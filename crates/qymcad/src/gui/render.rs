@@ -214,16 +214,27 @@ pub(crate) fn draw_3d_gpu(pn: &qymcad_ui_state::Painting, painter: &egui::Painte
     let ppp = painter.ctx().pixels_per_point();
     let key = qymcad_ui_state::gpu_scene_key(pn);
     let (inv_d, z_near, z_far, _) = proj_params(pn, rect, key);
-    let cam = crate::viewport_gpu::CamRaw::new(basis, pn.cam.scale, pn.cam.target, rect.size(), inv_d as f32, crate::viewport_gpu::ZRange { near: z_near as f32, far: z_far as f32 });
-    let size_px = [(rect.width() * ppp).round().max(1.0) as u32, (rect.height() * ppp).round().max(1.0) as u32];
-    let (verts, opaque_count) = if pn.cache.gpu_scene_key.get() != key {
-        pn.cache.gpu_scene_key.set(key);
-        let (v, oc) = render_scene::gpu_scene(pn);
-        (Some(std::sync::Arc::new(v)), oc)
-    } else {
-        (None, 0)
+    let gt = pn.scheme.pal.ghost_target;
+    let shade = crate::viewport_gpu::ShadeRaw {
+        // the same light the raster uses, so the two pictures agree
+        light: { let l = qymcad_ui_state::scene_light(); [l[0] as f32, l[1] as f32, l[2] as f32] },
+        floor: pn.scheme.pal.shade_floor_body,
+        ghost_alpha: pn.set.ghost_alpha as f32 / 255.0,
+        ghost_target: [gt[0] as f32 / 255.0, gt[1] as f32 / 255.0, gt[2] as f32 / 255.0],
     };
-    painter.add(eframe::egui_wgpu::Callback::new_paint_callback(rect, crate::viewport_gpu::MeshPaint::new(cam, size_px, verts, opaque_count, key)));
+    let cam = crate::viewport_gpu::CamRaw::new(basis, pn.cam.scale, pn.cam.target, rect.size(), inv_d as f32, crate::viewport_gpu::ZRange { near: z_near as f32, far: z_far as f32 }, shade);
+    let size_px = [(rect.width() * ppp).round().max(1.0) as u32, (rect.height() * ppp).round().max(1.0) as u32];
+    // THE GEOMETRY IS REBUILT RARELY, THE LOOK EVERY FRAME. Moving the pointer over the model, stepping into
+    // a subassembly, changing a colour - none of that touches a vertex now; it rewrites a table of two numbers
+    // per body. That is what used to send the whole scene to the card again.
+    let (pieces, looks) = if pn.cache.gpu_scene_key.get() != key {
+        pn.cache.gpu_scene_key.set(key);
+        let scene = render_scene::gpu_scene(pn);
+        (Some(scene.pieces), scene.looks)
+    } else {
+        (None, render_scene::scene_looks(pn))
+    };
+    painter.add(eframe::egui_wgpu::Callback::new_paint_callback(rect, crate::viewport_gpu::MeshPaint::new(cam, size_px, pieces, looks, key)));
 }
 
 pub(crate) fn draw_3d(pn: &Painting, painter: &egui::Painter, rect: Rect) {
@@ -326,8 +337,11 @@ pub(crate) fn draw_3d(pn: &Painting, painter: &egui::Painter, rect: Rect) {
         let selected: &[Id] = &[];
         let obj_sel = if let Sel::Contour(c) = pn.sel { Some(c) } else { None };
         let sketch_sel = if let Sel::Sketch(s) = pn.sel { pn.project.sketches.get(s).map(|sk| sk.contour_ids.clone()) } else { None };
-        // hidden sketches (the checkbox is off) are not drawn - the same computation as in the sketcher
-        let hidden_cids = hidden_contour_ids(pn.project, pn.sketch_hidden);
+        // hidden sketches (the checkbox is off) are not drawn - the same computation as in the sketcher - and neither
+        // are the sketches of a part whose own tick is off, as its bodies are not
+        let mut hidden_cids = hidden_contour_ids(pn.project, pn.sketch_hidden);
+        let ctx = qymcad_ui_state::current_ctx_id(pn.active_path, pn.project);
+        hidden_cids.extend(pn.project.sketches.iter().filter(|s| !qymcad_ui_state::sketch_shown_by_components(pn.project, s.id, ctx)).flat_map(|s| s.contour_ids.iter().copied()));
         // the sketches of OTHER components (outside the active context) are not drawn - sketch isolation
         let foreign_cids = qymcad_pick::foreign_contour_ids(pn);
         // the outlines of sketches on NON-world planes are drawn lifted onto their own plane
@@ -393,6 +407,7 @@ pub(crate) fn draw_3d(pn: &Painting, painter: &egui::Painter, rect: Rect) {
 
     // the edges of the selected body (for picking under a chamfer or a fillet)
     draw_body_edges(pn, painter, rect);
+    draw_taken_piece(pn, painter, rect);
     // the live wireframe preview of the active command (extrude, cut, ...) + the length arrow.
     // There is no permanent gizmo at the selected feature - editing goes through a double click in the tree.
     draw_feat_cmd_preview(pn, painter, rect);
@@ -487,7 +502,7 @@ pub(crate) fn draw_3d(pn: &Painting, painter: &egui::Painter, rect: Rect) {
                 }
             }
         }
-    } else if matches!(pn.armed.cmd_kind(), 30 | 31) {
+    } else if matches!(pn.armed.cmd_kind(), 30 | 31 | 36) {
         // COPY FACE (30) and REPLACE FACE (31): show the selection TO THE EYE, not only in the model.
         //
         // The first edition gathered faces silently - nothing changed on the screen, and that read, fairly,
@@ -496,7 +511,7 @@ pub(crate) fn draw_3d(pn: &Painting, painter: &egui::Painter, rect: Rect) {
         //
         // The colour carries the MEANING: for a copy it is "will be added" (a surface appears), for a
         // replacement "will go" (a sheet takes these faces' place). The sheet surface itself is lit separately.
-        let taken = if pn.armed.cmd_kind() == 30 { pn.scheme.pal.add() } else { pn.scheme.pal.remove() };
+        let taken = if matches!(pn.armed.cmd_kind(), 30 | 36) { pn.scheme.pal.add() } else { pn.scheme.pal.remove() };
         for (mi, body) in pn.project.bodies.iter().enumerate() {
             if pn.project.mesh_id(mi) != pn.gsel.faces_body {
                 continue;
@@ -535,6 +550,49 @@ pub(crate) fn draw_3d(pn: &Painting, painter: &egui::Painter, rect: Rect) {
                 }
             }
         }
+    } else if let (Some(src), Some((o, n))) = (pn.mirror.part, pn.mirror.at) {
+        // THE MIRRORED COPY BEFORE ENTER: every body of the part (and of its subparts) reflected about the plane taken, in
+        // the "will be added" colour, where the copy will stand
+        let ctx = qymcad_ui_state::current_ctx_id(pn.active_path, pn.project);
+        let nl = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt().max(1e-12);
+        let nu = [n[0] / nl, n[1] / nl, n[2] / nl];
+        let reflect = |p: [f64; 3]| {
+            let d = 2.0 * ((p[0] - o[0]) * nu[0] + (p[1] - o[1]) * nu[1] + (p[2] - o[2]) * nu[2]);
+            [p[0] - d * nu[0], p[1] - d * nu[1], p[2] - d * nu[2]]
+        };
+        let consumed = qymcad_ui_state::consumed_bodies(pn.project);
+        let comps: Vec<Id> = std::iter::once(src).chain(pn.project.descendants(src)).collect();
+        let col = qymcad_scheme::a(pn.scheme.pal.add(), 110);
+        let mut hm = egui::Mesh::default();
+        for b in comps.iter().flat_map(|c| pn.project.component_bodies(*c)).filter(|b| !consumed.contains(b)) {
+            let Some(mi) = pn.project.mesh_index(b) else { continue };
+            let wt = pn.project.body_display_transform(b, ctx);
+            let mesh = &pn.project.bodies[mi].mesh;
+            for ti in 0..mesh.tris.len() {
+                let base = hm.vertices.len() as u32;
+                for v in &mesh.triangle(ti) {
+                    hm.colored_vertex(scr.at(reflect(qymcad_core::feature::apply12(&wt, [v.x, v.y, v.z]))).0, col);
+                }
+                hm.add_triangle(base, base + 1, base + 2);
+            }
+        }
+        painter.add(egui::Shape::mesh(hm));
+    } else if let (Some((_, op)), Some(b)) = (pn.boolean.pick, pn.boolean.b) {
+        // A BOOLEAN WITH BODY B TAKEN: B in the colour of what it will do before Enter - "goes" for a cut, "stays"
+        // for a union or an intersection - so the person sees which body is the tool.
+        if let Some(mi) = pn.project.mesh_index(b) {
+            let col = qymcad_scheme::a(if op == 0 { pn.scheme.pal.remove() } else { pn.scheme.pal.add() }, 120);
+            let mesh = &pn.project.bodies[mi].mesh;
+            let mut hm = egui::Mesh::default();
+            for ti in 0..mesh.tris.len() {
+                let base = hm.vertices.len() as u32;
+                for v in &mesh.triangle(ti) {
+                    hm.colored_vertex(scr.at([v.x, v.y, v.z]).0, col);
+                }
+                hm.add_triangle(base, base + 1, base + 2);
+            }
+            painter.add(egui::Shape::mesh(hm));
+        }
     } else if pn.armed.cmd_kind() == 34 {
         // TRIM: the sheet being kept in the "stays" colour, the tool in the "goes" colour.
         for (body, add) in [(pn.trim.keep.map(|(b, _)| b), true), (pn.trim.tool, false)] {
@@ -559,18 +617,27 @@ pub(crate) fn draw_3d(pn: &Painting, painter: &egui::Painter, rect: Rect) {
             let p = scr.at(at).0;
             painter.circle_filled(p, 5.0, pn.scheme.pal.add());
         }
-    } else if pn.armed.cmd_kind() == 33 {
+    } else if pn.armed.cmd_kind() == 33 || pn.armed.cmd_kind() == 35 {
         // STITCH: the selected sheets filled in the "will be added" colour. A person must see WHAT
         // exactly will become one surface: clicking blind into an invisible set is not acceptable.
-        for part in pn.stitch_parts {
+        // RECOGNISE: the same for the one mesh that is to become a body.
+        // Once the count is in, what it found is shown: what lies on a surface in the "added" colour, what fits none in
+        // the "removed" one - the part that will stay pieces of mesh inside the body.
+        let found = pn.recognise.ready(|f| f.kinds.clone());
+        for part in pn.stitch_parts.iter().chain(pn.recognise.src.iter()) {
             let Some(mi) = pn.project.mesh_index(*part) else { continue };
             let mesh = &pn.project.bodies[mi].mesh;
+            let kinds = found.as_ref().filter(|k| pn.armed.cmd_kind() == 35 && k.len() == mesh.tris.len());
             let mut hm = egui::Mesh::default();
             for ti in 0..mesh.tris.len() {
                 let t = mesh.triangle(ti);
                 let base = hm.vertices.len() as u32;
+                let col = match kinds.map(|k| k[ti]) {
+                    Some(5) => qymcad_scheme::a(pn.scheme.pal.remove(), 170),
+                    _ => qymcad_scheme::a(pn.scheme.pal.add(), 130),
+                };
                 for v in &t {
-                    hm.colored_vertex(scr.at([v.x, v.y, v.z]).0, qymcad_scheme::a(pn.scheme.pal.add(), 130));
+                    hm.colored_vertex(scr.at([v.x, v.y, v.z]).0, col);
                 }
                 hm.add_triangle(base, base + 1, base + 2);
             }
@@ -741,4 +808,122 @@ pub(crate) fn draw_3d(pn: &Painting, painter: &egui::Painter, rect: Rect) {
         painter.line_segment([p3(a), p3(b)], Stroke::new(if sel { 2.6 } else { 1.5 }, col));
     }
 
+    draw_open_borders(pn, painter, &scr);
+}
+
+/// WHERE A BODY MADE OF A MESH DID NOT CLOSE: the borders of a recognised body or a polyhedron that came out a shell,
+/// drawn over the scene in the "removed" colour. The tree says the body did not close; a person told that must also be
+/// shown where. A border is a loop of triangle sides that no second triangle shares, found once per mesh.
+/// THE PIECE UNDER THE CURSOR AND THE PIECE TAKEN, with nothing in hand: what a click would take is lit in the hover
+/// colour - a corner, else an edge, else a face, as the click decides - and what was taken in the colour of the
+/// selection. Under a command the command's own highlight speaks instead. Reported behaviour: with nothing in hand the
+/// cursor over the top of a block changed nothing on the picture.
+fn draw_taken_piece(pn: &Painting, painter: &egui::Painter, rect: Rect) {
+    if pn.armed.commanding() {
+        return;
+    }
+    let hovered = if pn.view_dragging { None } else { painter.ctx().input(|i| i.pointer.hover_pos()).filter(|p| rect.contains(*p)) };
+    if let Some(piece) = hovered.and_then(|pos| piece_under(pn, rect, pos)).filter(|p| *p != pn.sel) {
+        draw_piece(pn, painter, rect, piece, pn.scheme.pal.highlight(), 130);
+    }
+    draw_piece(pn, painter, rect, pn.sel, pn.scheme.pal.selected(), 150);
+}
+
+/// What a click at `pos` would take with nothing in hand: a corner, an edge, or a face.
+fn piece_under(pn: &Painting, rect: Rect, pos: egui::Pos2) -> Option<Sel> {
+    qymcad_pick::edge_or_corner_under(pn, rect, pos).or_else(|| {
+        let (_, body, key) = qymcad_pick::face_under_cursor(pn, rect, pos)?;
+        let mi = pn.project.mesh_index(body)?;
+        let fi = pn.project.bodies.get(mi)?.faces.iter().position(|f| f.id == key.id)?;
+        Some(Sel::Face(mi, fi))
+    })
+}
+
+/// A face filled, an edge drawn thick along its length, a corner as a dot - in `col`, a face `alpha` opaque.
+fn draw_piece(pn: &Painting, painter: &egui::Painter, rect: Rect, piece: Sel, col: egui::Color32, alpha: u8) {
+    let basis = pn.cam.basis();
+    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis };
+    let ctx = qymcad_ui_state::current_ctx_id(pn.active_path, pn.project);
+    let world = |body: Id| {
+        let wt = pn.project.body_display_transform(body, ctx);
+        move |v: [f64; 3]| if qymcad_core::feature::is_identity12(&wt) { v } else { qymcad_core::feature::apply12(&wt, v) }
+    };
+    match piece {
+        Sel::Face(mi, fi) => {
+            let (Some(b), Some(body)) = (pn.project.bodies.get(mi), pn.project.mesh_id(mi)) else { return };
+            let Some(face) = b.faces.get(fi) else { return };
+            let w = world(body);
+            let mut hm = egui::Mesh::default();
+            for &ti in &face.triangles {
+                let base = hm.vertices.len() as u32;
+                for v in &b.mesh.triangle(ti as usize) {
+                    hm.colored_vertex(scr.at(w([v.x, v.y, v.z])).0, qymcad_scheme::a(col, alpha));
+                }
+                hm.add_triangle(base, base + 1, base + 2);
+            }
+            painter.add(egui::Shape::mesh(hm));
+        }
+        Sel::Edge(body, id) | Sel::Vertex(body, id, _) => {
+            let Some(edges) = qymcad_pick::body_edges_cached(pn.cache, pn.live, pn.regen, body) else { return };
+            let Some(poly) = edges.ids.iter().position(|i| *i == id).map(|k| &edges.polys[k]) else { return };
+            let w = world(body);
+            let at = |p: &[f32; 3]| scr.at(w([p[0] as f64, p[1] as f64, p[2] as f64])).0;
+            match piece {
+                Sel::Vertex(_, _, far) => {
+                    let end = if far { poly.last() } else { poly.first() };
+                    if let Some(p) = end {
+                        painter.circle_filled(at(p), 5.0, col);
+                    }
+                }
+                _ => {
+                    painter.add(egui::Shape::line(poly.iter().map(at).collect(), Stroke::new(3.5, col)));
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn draw_open_borders(pn: &Painting, painter: &egui::Painter, scr: &qymcad_ui_state::Screen) {
+    use qymcad_core::feature::FeatureKind;
+    use std::hash::{Hash, Hasher};
+    let open: Vec<usize> = pn
+        .project
+        .timeline
+        .iter()
+        .filter_map(|n| match n.kind {
+            FeatureKind::MeshRecognised { body, .. } | FeatureKind::MeshSolid { body, .. } => pn.project.mesh_index(body),
+            _ => None,
+        })
+        .filter(|&mi| pn.project.bodies[mi].sheet)
+        .collect();
+    if open.is_empty() {
+        return;
+    }
+    let key = {
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        for &mi in &open {
+            let m = &pn.project.bodies[mi].mesh;
+            (mi, m.tris.len(), m.verts.len(), m.verts.first().map(|v| (v.x.to_bits(), v.y.to_bits(), v.z.to_bits()))).hash(&mut h);
+        }
+        h.finish()
+    };
+    if pn.cache.open_borders.borrow().rev != key {
+        let mut found = std::collections::HashMap::new();
+        for &mi in &open {
+            let mesh = &pn.project.bodies[mi].mesh;
+            let p = qymcad_meshfit::prepare(mesh, qymcad_meshfit::weld_tolerance(mesh));
+            let loops: Vec<Vec<[f64; 3]>> = p.holes.iter().map(|l| l.iter().map(|&v| { let q = p.mesh.verts[v as usize]; [q.x, q.y, q.z] }).collect()).collect();
+            found.insert(mi, loops);
+        }
+        pn.cache.open_borders.borrow_mut().put(key, found);
+    }
+    let borders = pn.cache.open_borders.borrow();
+    for item in qymcad_ui_state::visible_mesh_items(pn) {
+        let Some(loops) = borders.value.get(&item.index) else { continue };
+        for l in loops {
+            let pts: Vec<egui::Pos2> = l.iter().map(|&q| scr.at(qymcad_core::feature::apply12(&item.world, q)).0).collect();
+            painter.add(egui::Shape::closed_line(pts, egui::Stroke::new(3.0, pn.scheme.pal.remove())));
+        }
+    }
 }

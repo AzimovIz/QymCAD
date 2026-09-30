@@ -63,7 +63,10 @@ fn merge_heals_bigger_gap_at_origin() {
     // end of the third line lies on the first, a real intersection, and the small tail near the origin simply
     // falls outside the region.
     assert_eq!(closed_contours(&p, si).len(), 1, "the arrangement finds a face despite the gap at the origin");
-    let n = p.merge_close_points(si, 0.1); // merge at a tolerance of 0.1, attaching (0.05,0) to the origin
-    assert!(n >= 1, "at least one point has to attach to the origin, merged: {n}");
-    assert_eq!(closed_contours(&p, si).len(), 1, "after merging there is a full triangle from the origin");
+    // Merging at a tolerance of 0.1 stitches (0.05,0) to the corner at zero. The two are the person's own
+    // points and one of them survives carrying both lines; the origin is not part of it - the frame of
+    // reference is never glued to, or the corner would become undraggable.
+    let n = p.merge_close_points(si, 0.1);
+    assert!(n >= 1, "the two corners standing in one place have to become one, merged: {n}");
+    assert_eq!(closed_contours(&p, si).len(), 1, "after merging there is a full triangle from the corner at zero");
 }

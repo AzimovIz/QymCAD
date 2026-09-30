@@ -41,14 +41,51 @@ pub fn dirs() -> Option<directories::ProjectDirs> {
     directories::ProjectDirs::from(tld, org, FOLDER)
 }
 
-/// A directory under the person's configuration, e.g. `schemes` or `templates`.
+/// A ROOT THAT STANDS IN FOR THE PERSON'S DIRECTORIES, for the whole process once set.
+static ROOT: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+
+/// KEEP EVERYTHING THE PROGRAM WRITES UNDER `root`, for the rest of this process: settings, schemes,
+/// templates, the parts library, crash and problem reports.
+///
+/// A program driven from outside - a run of acceptance checks - is still the whole program, and a whole
+/// program writes where a person keeps their files. One such run on a working machine replaced a person's
+/// settings and filled their crash folder. Set once: a second root would split one process between two
+/// homes, so a different root after the first is refused and the answer is `false`.
+pub fn keep_under(root: std::path::PathBuf) -> bool {
+    ROOT.get_or_init(|| root.clone()) == &root
+}
+
+/// THE ONE FOLDER A PERSON'S FILES ARE IN - settings, schemes, templates, parts, reports: under the root when one was
+/// given, the system's data folder of the program otherwise (`~/.local/share/qymcad`, `%APPDATA%\qymis\qymcad\data`,
+/// `~/Library/Application Support/tech.qymis.qymcad`). One folder on every system, not a "config" beside a "data".
+/// Reported behaviour: half a person's files were in `~/.config/qymcad` and half in `~/.local/share/qymcad`.
+pub fn data_root() -> Option<std::path::PathBuf> {
+    if let Some(root) = ROOT.get() {
+        return Some(root.clone());
+    }
+    dirs().map(|d| d.data_dir().to_path_buf())
+}
+
+/// THE FILE THE SETTINGS ARE KEPT IN.
+///
+/// Named here, with the rest of the program's places, because the framework picks one of its own otherwise -
+/// derived from the application id, which is a different string. On Linux both happen to land in the same
+/// folder and nothing looks wrong; on Windows they came out as `AppData\Roaming\qymcad\data` against
+/// `AppData\Roaming\qymis\qymcad\data`, and on macOS as `qymcad` beside `tech.qymis.qymcad` - a person's
+/// settings in one place and their schemes, templates, parts and crash reports in another.
+pub fn settings_file() -> Option<std::path::PathBuf> {
+    data_root().map(|d| d.join("app.ron"))
+}
+
+/// A directory of the person's own things that set how the program looks and starts, e.g. `schemes` or `templates` -
+/// in the same one folder as the rest.
 pub fn config(sub: &str) -> Option<std::path::PathBuf> {
-    dirs().map(|d| d.config_dir().join(sub))
+    data_root().map(|d| d.join(sub))
 }
 
 /// A directory under the person's data, e.g. `crashes` or `library/parts`.
 pub fn data(sub: &str) -> Option<std::path::PathBuf> {
-    dirs().map(|d| d.data_dir().join(sub))
+    data_root().map(|d| d.join(sub))
 }
 
 #[cfg(test)]

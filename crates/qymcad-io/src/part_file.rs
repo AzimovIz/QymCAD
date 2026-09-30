@@ -201,7 +201,7 @@ mod tests {
         // insertion into a clean host
         let mut host = Project::default();
         host.new_document();
-        let ins = host.graft(&loaded.project, host.root).expect("graft");
+        let ins = host.graft(&loaded.project, host.root, &|n| n.to_string()).expect("graft");
         let c = host.components.iter().find(|c| c.id == ins).unwrap();
         assert_eq!(c.kind, ComponentKind::Part, "a part was inserted");
         // the sketch and the extrusion arrived

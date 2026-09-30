@@ -33,7 +33,7 @@ fn body_volume(p: &Project, c: u64) -> f64 {
 #[test]
 fn a_linear_pattern_places_real_copies_with_geometry() {
     let (mut p, part) = assembly_with_part();
-    let id = p.add_comp_pattern(part, CompPatternKind::Linear { dir: [1.0, 0.0, 0.0], step: 30.0, count: 4 });
+    let id = p.add_comp_pattern(part, CompPatternKind::linear([1.0, 0.0, 0.0], 30.0, 4));
     assert_ne!(id, 0, "the pattern must be created");
     let _ = qymcad_testkit::regenerate(&mut p);
 
@@ -55,7 +55,7 @@ fn a_circular_pattern_spreads_copies_around_the_axis() {
     let (mut p, part) = assembly_with_part();
     // move the source off the axis, otherwise there is nothing to revolve
     p.set_component_transform(part, [1.0, 0.0, 0.0, 50.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]);
-    let id = p.add_comp_pattern(part, CompPatternKind::Circular { origin: [0.0; 3], dir: [0.0, 0.0, 1.0], angle: 360.0, count: 6 });
+    let id = p.add_comp_pattern(part, CompPatternKind::Circular { origin: [0.0; 3], dir: [0.0, 0.0, 1.0], angle: 360.0, count: 6, axis: 0 });
     assert_ne!(id, 0, "the pattern must be created");
     let _ = qymcad_testkit::regenerate(&mut p);
 
@@ -75,7 +75,7 @@ fn a_circular_pattern_spreads_copies_around_the_axis() {
 #[test]
 fn editing_the_source_part_updates_every_copy() {
     let (mut p, part) = assembly_with_part();
-    p.add_comp_pattern(part, CompPatternKind::Linear { dir: [1.0, 0.0, 0.0], step: 30.0, count: 3 });
+    p.add_comp_pattern(part, CompPatternKind::linear([1.0, 0.0, 0.0], 30.0, 3));
     let _ = qymcad_testkit::regenerate(&mut p);
     let copies = p.comp_pattern_of(part).expect("the pattern").copies.clone();
     assert!((body_volume(&p, copies[0]) - 4000.0).abs() < 1.0, "setup: the copy reproduces the source");
@@ -100,7 +100,7 @@ fn editing_the_source_part_updates_every_copy() {
 #[test]
 fn moving_the_source_moves_the_whole_row() {
     let (mut p, part) = assembly_with_part();
-    p.add_comp_pattern(part, CompPatternKind::Linear { dir: [1.0, 0.0, 0.0], step: 30.0, count: 3 });
+    p.add_comp_pattern(part, CompPatternKind::linear([1.0, 0.0, 0.0], 30.0, 3));
     let _ = qymcad_testkit::regenerate(&mut p);
     let copies = p.comp_pattern_of(part).expect("the pattern").copies.clone();
 
@@ -120,16 +120,16 @@ fn moving_the_source_moves_the_whole_row() {
 #[test]
 fn changing_the_count_keeps_the_existing_copies() {
     let (mut p, part) = assembly_with_part();
-    let id = p.add_comp_pattern(part, CompPatternKind::Linear { dir: [1.0, 0.0, 0.0], step: 30.0, count: 3 });
+    let id = p.add_comp_pattern(part, CompPatternKind::linear([1.0, 0.0, 0.0], 30.0, 3));
     let before = p.comp_pattern_of(part).expect("the pattern").copies.clone();
     assert_eq!(before.len(), 2);
 
-    p.set_comp_pattern(id, CompPatternKind::Linear { dir: [1.0, 0.0, 0.0], step: 30.0, count: 5 });
+    p.set_comp_pattern(id, CompPatternKind::linear([1.0, 0.0, 0.0], 30.0, 5));
     let grown = p.comp_pattern_of(part).expect("the pattern").copies.clone();
     assert_eq!(grown.len(), 4, "5 instances now = 4 copies");
     assert_eq!(&grown[..2], &before[..], "the former copies must keep their ids");
 
-    p.set_comp_pattern(id, CompPatternKind::Linear { dir: [1.0, 0.0, 0.0], step: 30.0, count: 2 });
+    p.set_comp_pattern(id, CompPatternKind::linear([1.0, 0.0, 0.0], 30.0, 2));
     let shrunk = p.comp_pattern_of(part).expect("the pattern").copies.clone();
     assert_eq!(shrunk.len(), 1, "2 instances now = 1 copy");
     assert_eq!(shrunk[0], before[0], "the remaining copy is the same one");
@@ -140,9 +140,9 @@ fn changing_the_count_keeps_the_existing_copies() {
 #[test]
 fn changing_the_step_moves_the_row() {
     let (mut p, part) = assembly_with_part();
-    let id = p.add_comp_pattern(part, CompPatternKind::Linear { dir: [1.0, 0.0, 0.0], step: 30.0, count: 3 });
+    let id = p.add_comp_pattern(part, CompPatternKind::linear([1.0, 0.0, 0.0], 30.0, 3));
     let copies = p.comp_pattern_of(part).expect("the pattern").copies.clone();
-    p.set_comp_pattern(id, CompPatternKind::Linear { dir: [1.0, 0.0, 0.0], step: 45.0, count: 3 });
+    p.set_comp_pattern(id, CompPatternKind::linear([1.0, 0.0, 0.0], 45.0, 3));
     assert_eq!(p.comp_pattern_of(part).expect("the pattern").copies, copies, "editing the step does not re-create the copies");
     assert!((pos(&p, copies[0])[0] - 45.0).abs() < 1e-9, "the first copy must move to the new step");
     assert!((pos(&p, copies[1])[0] - 90.0).abs() < 1e-9, "the second, to two steps");
@@ -152,7 +152,7 @@ fn changing_the_step_moves_the_row() {
 #[test]
 fn deleting_the_pattern_removes_copies_and_spares_the_source() {
     let (mut p, part) = assembly_with_part();
-    let id = p.add_comp_pattern(part, CompPatternKind::Linear { dir: [1.0, 0.0, 0.0], step: 30.0, count: 4 });
+    let id = p.add_comp_pattern(part, CompPatternKind::linear([1.0, 0.0, 0.0], 30.0, 4));
     let _ = qymcad_testkit::regenerate(&mut p);
     let copies = p.comp_pattern_of(part).expect("the pattern").copies.clone();
 
@@ -172,6 +172,88 @@ fn a_source_without_a_body_is_refused() {
     let root = p.ensure_root();
     p.set_active_component(Some(root));
     let empty = p.add_part("Empty");
-    assert_eq!(p.add_comp_pattern(empty, CompPatternKind::Linear { dir: [1.0, 0.0, 0.0], step: 10.0, count: 3 }), 0, "there is nothing to copy — no pattern is created");
-    assert!(p.comp_patterns.is_empty(), "and no record is left behind");
+    assert_eq!(p.add_comp_pattern(empty, CompPatternKind::linear([1.0, 0.0, 0.0], 10.0, 3)), 0, "there is nothing to copy — no pattern is created");
+    assert!(p.comp_patterns().is_empty(), "and no record is left behind");
+}
+
+/// A PATTERN IS ONE NODE: three and six instances lay one node in the assembly's timeline, which builds every copy's
+/// body; each body belongs to its copy, the copies stay parts. Reported behaviour: Enter laid a "Copy of part" node
+/// per copy - 2 for a linear pattern of three, 5 for a circular one of six.
+#[test]
+fn a_pattern_is_one_node_that_builds_every_copy() {
+    for kind in [CompPatternKind::linear([1.0, 0.0, 0.0], 30.0, 3), CompPatternKind::Circular { origin: [0.0; 3], dir: [0.0, 0.0, 1.0], angle: 360.0, count: 6, axis: 0 }] {
+        let (mut p, part) = assembly_with_part();
+        let nodes = p.timeline.len();
+        let id = p.add_comp_pattern(part, kind);
+        let _ = qymcad_testkit::regenerate(&mut p);
+        assert_eq!(p.timeline.len(), nodes + 1, "{kind:?}: the pattern laid {} nodes, not one", p.timeline.len() - nodes);
+        let copies = p.comp_pattern(id).expect("the pattern").copies;
+        assert_eq!(copies.len() as u32, kind.count() - 1, "{kind:?}: the copies");
+        for c in &copies {
+            let bodies = p.component_bodies(*c);
+            assert!(bodies.len() == 1 && p.body_owner(bodies[0]) == Some(*c), "{kind:?}: the copy {c} does not own one body: {bodies:?}");
+            assert!((body_volume(&p, *c) - 4000.0).abs() < 1.0, "{kind:?}: the copy {c} holds {} instead of 4000", body_volume(&p, *c));
+            assert!(p.component_kind(*c) == Some(qymcad_core::feature::ComponentKind::Part), "{kind:?}: the copy {c} is no part");
+        }
+        assert!(p.delete_comp_pattern(id), "the node deletes");
+        assert!(p.timeline.len() == nodes && copies.iter().all(|c| !p.components.iter().any(|x| x.id == *c)), "{kind:?}: deleting the node left {} nodes and copies behind", p.timeline.len());
+    }
+}
+
+/// DELETING THE PATTERN'S NODE as any node is deleted - its row in the tree - takes the copies with it and spares the
+/// source, as deleting the pattern does.
+#[test]
+fn deleting_the_pattern_node_takes_its_copies() {
+    let (mut p, part) = assembly_with_part();
+    let id = p.add_comp_pattern(part, CompPatternKind::linear([1.0, 0.0, 0.0], 30.0, 3));
+    let _ = qymcad_testkit::regenerate(&mut p);
+    let copies = p.comp_pattern(id).expect("the pattern").copies;
+    p.delete_feature_op(id);
+    assert!(copies.iter().all(|c| !p.components.iter().any(|x| x.id == *c)), "the node went and left its copies");
+    assert!(p.components.iter().any(|x| x.id == part) && p.active_body(part).is_some(), "the source went with the node");
+    assert!(!p.timeline.iter().any(|n| n.id == id), "the node stayed");
+}
+
+/// A GRID OF PARTS: three along X 30 apart and two along Y 40 apart - six instances, five copies, each where the grid
+/// puts it; as a pattern of bodies has a second and a third direction. Reported behaviour: a linear pattern of parts
+/// ran one way only.
+#[test]
+fn a_linear_pattern_runs_a_second_direction() {
+    let (mut p, part) = assembly_with_part();
+    let kind = CompPatternKind::Linear { dir: [1.0, 0.0, 0.0], step: 30.0, count: 3, more: [([0.0, 1.0, 0.0], 40.0, 2), ([0.0, 0.0, 1.0], 0.0, 1)] };
+    let id = p.add_comp_pattern(part, kind);
+    let _ = qymcad_testkit::regenerate(&mut p);
+    let copies = p.comp_pattern(id).expect("the pattern").copies;
+    let mut at: Vec<[f64; 3]> = copies.iter().map(|c| pos(&p, *c)).collect();
+    at.sort_by(|a, b| (a[1], a[0]).partial_cmp(&(b[1], b[0])).unwrap());
+    let want = [[30.0, 0.0, 0.0], [60.0, 0.0, 0.0], [0.0, 40.0, 0.0], [30.0, 40.0, 0.0], [60.0, 40.0, 0.0]];
+    assert!(at.len() == 5 && at.iter().zip(want).all(|(a, w)| (0..3).all(|k| (a[k] - w[k]).abs() < 1e-9)), "a grid of 3 x 2 places its copies at {at:?}, not at {want:?}");
+}
+
+/// A CIRCULAR PATTERN ABOUT A DATUM AXIS OF ITS OWN: two instances the whole way about an upright axis at x = 50 put the
+/// copy half a turn round, at x = 100; the axis moved to x = 60, the copy follows to x = 120. Reported behaviour: the
+/// axis of a circular pattern of parts could only be X, Y or Z through the origin of the assembly.
+#[test]
+fn a_circular_pattern_turns_about_a_datum_axis_and_follows_it() {
+    let (mut p, part) = assembly_with_part();
+    p.set_active_component(Some(p.root));
+    let axis = p.add_datum_axis(qymcad_core::model::DatumAxis::manual("name-datum-axis", [50.0, 0.0, 0.0], [0.0, 0.0, 1.0]));
+    let id = p.add_comp_pattern(part, CompPatternKind::Circular { origin: [0.0; 3], dir: [0.0, 0.0, 1.0], angle: 360.0, count: 2, axis });
+    let _ = qymcad_testkit::regenerate(&mut p);
+    let copy = p.comp_pattern(id).expect("the pattern").copies[0];
+    assert!((pos(&p, copy)[0] - 100.0).abs() < 1e-6, "half a turn about x = 50 puts the copy at x = 100, not at {:?}", pos(&p, copy));
+    if let Some(a) = p.datum_axes.iter_mut().find(|d| d.id == axis) {
+        a.set_manual([60.0, 0.0, 0.0], [0.0, 0.0, 1.0]);
+    }
+    let _ = qymcad_testkit::regenerate(&mut p);
+    assert!((pos(&p, copy)[0] - 120.0).abs() < 1e-6, "the axis moved to x = 60 and the copy stayed at {:?}", pos(&p, copy));
+}
+
+/// A PATTERN OF ONE INSTANCE IS REFUSED: it is the source alone, and a node for it would change nothing.
+#[test]
+fn a_pattern_of_one_is_refused() {
+    let (mut p, part) = assembly_with_part();
+    let nodes = p.timeline.len();
+    assert_eq!(p.add_comp_pattern(part, CompPatternKind::linear([1.0, 0.0, 0.0], 30.0, 1)), 0, "a row of one was taken");
+    assert_eq!(p.timeline.len(), nodes, "a row of one laid a node");
 }

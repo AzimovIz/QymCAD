@@ -188,7 +188,7 @@ mod command_flow_tests {
         let v_before = live_volume(&app);
 
         let ti = app.project.timeline.iter().position(|n| n.id == mid_node).unwrap();
-        crate::gui::commands::delete_feature(&mut app.part_ctx(), ti);
+        crate::gui::commands::delete_feature(&mut app.part_ctx(), ti, false);
         crate::gui::io_jobs::regenerate_now(&mut app.rebuild_ctx());
 
         let cuts_after = app.project.timeline.iter().filter(|n| n.name.starts_with("feat-name-combine")).count();
@@ -376,7 +376,7 @@ mod command_flow_tests {
         app.params.rev.pick_axis = true;
         app.viewing.mode_3d = true; // exactly what the button does: the candidates are hit-tested in 3D only
         let ax = app.project.add_datum_axis(qymcad_core::model::DatumAxis::manual("Axis 1", [0.0, 0.0, 0.0], [0.0, 0.0, 1.0]));
-        assert!(app.datum_render_transform(ax).is_some(), "the datum axis is visible in its own context - otherwise there is nothing to click");
+        assert!(qymcad_ui_state::datum_render_transform(&app.painting(), ax).is_some(), "the datum axis is visible in its own context - otherwise there is nothing to click");
         let basis = app.viewing.cam.basis();
         let (s3, e3) = super::axis_segment([0.0, 0.0, 0.0], [0.0, 0.0, 1.0], 45.0);
         let scr = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: rect, basis: &basis };
@@ -421,7 +421,7 @@ mod command_flow_tests {
         app.enter_component(part); // as a double click on a part in the tree does
         let ax = app.project.add_datum_axis(qymcad_core::model::DatumAxis::manual("Axis 1", [0.0, 0.0, 0.0], [0.0, 0.0, 1.0]));
         assert_eq!(qymcad_ui_state::current_ctx_id(&app.active_path, &app.project), part, "we are inside the part");
-        assert!(app.datum_render_transform(ax).is_some(), "the part's own axis is visible from inside the part");
+        assert!(qymcad_ui_state::datum_render_transform(&app.painting(), ax).is_some(), "the part's own axis is visible from inside the part");
 
         app.viewing.mode_3d = true;
         app.tools.armed = qymcad_ui_state::Armed::Command(3);
@@ -446,7 +446,7 @@ mod command_flow_tests {
         // and from THE ROOT (outside the part) it is neither shown nor caught - otherwise another part's geometry would litter the assembly
         let root = app.project.root;
         app.enter_component(root);
-        assert!(app.datum_render_transform(ax).is_none(), "the part's axis does not stick out into the assembly");
+        assert!(qymcad_ui_state::datum_render_transform(&app.painting(), ax).is_none(), "the part's axis does not stick out into the assembly");
     }
 
     /// Reported behaviour: a section through a threaded part was filled only in the smooth part and empty in the
@@ -473,10 +473,10 @@ mod command_flow_tests {
 
         // a section ALONG the axis: a plane through the axis with a +Y normal
         app.side.section.plane = Some(([0.0, 0.0, 0.0], [0.0, 1.0, 0.0]));
-        let (verts, _) = crate::gui::render_scene::gpu_scene(&app.painting());
-        let amber = u32::from_le_bytes([224, 168, 92, 255]);
-        let amber_back = u32::from_le_bytes([176, 128, 66, 255]);
-        let cap: Vec<&qymcad_ui_state::GpuVert> = verts.iter().filter(|v| v.color == amber || v.color == amber_back).collect();
+        let (verts, looks) = crate::gui::render_scene::gpu_scene_flat(&app.painting());
+        // THE CAPS ARE KNOWN BY THEIR LOOK, not by a colour baked into the vertices: the colour lives in the
+        // look table now, and state 3 is the cap of a section.
+        let cap: Vec<&qymcad_ui_state::GpuVert> = verts.iter().filter(|v| looks.get(v.body as usize).is_some_and(|l| l.state == qymcad_ui_state::LOOK_CAP)).collect();
         let _in_band = |a: f64, b: f64| cap.iter().filter(|v| (v.pos[2] as f64) >= a && (v.pos[2] as f64) <= b).count();
         eprintln!("cap vertices in the scene: {}", cap.len());
         // THE CAP MUST cover the whole outline of the cut. It is measured by area rather than by vertices in a
@@ -776,7 +776,7 @@ mod command_flow_tests {
             .iter()
             .position(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::Combine { .. }))
             .expect("the cut's node");
-        crate::gui::commands::delete_feature(&mut app.part_ctx(), cut_ti);
+        crate::gui::commands::delete_feature(&mut app.part_ctx(), cut_ti, false);
         qymcad_ui_state::regenerate_all(&mut app.rebuild_ctx());
         let consumed = qymcad_ui_state::consumed_bodies(&app.project);
         let live: Vec<f64> = app.live.shapes.iter().filter(|(b, _)| !consumed.contains(b)).map(|(_, s)| s.volume()).collect();
@@ -1012,7 +1012,7 @@ mod command_flow_tests {
             std::thread::sleep(std::time::Duration::from_secs(30)); // a "slow" worker
             let _ = tx.send(JobResult::ImportShapes { shapes: Vec::new(), regen: false });
         });
-        app.regen.bg.push(Busy { label: "a long top-up".into(), rx, kind: BgKind::ImportShapes, pulse: None, quiet: false });
+        app.regen.bg.push(Busy { started: std::time::Instant::now(), label: "a long top-up".into(), rx, kind: BgKind::ImportShapes, pulse: None, quiet: false });
         let t = std::time::Instant::now();
         app.wait_bg();
         let waited = t.elapsed();
@@ -1074,7 +1074,7 @@ mod command_flow_tests {
         app.project.timeline.push(qymcad_core::feature::FeatureNode {
             id: body,
             name: "Import".into(),
-            kind: FeatureKind::Import { body, source: src_id, solid: 0 },
+            kind: FeatureKind::Import { body, source: src_id, solid: 0, scale: 1.0 },
             parent: Some(app.project.root),
             dirty: false,
             suppressed: false,
@@ -1176,7 +1176,7 @@ mod command_flow_tests {
         app.project.timeline.push(qymcad_core::feature::FeatureNode {
             id: body,
             name: "Import".into(),
-            kind: FeatureKind::Import { body, source: 0, solid: 0 },
+            kind: FeatureKind::Import { body, source: 0, solid: 0, scale: 1.0 },
             parent: Some(app.project.root),
             dirty: false,
             suppressed: false,
@@ -1200,7 +1200,7 @@ mod command_flow_tests {
         app.project.timeline.push(qymcad_core::feature::FeatureNode {
             id: body,
             name: "Import".into(),
-            kind: FeatureKind::Import { body, source: 0, solid: 0 },
+            kind: FeatureKind::Import { body, source: 0, solid: 0, scale: 1.0 },
             parent: Some(app.project.root),
             dirty: false,
             suppressed: false,
@@ -1337,7 +1337,7 @@ mod command_flow_tests {
             .iter()
             .position(|n| n.kind.body() == Some(victim))
             .expect("the node of part two's body");
-        crate::gui::commands::delete_feature(&mut app.part_ctx(), ti);
+        crate::gui::commands::delete_feature(&mut app.part_ctx(), ti, false);
 
         assert!(app.project.mesh_index(victim).is_none() && !app.live.shapes.contains_key(&victim), "the deleted body went away entirely");
         let ki = app.project.mesh_index(keep).expect("the unrelated body is still there");
@@ -1801,6 +1801,8 @@ mod command_flow_tests {
         let _cube = build_cube(&mut app);
         app.start_array_cmd(17);
         assert_eq!(app.tools.armed.cmd_kind(), 17, "the pattern started: {}", app.status);
+        // the body to repeat is picked, as a person clicks it: a pattern with nothing picked is refused
+        app.chosen.sel = Sel::Mesh(app.project.bodies.len() - 1);
         app.params.arr.count = 3;
         app.params.arr.two = false;
         if let Some(p) = app.tools.cmd.params.iter_mut().find(|p| p.key == "step") {
@@ -1819,17 +1821,18 @@ mod command_flow_tests {
     fn section_view_hides_half() {
         let mut app = App::default();
         let _cube = build_cube(&mut app); // a block from 0 to 20
-        let (full, _) = crate::gui::render_scene::gpu_scene(&app.painting());
+        let (full, _) = crate::gui::render_scene::gpu_scene_flat(&app.painting());
         assert!(!full.is_empty(), "the scene is not empty");
         // a section through the centre with a +X normal, so the x>10 half is hidden
         app.side.section.plane = Some(([10.0, 0.0, 0.0], [1.0, 0.0, 0.0]));
-        let (half, _) = crate::gui::render_scene::gpu_scene(&app.painting());
+        let (half, looks) = crate::gui::render_scene::gpu_scene_flat(&app.painting());
         assert!(!half.is_empty(), "the visible half is still there");
+        // THE CAP IS KNOWN BY ITS LOOK: the colour is no longer baked into the vertices, and state 3 is the cap.
+        let is_cap = |v: &qymcad_ui_state::GpuVert| looks.get(v.body as usize).is_some_and(|l| l.state == qymcad_ui_state::LOOK_CAP);
         // What is checked is THE BODY's clip: the section cap is not part of it - the cap is deliberately nudged a
         // hair beyond the plane, into the cut-away side, so that the clipped triangles of the thread turns do not
         // occlude it.
-        let amber_cap = [u32::from_le_bytes([224, 168, 92, 255]), u32::from_le_bytes([176, 128, 66, 255])];
-        for v in half.iter().filter(|v| !amber_cap.contains(&v.color)) {
+        for v in half.iter().filter(|v| !is_cap(v)) {
             assert!(v.pos[0] <= 10.0 + 1e-3, "an honest clip: EVERY vertex of the visible part has x<=10 (the cut runs exactly along the plane): {}", v.pos[0]);
         }
         assert!(half.iter().any(|v| (v.pos[0] - 10.0).abs() < 1e-3), "there are vertices EXACTLY on the cutting plane");
@@ -1837,26 +1840,27 @@ mod command_flow_tests {
         // A tolerance rather than exact equality: the cap is deliberately nudged a hair into the CUT-AWAY side -
         // there is no material left there, so the body's clipped triangles do not occlude it. Lying exactly in the
         // plane, it argued with them over depth, and on a thread the fill disappeared in patches.
-        let amber = u32::from_le_bytes([224, 168, 92, 255]);
-        let cap_verts = half.iter().filter(|v| v.color == amber && (v.pos[0] - 10.0).abs() < 0.05).count();
-        assert!(cap_verts >= 3, "the section cap is present ({cap_verts} amber vertices at the plane)");
-        let wrong_side = half.iter().filter(|v| v.color == amber).any(|v| v.pos[0] < 10.0 - 1e-6);
+        let cap_verts = half.iter().filter(|v| is_cap(v) && (v.pos[0] - 10.0).abs() < 0.05).count();
+        assert!(cap_verts >= 3, "the section cap is present ({cap_verts} cap vertices at the plane)");
+        let wrong_side = half.iter().filter(|v| is_cap(v)).any(|v| v.pos[0] < 10.0 - 1e-6);
         assert!(!wrong_side, "the cap is nudged into the CUT-AWAY side (x >= 10): inside the material the thread turns occlude it");
         // flip: the other half becomes visible
         app.side.section.plane = Some(([10.0, 0.0, 0.0], [-1.0, 0.0, 0.0]));
-        let (other, _) = crate::gui::render_scene::gpu_scene(&app.painting());
-        for v in other.iter().filter(|v| !amber_cap.contains(&v.color)) {
+        let (other, looks_o) = crate::gui::render_scene::gpu_scene_flat(&app.painting());
+        let is_cap_o = |v: &qymcad_ui_state::GpuVert| looks_o.get(v.body as usize).is_some_and(|l| l.state == qymcad_ui_state::LOOK_CAP);
+        for v in other.iter().filter(|v| !is_cap_o(v)) {
             assert!(v.pos[0] >= 10.0 - 1e-3, "after the flip every vertex has x>=10: {}", v.pos[0]);
         }
         // the offset moves the plane: a -X normal with an offset of 5 puts the plane at x=5 and shows x>=5
         app.side.section.offset = 5.0;
-        let (shifted, _) = crate::gui::render_scene::gpu_scene(&app.painting());
-        let minx = shifted.iter().filter(|v| !amber_cap.contains(&v.color)).map(|v| v.pos[0]).fold(f32::MAX, f32::min);
+        let (shifted, looks_s) = crate::gui::render_scene::gpu_scene_flat(&app.painting());
+        let is_cap_s = |v: &qymcad_ui_state::GpuVert| looks_s.get(v.body as usize).is_some_and(|l| l.state == qymcad_ui_state::LOOK_CAP);
+        let minx = shifted.iter().filter(|v| !is_cap_s(v)).map(|v| v.pos[0]).fold(f32::MAX, f32::min);
         assert!((minx - 5.0).abs() < 1e-3, "the cut moved to x=5 (min x = {minx})");
         // off: everything is back
         app.side.section.plane = None;
         app.side.section.offset = 0.0;
-        let (back, _) = crate::gui::render_scene::gpu_scene(&app.painting());
+        let (back, _) = crate::gui::render_scene::gpu_scene_flat(&app.painting());
         assert_eq!(back.len(), full.len(), "Off brings the whole scene back");
     }
 
@@ -1936,7 +1940,7 @@ mod command_flow_tests {
         app.params.mirror.part = Some(comp_a);
         // there is nothing behind the ghost at this point - the pick either misses or (plausibly) falls through it
         // to a base plane; what matters is that it is NOT a face of ghost A
-        let hit = app.pick_sketch_plane_at(rect, rect.center());
+        let hit = crate::gui::pick::pick_sketch_plane_at(&app.painting(), rect, rect.center());
         if let Some(qymcad_core::feature::SketchPlane::Face(body, _)) = hit {
             assert_ne!(body, cube_a, "a GHOST's face (A) must not be pickable in mirror mode: {hit:?}");
         }
@@ -2012,12 +2016,13 @@ mod command_flow_tests {
         let stale = *app.live.shapes.keys().find(|b| !before.contains(b) && !consumed.contains(b)).expect("part two's body");
         app.live.shapes.remove(&stale); // the B-rep is gone, the node is red and the mesh stayed on screen
 
-        // An STL import: a mesh body with no timeline node
+        // An STL import: a mesh piece in a part, which never has a B-rep
         let mut mesh = qymcad_core::geom::Mesh::default();
         mesh.verts.extend([Point3::new(0.0, 0.0, 0.0), Point3::new(1.0, 0.0, 0.0), Point3::new(0.0, 1.0, 0.0)]);
         mesh.tris.push([0, 1, 2]);
-        crate::gui::add_bodies(&mut app.viewing.cam, &mut app.live, &mut app.project, &mut app.regen, &mut app.chosen.sel, &mut app.viewing.view, vec![(mesh, Vec::new())]);
-        let mesh_only = app.project.bodies.last().map(|b| b.id).expect("the imported body");
+        let mesh_only = app.project.add_mesh(mesh);
+        let source = app.project.add_source("mesh.stl", Vec::new());
+        app.project.import_tree_as_parts(vec![qymcad_core::model::ImportNode { name: "mesh".into(), body: Some(mesh_only), mesh: true, ..Default::default() }], source, "mesh");
 
         let plan = app.export_plan(ExportTarget::Project);
         assert_eq!(plan.brep, vec![brep], "only a live B-rep goes into STEP");
@@ -2060,7 +2065,7 @@ mod command_flow_tests {
         let mi = app.project.mesh_index(cube_a).expect("block A's mesh");
         assert!(qymcad_ui_state::body_is_ghost(&app.draw_ctx(), mi), "block A is a ghost seen from context B");
         assert!(app.params.mirror.part.is_none() && !app.side.section.pick, "an ordinary pick, not a mirror or a section");
-        let hit = app.pick_sketch_plane_at(rect, rect.center());
+        let hit = crate::gui::pick::pick_sketch_plane_at(&app.painting(), rect, rect.center());
         match hit {
             Some(qymcad_core::feature::SketchPlane::Face(body, _)) => {
                 assert_eq!(body, cube_a, "the pick must land on ghost A's face rather than on some other body");
@@ -2086,13 +2091,13 @@ mod command_flow_tests {
         app.project.active_component = Some(app.project.root);
         app.params.mirror.part = Some(asm); // the pick mode is active
         // from THE ROOT: the Part (the datum's owner) is not the current context, so it is hidden
-        assert!(app.datum_render_transform(datum_id).is_none(), "another component's datum is not visible from the root");
+        assert!(qymcad_ui_state::datum_render_transform(&app.painting(), datum_id).is_none(), "another component's datum is not visible from the root");
         // from the Assembly (the Part's direct parent, but NOT the owner itself) it is hidden too
         app.active_path = vec![app.project.root, asm];
-        assert!(app.datum_render_transform(datum_id).is_none(), "a DIRECT child's datum is NOT visible - it is not this context's own");
+        assert!(qymcad_ui_state::datum_render_transform(&app.painting(), datum_id).is_none(), "a DIRECT child's datum is NOT visible - it is not this context's own");
         // entering the Part (the owner itself) makes it visible
         app.active_path = vec![app.project.root, asm, part];
-        assert!(app.datum_render_transform(datum_id).is_some(), "the owning context's own datum is visible");
+        assert!(qymcad_ui_state::datum_render_transform(&app.painting(), datum_id).is_some(), "the owning context's own datum is visible");
     }
 }
 
@@ -2360,8 +2365,8 @@ mod sketch_conflict_ui_tests {
         let s = &mut app.project.sketches[si];
         s.constraints.push(Constraint::Fixed { p: a });
         s.constraints.push(Constraint::Horizontal { a, b });
-        s.constraints.push(Constraint::Distance { a, b, d: 30.0, off: 0.0, expr: String::new(), driven: false, axis: 0 });
-        s.constraints.push(Constraint::Distance { a, b, d: 50.0, off: 0.0, expr: String::new(), driven: false, axis: 0 });
+        s.constraints.push(Constraint::Distance { a, b, d: 30.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
+        s.constraints.push(Constraint::Distance { a, b, d: 50.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
         app.project.solve_sketch(si);
         (app, si)
     }
@@ -2382,7 +2387,7 @@ mod sketch_conflict_ui_tests {
         };
         let s = &mut app.project.sketches[si];
         s.constraints.push(Constraint::Fixed { p: a });
-        s.constraints.push(Constraint::Distance { a, b, d: 30.0, off: 0.0, expr: String::new(), driven: false, axis: 0 });
+        s.constraints.push(Constraint::Distance { a, b, d: 30.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
         s.constraints.push(Constraint::Horizontal { a, b });
         s.constraints.push(Constraint::Vertical { a, b });
         app.project.solve_sketch(si);

@@ -23,6 +23,13 @@ pub struct OcctKernel {
     /// whichever machine happened to open it. A zero, the factory value of a record, reads as the ordinary
     /// tolerance; see `k()`.
     pub quality_k: f64,
+    /// THE EDGES A BLEND LEFT OUT, per body built: (edges asked, edges left out). A rounding that cannot take an
+    /// edge builds the rest, and the node says so in words rather than going red or keeping quiet.
+    pub dropped: std::cell::RefCell<std::collections::HashMap<Id, (usize, usize)>>,
+    /// THE REQUEST TO STOP, shared with whoever started the rebuild. The rebuild itself looks at it between nodes;
+    /// an operation that runs long inside one node (recognising a mesh: 11 s of 14 s on a 160k-triangle ball in a
+    /// debug build) looks at it as it goes, so that neither Cancel nor deleting the source waits for it to finish.
+    pub stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 /// THE KERNEL REFUSED AN OPERATION: the coded fact goes on to the user, the kernel's own words to the log.
@@ -109,7 +116,19 @@ impl OcctKernel {
         // the inner contour meets the outer one, the remainder lies as two patches, and both carry the same id.
         // It showed while pushing a face: clicking one end lifted the opposite one too. It is resolved here in
         // the shared funnel, since any operation can leave such a face behind.
+        // A STOP ASKED ON THE WAY breaks the funnel off between its steps: on a body of 144 381 faces each of them
+        // took seconds to minutes, and Cancel waited for all of them. The refusal is no failure of the node - the
+        // rebuild it breaks off is cancelled whole.
+        let stopped = || self.stop.load(std::sync::atomic::Ordering::Relaxed).then_some(qymcad_core::errors::CoreError::EmptyResult);
         shape.heal_pinched_faces();
+        if let Some(e) = stopped() {
+            return Err(e);
+        }
+        // a crack narrower than 1e-6 left standing (a rounding as wide as its wall) breaks the next blend beside it
+        shape.drop_slivers();
+        if let Some(e) = stopped() {
+            return Err(e);
+        }
         // Emptiness is asked about first. An empty shape fails the validity check, so a broken body was
         // reported where in fact the operation produced nothing at all. Those are different faults calling for
         // different actions: a broken result is repaired, an empty one is redone. The order of the checks is
@@ -124,6 +143,9 @@ impl OcctKernel {
         // flaw: the check rejects it and a broken body is reported where the part is essentially correct and
         // repairs with a standard tool. A red node is left only for what could not be repaired.
         if !shape.is_valid() {
+            if let Some(e) = stopped() {
+                return Err(e);
+            }
             match shape.healed() {
                 Some(fixed) => shape = fixed,
                 None => return Err(qymcad_core::errors::CoreError::BrokenSolid),
@@ -142,9 +164,31 @@ impl OcctKernel {
         if !shape.is_sheet() && shape.volume() <= 1e-9 {
             return Err(qymcad_core::errors::CoreError::EmptyResult);
         }
+        if let Some(e) = stopped() {
+            return Err(e);
+        }
         let out = shape.tessellate_merged_auto(self.k()).ok_or(qymcad_core::errors::CoreError::EmptyResult)?;
         self.shapes.borrow_mut().insert(body, shape);
         Ok(out)
+    }
+}
+
+/// THE HALF OF A KERNEL THAT TRAVELS: a kernel of its own holding the bodies of one node.
+///
+/// It exists because two threads over one OCCT shape is exactly what this kernel is not safe for. The bodies
+/// are moved into it, the parcel of work is run on it, and the shapes - the ones it was lent plus the one it
+/// built - go home afterwards.
+pub struct OcctWorker {
+    pub kernel: OcctKernel,
+}
+
+impl qymcad_core::feature::KernelWorker for OcctWorker {
+    fn kernel(&self) -> &dyn qymcad_core::feature::Kernel {
+        &self.kernel
+    }
+
+    fn as_any(self: Box<Self>) -> Box<dyn std::any::Any> {
+        self
     }
 }
 
@@ -175,6 +219,14 @@ impl qymcad_core::feature::Kernel for OcctKernel {
             let shapes = self.shapes.borrow();
             let s = shapes.get(&src).ok_or(qymcad_core::errors::CoreError::SourceBodyNotBuilt)?;
             s.copy_faces(faces, names).ok_or_else(|| refused(qymcad_core::errors::Op::CopyFaces))?
+        };
+        self.finish(body, res)
+    }
+    fn offset_faces(&self, body: Id, src: Id, faces: &[u32], names: &[u32], dist: f64) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+        let res = {
+            let shapes = self.shapes.borrow();
+            let s = shapes.get(&src).ok_or(qymcad_core::errors::CoreError::SourceBodyNotBuilt)?;
+            s.offset_faces(faces, names, dist).ok_or_else(|| refused(qymcad_core::errors::Op::OffsetSurface))?
         };
         self.finish(body, res)
     }
@@ -214,6 +266,31 @@ impl qymcad_core::feature::Kernel for OcctKernel {
         };
         self.finish(body, res)
     }
+    fn mesh_solid(&self, body: Id, mesh: &Mesh) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+        // a polyhedron of the mesh's flat faces, sewn: a solid where the mesh closes, a surface where it does not
+        let res = crate::Shape::from_mesh(mesh).ok_or_else(|| refused(qymcad_core::errors::Op::MeshSolid))?;
+        self.finish(body, res)
+    }
+    fn mesh_recognised(&self, body: Id, mesh: &Mesh, tol: f64, sharp: f64) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+        // the whole chain of recognition: prepare, split into regions, fit a surface to each, find the corners and the
+        // curves they meet in, build the faces and sew them
+        let stopped = || self.stop.load(std::sync::atomic::Ordering::Relaxed);
+        let prepared = qymcad_meshfit::prepare(mesh, qymcad_meshfit::weld_tolerance(mesh));
+        if stopped() {
+            return Err(refused(qymcad_core::errors::Op::MeshRecognise));
+        }
+        let mut tolerance = qymcad_meshfit::Tolerance::for_mesh(&prepared);
+        tolerance.distance *= if tol > 0.0 { tol } else { 1.0 };
+        if sharp > 0.0 {
+            tolerance.sharp_deg = sharp;
+        }
+        let found = qymcad_meshfit::regions_until(&prepared, &tolerance, &stopped).ok_or_else(|| refused(qymcad_core::errors::Op::MeshRecognise))?;
+        let bounds = qymcad_meshfit::boundaries(&prepared, &found);
+        let curves = qymcad_meshfit::curves(&bounds, &found, &tolerance);
+        let made = crate::recognise::recognise_until(&prepared, &found, &bounds, &curves, &tolerance, &stopped)
+            .ok_or_else(|| refused(qymcad_core::errors::Op::MeshRecognise))?;
+        self.finish(body, made.shape)
+    }
     fn trim(&self, body: Id, src: Id, tool: Id, keep: [f64; 3]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
         let res = {
             let shapes = self.shapes.borrow();
@@ -226,9 +303,50 @@ impl qymcad_core::feature::Kernel for OcctKernel {
     fn body_is_sheet(&self, body: Id) -> bool {
         self.shapes.borrow().get(&body).is_some_and(|s| s.is_sheet())
     }
+    fn body_pieces(&self, body: Id) -> u32 {
+        self.shapes.borrow().get(&body).map_or(1, |s| s.solid_count().max(1))
+    }
+    fn body_solids(&self, body: Id) -> Vec<([f64; 3], f64)> {
+        self.shapes.borrow().get(&body).map(|s| s.solids_info()).unwrap_or_default()
+    }
+    fn take_solid(&self, body: Id, src: Id, index: usize) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+        let res = {
+            let shapes = self.shapes.borrow();
+            let s = shapes.get(&src).ok_or(qymcad_core::errors::CoreError::SourceBodyNotBuilt)?;
+            s.solid_at(index).ok_or(qymcad_core::errors::CoreError::BodyInOnePiece)?
+        };
+        self.finish(body, res)
+    }
     fn edge_end_faces(&self, body: Id) -> Vec<(u32, u32, u32)> {
         self.shapes.borrow().get(&body).map(|s| s.edge_end_faces()).unwrap_or_default()
     }
+    fn workers(&self) -> usize {
+        crate::workers()
+    }
+
+    fn split_off(&self, bodies: &[Id]) -> Option<Box<dyn qymcad_core::feature::KernelWorker>> {
+        let mut mine = self.shapes.borrow_mut();
+        let mut taken: std::collections::HashMap<Id, crate::Shape> = std::collections::HashMap::new();
+        for b in bodies {
+            if let Some(s) = mine.remove(b) {
+                taken.insert(*b, s);
+            }
+        }
+        Some(Box::new(OcctWorker { kernel: OcctKernel { shapes: std::cell::RefCell::new(taken), quality_k: self.quality_k, dropped: Default::default(), stop: self.stop.clone() } }))
+    }
+
+    fn absorb(&self, worker: Box<dyn qymcad_core::feature::KernelWorker>) {
+        let Ok(w) = worker.as_any().downcast::<OcctWorker>() else { return };
+        let mut mine = self.shapes.borrow_mut();
+        for (id, shape) in w.kernel.shapes.into_inner() {
+            mine.insert(id, shape);
+        }
+        self.dropped.borrow_mut().extend(w.kernel.dropped.into_inner());
+    }
+    fn take_dropped_edges(&self, body: Id) -> Option<(usize, usize)> {
+        self.dropped.borrow_mut().remove(&body)
+    }
+
     fn absorbed_names(&self, body: Id) -> Vec<(u32, u32)> {
         self.shapes.borrow().get(&body).map(|s| s.absorbed_names()).unwrap_or_default()
     }
@@ -517,7 +635,11 @@ impl qymcad_core::feature::Kernel for OcctKernel {
             let out = src_shape.boolean(&tool, op).ok_or_else(|| refused(qymcad_core::errors::Op::Boolean))?;
             // The same as for a boolean of bodies: a cut by a contour lying clear of the part removed nothing
             // and said nothing — measured at an area of 1600.00 before and after, with no red nodes.
-            if op == 0 && src_shape.volume() > 1e-9 && out.volume() >= src_shape.volume() - 1e-6 {
+            // A cut that only touches the body is nothing either: a square on the top cut 5 up, away from the block,
+            // took 0.1 mm^3 of a tool of 500 along the face it stood on and cut the top into 11 faces. Less than a
+            // thousandth of the tool is a touch, not a cut.
+            let removed = src_shape.volume() - out.volume();
+            if op == 0 && src_shape.volume() > 1e-9 && removed <= (tool.volume().abs() * 1e-3).max(1e-6) {
                 return Err(qymcad_core::errors::CoreError::CutRemovedNothing);
             }
             out
@@ -531,13 +653,29 @@ impl qymcad_core::feature::Kernel for OcctKernel {
             // Smooth edges — the tangent junctions of earlier fillets, with a dihedral angle near 180° —
             // have nothing left to round, and the kernel honestly fails on them. They are filtered out, as
             // elsewhere in the trade; the sharp ones are rounded.
+            self.dropped.borrow_mut().remove(&body);
             let sm = s.smooth_edge_ids();
-            let edges: Vec<u32> = edges.iter().copied().filter(|e| !sm.contains(e)).collect();
-            if edges.is_empty() && !sm.is_empty() {
+            // EVERY EDGE, with smooth ones among them, is every sharp edge by name: the smooth ones have nothing to round
+            let every: Vec<u32>;
+            let edges: &[u32] = if edges.is_empty() && !sm.is_empty() { every = s.sharp_edge_ids(); &every } else { edges };
+            // THE NAMES GO WITH THEIR EDGES: the kernel takes the surface names in parallel with the edges, so an edge
+            // left out takes its name out with it. Filtering the edges alone shifted every name after it onto the
+            // next edge - the blend of one edge carried the name of its neighbour.
+            let named = |keep: &dyn Fn(u32) -> bool| -> (Vec<u32>, Vec<u32>) {
+                let pairs: Vec<(u32, u32)> = edges.iter().enumerate().filter(|(_, e)| keep(**e)).map(|(i, e)| (*e, names.surfaces.get(i).copied().unwrap_or(0))).collect();
+                (pairs.iter().map(|p| p.0).collect(), pairs.iter().map(|p| p.1).collect())
+            };
+            let (kept, kept_names) = named(&|e| !sm.contains(&e));
+            // only when edges were asked for: an empty list asks for every edge, and a body with any smooth one - the seam
+            // of a tube - was refused whole, its sharp edges with it
+            if !edges.is_empty() && kept.is_empty() {
                 return Err(qymcad_core::errors::CoreError::AllEdgesSmooth);
             }
-            let edges = &edges[..];
-            let mut r = if edges.is_empty() { s.fillet_all(radius) } else { s.fillet_edges_named(radius, edges, names.surfaces, names.corners, names.all) };
+            let name_of = |e: u32| kept.iter().position(|k| *k == e).and_then(|i| kept_names.get(i).copied()).unwrap_or(0);
+            let names_for = |list: &[u32]| -> Vec<u32> { if names.surfaces.is_empty() { Vec::new() } else { list.iter().map(|e| name_of(*e)).collect() } };
+            let edges = &kept[..];
+            let surf = names_for(edges);
+            let mut r = if edges.is_empty() { s.fillet_all(radius) } else { s.fillet_edges_named(radius, edges, &surf, names.corners, names.all) };
             // The kernel fails exactly at the boundary of degeneracy — a radius equal to half a face: on a
             // 10 mm cube with r = 5 the face collapses to nothing, while 4.9999999 works. A retry with a
             // step back of about 2e-8, invisible in the geometry, builds the limiting case the way mature
@@ -547,21 +685,21 @@ impl qymcad_core::feature::Kernel for OcctKernel {
                     break;
                 }
                 let r2 = radius * f;
-                r = if edges.is_empty() { s.fillet_all(r2) } else { s.fillet_edges_named(r2, edges, names.surfaces, names.corners, names.all) };
+                r = if edges.is_empty() { s.fillet_all(r2) } else { s.fillet_edges_named(r2, edges, &surf, names.corners, names.all) };
             }
             // Honest diagnostics: if the group did not take, each edge is tried on its own and the answer
             // says which edges refuse this radius and which radius they do accept.
             if r.is_none() && !edges.is_empty() {
                 let mut bad: Vec<qymcad_core::errors::FilletEdgeIssue> = Vec::new();
                 for &e in edges.iter() {
-                    if s.fillet_edges_named(radius, &[e], names.surfaces, names.corners, names.all).is_some() {
+                    if s.fillet_edges_named(radius, &[e], &names_for(&[e]), names.corners, names.all).is_some() {
                         continue;
                     }
                     // What exactly is wrong with this edge, told with data rather than a phrase: the
                     // largest radius it does accept, or none at all. The wording is the application's job.
                     let mut takes_up_to = None;
                     for f in [0.5, 0.25, 0.1] {
-                        if s.fillet_edges_named(radius * f, &[e], names.surfaces, names.corners, names.all).is_some() {
+                        if s.fillet_edges_named(radius * f, &[e], &names_for(&[e]), names.corners, names.all).is_some() {
                             takes_up_to = Some(radius * f);
                             break;
                         }
@@ -573,8 +711,9 @@ impl qymcad_core::feature::Kernel for OcctKernel {
                     // the part gets as much as is possible instead of one wholly red node.
                     let bad_ids: Vec<u32> = bad.iter().map(|b| b.edge).collect();
                     let good: Vec<u32> = edges.iter().copied().filter(|e| !bad_ids.contains(e)).collect();
+                    let mut one_by_one = 0usize;
                     if !good.is_empty() {
-                        r = s.fillet_edges_named(radius, &good, names.surfaces, names.corners, names.all);
+                        r = s.fillet_edges_named(radius, &good, &names_for(&good), names.corners, names.all);
                     }
                     if r.is_none() && good.len() > 1 {
                         // One at a time: the ids of untouched edges survive a fillet through
@@ -584,7 +723,7 @@ impl qymcad_core::feature::Kernel for OcctKernel {
                         let mut done = 0usize;
                         for &e in &good {
                             let base = acc.as_ref().unwrap_or(s);
-                            if let Some(ns) = base.fillet_edges_named(radius, &[e], names.surfaces, names.corners, names.all) {
+                            if let Some(ns) = base.fillet_edges_named(radius, &[e], &names_for(&[e]), names.corners, names.all) {
                                 acc = Some(ns);
                                 done += 1;
                             }
@@ -593,11 +732,16 @@ impl qymcad_core::feature::Kernel for OcctKernel {
                         }
                         if done > 0 {
                             r = acc;
+                            one_by_one = done;
                         }
                     }
                     if r.is_none() {
                         return Err(qymcad_core::errors::CoreError::FilletRadiusTooBig { radius, issues: bad.clone(), smooth_skipped: sm.len() });
                     }
+                    // what was left out goes on to the node in words: the edges that refused on their own, and those
+                    // the one-at-a-time pass could not add on top of the rest
+                    let taken = if one_by_one > 0 { one_by_one } else { good.len() };
+                    self.dropped.borrow_mut().insert(body, (edges.len(), edges.len() - taken));
                 }
                 if r.is_none() {
                     // the edges take individually but not together: neighbouring fillets intersect
@@ -630,6 +774,11 @@ impl qymcad_core::feature::Kernel for OcctKernel {
         let out = s
             .helical_profile(crate::HelicalCut { axis: qymcad_core::feature::AxisLine { origin: h.origin, dir: h.dir }, radius: h.radius, profile: h.profile, length: h.length, lead: h.lead, starts: h.starts, hand: if h.left { crate::Hand::Left } else { crate::Hand::Right }, kind: if h.fuse { crate::Helix::Rib } else { crate::Helix::Groove }, lead_in: h.lead_in, lead_out: h.lead_out, gnames: h.gnames, rnames: h.rnames, crest_relief: h.crest_relief })
             .ok_or(if h.fuse { qymcad_core::errors::CoreError::AugerFlightFailed } else { qymcad_core::errors::CoreError::ThreadFailed })?;
+        // A GROOVE THAT CUT NOTHING, told by the exact volumes: the check on the meshes let 11546.04 -> 11546.04 through
+        // as a thread, the tessellation noise passing for material taken.
+        if !h.fuse && out.volume() >= s.volume() * (1.0 - 1e-7) {
+            return Err(qymcad_core::errors::CoreError::ThreadRemovedNothing { before: s.volume(), after: out.volume() });
+        }
         drop(shapes);
         self.finish(h.body, out)
     }
@@ -641,12 +790,20 @@ impl qymcad_core::feature::Kernel for OcctKernel {
             // have nothing left to cut, and the kernel honestly fails on them. They are filtered out, as
             // elsewhere in the trade; the sharp ones are chamfered.
             let sm = s.smooth_edge_ids();
-            let edges: Vec<u32> = edges.iter().copied().filter(|e| !sm.contains(e)).collect();
-            if edges.is_empty() && !sm.is_empty() {
+            // every edge, with smooth ones among them, is every sharp edge by name (see the rounding)
+            let every: Vec<u32>;
+            let edges: &[u32] = if edges.is_empty() && !sm.is_empty() { every = s.sharp_edge_ids(); &every } else { edges };
+            // the names go with their edges, as for a rounding: an edge left out takes its name out with it
+            let kept: Vec<(u32, u32)> = edges.iter().enumerate().filter(|(_, e)| !sm.contains(*e)).map(|(i, e)| (*e, names.surfaces.get(i).copied().unwrap_or(0))).collect();
+            let surf: Vec<u32> = if names.surfaces.is_empty() { Vec::new() } else { kept.iter().map(|k| k.1).collect() };
+            let asked_some = !edges.is_empty();
+            let edges: Vec<u32> = kept.iter().map(|k| k.0).collect();
+            // only when edges were asked for: an empty list asks for every edge (see the rounding)
+            if asked_some && edges.is_empty() {
                 return Err(qymcad_core::errors::CoreError::AllEdgesSmooth);
             }
             let edges = &edges[..];
-            let mut r = if edges.is_empty() { s.chamfer_all(dist) } else { s.chamfer_edges(dist, edges, names.surfaces, names.corners, names.all) };
+            let mut r = if edges.is_empty() { s.chamfer_all(dist) } else { s.chamfer_edges(dist, edges, &surf, names.corners, names.all) };
             // The kernel fails exactly at the boundary of degeneracy, where the leg equals the size of the
             // face; a retry stepped back builds the limiting case. A chamfer needs a coarser step than a
             // fillet: 1.99999999 failed where 1.99998 worked, so about 1e-5.
@@ -655,7 +812,7 @@ impl qymcad_core::feature::Kernel for OcctKernel {
                     break;
                 }
                 let d2 = dist * f;
-                r = if edges.is_empty() { s.chamfer_all(d2) } else { s.chamfer_edges(d2, edges, names.surfaces, names.corners, names.all) };
+                r = if edges.is_empty() { s.chamfer_all(d2) } else { s.chamfer_edges(d2, edges, &surf, names.corners, names.all) };
             }
             r.ok_or(qymcad_core::errors::CoreError::ChamferTooBig { dist })?
         };
@@ -766,13 +923,19 @@ impl qymcad_core::feature::Kernel for OcctKernel {
             let plate = s.thicken_face_join(face, thickness, fmap, emap).ok_or(qymcad_core::errors::CoreError::ThickenFaceRefused)?;
             // The plate returns into the part the surface was taken from. Otherwise a second body stays in
             // the part — a differently coloured piece on screen — breaking the rule that a part is one body.
-            match join {
+            let res = match join {
                 0 => plate,
                 j => {
                     let base = shapes.get(&j).ok_or(qymcad_core::errors::CoreError::SourceBodyNotBuilt)?;
                     base.boolean(&plate, 1).ok_or(qymcad_core::errors::CoreError::ThickenPlateNotJoined)?
                 }
+            };
+            // a plate grown into the body adds nothing: the top of a block thickened -2 stood green, the body as it
+            // was
+            if !s.is_sheet() && res.volume() <= s.volume() + 1e-6 {
+                return Err(qymcad_core::errors::CoreError::ThickenAddedNothing);
             }
+            res
         };
         self.finish(body, res)
     }
@@ -954,14 +1117,15 @@ impl qymcad_core::feature::Kernel for OcctKernel {
             let shapes = self.shapes.borrow();
             let sa = shapes.get(&a).ok_or(qymcad_core::errors::CoreError::BodyANotBuilt)?;
             let sb = shapes.get(&b).ok_or(qymcad_core::errors::CoreError::BodyBNotBuilt)?;
-            let out = sa.boolean(sb, op).ok_or_else(|| refused(qymcad_core::errors::Op::BodyBoolean))?;
             // A cut that removed nothing is worse than a refusal. Measured: a tool not intersecting the
             // base left the area and volume unchanged, the node stood green, and the tool was consumed all
-            // the same — a body lost with nothing given back.
-            if op == 0 && sa.volume() > 1e-9 && out.volume() >= sa.volume() - 1e-6 {
-                return Err(qymcad_core::errors::CoreError::CutRemovedNothing);
+            // the same - a body lost with nothing given back.
+            match sa.boolean_checked(sb, op) {
+                Ok(out) => out,
+                Err(crate::BoolVerdict::CutRemovedNothing) => return Err(qymcad_core::errors::CoreError::CutRemovedNothing),
+                Err(crate::BoolVerdict::NothingInCommon) => return Err(qymcad_core::errors::CoreError::EmptyResult),
+                Err(_) => return Err(refused(qymcad_core::errors::Op::BodyBoolean)),
             }
-            out
         };
         self.finish(body, res)
     }

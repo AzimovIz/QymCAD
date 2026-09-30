@@ -52,6 +52,42 @@ pub(crate) const TOL: f64 = 1e-7;
 /// fraction of 1e-9 of the largest value is standard practice at this scale.
 const RANK_EPS: f64 = 1e-9;
 
+/// HOW A TURN IS WEIGHED AGAINST A SHIFT when the nearest of the admissible poses is chosen: a radian counts as this
+/// many millimetres. Measured in solver coordinates a radian cost a millimetre, and a point held on a plane was met by
+/// turning the part about its own origin rather than by moving it: a tab 90 off the mid-plane, built 140 from its
+/// part's origin, turned and moved 0.009. Any finite weight leaves a turn of lever x shift / weight^2 (at 1000:
+/// 0.013 rad there), so the weight is made so heavy that a turn is taken back first and a shift chosen instead -
+/// a condition that asks for no turn gets none. The solver's own step keeps its coordinates: only the choice
+/// Pure turns still stand far above the rank threshold (1e-6 against 1e-9).
+const TURN_LEVER: f64 = 1.0e6;
+
+/// The same weight in the solver's own step, lighter: there a turn has to stay reachable under the damping floor
+/// (1e-6 of the largest curvature), and 1000 leaves it at that floor. The step then turns a tab 140 from its origin
+/// by 0.013 rad instead of 1.1, and the choice between solutions takes the rest back.
+const STEP_TURN_LEVER: f64 = 1000.0;
+
+/// The Jacobian in the weighed coordinates: a turn's column shrinks by `lever`.
+fn weighed(mut j: DMatrix<f64>, problem: &Problem, layout: &Layout, lever: f64) -> DMatrix<f64> {
+    for i in 0..problem.bodies.len() {
+        if let Some(col) = layout.column_of(i) {
+            for k in 3..6 {
+                j.column_mut(col + k).scale_mut(1.0 / lever);
+            }
+        }
+    }
+    j
+}
+
+/// A step from the weighed coordinates back to the solver's: a turn's part shrinks by `lever`.
+fn unweighed(mut step: DVector<f64>, problem: &Problem, layout: &Layout, lever: f64) -> DVector<f64> {
+    for i in 0..problem.bodies.len() {
+        if let Some(col) = layout.column_of(i) {
+            step.rows_mut(col + 3, 3).scale_mut(1.0 / lever);
+        }
+    }
+    step
+}
+
 
 /// Initial guess: place every free body so that its anchor coincides with the anchor of an already
 /// placed partner.
@@ -220,14 +256,14 @@ fn run_lm(
     layout: &Layout,
     start: &[Isometry3<f64>],
 ) -> (Vec<Isometry3<f64>>, DVector<f64>, usize) {
-    let problem = &Problem {
+    let mut based = Problem {
         bodies: problem.bodies.iter().zip(start.iter()).map(|(b, pose)| super::problem::Body { pose: *pose, grounded: b.grounded }).collect(),
         constraints: problem.constraints.clone(),
     };
+    let problem = &mut based;
     let mut iterations = 0usize;
-    let mut x = DVector::zeros(layout.unknowns);
     let mut lambda = 1e-3; // Damping: grows after a rejected step, shrinks after an accepted one.
-    let mut poses = poses_at(problem, layout, &x);
+    let mut poses: Vec<Isometry3<f64>> = problem.bodies.iter().map(|b| b.pose).collect();
     let mut r = residuals(problem, &poses);
     // The cost is the constraints and nothing else.
     //
@@ -245,7 +281,9 @@ fn run_lm(
     const MAX_ITER: usize = 200;
     for it in 1..=MAX_ITER {
         iterations = it;
-        let j = jacobian(problem, layout, &poses);
+        // the step is solved with a turn weighed at `STEP_TURN_LEVER`: its least-norm answer shifts a part where a
+        // shift is enough instead of swinging it about its origin (1.1 rad on the first step for a tab 140 from it)
+        let j = weighed(jacobian(problem, layout, &poses), problem, layout, STEP_TURN_LEVER);
 
         // Levenberg-Marquardt step: (J^T J + lambda * diag(J^T J)) . d = -J^T r, solved through SVD.
         // Only the constraints are solved here; keeping a body where it was left is the job of the
@@ -294,16 +332,22 @@ fn run_lm(
         // tweak: displacement along free directions is the job of `pull_back_free_directions`, and the
         // step
         // has nothing to do there by definition.
-        let step = project_onto_row_space(&j, step);
+        let step = unweighed(project_onto_row_space(&j, step), problem, layout, STEP_TURN_LEVER);
 
-        let x_try = &x + &step;
-        let poses_try = poses_at(problem, layout, &x_try);
+        let poses_try = poses_at(problem, layout, &step);
         let r_try = residuals(problem, &poses_try);
         let cost_try = r_try.norm_squared();
 
         if cost_try < cost {
             let improved = cost - cost_try;
-            x = x_try;
+            // THE STEP IS TAKEN FROM WHERE THE BODIES STAND NOW: the Jacobian is the derivative at the current poses,
+            // and adding steps into one vector from the start is not the same once a body has turned (exp(x + d) is
+            // not exp(d) exp(x)). Two revolute mates tied by a relation and driven to 45 deg crawled to a residual of
+            // 2.4e-7 in all 200 steps (tolerance 1e-7) and the drive was refused as a conflict, though the
+            // linearised residual left over was 1.9e-14.
+            for (b, p) in problem.bodies.iter_mut().zip(poses_try.iter()) {
+                b.pose = *p;
+            }
             poses = poses_try;
             r = r_try;
             cost = cost_try;
@@ -586,7 +630,7 @@ fn pull_back_free_directions(
         let mut scale = 1.0;
         let mut accepted = false;
         loop {
-            let step = &free * -scale;
+            let step = unweighed(&free * -scale, problem, layout, TURN_LEVER);
             let moved = poses_at(&staged, layout, &step);
             let (settled, r_settled, _) = run_lm(problem, layout, &moved);
             // Both sides are measured by the same quantity: the free part of the deviation. Comparing a
@@ -613,7 +657,8 @@ fn pull_back_free_directions(
     poses
 }
 
-/// The free part of the deviation from the original pose: what the constraints did not require.
+/// The free part of the deviation from the original pose: what the constraints did not require. In the weighed
+/// coordinates (`TURN_LEVER`).
 ///
 /// The deviation splits in two: the part in the row space of the Jacobian is held by the constraints —
 /// a driven travel is a constraint too — while the remainder lies in the null space with nothing to
@@ -622,7 +667,7 @@ fn pull_back_free_directions(
 fn free_deviation(problem: &Problem, layout: &Layout, poses: &[Isometry3<f64>], origin: &[Isometry3<f64>]) -> Option<DVector<f64>> {
     let n = layout.unknowns;
     let staged = staged_problem(problem, poses);
-    let j = jacobian(&staged, layout, poses);
+    let j = weighed(jacobian(&staged, layout, poses), problem, layout, TURN_LEVER);
     if !j.iter().all(|v| v.is_finite()) {
         return None;
     }
@@ -638,7 +683,7 @@ fn free_deviation(problem: &Problem, layout: &Layout, poses: &[Isometry3<f64>], 
         let dw = (poses[i].rotation * origin[i].rotation.inverse()).scaled_axis();
         for k in 0..3 {
             dev[col + k] = dt[k];
-            dev[col + 3 + k] = dw[k];
+            dev[col + 3 + k] = dw[k] * TURN_LEVER;
         }
     }
 
@@ -670,7 +715,7 @@ fn deviation_norm(problem: &Problem, layout: &Layout, poses: &[Isometry3<f64>], 
         }
         let dt = poses[i].translation.vector - origin[i].translation.vector;
         let dw = (poses[i].rotation * origin[i].rotation.inverse()).scaled_axis();
-        acc += dt.norm_squared() + dw.norm_squared();
+        acc += dt.norm_squared() + (dw * TURN_LEVER).norm_squared();
     }
     acc.sqrt()
 }

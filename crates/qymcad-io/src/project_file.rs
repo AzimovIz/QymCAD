@@ -188,6 +188,9 @@ pub fn load_project_with_brep(path: &str) -> Result<LoadedProject, String> {
     let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(|e| format!("zip: {e}"))?;
     let doc_s = read_entry(&mut zip, "document.ron")?;
     let mut project = model::from_ron(&doc_s)?; // the meshes are placeholders and the ids are correct
+    // settled as read: the first rebuild gave the sketches of an older file their frame, and the untouched document
+    // opened read as changed
+    project.settle_loaded();
 
     // load the mesh geometry and the face cache by their ids
     let ids = project.bodies.iter().map(|b| b.id).collect::<Vec<_>>();

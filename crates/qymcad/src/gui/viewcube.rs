@@ -18,7 +18,7 @@
 //!
 //! That way the set of zones cannot diverge from the picture: THE SAME THING is drawn and picked.
 use super::App;
-use egui::{Color32, Pos2, Rect, Stroke};
+use egui::{Pos2, Rect, Stroke};
 
 /// The half-size of the cube, and the vertex of the chamfer along the middle axis and the small one.
 /// `H > T > S`, otherwise there is no truncation.
@@ -245,48 +245,9 @@ fn point_in_poly(p: Pos2, poly: &[Pos2]) -> bool {
 /// The texture is prepared ONCE per caption and size and lives in a cache: rasterising a font every frame
 /// is thousands of glyphs a second for nothing.
 fn label_texture(ctx: &egui::Context, cache: &mut std::collections::HashMap<String, egui::TextureHandle>, text: &str, px: usize) -> egui::TextureHandle {
-    let key = format!("{text}@{px}");
-    if let Some(t) = cache.get(&key) {
-        return t.clone();
-    }
-    use ab_glyph::{Font, ScaleFont};
     static BOLD: &[u8] = include_bytes!("../../../../assets/fonts/LiberationSans-Bold.ttf");
-    let font = ab_glyph::FontRef::try_from_slice(BOLD).expect("the baked-in bold font parses");
-    let scaled = font.as_scaled(px as f32);
-
-    // THE WIDTH COMES FROM THE GLYPHS THEMSELVES rather than from the number of letters: captions differ
-    // in length, and a texture of fixed width would stretch one and squeeze another.
-    let glyphs: Vec<_> = text.chars().map(|c| font.glyph_id(c)).collect();
-    let advance: f32 = glyphs.iter().map(|g| scaled.h_advance(*g)).sum();
-    let pad = px as f32 * 0.25;
-    let w = (advance + pad * 2.0).ceil().max(1.0) as usize;
-    let h = (scaled.height() + pad).ceil().max(1.0) as usize;
-    let mut alpha = vec![0u8; w * h];
-    let mut pen = pad;
-    let baseline = pad * 0.5 + scaled.ascent();
-    for g in &glyphs {
-        let q = g.with_scale_and_position(px as f32, ab_glyph::point(pen, baseline));
-        if let Some(outline) = font.outline_glyph(q) {
-            let bb = outline.px_bounds();
-            outline.draw(|gx, gy, c| {
-                let (x, y) = (bb.min.x as i32 + gx as i32, bb.min.y as i32 + gy as i32);
-                if x >= 0 && y >= 0 && (x as usize) < w && (y as usize) < h {
-                    let i = y as usize * w + x as usize;
-                    // THE MAXIMUM is taken rather than the sum: neighbouring glyphs overlap, and adding
-                    // gives dirty dark patches at the joins
-                    alpha[i] = alpha[i].max((c * 255.0) as u8);
-                }
-            });
-        }
-        pen += scaled.h_advance(*g);
-    }
-    // THE COLOUR COMES FROM THE VERTICES OF THE MESH (multiplied by the texture), so only the alpha is
-    // here: one texture serves a dark caption on a light face and the other way round alike.
-    let pixels: Vec<Color32> = alpha.iter().map(|a| Color32::from_white_alpha(*a)).collect();
-    let img = egui::ColorImage { size: [w, h], source_size: egui::Vec2::new([w, h][0] as f32, [w, h][1] as f32), pixels };
-    let tex = ctx.load_texture(&key, img, egui::TextureOptions::LINEAR);
-    cache.insert(key, tex.clone());
-    tex
+    let key = format!("{text}@{px}");
+    qymcad_ui_state::text_texture(ctx, cache, &key, BOLD, px as f32, text).expect("the baked-in bold font parses")
 }
 
 /// WHERE "RIGHT" AND "UP" OF A CAPTION POINT ON EACH FACE — as a table, not as a formula.
@@ -627,7 +588,6 @@ pub(crate) fn label_screen_dirs(cube: &CubeCtx, rect: Rect, i: usize) -> (egui::
 }
 
 /// The screen centre of one face of the cube: where a click has to land to turn to it.
-#[cfg(test)]
 pub(crate) fn zone_center(cube: &CubeCtx, rect: Rect, i: usize) -> Pos2 {
     let z = &zones()[i];
     let pts: Vec<Pos2> = z.poly.iter().map(|p| project(cube, *p, rect).0).collect();

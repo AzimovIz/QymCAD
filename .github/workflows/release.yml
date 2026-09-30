@@ -23,11 +23,11 @@
 #
 # It used to be MSYS2/MinGW, chosen because OCCT was one `pacman` line away. That path broke on a link
 # error that has been open upstream since 2019 (rust-lang/rust#60912): Rust carries a libmsvcrt.a of its
-# own, MSYS2 updated libmingwex.a, and the halves drifted apart. See docs/MSVC_MIGRATION.md.
+# own, MSYS2 updated libmingwex.a, and the halves drifted apart.
 #
 # Linux: the very same Docker image a local build uses (`just pkg-linux`), so what CI produces and
-# what is built by hand are the same artifact. The image compiles OCCT 7.8.1 FROM SOURCE - apt on Ubuntu
-# 22.04 carries only 7.5, while build.rs needs the merged modules of 7.8 - and that is slow, so the layers are
+# what is built by hand are the same artifact. The image compiles OCCT 7.9.3 FROM SOURCE - apt on Ubuntu
+# 22.04 carries only 7.5, while build.rs needs the merged modules of 7.8+ - and that is slow, so the layers are
 # cached in the Actions cache. The first run pays for the compilation; the rest reuse it.
 name: release
 
@@ -69,7 +69,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # THE KERNEL IS BUILT FROM SOURCE, exactly as it is for Linux: the same 7.8.1, the same modules
+      # THE KERNEL IS BUILT FROM SOURCE, exactly as it is for Linux: the same 7.9.3, the same modules
       # switched off. The alternatives were binaries from Open Cascade (a download behind a registration,
       # which no automated build can walk through) and vcpkg (whose port decides the version and the module
       # set for us). One kernel for all three systems beats three different ones.
@@ -82,21 +82,21 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: C:\occt
-          key: occt-7.8.1-msvc-x64-v1
+          key: occt-7.9.3-msvc-x64-v1
 
-      - name: Build OCCT 7.8.1 (only when the cache missed)
+      - name: Build OCCT 7.9.3 (only when the cache missed)
         if: steps.occt.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
-          curl.exe -sSL -o occt.tar.gz https://github.com/Open-Cascade-SAS/OCCT/archive/refs/tags/V7_8_1.tar.gz
+          curl.exe -sSL -o occt.tar.gz https://github.com/Open-Cascade-SAS/OCCT/archive/refs/tags/V7_9_3.tar.gz
           tar xf occt.tar.gz
           # THE NAME OF THE UNPACKED DIRECTORY IS NOT OURS TO ASSUME. GitHub strips the leading `V` from a
-          # tag when it names the folder inside an archive, so `V7_8_1` arrives as `OCCT-7_8_1`. The Linux
+          # tag when it names the folder inside an archive, so `V7_9_3` arrives as `OCCT-7_9_3`. The Linux
           # build always matched it by pattern; this one spelled it out and failed on the first run.
           $src = (Get-ChildItem -Directory -Filter 'OCCT-*' | Select-Object -First 1).FullName
           if (-not $src) { throw "the archive unpacked into nothing that looks like OCCT-*" }
           Write-Host ">>> sources at $src"
-          # OCCT 7.8.1 declares compatibility with CMake older than 3.5, and current CMake has dropped
+          # Parts of OCCT's own tree declare compatibility with CMake older than 3.5, and current CMake has dropped
           # support for saying that at all - the runner here carries the one shipped with Visual Studio
           # 2026. This is the escape hatch CMake itself names in the refusal. On Linux the question never
           # comes up: the builder image is Ubuntu 22.04, whose CMake is old enough to accept it as written.
@@ -124,7 +124,7 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: C:\occt
-          key: occt-7.8.1-msvc-x64-v1
+          key: occt-7.9.3-msvc-x64-v1
 
       # THE TAG IS STAMPED INTO THE BINARY HERE, at the step that compiles it - not at the one that packs
       # it. `build.rs` reads `QYMCAD_VERSION`, so a build step without it produces a program that cannot
@@ -208,7 +208,7 @@ jobs:
 
       # The build record this action uploads by itself is a 30 KB artifact nobody opens, sitting next to the
       # 35 MB one that people came for. Off: the list of artifacts is read by a person looking for a package.
-      - name: Builder image (OCCT 7.8.1 from source, Ubuntu 22.04 base)
+      - name: Builder image (OCCT 7.9.3 from source, Ubuntu 22.04 base)
         uses: docker/build-push-action@v7
         env:
           DOCKER_BUILD_RECORD_UPLOAD: false
@@ -243,7 +243,7 @@ jobs:
   # runner any more - the last one, macos-13, stopped being updated in September 2025 - and Apple has not
   # sold an Intel machine since 2023. Building for it would mean cross-compiling for a shrinking minority.
   #
-  # The kernel is built from source here as well: one OCCT 7.8.1 with one set of modules for all three
+  # The kernel is built from source here as well: one OCCT 7.9.3 with one set of modules for all three
   # systems beats three different ones.
   macos:
     needs: agree
@@ -256,12 +256,12 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: /Users/runner/occt
-          key: occt-7.8.1-macos-arm64-v1
+          key: occt-7.9.3-macos-arm64-v1
 
-      - name: Build OCCT 7.8.1 (only when the cache missed)
+      - name: Build OCCT 7.9.3 (only when the cache missed)
         if: steps.occt.outputs.cache-hit != 'true'
         run: |
-          curl -sSL -o occt.tar.gz https://github.com/Open-Cascade-SAS/OCCT/archive/refs/tags/V7_8_1.tar.gz
+          curl -sSL -o occt.tar.gz https://github.com/Open-Cascade-SAS/OCCT/archive/refs/tags/V7_9_3.tar.gz
           tar xf occt.tar.gz
           src=$(ls -d OCCT-* | head -1)
           echo ">>> sources at $src"
@@ -284,7 +284,7 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: /Users/runner/occt
-          key: occt-7.8.1-macos-arm64-v1
+          key: occt-7.9.3-macos-arm64-v1
 
       # The tag is stamped at the compiling step - see the same step in the Windows job.
       - name: Build (release)

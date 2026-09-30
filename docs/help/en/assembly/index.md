@@ -27,14 +27,15 @@ A joint's anchor is **inferred under the cursor**: the middle of a face gives it
 midpoint, a circular rim the hole centre, an edge end a vertex. You do not declare in advance what
 you are about to pick.
 
-The solver places the parts so that all joints hold at once, and says honestly how many degrees of
-freedom are left and which constraints turned out to be **redundant** — that is, repeat what was
-already said.
+The parts are placed so that all joints hold at once. The properties of a joint show how many degrees of freedom the
+driven part has left, and if the joints ask something incompatible, the program says that they conflict.
 
-## Component arrays and mirrors
+## Patterns, mirrors and clones
 
-A row of bolts or a symmetric pair of brackets is placed by a component array or mirror. The copies
-live in one feature: editing happens in one place.
+A row of bolts is placed by a [component pattern](assembly/04-arrays) — one row of the assembly timeline. The left
+bracket from the right one is a **Mirrored copy** of the part. **Make a clone** (the right button on the part in the
+tree) places the same part once more: editing the original changes the clone too, while it stands and mates on its
+own.
 
 ## Interference check
 
@@ -45,4 +46,4 @@ the first thing worth looking at before release.
 
 One part's sketch can stand on another part's face — then an explicit **external reference** appears
 between them. That is how a bracket's dimensions come from the housing instead of being retyped into
-it. The reference is visible in the tree and it can be broken.
+it. The reference shows in the properties of the part and can be broken — [more](assembly/06-external-refs).

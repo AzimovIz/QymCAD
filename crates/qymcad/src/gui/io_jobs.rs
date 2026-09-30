@@ -7,23 +7,41 @@ pub(crate) use qymcad_ui_state::regenerate_now;
 pub(crate) use qymcad_ui_state::finish_dim;
 use super::*;
 
+/// The rebuild writes `line` on the status line and remembers it as its own.
+fn rebuild_says(regen: &mut qymcad_ui_state::Rebuilding, status: &mut String, line: String) {
+    regen.line = line.clone();
+    *status = line;
+}
+
+/// A quiet rebuild shows its progress on the status line - over what the operation that asked for it said, which is
+/// kept to be put back.
+fn rebuild_says_it_started(regen: &mut qymcad_ui_state::Rebuilding, status: &mut String, quiet: bool, label: &str) {
+    if quiet {
+        regen.over = if *status == regen.line { String::new() } else { std::mem::take(status) };
+        rebuild_says(regen, status, label.to_string());
+    }
+}
+
+/// The end of a rebuild: an error is always said. Success replaces only the rebuild's own line - with the words of
+/// the operation it covered, or "Done" - and leaves alone anything written since by someone else.
+/// Reported behaviour: grounding named the part, the rebuild it asked for ended and the line read "Done".
+fn rebuild_says_it_ended(regen: &mut qymcad_ui_state::Rebuilding, status: &mut String, error: Option<&qymcad_core::errors::CoreError>) {
+    regen.computed_depth = regen.computing_depth; // the rebuild ran to its end: the document it was asked for is computed
+    let over = std::mem::take(&mut regen.over);
+    match error {
+        Some(e) => rebuild_says(regen, status, crate::i18n::tr1("io-rebuild-error", "error", &crate::gui::error_words::error_text(e))),
+        None if status.is_empty() || *status == regen.line => {
+            let line = if over.is_empty() { format!("{} {}", ph::CHECK, crate::i18n::tr("io-ready")) } else { over };
+            rebuild_says(regen, status, line);
+        }
+        None => {}
+    }
+    qymcad_ui_state::invalidate(regen); // the geometry moved: what is drawn from it is drawn again
+}
+
 impl App {
 
 
-
-
-
-
-    /// Integrating a finished STL mesh (from the worker) into the project - on the UI thread, and fast.
-    pub(super) fn finish_stl_import(&mut self, path: String, mesh: qymcad_core::geom::Mesh, faces: Vec<qymcad_core::geom::MeshFace>) {
-        qymcad_ui_state::begin_edit(&mut self.disk.edits, &self.project, crate::i18n::tr("io-import-stl")); // this is an EDIT of the document: a body is added to the current one
-        let tris = mesh.tris.len();
-        crate::gui::add_bodies(&mut self.viewing.cam, &mut self.live, &mut self.project, &mut self.regen, &mut self.chosen.sel, &mut self.viewing.view, vec![(mesh, faces)]);
-        crate::gui::embed_source(&mut self.project, &path);
-        self.disk.dxf_path = Some(path);
-        self.status = crate::i18n::tr1("io-stl-added", "n", &tris.to_string());
-            qymcad_ui_state::commit_edit(&mut self.rebuild_ctx());
-    }
 
 
 
@@ -75,9 +93,9 @@ impl App {
             let _ = tx.send(JobResult::ImportShapes { shapes, regen });
         });
         if regen {
-            self.regen.busy = Some(Busy { label: crate::i18n::tr("io-brep-restore"), rx, kind: BgKind::ImportShapes, pulse: None, quiet: false });
+            self.regen.busy = Some(Busy { started: std::time::Instant::now(), label: crate::i18n::tr("io-brep-restore"), rx, kind: BgKind::ImportShapes, pulse: None, quiet: false });
         } else {
-            self.regen.bg.push(Busy { label: crate::i18n::tr("io-brep-restoring"), rx, kind: BgKind::ImportShapes, pulse: None, quiet: false });
+            self.regen.bg.push(Busy { started: std::time::Instant::now(), label: crate::i18n::tr("io-brep-restoring"), rx, kind: BgKind::ImportShapes, pulse: None, quiet: false });
         }
     }
 
@@ -257,44 +275,39 @@ impl App {
 
 
 
-    /// Exporting a target to STEP (exact B-rep, live `Shape`s from the core, every body in the world frame
-    /// of the assembly).
-    pub(super) fn export_step(&mut self, target: ExportTarget) {
+    /// Exporting a target into an exact file - STEP or IGES (exact B-rep, live `Shape`s from the core, every
+    /// body in the world frame of the assembly).
+    pub(super) fn export_exact(&mut self, format: qymcad_kernel::ExactFormat, target: ExportTarget) {
         ensure_brep(&mut self.rebuild_ctx()); // without a live B-rep the sort would count every body as B-rep-less and the file would come out empty
         // the sort into "has a B-rep" and "has not" is done on the UI thread (self is needed)
         let plan = self.export_plan(target); // the same sort STL uses
-        let note = plan.note(true);
         if plan.brep.is_empty() {
-            self.status = if plan.mesh_only.len() + plan.stale.len() > 0 {
-                format!("{} {}{}", ph::WARNING, crate::i18n::tr("io-step-no-brep"), note)
-            } else {
-                crate::i18n::tr("io-step-no-bodies")
-            };
+            self.status = nothing_exact_to_write(format, &plan);
             return;
         }
-        let default = format!("{}.step", export_base_name(&self.project, &self.disk.project_path, target));
-        let bodies = plan.brep.clone();
-        self.ask_save_file(rfd::AsyncFileDialog::new().set_file_name(default).add_filter("STEP", &["step", "stp"]), move |app, path| write_step_to(&mut app.live, &mut app.project, &mut app.regen, &mut app.status, &path, &bodies, &note));
+        let dialog = exact_dialog(format, &export_base_name(&self.project, &self.disk.project_path, target));
+        let job = ExportJob { format, tree: export_tree_of(&self.project, format, target, &plan.brep), bodies: plan.brep.clone(), note: plan.note(true) };
+        self.ask_save_file(dialog, move |app, path| write_exact_to(&mut app.live, &mut app.project, &mut app.regen, &mut app.status, &path, &job));
     }
 
 
 
 
-    /// Exporting a target to STL at a given detail (deflection in mm). A live `Shape` is re-tessellated to
-    /// that quality; imported bodies with no shape use the stored mesh. Every mesh is placed into the world
-    /// frame of the assembly.
-    pub(super) fn export_stl(&mut self, target: ExportTarget, deflection: f64) {
-        ensure_brep(&mut self.rebuild_ctx()); // STL quality comes from re-tessellating the live B-rep - bring the cache up
+    /// Exporting a target as a mesh (STL, OBJ) at a given detail (deflection in mm). A live `Shape` is
+    /// re-tessellated to that quality; imported bodies with no shape use the stored mesh. Every mesh is placed
+    /// into the world frame of the assembly.
+    pub(super) fn export_mesh(&mut self, format: qymcad_ui_state::MeshFormat, target: ExportTarget, deflection: f64) {
+        ensure_brep(&mut self.rebuild_ctx()); // the quality comes from re-tessellating the live B-rep - bring the cache up
         // split into bodies with a live shape (tessellated in the worker) and raw meshes (a data clone is Send)
         let plan = self.export_plan(target); // the same sort STEP uses
         let note = plan.note(false);
         let bodies = plan.stl_bodies();
         if bodies.is_empty() {
-            self.status = crate::i18n::tr("io-stl-no-bodies");
+            self.status = crate::i18n::tr1("io-mesh-no-bodies", "format", crate::gui::mesh_entry(format).name());
             return;
         }
-        let default = format!("{}.stl", export_base_name(&self.project, &self.disk.project_path, target));
-        self.ask_save_file(rfd::AsyncFileDialog::new().set_file_name(default).add_filter("STL", &["stl"]), move |app, path| write_stl_to(qymcad_ui_state::editing_of!(app), &mut app.live, &path, &bodies, &note, deflection));
+        let dialog = mesh_dialog(format, &export_base_name(&self.project, &self.disk.project_path, target));
+        self.ask_save_file(dialog, move |app, path| { let job = mesh_job(&app.project, format, target, bodies, note, deflection); write_mesh_to(qymcad_ui_state::editing_of!(app), &mut app.live, &path, &job) });
     }
 
 
@@ -324,45 +337,6 @@ impl App {
 
 
 
-    /// Integrating finished STEP solids (from the worker) into the project - on the UI thread, and fast.
-    /// Every solid becomes the base body of its own part (several of them become a subassembly). The live
-    /// shape goes into the cache.
-    pub(super) fn finish_step_import(&mut self, path: String, bodies: Vec<qymcad_kernel::Body>, shapes: Vec<qymcad_kernel::Shape>) {
-        let mut shapes = shapes.into_iter();
-        let nbodies = bodies.len();
-        let tris: usize = bodies.iter().map(|(m, _)| m.tris.len()).sum();
-        let source = crate::gui::embed_source(&mut self.project, &path).unwrap_or(0);
-        let base = crate::gui::file_name(&path);
-        let stem = std::path::Path::new(&base).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| base.clone());
-
-        // add the mesh, the faces and the shape of every solid; collect (body, name, source, index)
-        let mut solids: Vec<(Id, String, Id, u32)> = Vec::with_capacity(nbodies);
-        for (k, (mesh, fs)) in bodies.into_iter().enumerate() {
-            let bid = self.project.add_mesh(mesh);
-            self.live.faces.insert(bid, fs.clone()); // a face cache keyed by body Id, for quick access
-            self.project.set_body_faces(bid, fs);
-            if let Some(s) = shapes.next() {
-                self.live.shapes.insert(bid, s);
-            }
-            let name = if nbodies == 1 { stem.clone() } else { format!("{stem} {}", k + 1) };
-            solids.push((bid, name, source, k as u32));
-        }
-        // create the parts or the subassembly in the active context (one tested topology operation of the core)
-        let created = self.project.import_bodies_as_parts(solids, &stem);
-        qymcad_ui_state::regenerate_all(&mut self.rebuild_ctx()); // re-tessellate the import nodes, and take faces and edges from the B-rep
-        if let Some(cid) = created {
-            if let Some(ci) = self.project.components.iter().position(|c| c.id == cid) {
-                self.chosen.sel = Sel::Component(ci);
-            }
-        }
-        self.disk.dxf_path = Some(path);
-        qymcad_ui_state::invalidate(&mut self.regen);
-        self.viewing.view.initialized = false;
-        self.viewing.cam.init = false;
-        let what = if nbodies == 1 { crate::i18n::tr("io-part") } else { crate::i18n::tr1("io-subassembly-of", "n", &nbodies.to_string()) };
-        self.status = crate::i18n::tr2("io-step-imported", "what", &what, "tris", &tris.to_string());
-    }
-
 
     /// Move the rebuild of the timeline into a worker thread. It is a modal job: while it runs the window
     /// draws a spinner and input is blocked - otherwise edits would land on a stale copy of the project.
@@ -382,11 +356,11 @@ impl App {
         // precision is a property of THE DOCUMENT, taken here: in the thread there is no project to ask
         let quality_k = self.project.geom_quality.deflection_k();
         let (tx, rx) = std::sync::mpsc::channel();
-        let pulse = std::sync::Arc::new(qymcad_ui_state::RegenPulse::default());
+        let pulse = std::sync::Arc::new(qymcad_ui_state::RegenPulse { stamp, ..Default::default() });
         let watch = pulse.clone();
         std::thread::spawn(move || {
             let _gate = qymcad_kernel::kernel_gate();
-            let kernel = OcctKernel { shapes: std::cell::RefCell::new(shapes), quality_k };
+            let kernel = OcctKernel { shapes: std::cell::RefCell::new(shapes), quality_k, stop: watch.stop.clone(), ..Default::default() };
             let report = proj.regenerate_watched(&kernel, watch.as_ref());
             let shapes = kernel.shapes.into_inner().into_iter().collect::<Vec<_>>();
             let _ = tx.send(JobResult::Regenerated { stamp, project: Box::new(proj), shapes, built: report.built, errors: report.errors, cancelled: report.cancelled });
@@ -414,10 +388,8 @@ impl App {
         } else {
             crate::i18n::tr("io-rebuilding")
         };
-        if quiet {
-            self.status = label.clone();
-        }
-        self.regen.busy = Some(Busy { label, rx, kind: BgKind::Regen, pulse: Some(pulse), quiet });
+        rebuild_says_it_started(&mut self.regen, &mut self.status, quiet && !plan.nodes.is_empty(), &label); // a rebuild of no node is a sync of caches, not news
+        self.regen.busy = Some(Busy { started: std::time::Instant::now(), label, rx, kind: BgKind::Regen, pulse: Some(pulse), quiet });
     }
 
 
@@ -437,19 +409,18 @@ impl App {
         // feature failed to build" cannot be read out of it. The document stays what it was - it never
         // changed: the work was done on a copy. The live B-rep is taken back, otherwise the next operation
         // would be left without it.
-        //
         // AND NOTHING IS STARTED AGAIN. The dirty marks on the nodes are still there, and the planner looks
         // at exactly those - without this flag the very next frame would launch the same rebuild that was
-        // just stopped, and Cancel would turn into a blinking button.
-        if cancelled {
+        // just stopped, and Cancel would turn into a blinking button. A stop asked because the document moved
+        // on under the rebuild (a part deleted mid-way) is not a person's: it goes the stale way below.
+        if cancelled && regen_doc_stamp(&self.project) == stamp {
             adopt_shapes(&mut self.live, shapes);
-            self.regen.paused = true;
-            self.status = format!("{} {}", ph::WARNING, crate::i18n::tr("io-rebuild-cancelled"));
+            self.active_path = qymcad_ui_state::rebuild_cancelled(&mut self.rebuild_ctx()).unwrap_or_else(|| self.active_path.clone());
             return;
         }
         if regen_doc_stamp(&self.project) != stamp {
             adopt_shapes(&mut self.live, shapes); // the live B-rep had travelled to the thread - take it back
-            self.status = crate::i18n::tr("io-doc-changed");
+            rebuild_says(&mut self.regen, &mut self.status, crate::i18n::tr("io-doc-changed"));
             qymcad_ui_state::mark_dirty_for_rebuild(&mut self.rebuild_ctx());
             return;
         }
@@ -486,24 +457,12 @@ impl App {
         // THREAD DID NOT COMPUTE. It brings back its own and lays it on top; it does not touch anyone
         // else's.
         adopt_shapes(&mut self.live, shapes);
-        let imports: std::collections::HashSet<Id> = self
-            .project
-            .timeline
-            .iter()
-            .filter_map(|n| match n.kind {
-                qymcad_core::feature::FeatureKind::Import { body, .. } => Some(body),
-                _ => None,
-            })
-            .collect();
-        self.live.shapes.retain(|body, _| self.project.mesh_index(*body).is_some() || imports.contains(body));
+        qymcad_ui_state::keep_live_shapes(&mut self.live, &self.project);
         for (body, faces) in built {
             qymcad_ui_state::set_body_faces(&mut self.live, &mut self.project, body, faces);
         }
-        self.status = match errors.first() {
-            Some((_, e)) => crate::i18n::tr1("io-rebuild-error", "error", &crate::gui::error_words::error_text(e)),
-            None => format!("{} {}", ph::CHECK, crate::i18n::tr("io-ready")),
-        };
-        qymcad_ui_state::invalidate(&mut self.regen);
+        rebuild_says_it_ended(&mut self.regen, &mut self.status, errors.first().map(|(_, e)| e));
+        qymcad_ui_state::settle_baseline(&mut self.disk.edits, &self.project);
         // if this rebuild was the preparation of a live B-rep, then it HAS NOW HAPPENED, and the outcome is
         // drawn from its result (after invalidate: that is what moves the geometry revision).
         if let Some(was_clean) = self.live.wait.take() {
@@ -613,9 +572,7 @@ impl App {
                         ctx.request_repaint();
                         return false;
                     }
-                    crate::gui::render::draw_splash(&self.logo_tex, &self.scheme, ctx, &label);
-                    ctx.request_repaint();
-                    return true;
+                    return busy_card(&mut self.regen, &mut self.live, &mut self.status, &self.logo_tex, &self.scheme, ctx);
                 }
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
                     // the worker died without sending a result - drop `busy` rather than hang in the overlay
@@ -677,7 +634,7 @@ pub(crate) fn spawn_project_load(regen: &mut super::Rebuilding, path: String) {
         };
         let _ = tx.send(res);
     });
-    regen.busy = Some(Busy { label: crate::i18n::tr("io-loading"), rx, kind: BgKind::ImportShapes, pulse: None, quiet: false });
+    regen.busy = Some(Busy { started: std::time::Instant::now(), label: crate::i18n::tr("io-loading"), rx, kind: BgKind::ImportShapes, pulse: None, quiet: false });
 }
 
 /// Writing the project in a BACKGROUND thread. On a real assembly a save took seconds (compressing the
@@ -707,7 +664,70 @@ pub(crate) fn adopt_shapes(live: &mut super::LiveGeom, shapes: Vec<(Id, qymcad_k
 /// Writing the STL, once a name has been given. Like STEP, the solids leave the cache only here: while
 /// the chooser is up the program goes on drawing, and a viewport whose bodies were taken out from under
 /// it draws nothing.
-pub(crate) fn write_stl_to(ed: qymcad_ui_state::Editing, live: &mut LiveGeom, path: &std::path::Path, bodies: &[Id], note: &str, deflection: f64) {
+/// WHAT IS TO BE WRITTEN as a mesh: the format, the bodies, the note on what was left out, and the detail.
+pub(crate) struct MeshJob {
+    pub format: qymcad_ui_state::MeshFormat,
+    pub bodies: Vec<Id>,
+    pub note: String,
+    pub deflection: f64,
+    /// The tree the file goes out as, for a format that holds one (see `mesh_job`); empty goes out flat.
+    pub tree: Vec<qymcad_core::model::ExportNode>,
+}
+
+/// THE JOB A MESH EXPORT RUNS once the file is named: the bodies sorted before the chooser went up, the note about
+/// what is missing, the detail - and the tree they go out as, where the format holds one: glTF keeps the parts as nodes
+/// under their names, 3MF as an object of parts under theirs, placed, in their colours. The rest go out flat, every
+/// body where it stands in the world.
+pub(crate) fn mesh_job(project: &Project, format: qymcad_ui_state::MeshFormat, target: ExportTarget, bodies: Vec<Id>, note: String, deflection: f64) -> MeshJob {
+    let tree = if matches!(format, qymcad_ui_state::MeshFormat::Glb | qymcad_ui_state::MeshFormat::ThreeMf) { tree_to_write(project, target, &bodies) } else { Vec::new() };
+    MeshJob { format, bodies, note, deflection, tree }
+}
+
+/// The colour, or none, of every triangle of `body`'s tessellation where the tree gives faces of it a colour of their
+/// own: the body's colour (none for a part in the palette, which goes out with none), and each coloured face's over it,
+/// by the face's persistent id. Empty where no face has one.
+fn tri_colours(tree: &[qymcad_core::model::ExportNode], body: Id, mesh: &qymcad_core::geom::Mesh, faces: &[qymcad_core::geom::MeshFace]) -> Vec<Option<[u8; 3]>> {
+    let Some(node) = tree.iter().find(|n| n.body == Some(body)).filter(|n| !n.face_colors.is_empty()) else { return Vec::new() };
+    let mut out = vec![node.color; mesh.tris.len()];
+    for f in faces.iter().filter(|f| f.id != 0) {
+        if let Some((_, c)) = node.face_colors.iter().find(|(id, _)| *id == f.id) {
+            for &t in &f.triangles {
+                if let Some(slot) = out.get_mut(t as usize) {
+                    *slot = Some(*c);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Write meshes in the format asked for.
+fn write_meshes(format: qymcad_ui_state::MeshFormat, meshes: &[qymcad_core::geom::Mesh], path: &str) -> Result<(), String> {
+    match format {
+        qymcad_ui_state::MeshFormat::Stl => qymcad_io::export_stl(meshes, path),
+        qymcad_ui_state::MeshFormat::Obj => qymcad_io::export_obj(meshes, path),
+        qymcad_ui_state::MeshFormat::Ply => qymcad_io::export_ply(meshes, path),
+        qymcad_ui_state::MeshFormat::Glb => qymcad_io::export_glb(meshes, path),
+        qymcad_ui_state::MeshFormat::ThreeMf => qymcad_io::export_3mf(meshes, path),
+        qymcad_ui_state::MeshFormat::Amf => qymcad_io::export_amf(meshes, path),
+    }
+}
+
+/// The chooser for writing a mesh: the suggested name with the format's extension, and the format's filter.
+fn mesh_dialog(format: qymcad_ui_state::MeshFormat, base: &str) -> rfd::AsyncFileDialog {
+    let entry = crate::gui::mesh_entry(format);
+    rfd::AsyncFileDialog::new().set_file_name(format!("{base}.{}", entry.extensions()[0])).add_filter(entry.name(), entry.extensions())
+}
+
+/// What the status says once meshes have come in: the format, how many bodies, how many triangles.
+pub(super) fn mesh_added(format: qymcad_ui_state::MeshFormat, pieces: &[qymcad_ui_state::MeshPiece]) -> String {
+    let tris: usize = pieces.iter().map(|(_, m, ..)| m.tris.len()).sum();
+    crate::i18n::trn("io-mesh-added", &[("format", crate::gui::mesh_entry(format).name()), ("bodies", &pieces.len().to_string()), ("n", &tris.to_string())])
+}
+
+pub(crate) fn write_mesh_to(ed: qymcad_ui_state::Editing, live: &mut LiveGeom, path: &std::path::Path, job: &MeshJob) {
+    let (bodies, deflection, format) = (&job.bodies, job.deflection, job.format);
+    let name = crate::gui::mesh_entry(format).name();
     // THE MODAL SLOT HOLDS ONE JOB. Frames go on running while the chooser is open, so a rebuild may
     // have been started behind it; claiming the slot over that one would drop its channel and the
     // rebuild would never land. Said out loud rather than written over.
@@ -716,57 +736,159 @@ pub(crate) fn write_stl_to(ed: qymcad_ui_state::Editing, live: &mut LiveGeom, pa
         return;
     }
     let mut moved: Vec<(Id, qymcad_kernel::Shape, [f64; 12])> = Vec::new();
-    let mut raw: Vec<(qymcad_core::geom::Mesh, [f64; 12])> = Vec::new();
-    for &b in bodies {
+    let mut raw: Vec<(Id, qymcad_core::geom::Mesh, [f64; 12], Vec<Option<[u8; 3]>>)> = Vec::new();
+    for &b in bodies.iter() {
         let m = ed.project.body_world_transform(b);
         if let Some(s) = live.shapes.remove(&b) {
             moved.push((b, s, m));
         } else if let Some(i) = ed.project.mesh_index(b) {
-            raw.push((ed.project.bodies[i].mesh.clone(), m));
+            // a piece of a mesh coloured triangle by triangle keeps its colours on the way out
+            let tri = ed.project.tri_colors.get(&ed.project.lineage_root(b)).filter(|(_, places)| places.len() == ed.project.bodies[i].mesh.tris.len()).map(|(palette, places)| places.iter().map(|&k| palette.get(k as usize).copied()).collect()).unwrap_or_default();
+            raw.push((b, ed.project.bodies[i].mesh.clone(), m, tri));
         }
     }
     if moved.is_empty() && raw.is_empty() {
-        *ed.status = crate::i18n::tr("io-stl-no-bodies"); // everything that was to be written is gone from the document
+        *ed.status = crate::i18n::tr1("io-mesh-no-bodies", "format", name); // everything that was to be written is gone from the document
         return;
     }
-    let note = note.to_string();
+    let note = job.note.clone();
+    let tree = job.tree.clone();
     let p = path.to_string_lossy().into_owned();
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let mut meshes: Vec<qymcad_core::geom::Mesh> = Vec::new();
+        // every body's mesh in its own coordinates, and where it stands in the world
+        let mut own: Vec<(Id, qymcad_core::geom::Mesh, [f64; 12], Vec<Option<[u8; 3]>>)> = Vec::new();
         let mut failed = 0usize; // a body whose tessellation failed is NOT dropped silently but reported
-        for (_, s, m) in &moved {
-            if let Some((mut mesh, _)) = s.tessellate_merged(deflection) {
-                mesh.transform(m);
-                meshes.push(mesh);
+        for (id, s, m) in &moved {
+            if let Some((mesh, faces)) = s.tessellate_merged(deflection) {
+                let tri = tri_colours(&tree, *id, &mesh, &faces);
+                own.push((*id, mesh, *m, tri));
             } else {
                 failed += 1;
             }
         }
-        for (mut mesh, m) in raw {
-            mesh.transform(&m);
-            meshes.push(mesh);
-        }
+        own.extend(raw);
+        let n = own.len();
         // STL writes EVERYTHING that is on screen (B-rep plus meshes), but it must say that some of the
         // bodies have no B-rep: the same sort STEP uses, so that the contents of the two files do not
         // drift apart SILENTLY.
-        let said = match qymcad_io::export_stl(&meshes, &p) {
-            Ok(()) if failed > 0 => format!("(!) {}{}", crate::i18n::trn("io-stl-partial", &[("n", &meshes.len().to_string()), ("path", &p), ("failed", &failed.to_string())]), note),
-            Ok(()) if !note.is_empty() => format!("(!) {}{}", crate::i18n::tr2("io-stl-done", "n", &meshes.len().to_string(), "path", &p), note),
-            Ok(()) => crate::i18n::tr2("io-stl-done", "n", &meshes.len().to_string(), "path", &p),
+        let done = || crate::i18n::trn("io-mesh-done", &[("format", name), ("n", &n.to_string()), ("path", &p)]);
+        // a tree goes out with every part in its own coordinates, placed by the tree; flat, every body where it stands
+        let written = if tree.is_empty() {
+            let world: Vec<qymcad_core::geom::Mesh> = own.into_iter().map(|(_, mut mesh, m, _)| {
+                mesh.transform(&m);
+                mesh
+            }).collect();
+            write_meshes(format, &world, &p)
+        } else {
+            let own: Vec<(Id, qymcad_core::geom::Mesh, Vec<Option<[u8; 3]>>)> = own.into_iter().map(|(id, mesh, _, tri)| (id, mesh, tri)).collect();
+            match format {
+                qymcad_ui_state::MeshFormat::ThreeMf => qymcad_io::export_3mf_tree(&tree, &own, &p),
+                _ => qymcad_io::export_glb_tree(&tree, &own, &p), // `mesh_job` gives a tree to GLB and 3MF alone
+            }
+        };
+        let said = match written {
+            Ok(()) if failed > 0 => format!("(!) {}{}", crate::i18n::trn("io-mesh-partial", &[("format", name), ("n", &n.to_string()), ("path", &p), ("failed", &failed.to_string())]), note),
+            Ok(()) if !note.is_empty() => format!("(!) {}{}", done(), note),
+            Ok(()) => done(),
             Err(e) => crate::i18n::name(&e),
         };
         let shapes_back = moved.into_iter().map(|(id, s, _)| (id, s)).collect();
         let _ = tx.send(JobResult::Exported { status: said, shapes_back });
     });
-    ed.regen.busy = Some(Busy { label: crate::i18n::tr("io-export-stl"), rx, kind: BgKind::Save, pulse: None, quiet: false });
+    ed.regen.busy = Some(Busy { started: std::time::Instant::now(), label: crate::i18n::tr1("io-export-mesh", "format", name), rx, kind: BgKind::Save, pulse: None, quiet: false });
 }
 
 /// Writing the STEP, once a name has been given. The bodies were sorted before the chooser went up; the
 /// SOLIDS are gathered only here, because the chooser is answered at leisure and the program keeps
 /// running the whole time - a cache emptied while somebody types a file name is a cache the viewport
 /// then draws from.
-pub(crate) fn write_step_to(live: &mut LiveGeom, project: &mut Project, regen: &mut Rebuilding, status: &mut String, path: &std::path::Path, bodies: &[Id], note: &str) {
+/// What the status says once an exact file has come in: a part or a subassembly of how many, and the triangles.
+pub(super) fn exact_imported(format: qymcad_kernel::ExactFormat, bodies: usize, tris: usize) -> String {
+    let what = if bodies == 1 { crate::i18n::tr("io-part") } else { crate::i18n::tr1("io-subassembly-of", "n", &bodies.to_string()) };
+    crate::i18n::trn("io-exact-imported", &[("format", crate::gui::exact_entry(format).name()), ("what", &what), ("tris", &tris.to_string())])
+}
+
+/// THE CARD OF A BACKGROUND JOB THAT IS NOT A REBUILD. An import says how long it has gone and can be left: the
+/// reading goes on in its thread and is thrown away when it ends, and the window is given back now. Returns
+/// whether the card is still up.
+fn busy_card(regen: &mut Rebuilding, live: &mut LiveGeom, status: &mut String, logo: &Option<egui::TextureHandle>, scheme: &qymcad_ui_state::SchemeUi, ctx: &egui::Context) -> bool {
+    let Some(busy) = &regen.busy else { return false };
+    let label = busy.label.clone();
+    if busy.kind != BgKind::ImportShapes {
+        crate::gui::render::draw_splash(logo, scheme, ctx, &label);
+        ctx.request_repaint();
+        return true;
+    }
+    if crate::gui::render::draw_import_card(logo, scheme, ctx, &label, busy.started.elapsed(), &crate::i18n::tr("io-cancel-import")) {
+        regen.busy = None;
+        live.wait = None; // nothing will arrive for the wait to be waiting on
+        *status = crate::i18n::tr("in-import-cancelled");
+        return false;
+    }
+    ctx.request_repaint(); // the clock on the card moves on
+    true
+}
+
+/// The file's name without its folder and its extension - what an imported part is called.
+pub(super) fn stem_of(path: &str) -> String {
+    let base = crate::gui::file_name(path);
+    std::path::Path::new(&base).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or(base)
+}
+
+/// WHAT THE STATUS SAYS WHEN NOTHING CAN GO INTO AN EXACT FILE: bodies that are there but carry no B-rep are
+/// told apart from there being no bodies at all.
+fn nothing_exact_to_write(format: qymcad_kernel::ExactFormat, plan: &ExportPlan) -> String {
+    let name = crate::gui::exact_entry(format).name();
+    if plan.mesh_only.len() + plan.stale.len() > 0 {
+        format!("{} {}{}", ph::WARNING, crate::i18n::tr1("io-exact-no-brep", "format", name), plan.note(true))
+    } else {
+        crate::i18n::tr1("io-exact-no-bodies", "format", name)
+    }
+}
+
+/// The chooser for writing an exact file: the suggested name with the format's first extension, and the
+/// format's own filter.
+fn exact_dialog(format: qymcad_kernel::ExactFormat, base: &str) -> rfd::AsyncFileDialog {
+    let entry = crate::gui::exact_entry(format);
+    rfd::AsyncFileDialog::new().set_file_name(format!("{base}.{}", entry.extensions()[0])).add_filter(entry.name(), entry.extensions())
+}
+
+/// WHAT IS TO BE WRITTEN into an exact file: the format, the bodies, and the note on what was left out.
+pub(crate) struct ExportJob {
+    pub format: qymcad_kernel::ExactFormat,
+    pub bodies: Vec<Id>,
+    pub note: String,
+    /// The tree the file goes out as (see `export_tree_of`); empty for a format with no tree, which goes out flat.
+    pub tree: Vec<qymcad_core::model::ExportNode>,
+}
+
+/// THE TREE AN EXACT FILE GOES OUT AS. STEP carries the assembly: its subassemblies and parts under the names the tree
+/// shows, their colours, every component in its place, a clone as a second occurrence of its original. IGES has no
+/// tree, and goes out flat as before. `bodies` are the ones that go out - visible, with a live B-rep.
+pub(crate) fn export_tree_of(project: &Project, format: qymcad_kernel::ExactFormat, target: ExportTarget, bodies: &[Id]) -> Vec<qymcad_core::model::ExportNode> {
+    if format != qymcad_kernel::ExactFormat::Step {
+        return Vec::new();
+    }
+    tree_to_write(project, target, bodies)
+}
+
+/// The tree under `target` as a file takes it, with the names the tree shows; `bodies` are the ones that go out.
+fn tree_to_write(project: &Project, target: ExportTarget, bodies: &[Id]) -> Vec<qymcad_core::model::ExportNode> {
+    let root = match target {
+        ExportTarget::Project => project.root,
+        ExportTarget::Component(c) => c,
+    };
+    let mut tree = project.export_tree(root, |b| bodies.contains(&b));
+    for n in &mut tree {
+        n.name = crate::i18n::name(&n.name); // the name the tree shows, not a catalogue key
+    }
+    tree
+}
+
+pub(crate) fn write_exact_to(live: &mut LiveGeom, project: &mut Project, regen: &mut Rebuilding, status: &mut String, path: &std::path::Path, job: &ExportJob) {
+    let (bodies, note, format) = (&job.bodies, job.note.as_str(), job.format);
+    let name = crate::gui::exact_entry(format).name();
     // THE MODAL SLOT HOLDS ONE JOB. Frames go on running while the chooser is open, so a rebuild may
     // have been started behind it; claiming the slot over that one would drop its channel and the
     // rebuild would never land. Said out loud rather than written over.
@@ -779,34 +901,40 @@ pub(crate) fn write_step_to(live: &mut LiveGeom, project: &mut Project, regen: &
     // TEMPORARILY and returned to the cache when it finishes. While the export runs the overlay is modal
     // (no edits are possible), so losing the cache is ruled out.
     let mut moved: Vec<(Id, qymcad_kernel::Shape, [f64; 12])> = Vec::with_capacity(bodies.len());
-    for &id in bodies {
+    for &id in bodies.iter() {
         let m = project.body_world_transform(id);
         if let Some(s) = live.shapes.remove(&id) {
             moved.push((id, s, m));
         }
     }
     if moved.is_empty() {
-        *status = crate::i18n::tr("io-step-no-bodies"); // everything that was to be written is gone from the document
+        *status = crate::i18n::tr1("io-exact-no-bodies", "format", name); // everything that was to be written is gone from the document
         return;
     }
     let n = moved.len();
     let note = note.to_string();
+    let tree = job.tree.clone();
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         let pairs: Vec<(&qymcad_kernel::Shape, [f64; 12])> = moved.iter().map(|(_, s, m)| (s, *m)).collect();
         // honest about what was skipped: a body with no live B-rep (an imported STL, a failed regen)
         // does not get into the STEP - such a file used to come out short of parts SILENTLY, and that
         // was discovered only by whoever received it.
-        let status = match qymcad_kernel::write_step(&pairs, &p) {
-            Ok(()) if !note.is_empty() => format!("(!) {}{}", crate::i18n::tr2("io-step-done", "n", &n.to_string(), "path", &p), note),
-            Ok(()) => crate::i18n::tr2("io-step-done", "n", &n.to_string(), "path", &p),
+        let done = || crate::i18n::trn("io-exact-done", &[("format", name), ("n", &n.to_string()), ("path", &p)]);
+        // a STEP goes out as the document's tree; a format with none, flat
+        let by_id: Vec<(Id, &qymcad_kernel::Shape)> = moved.iter().map(|(id, s, _)| (*id, s)).collect();
+        let written = if tree.is_empty() { qymcad_kernel::write_exact(format, &pairs, &p) } else { qymcad_kernel::write_step_tree(&tree, &by_id, &p) };
+        drop(by_id);
+        let status = match written {
+            Ok(()) if !note.is_empty() => format!("(!) {}{}", done(), note),
+            Ok(()) => done(),
             Err(e) => crate::i18n::name(&e),
         };
         drop(pairs);
         let shapes_back = moved.into_iter().map(|(id, s, _)| (id, s)).collect();
         let _ = tx.send(JobResult::Exported { status, shapes_back });
     });
-    regen.busy = Some(Busy { label: crate::i18n::tr("io-export-step"), rx, kind: BgKind::Save, pulse: None, quiet: false });
+    regen.busy = Some(Busy { started: std::time::Instant::now(), label: crate::i18n::tr1("io-export-exact", "format", name), rx, kind: BgKind::Save, pulse: None, quiet: false });
 }
 
 /// The suggested file name for an export target (the component name or the project name).
@@ -852,7 +980,7 @@ pub(crate) fn spawn_save(io: &mut DocIo, live: &mut LiveGeom, project: &mut Proj
         let res = qymcad_io::save_project_guarded_with_brep(&proj, &p, &breps);
         let _ = tx.send(JobResult::Saved { path: p, autosave, error: res.err() });
     });
-    regen.bg.push(Busy { label: if autosave { crate::i18n::tr("io-autosaving") } else { crate::i18n::tr("io-saving") }, rx, kind: BgKind::Save, pulse: None, quiet: false });
+    regen.bg.push(Busy { started: std::time::Instant::now(), label: if autosave { crate::i18n::tr("io-autosaving") } else { crate::i18n::tr("io-saving") }, rx, kind: BgKind::Save, pulse: None, quiet: false });
     *status = if autosave { crate::i18n::tr("io-autosaving") } else { crate::i18n::tr1("io-saving-path", "path", &path) };
 }
 
@@ -943,5 +1071,26 @@ pub(crate) fn save_part_window(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Con
         if let Some(d) = wc.parts.save.take() {
             wc.tex_graveyard.extend(d.tex);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::tri_colours;
+    use qymcad_core::geom::{Mesh, MeshFace, Point3};
+    use qymcad_core::model::ExportNode;
+
+    /// A FACE WITH NO COLOUR ON A PART WITH NONE GOES OUT WITH NONE: the part is in the palette, its second face green -
+    /// the first face's triangle takes no colour, not one made up for it.
+    #[test]
+    fn a_face_with_no_colour_goes_out_with_none() {
+        let green = [26, 204, 26];
+        let place = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0];
+        let tree = [ExportNode { name: "plate".into(), parent: None, place, body: Some(7), same_as: None, color: None, face_colors: vec![(2, green)] }];
+        let p = |x: f64, y: f64| Point3::new(x, y, 0.0);
+        let mesh = Mesh { verts: vec![p(0.0, 0.0), p(1.0, 0.0), p(0.0, 1.0), p(1.0, 1.0)], tris: vec![[0, 1, 2], [1, 3, 2]] };
+        let face = |id: u32, t: u32| MeshFace { triangles: vec![t], normal: [0.0, 0.0, 1.0], centroid: p(0.5, 0.5), area: 0.5, id };
+        let out = tri_colours(&tree, 7, &mesh, &[face(1, 0), face(2, 1)]);
+        assert_eq!(out, [None, Some(green)], "a face with no colour goes out in one made up");
     }
 }

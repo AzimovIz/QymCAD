@@ -49,11 +49,28 @@ impl Project {
         hit
     }
 
+    /// Delete a sketch and its `Sketch` node, and nothing else: every feature built on it stays in the timeline,
+    /// marked for a rebuild, where it fails and says why - no profile to build from. The person repairs it or
+    /// deletes it; losing the work above the sketch without a word is not the delete's to decide. The cascade is
+    /// `delete_sketch_with_dependents`.
+    pub fn delete_sketch(&mut self, sid: Id) {
+        use crate::feature::FeatureKind;
+        self.timeline.retain(|nd| !matches!(nd.kind, FeatureKind::Sketch { sketch } if sketch == sid));
+        for nd in self.timeline.iter_mut() {
+            if nd.kind.inputs().contains(&sid) {
+                nd.dirty = true;
+            }
+        }
+        if let Some(si) = self.sketch_index(sid) {
+            self.remove_sketch(si);
+        }
+    }
+
     /// Delete a sketch as a cascade: the `Sketch` node in the timeline, every feature built on it (extrude,
     /// cut, revolve) and everything downstream (fillets, patterns and so on) together with their bodies and
     /// parametric dimensions, then the sketch itself. Returns the ids of the deleted bodies, for the interface
     /// caches.
-    pub fn delete_sketch(&mut self, sid: Id) -> Vec<Id> {
+    pub fn delete_sketch_with_dependents(&mut self, sid: Id) -> Vec<Id> {
         use crate::feature::FeatureKind;
         // Transitive closure of the doomed set: everything that depends on the sketch directly or
         // indirectly.
@@ -190,6 +207,11 @@ impl Project {
             let before = self.sketch_frame(si);
             let pid = self.snapshot_face_plane_for(owner, body, &key);
             self.sketches[si].plane = SketchPlane::Datum(pid);
+            // the snapshot says where the face stood, and that the face is gone: the sketch goes red on it
+            if let Some(pl) = self.planes.iter_mut().find(|p| p.id == pid) {
+                pl.def = crate::model::PlaneDef::FaceGone;
+            }
+            self.mark_node_dirty(sid); // the rebuild visits it and marks it red
             // The snapshot has to land exactly where the live frame stood: freezing does not move the
             // sketch.
             if let (Some(before), Some(pi)) = (before, self.planes.iter().position(|p| p.id == pid)) {
@@ -251,7 +273,19 @@ impl Project {
         let _ = dead;
     }
 
+    /// Delete operation node `node_id` alone. A node in the middle hands its consumers to its source (below); a
+    /// base node - an extrusion, a primitive - has no source, and what stood on it stays in the timeline, marked
+    /// for a rebuild, where it fails and says why. The cascade over it is `delete_feature_with_dependents`.
     pub fn delete_feature_op(&mut self, node_id: Id) -> std::collections::HashSet<Id> {
+        self.delete_feature_node(node_id, false)
+    }
+
+    /// Delete operation node `node_id` and everything built on it, whether or not it has a source to hand it to.
+    pub fn delete_feature_with_dependents(&mut self, node_id: Id) -> std::collections::HashSet<Id> {
+        self.delete_feature_node(node_id, true)
+    }
+
+    fn delete_feature_node(&mut self, node_id: Id, dependents: bool) -> std::collections::HashSet<Id> {
         // A body goes with its node. A mesh nobody produces any more stayed in the document and surfaced in
         // the root assembly as its own row, showing bodies in the tree that were never made and belong to no
         // part. The cleanup sits at the end of the deletion, in one place nothing can bypass.
@@ -278,6 +312,13 @@ impl Project {
         let Some(node) = self.timeline.iter().find(|n| n.id == node_id) else {
             return std::collections::HashSet::new();
         };
+        // A PATTERN OF COMPONENTS goes whole: its node and its copies, the source staying - the one door every
+        // deletion of the pattern takes, from its row in the tree or from a copy
+        if let crate::feature::FeatureKind::ComponentPattern { bodies, .. } = &node.kind {
+            let gone: std::collections::HashSet<Id> = bodies.iter().copied().collect();
+            self.delete_comp_pattern(node_id);
+            return gone;
+        }
         // A node may have several outputs (a split gives one body per piece) and every one of them has to be
         // re-pointed: handling only the first leaves the rest as orphaned meshes with no timeline node — ghost
         // bodies absent from the tree yet present in the project and surfacing in the root assembly.
@@ -287,9 +328,29 @@ impl Project {
             self.drop_orphan_bodies();
             return std::collections::HashSet::new();
         };
-        let src = node.kind.consumed_body().filter(|s| *s != 0 && !outs.contains(s));
+        let src = node.kind.consumed_body().filter(|s| *s != 0 && !outs.contains(s) && !dependents);
         let Some(src) = src else {
-            // Nothing to re-point to (a base feature), so the cascade runs over every output.
+            if !dependents {
+                // The base goes alone: its consumers keep naming its bodies, find none on the rebuild and go red.
+                let gone: std::collections::HashSet<Id> = outs.into_iter().collect();
+                // a datum on a face or an edge of it names the body in its definition rather than among its inputs
+                let datums: std::collections::HashSet<Id> = self.timeline.iter().filter_map(|n| match n.kind {
+                    crate::feature::FeatureKind::Plane { plane: d } | crate::feature::FeatureKind::DatumAxis { axis: d } => self.datum_base_body(d).filter(|b| gone.contains(b)).map(|_| n.id),
+                    _ => None,
+                }).collect();
+                for n in self.timeline.iter_mut() {
+                    if n.kind.inputs().iter().any(|i| gone.contains(i)) || datums.contains(&n.id) {
+                        n.dirty = true;
+                    }
+                }
+                self.remove_bodies(&gone);
+                let list: Vec<Id> = gone.iter().copied().collect();
+                self.drop_connectors_of_dead_bodies(&list);
+                self.break_external_refs_of_dead_bodies();
+                self.freeze_sketches_on_dead_faces();
+                return gone;
+            }
+            // Nothing to re-point to (a base feature), or the dependents were asked for: the cascade runs over every output.
             let mut gone = std::collections::HashSet::new();
             for o in outs {
                 gone.extend(self.delete_body_cascade(o));
@@ -353,12 +414,7 @@ impl Project {
             return;
         }
         for n in self.timeline.iter_mut() {
-            let src = match n.kind {
-                crate::feature::FeatureKind::MirrorPart { src_comp, .. } => Some(src_comp),
-                crate::feature::FeatureKind::PartInstance { src_comp, .. } => Some(src_comp),
-                _ => None,
-            };
-            if src.is_some_and(|c| owners.contains(&c)) {
+            if n.kind.copy_source().is_some_and(|c| owners.contains(&c)) {
                 n.dirty = true;
             }
         }
@@ -550,7 +606,7 @@ impl Project {
         self.push_timeline(FeatureNode {
             id: body,
             name: "feat-name-revolve".into(),
-            kind: FeatureKind::Revolve { sketch, profiles, axis, angle, axis_datum, axis_line, reach, src, op, body },
+            kind: FeatureKind::Revolve { sketch, profiles, axis, angle, axis_datum, axis_line, reach, src, op, body, pieces: Vec::new() },
             parent,
             dirty: true,
             suppressed: false,
@@ -577,7 +633,7 @@ impl Project {
         use crate::feature::{FeatureKind, FeatureNode};
         let body = self.alloc_id();
         let parent = Some(self.body_parent());
-        self.push_timeline(FeatureNode { id: body, name: "feat-name-sweep".into(), kind: FeatureKind::Sweep { sketch, profiles, path_sketch, path, src, op, body }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode { id: body, name: "feat-name-sweep".into(), kind: FeatureKind::Sweep { sketch, profiles, path_sketch, path, src, op, body, pieces: Vec::new() }, parent, dirty: true, suppressed: false });
         body
     }
 
@@ -592,7 +648,7 @@ impl Project {
         use crate::feature::{FeatureKind, FeatureNode};
         let body = self.alloc_id();
         let parent = Some(self.body_parent());
-        self.push_timeline(FeatureNode { id: body, name: "feat-name-loft".into(), kind: FeatureKind::Loft { sketches, contours, ruled, src, op, surface, body }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode { id: body, name: "feat-name-loft".into(), kind: FeatureKind::Loft { sketches, contours, ruled, src, op, surface, body, pieces: Vec::new() }, parent, dirty: true, suppressed: false });
         body
     }
 
@@ -604,7 +660,7 @@ impl Project {
 
     /// Bodies belonging to component `id`: the timeline nodes of that component that produce a body.
     pub fn component_bodies(&self, id: Id) -> Vec<Id> {
-        self.timeline.iter().filter(|n| n.parent == Some(id)).flat_map(|n| n.kind.bodies()).collect()
+        self.timeline.iter().flat_map(|n| n.kind.bodies().into_iter().filter(move |b| n.owner_of(*b) == Some(id))).collect()
     }
 
     /// Sketches belonging to component `id`.
@@ -915,7 +971,7 @@ impl Project {
         let body = self.alloc_id();
         let parent = Some(self.body_parent());
         let name = ["feat-name-combine-cut", "feat-name-combine-boss", "feat-name-combine-intersect"][(op as usize).min(2)].to_string();
-        self.push_timeline(FeatureNode { id: body, name, kind: FeatureKind::Combine { src, sketch, profiles, height, op, extent: ext, down, fill, body }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode { id: body, name, kind: FeatureKind::Combine { src, sketch, profiles, height, op, extent: ext, down, fill, body, pieces: Vec::new() }, parent, dirty: true, suppressed: false });
         body
     }
 
@@ -996,12 +1052,44 @@ impl Project {
         body
     }
 
+    /// Turn mesh body `src` - made lighter within `simplify` mm first, zero for none - into a solid - a polyhedron of its
+    /// flat faces - in the part the mesh stands in, whatever
+    /// part is being worked in: the part is to hold one body, and it is the mesh's. The mesh is consumed; what is cut
+    /// and drilled from here on is the solid.
+    pub fn add_mesh_solid(&mut self, src: Id, simplify: f64) -> Id {
+        use crate::feature::{FeatureKind, FeatureNode};
+        let body = self.alloc_id();
+        let parent = self.timeline.iter().find(|n| n.kind.owns_body(src)).and_then(|n| n.parent).or_else(|| Some(self.body_parent()));
+        self.push_timeline(FeatureNode { id: body, name: "feat-name-mesh-solid".into(), kind: FeatureKind::MeshSolid { src, body, simplify }, parent, dirty: true, suppressed: false });
+        body
+    }
+
+    /// Recognise a mesh into a body of exact surfaces; `tol` multiplies the distance a corner may lie from its surface,
+    /// `sharp` is the angle in degrees from which an edge between two triangles is sharp; `simplify` the deviation in mm
+    /// the mesh is made lighter within first, zero for none.
+    pub fn add_mesh_recognised(&mut self, src: Id, tol: f64, sharp: f64, simplify: f64) -> Id {
+        use crate::feature::{FeatureKind, FeatureNode};
+        let body = self.alloc_id();
+        let parent = self.timeline.iter().find(|n| n.kind.owns_body(src)).and_then(|n| n.parent).or_else(|| Some(self.body_parent()));
+        self.push_timeline(FeatureNode { id: body, name: "feat-name-mesh-recognised".into(), kind: FeatureKind::MeshRecognised { src, body, tol, sharp, simplify }, parent, dirty: true, suppressed: false });
+        body
+    }
+
     /// Stitch sheets: `parts` are the sheet bodies and `tol` is the edge coincidence tolerance.
     pub fn add_stitch(&mut self, parts: Vec<Id>, tol: f64) -> Id {
         use crate::feature::{FeatureKind, FeatureNode};
         let body = self.alloc_id();
         let parent = Some(self.body_parent());
         self.push_timeline(FeatureNode { id: body, name: "feat-name-stitch".into(), kind: FeatureKind::Stitch { parts, tol, body }, parent, dirty: true, suppressed: false });
+        body
+    }
+
+    /// An offset sheet of the faces `faces` of `src`, `dist` along their normals (see `FeatureKind::OffsetSurface`).
+    pub fn add_offset_surface(&mut self, src: Id, faces: crate::refs::Ref, dist: f64) -> Id {
+        use crate::feature::{FeatureKind, FeatureNode};
+        let body = self.alloc_id();
+        let parent = Some(self.body_parent());
+        self.push_timeline(FeatureNode { id: body, name: "feat-name-offset-surface".into(), kind: FeatureKind::OffsetSurface { src, faces, dist, body }, parent, dirty: true, suppressed: false });
         body
     }
 
@@ -1040,7 +1128,7 @@ impl Project {
         let body = self.alloc_id();
         let parent = Some(self.body_parent());
         let name = ["feat-name-body-cut", "feat-name-body-union", "feat-name-body-intersect"][(op as usize).min(2)].to_string();
-        self.push_timeline(FeatureNode { id: body, name, kind: FeatureKind::BodyBoolean { a, b, op, body }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode { id: body, name, kind: FeatureKind::BodyBoolean { a, b, op, body, pieces: Vec::new() }, parent, dirty: true, suppressed: false });
         body
     }
 
@@ -1103,7 +1191,7 @@ impl Project {
         for _ in 0..64 {
             let Some(node) = self.timeline.iter().find(|n| n.kind.bodies().contains(&cur)) else { return 0 };
             let src = match node.kind {
-                FK::FaceCopy { src, .. } | FK::Patch { src, .. } | FK::Trim { src, .. } => src,
+                FK::FaceCopy { src, .. } | FK::OffsetSurface { src, .. } | FK::Patch { src, .. } | FK::Trim { src, .. } => src,
                 FK::Stitch { ref parts, .. } => parts.first().copied().unwrap_or(0),
                 _ => return 0,
             };
@@ -1149,7 +1237,7 @@ impl Project {
         use crate::feature::{FeatureKind, FeatureNode};
         let body = self.alloc_id();
         let parent = Some(self.body_parent());
-        self.push_timeline(FeatureNode { id: body, name: "feat-name-split-face".into(), kind: FeatureKind::SplitFace { src, plane, datum, offset, body }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode { id: body, name: "feat-name-split-face".into(), kind: FeatureKind::SplitFace { src, plane, datum, offset, body, face: None }, parent, dirty: true, suppressed: false });
         body
     }
 
@@ -1166,7 +1254,7 @@ impl Project {
         let bodies: Vec<Id> = (0..pieces).map(|_| self.alloc_id()).collect();
         let parent = Some(self.body_parent());
         let id = bodies[0];
-        self.push_timeline(FeatureNode { id, name: "feat-name-split-body".into(), kind: FeatureKind::SplitBody { src, plane, datum, offset, bodies: bodies.clone() }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode { id, name: "feat-name-split-body".into(), kind: FeatureKind::SplitBody { src, plane, datum, offset, bodies: bodies.clone(), face: None }, parent, dirty: true, suppressed: false });
         bodies
     }
 
@@ -1201,11 +1289,24 @@ impl Project {
         body
     }
 
+    /// THE PLANE OF A MIRROR OR A SPLIT MADE A FACE: `node` then reads its plane off face `key` of body `body` at every
+    /// rebuild - one node of the timeline, not a datum plane of its own beside it. Nothing when `node` is neither.
+    pub fn set_op_face(&mut self, node: Id, body: Id, key: crate::feature::FaceKey) {
+        use crate::feature::FeatureKind;
+        if let Some(n) = self.timeline.iter_mut().find(|n| n.id == node) {
+            if let FeatureKind::Mirror { face, datum, .. } | FeatureKind::SplitBody { face, datum, .. } | FeatureKind::SplitFace { face, datum, .. } = &mut n.kind {
+                *face = Some((body, key));
+                *datum = 0;
+                n.dirty = true;
+            }
+        }
+    }
+
     pub fn add_mirror(&mut self, src: Id, plane: u8, keep: bool, datum: Id) -> Id {
         use crate::feature::{FeatureKind, FeatureNode};
         let body = self.alloc_id();
         let parent = Some(self.body_parent());
-        self.push_timeline(FeatureNode { id: body, name: "feat-name-mirror".into(), kind: FeatureKind::Mirror { src, plane, keep, datum, body }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode { id: body, name: "feat-name-mirror".into(), kind: FeatureKind::Mirror { src, plane, keep, datum, body, face: None }, parent, dirty: true, suppressed: false });
         body
     }
 
@@ -1222,15 +1323,22 @@ impl Project {
     /// `depth2` are the parameters of the recess.
     #[allow(clippy::too_many_arguments)]
     pub fn add_hole_typed(&mut self, src: Id, face: crate::feature::FaceKey, tool: super::HoleTool) -> Id {
+        self.add_hole_at(src, face, face.centroid, tool)
+    }
+
+    /// A hole in `face` of `src` whose centre is `at`, a point on that face in the body's frame (where it was
+    /// clicked): the rebuild drills at that point brought onto the face as it stands then, so two holes in one
+    /// face stand apart and a hole keeps its place when the face moves along its normal.
+    pub fn add_hole_at(&mut self, src: Id, face: crate::feature::FaceKey, at: [f64; 3], tool: super::HoleTool) -> Id {
         let super::HoleTool { kind, diameter, depth, dia2, depth2 } = tool;
         use crate::feature::{FeatureKind, FeatureNode};
         let body = self.alloc_id();
         let parent = Some(self.body_parent());
-        let (point, normal) = (face.centroid, face.normal);
+        let (point, normal) = (at, face.normal);
         // A pick gives a specific face, which becomes an `Id` query. The fingerprint travels with it not for
         // matching but so that a refusal can one day say where that face was when it was picked.
         let face = crate::refs::Ref::one(face.id, crate::refs::Fingerprint { centroid: face.centroid, normal: face.normal });
-        self.push_timeline(FeatureNode { id: body, name: "feat-name-hole".into(), kind: FeatureKind::Hole { src, face, point, normal, diameter, depth, kind, dia2, depth2, sketch: 0, flip: false, body }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode { id: body, name: "feat-name-hole".into(), kind: FeatureKind::Hole { src, face, point, normal, diameter, depth, kind, dia2, depth2, sketch: 0, flip: false, body, pieces: Vec::new() }, parent, dirty: true, suppressed: false });
         body
     }
 
@@ -1246,7 +1354,7 @@ impl Project {
         // The sketch-driven form picks no face at all: the reference is empty and never reaches
         // resolution.
         let face = crate::refs::Ref::one(0, crate::refs::Fingerprint::default());
-        self.push_timeline(FeatureNode { id: body, name: "feat-name-holes-sketch".into(), kind: FeatureKind::Hole { src, face, point: [0.0; 3], normal: [0.0, 0.0, 1.0], diameter, depth, kind, dia2, depth2, sketch, flip, body }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode { id: body, name: "feat-name-holes-sketch".into(), kind: FeatureKind::Hole { src, face, point: [0.0; 3], normal: [0.0, 0.0, 1.0], diameter, depth, kind, dia2, depth2, sketch, flip, body, pieces: Vec::new() }, parent, dirty: true, suppressed: false });
         body
     }
 
@@ -1296,6 +1404,9 @@ impl Project {
     /// forcibly across the whole project, which on an assembly of a thousand imports takes tens of seconds.
     pub fn changed_bodies_vs(&self, other: &Project) -> Vec<Id> {
         let mut out = Vec::new();
+        // the rollback bar decides which recipes are built at all: moved, it changes every body, as `set_rollback`
+        // marks every node - undone and done again, the bar left each body with the meshes of the other state
+        let bar_moved = self.rollback != other.rollback;
         for n in &self.timeline {
             let outs = n.kind.bodies();
             if outs.is_empty() {
@@ -1303,7 +1414,7 @@ impl Project {
             }
             let mine = self.node_recipe_key(n.id);
             let theirs = if other.timeline.iter().any(|o| o.id == n.id) { other.node_recipe_key(n.id) } else { 0 };
-            if mine != theirs || theirs == 0 {
+            if bar_moved || mine != theirs || theirs == 0 {
                 out.extend(outs);
             }
         }
@@ -1362,7 +1473,7 @@ impl Project {
     /// Owning component of body `body`: the parent of the feature that built it. `None` for an import with no
     /// feature.
     pub fn body_owner(&self, body: Id) -> Option<Id> {
-        self.timeline.iter().find(|n| n.kind.bodies().contains(&body)).and_then(|n| n.parent)
+        self.timeline.iter().find(|n| n.kind.owns_body(body)).and_then(|n| n.owner_of(body))
     }
 
     /// What a body is for the purpose of export: one policy for STEP and STL.
@@ -1376,6 +1487,8 @@ impl Project {
     pub fn export_kind(&self, body: Id, has_shape: bool) -> ExportKind {
         if has_shape {
             ExportKind::Brep
+        } else if self.timeline.iter().any(|n| matches!(n.kind, crate::feature::FeatureKind::MeshPiece { body: b, .. } if b == body)) {
+            ExportKind::MeshOnly // A piece of an imported mesh: its mesh is all there is, and it never had a B-rep.
         } else if self.timeline.iter().any(|n| n.kind.bodies().contains(&body)) {
             ExportKind::Stale // A recipe exists without a B-rep: a failed rebuild, with the last good mesh
                               // still visible.
@@ -1407,12 +1520,57 @@ impl Project {
         self.timeline.iter().filter(|n| n.id != id && n.kind.inputs().iter().any(|i| own.contains(i))).map(|n| n.id).collect()
     }
 
+    /// WHAT NODE `node` READS THAT THE DOCUMENT NO LONGER HOLDS: an input that is no body, sketch, plane, datum axis or
+    /// point, component or node of the timeline. A command that picked a face and then saw Ctrl+Z take the body away
+    /// holds such an input; the node laid on it would only stand red.
+    pub fn gone_inputs(&self, node: Id) -> Vec<Id> {
+        let Some(n) = self.timeline.iter().find(|n| n.id == node) else { return Vec::new() };
+        let own = n.kind.bodies();
+        // a datum reads its body through its definition, not through the inputs of its node
+        let base = match n.kind {
+            crate::feature::FeatureKind::Plane { plane: d } | crate::feature::FeatureKind::DatumAxis { axis: d } => self.datum_base_body(d),
+            _ => None,
+        };
+        n.kind
+            .inputs()
+            .into_iter()
+            .chain(n.kind.consumed())
+            .chain(base)
+            .filter(|&i| i != 0 && !own.contains(&i))
+            .filter(|&i| {
+                self.mesh_index(i).is_none()
+                    && self.sketch_index(i).is_none()
+                    && !self.planes.iter().any(|p| p.id == i)
+                    && !self.datum_axes.iter().any(|a| a.id == i)
+                    && !self.datum_points.iter().any(|q| q.id == i)
+                    && !self.components.iter().any(|c| c.id == i)
+                    && !self.timeline.iter().any(|t| t.id == i)
+            })
+            .fold(Vec::new(), |mut out, i| {
+                if !out.contains(&i) {
+                    out.push(i); // a consumed body is an input too: named once
+                }
+                out
+            })
+    }
+
     /// Bodies consumed by active modifier features, which are hidden so that only the result of the chain is
     /// visible. It accounts for the rollback bar: features below the bar are not built and therefore consume no
     /// source. One source for both the core and the interface.
     pub fn consumed_bodies(&self) -> std::collections::HashSet<Id> {
         let limit = self.rollback.unwrap_or(usize::MAX);
-        self.timeline.iter().enumerate().filter(|(ti, _)| *ti < limit).flat_map(|(_, n)| n.kind.consumed()).collect()
+        // A NODE THAT FAILED WITHOUT EVER BUILDING CONSUMES NOTHING: its inputs stay in sight until something stands
+        // in their place (a node merely not built yet still consumes - the document is read that way before any
+        // rebuild). An intersection of two pieces that only touch comes out empty and red, and it took both pieces out
+        // of view with it - 8000 mm^3 of the part became 4000. A node that built once and fails later keeps its last
+        // good body, so its inputs stay consumed and nothing is shown twice.
+        let built: std::collections::HashSet<Id> = self.bodies.iter().filter(|b| !b.mesh.tris.is_empty()).map(|b| b.id).collect();
+        self.timeline
+            .iter()
+            .enumerate()
+            .filter(|(ti, n)| *ti < limit && (!self.regen_errors.contains_key(&n.id) || n.kind.bodies().is_empty() || n.kind.bodies().iter().any(|b| built.contains(b))))
+            .flat_map(|(_, n)| n.kind.consumed())
+            .collect()
     }
 
     /// Active body of context `ctx`: the last unconsumed body belonging to `ctx` directly (`parent == ctx`).
@@ -1448,7 +1606,13 @@ impl Project {
             .take(limit)
             .rev()
             .flat_map(|n| n.kind.bodies())
-            .find(|b| !consumed.contains(b) && self.body_owner(*b) == Some(ctx))
+            .find(|b| !consumed.contains(b) && !self.is_sheet_body(*b) && self.body_owner(*b) == Some(ctx))
+    }
+
+    /// Is `body` a sheet - a surface with no volume, a face copy or a patch? A sheet stands beside the part's solid and
+    /// is never the body an operation of the part lands on: a boss united with a sheet failed and ate the sheet.
+    fn is_sheet_body(&self, body: Id) -> bool {
+        self.bodies.iter().any(|b| b.id == body && b.sheet)
     }
 
     /// One part is one body. Finish a base (material-adding) feature: when the part already has a result body,
@@ -1469,7 +1633,7 @@ impl Project {
         // The previous result body of the same part: unconsumed, above the rollback bar, and not the one just
         // added.
         let bodies: Vec<Id> = self.timeline.iter().take(limit).flat_map(|n| n.kind.bodies()).collect();
-        let prior = bodies.iter().rev().copied().find(|b| *b != new_body && !consumed.contains(b) && self.body_owner(*b) == Some(ctx));
+        let prior = bodies.iter().rev().copied().find(|b| *b != new_body && !consumed.contains(b) && !self.is_sheet_body(*b) && self.body_owner(*b) == Some(ctx));
         match prior {
             Some(p) => self.add_body_boolean(p, new_body, op),
             None => new_body,
@@ -1486,10 +1650,14 @@ impl Project {
         let Some(pos) = self.timeline.iter().position(|n| n.id == first_id) else { return vec![first_id] };
         let Some(body) = self.timeline[pos].kind.body() else { return vec![first_id] };
         // Absorb the next node when it is the body boolean joining this very body (a revolve, sweep or loft
-        // followed by `finish_base_body`).
+        // followed by `finish_base_body`, which always joins the new body as the tool `b`). A node that leaves
+        // several bodies - a split - is never joined that way: a boolean after it is the person's own and has a
+        // row of its own, or it could not be found in the tree to reopen. Nor is a node that grows a body it takes
+        // (a boss joined into a piece): it joins by itself, and a union after it is the person's too.
         if let Some(next) = self.timeline.get(pos + 1) {
-            if let FK::BodyBoolean { a, b, .. } = next.kind {
-                if a == body || b == body {
+            if let FK::BodyBoolean { b, op: 1, .. } = next.kind {
+                let grows_a_body = self.timeline[pos].kind.inputs().iter().any(|i| self.bodies.iter().any(|x| x.id == *i));
+                if b == body && self.timeline[pos].kind.bodies().len() == 1 && !grows_a_body {
                     return vec![first_id, next.id];
                 }
             }
@@ -1511,15 +1679,63 @@ impl Project {
     /// Every `add_*` goes through this, which makes the rollback bar genuinely the place where building
     /// continues. Returns the node id.
     pub(super) fn push_timeline(&mut self, node: crate::feature::FeatureNode) -> Id {
-        let id = node.id;
-        match self.rollback {
+        let (id, part) = (node.id, node.parent);
+        let link = node.kind.consumed_body().zip(node.kind.body());
+        let at = match self.rollback {
             Some(r) if r <= self.timeline.len() => {
                 self.timeline.insert(r, node);
                 self.rollback = Some(r + 1);
+                // A STEP PUT IN ABOVE GOES INTO THE CHAIN: the node below that carried the same body on now carries
+                // on from the one put in. Reported behaviour: a cut put in by the rollback above a rounding left the
+                // rounding on the body without the cut, and the part held two bodies (11000 and 11882.9 mm^3).
+                if let Some((src, out)) = link {
+                    if let Some(next) = self.timeline.iter_mut().skip(r + 1).find(|n| n.parent == part && n.kind.consumed_body() == Some(src)) {
+                        next.kind.remap_body_input(src, out);
+                        next.dirty = true;
+                    }
+                }
+                r
             }
-            _ => self.timeline.push(node),
+            _ => {
+                self.timeline.push(node);
+                self.timeline.len() - 1
+            }
+        };
+        if let Some(part) = part {
+            self.bring_instances_after(part, at);
         }
         id
+    }
+
+    /// A PART'S INSTANCES FOLLOW WHAT IT GETS LATER.
+    ///
+    /// An instance - a clone, a pattern's copy - repeats its source's body from what stands above it in the
+    /// timeline (`active_body_before`), so a feature added to the source after the instance was made stood below
+    /// it and never reached it: a box united with the original left its clone as it was. The instance nodes of
+    /// `part` above `at` move to just after it, together with every node between that reads what they make (a
+    /// sketch on a clone's face, say), so no node ends up above its input. A moved node is rebuilt. Nodes leave
+    /// only from above `at` and land at or below it, so the rollback bar keeps the same nodes above it.
+    fn bring_instances_after(&mut self, part: Id, at: usize) {
+        use crate::feature::FeatureKind;
+        let mut made: std::collections::HashSet<Id> = std::collections::HashSet::new();
+        let mut going: Vec<usize> = Vec::new();
+        for i in 0..at {
+            let instance = matches!(self.timeline[i].kind, FeatureKind::PartInstance { .. } | FeatureKind::ComponentPattern { .. }) && self.timeline[i].kind.copy_source() == Some(part);
+            if instance || (!made.is_empty() && self.node_reads_any(i, &made)) {
+                made.extend(self.timeline[i].kind.declares());
+                going.push(i);
+            }
+        }
+        if going.is_empty() {
+            return;
+        }
+        let mut moved: Vec<crate::feature::FeatureNode> = going.iter().rev().map(|&i| self.timeline.remove(i)).collect();
+        moved.reverse();
+        let after = at + 1 - going.len(); // the new node moved up by as many as left from above it
+        for (k, mut n) in moved.into_iter().enumerate() {
+            n.dirty = true;
+            self.timeline.insert(after + k, n);
+        }
     }
 
     /// Suppress or unsuppress feature `ti`. The node is marked dirty, so regenerate removes its body from view
@@ -1591,7 +1807,25 @@ impl Project {
         let mut order: Vec<usize> = (0..self.timeline.len()).collect();
         let item = order.remove(from);
         order.insert(to2, item);
-        self.order_valid(&order)
+        self.order_valid(&order) || (from.abs_diff(to2) == 1 && self.chain_swap(from.min(to2)).is_some())
+    }
+
+    /// TWO CHANGES OF ONE BODY IN A ROW, at `i` and `i + 1`: the second takes as its only input the body the first
+    /// made, and the first takes one body. Such a pair may change places: each then drills, rounds or cuts the body
+    /// the other left. Answers (the first's input, the first's body, the second's body). Plain reordering refused
+    /// them, the second standing on the first's output: two holes of one part could never swap.
+    fn chain_swap(&self, i: usize) -> Option<(Id, Id, Id)> {
+        let (a, b) = (&self.timeline.get(i)?.kind, &self.timeline.get(i + 1)?.kind);
+        let (a_in, a_out, b_in, b_out) = (a.inputs(), a.bodies(), b.inputs(), b.bodies());
+        let ([s], [a_out], [b_out]) = (a_in.as_slice(), a_out.as_slice(), b_out.as_slice()) else { return None };
+        if b_in.as_slice() != [*a_out] {
+            return None;
+        }
+        // both have to be re-pointable at another body; a node whose input is not a plain `src` is not
+        let (mut ta, mut tb) = (a.clone(), b.clone());
+        ta.remap_body_input(*s, *b_out);
+        tb.remap_body_input(*a_out, *s);
+        (ta.inputs() == vec![*b_out] && tb.inputs() == vec![*s]).then_some((*s, *a_out, *b_out))
     }
 
     /// Move timeline node `from` to position `to`, reordering the history. Refused when it would break a
@@ -1606,7 +1840,27 @@ impl Project {
         let item = order.remove(from);
         order.insert(to2, item);
         if !self.order_valid(&order) {
-            return false;
+            // two changes of one body swap by re-pointing their inputs: the second now takes the first's input, the
+            // first takes the second's body, and what stood on the second's body stands on the first's
+            let i = from.min(to2);
+            let Some((s, a_out, b_out)) = (from.abs_diff(to2) == 1).then(|| self.chain_swap(i)).flatten() else { return false };
+            self.timeline[i + 1].kind.remap_body_input(a_out, s);
+            self.timeline[i].kind.remap_body_input(s, b_out);
+            for n in &mut self.timeline[i + 2..] {
+                n.kind.remap_body_input(b_out, a_out);
+            }
+            for sk in &mut self.sketches {
+                if let crate::feature::SketchPlane::Face(body, _) = &mut sk.plane {
+                    if *body == b_out {
+                        *body = a_out;
+                    }
+                }
+            }
+            self.timeline.swap(i, i + 1);
+            for nd in &mut self.timeline {
+                nd.dirty = true;
+            }
+            return true;
         }
         let n = self.timeline.remove(from);
         self.timeline.insert(to2, n);

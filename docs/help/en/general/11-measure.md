@@ -4,8 +4,9 @@ The tool is there both in a sketch and in 3D.
 
 ![The wall of the hole is clicked and the program answers with a diameter: it works out what you asked.](img/measure.png)
 
-- **In a sketch** — two clicks: the distance between points.
-- **In 3D** — click **vertices, edges and faces**, two elements at a time. Esc leaves.
+- **In a sketch** — the **Measure a distance** button, two clicks: the distance between points.
+- **In 3D** — the **Measure in 3D** button (the ruler): click **vertices, edges and faces**, two elements at a time.
+  **Esc** leaves.
 
 ## What the program works out
 

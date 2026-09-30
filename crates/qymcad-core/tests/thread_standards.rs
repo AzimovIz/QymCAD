@@ -277,8 +277,14 @@ fn internal_groove_goes_into_the_wall_external_into_the_shaft() {
         let (int_lo, int_hi) = ys(&ThreadSpec { internal: true, ..base }.geometry());
         assert!(ext_lo < 0.0 && ext_hi > 0.0, "{std:?}: the external groove goes into the shaft, y < 0, with the overshoot outwards");
         assert!(int_hi > 0.0 && int_lo < 0.0, "{std:?}: the internal groove goes into the wall, y > 0, with the overshoot into the hole");
-        // and it is exactly a mirror: the same depth with the opposite sign
-        assert!((int_hi + ext_lo).abs() < 1e-9, "{std:?}: internal depth {int_hi:.4} is not the mirror of the external {ext_lo:.4}");
+        // and it is exactly a mirror: the same depth with the opposite sign - except the ISO nut, cut to the room of
+        // the bolt's tooth, 5H/8 deep from D1 rather than the bolt's 0.6134 P
+        if std == ThreadStandard::MetricIso {
+            let nut = 0.625 * 5.0 * 3f64.sqrt() / 2.0;
+            assert!((int_hi - nut).abs() < 1e-5, "{std:?}: the nut's groove is {int_hi:.4} deep, 5H/8 is {nut:.4}");
+        } else {
+            assert!((int_hi + ext_lo).abs() < 1e-9, "{std:?}: internal depth {int_hi:.4} is not the mirror of the external {ext_lo:.4}");
+        }
         assert!((int_lo + ext_hi).abs() < 1e-9, "{std:?}: internal overshoot {int_lo:.4} is not the mirror of the external {ext_hi:.4}");
     }
     // the contour of an internal thread stays closed: mirroring must not break the traversal of the arcs

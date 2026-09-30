@@ -21,7 +21,7 @@ mod tests {
         let si = p.sketch_index(sid).unwrap();
         p.add_sketch_node(sid, sketch);
         let pts: Vec<Id> = p.sketches[si].points.iter().map(|q| q.id).collect();
-        p.sketches[si].constraints.push(Constraint::Distance { a: pts[0], b: pts[1], d: len, off: 0.0, expr: String::new(), driven: false, axis: 0 });
+        p.sketches[si].constraints.push(Constraint::Distance { a: pts[0], b: pts[1], d: len, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
         assert!(p.add_named_dim(driver.into(), sid, vec![pts[0], pts[1]]));
     }
 

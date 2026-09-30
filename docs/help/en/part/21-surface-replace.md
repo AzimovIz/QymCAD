@@ -20,19 +20,20 @@ layer on top of the model, so anything can be built below it: fillets, holes, a 
 
 ## Worth knowing
 
-- **The boundaries must match.** Replacing a face means the surface stands on ITS edges, not roughly in
-  the same place. A common mistake: the top of a shelled part is a RING as wide as the wall, while the
-  patch is stretched across the whole opening. The ring and the lid are bounded differently, the inner
-  loop is left unpaired — and the node turns red. Build the patch on the same edges that bound the face
-  being replaced.
+- **One face can be replaced by a sheet standing off it.** The neighbouring faces reach the sheet: the top of a
+  block replaced by an [offset](part/27-offset-surface) sheet lifted 5 makes the block 5 taller, a sheet sunk 3 makes
+  it 3 lower. The sheet must cover the face whole.
+- **Several faces — only along their edges.** The surface stands on the edges of the faces replaced. A common
+  mistake: the top of a shelled part is a RING as wide as the wall, while the patch is stretched across the whole
+  opening. The ring and the lid are bounded differently, the inner loop is left unpaired — and the node turns red.
+  Build the patch on the same edges that bound the face being replaced.
 - **Capping an open box is a different job.** A shelled part is already closed: the top is a recess in
   the material, not a hole in the surface. A lid there adds material — that is an extrude or a thicken,
   not a face replacement.
 - **The surface must close the opening.** If a gap is left after the faces are removed, the node turns
-  red and says how many edges are left unpaired, and the part stays as it was. "Almost a solid" is
-  never handed on: further down the timeline it would behave like garbage.
+  red and says how many edges are left unpaired, and the part stays as it was.
 - **Faces are stored as a description.** Say "all faces of this feature" and the node keeps replacing
   exactly those after the base changes, not yesterday's numbers.
 - **Both inputs are absorbed.** One part is left on screen, not a part plus a surface over it.
-- **A lost target is an honest refusal.** Nothing "similar" gets replaced instead: putting design work
-  in the wrong place silently is worse than not putting it at all.
+- **The faces are gone after an edit of the base** — the node turns red with the reason; pick the faces
+  again by a double click on the row.

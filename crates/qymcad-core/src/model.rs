@@ -210,6 +210,14 @@ pub struct Project {
     /// default palette (`default_part_color`).
     #[serde(default)]
     pub part_colors: std::collections::HashMap<Id, [u8; 3]>,
+    /// Colours a file gives single faces of a part (RGB), by the persistent id of the face, keyed like `part_colors`
+    /// by the lineage root of a body. A face with no entry takes the part's colour.
+    #[serde(default)]
+    pub face_colors: std::collections::HashMap<Id, Vec<(u32, [u8; 3])>>,
+    /// The colours of the triangles of a piece of a mesh whose file colours faces one by one, keyed like `part_colors`:
+    /// the distinct colours, and for every triangle the place of its colour among them.
+    #[serde(default)]
+    pub tri_colors: std::collections::HashMap<Id, (Vec<[u8; 3]>, Vec<u8>)>,
     /// Construction tree: user-defined work planes.
     #[serde(default)]
     pub planes: Vec<WorkPlane>,
@@ -274,9 +282,6 @@ pub struct Project {
     /// the dependency explicit, enumerable and breakable.
     #[serde(default)]
     pub external_refs: Vec<crate::feature::ExternalRef>,
-    /// Component patterns (see `comp_pattern`): a source, a layout and the instance copies.
-    #[serde(default)]
-    pub comp_patterns: Vec<comp_pattern::CompPattern>,
     /// Named driving dimensions: a dimension of a skeleton sketch exposed as a global parameter.
     #[serde(default)]
     pub named_dims: Vec<NamedDim>,
@@ -341,6 +346,10 @@ pub struct Project {
     /// cleared on success or deletion.
     #[serde(skip)]
     pub regen_errors: std::collections::HashMap<Id, crate::errors::CoreError>,
+    /// Nodes that built, but not all of what was asked (`node id -> what was left out`): a rounding that could not
+    /// take some of its edges and did the rest. Shown yellow with the words, not red. Derived, not saved.
+    #[serde(skip)]
+    pub regen_warnings: std::collections::HashMap<Id, crate::errors::CoreError>,
     /// Rollback bar: build only the first N timeline nodes; nodes at index N and beyond are suppressed and
     /// their bodies are neither built nor shown. `None` builds everything. Saved with the project.
     #[serde(default)]
@@ -617,8 +626,10 @@ impl Sketch {
     /// not to zero, so a frame that moved once is locked in the wrong place for good - and documents in
     /// that state already exist. Called on every rebuild of the sketch, so a file opens repaired.
     pub fn pin_frame(&mut self) -> bool {
-        // `origin` is NOT in this list: geometry may be glued to it, and pinning it nailed down the
-        // centre of a circle drawn at zero. The frame stands on `frame`, which is nobody's geometry.
+        // THE ORIGIN IS PINNED HERE TOO, and that is safe only because it is nobody's geometry by the time
+        // this runs: `regen_sketch` calls `detach_geometry_from_origin` first, which gives any drawing
+        // welded to the origin a point of its own. Pinning a point that geometry sits on is what nailed
+        // down a shape drawn at zero. The frame itself stands on `frame`, which is never anybody's.
         // A DOCUMENT WHOSE AXES WERE HUNG ON THE ORIGIN IS REPAIRED HERE.
         //
         // Before the anchor existed, an axis was the line through the ORIGIN and its guide, and every
@@ -674,6 +685,31 @@ impl Sketch {
         s.extend(self.system_ids());
         s
     }
+
+    /// Points a person has pinned with the anchor constraint.
+    pub fn pinned_points(&self) -> std::collections::HashSet<Id> {
+        self.constraints
+            .iter()
+            .filter_map(|c| match c {
+                Constraint::Fixed { p } => Some(*p),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// EVERYTHING AN EDITING TOOL MUST LEAVE WHERE IT IS: the frame, the driven projections, and whatever
+    /// the person pinned.
+    ///
+    /// Why the pinned ones need naming at all. `Constraint::Fixed` carries no coordinates - it pins the point
+    /// to where it IS at the moment of the solve. So a tool that shifts the point first and asks the solver
+    /// afterwards gets a constraint satisfied by the NEW place: the pin travels with the drawing instead of
+    /// holding it, the glyph stays green and nobody is told. Not the same list as `immovable_points`, which
+    /// answers "may this be deleted one by one" - a pinned point is deleted like any other.
+    pub fn held_points(&self) -> std::collections::HashSet<Id> {
+        let mut s = self.immovable_points();
+        s.extend(self.pinned_points());
+        s
+    }
 }
 
 /// A text note in a sketch (an annotation). Not geometry.
@@ -682,6 +718,36 @@ pub struct Note {
     pub x: f64,
     pub y: f64,
     pub text: String,
+}
+
+/// WHERE THE OUTLINES OF A TEXT CAME FROM.
+///
+/// Kept in the document beside the baked glyphs, because a re-bake without it uses whatever font happens to
+/// be loaded: open the file again, change the height of a label, and it is silently redrawn in somebody
+/// else's typeface. Measured: a label written in Liberation Sans came back in Cantarell, 1.201 wide for its
+/// height against 1.379.
+///
+/// Both the name and the path, on purpose. The name survives a move to another machine, where the file lies
+/// elsewhere; the path finds the file at once on this one. The index is the face inside a collection - a
+/// `.ttc` holds several, and a variable font its instances.
+///
+/// Empty means "not recorded": labels written before this was kept. Their drawing is intact, since the
+/// glyphs are in the file; what cannot be done to them is an honest re-bake.
+#[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FontRef {
+    #[serde(default)]
+    pub family: String,
+    #[serde(default)]
+    pub path: String,
+    #[serde(default)]
+    pub index: u32,
+}
+
+impl FontRef {
+    /// Is anything recorded at all.
+    pub fn is_empty(&self) -> bool {
+        self.family.is_empty() && self.path.is_empty()
+    }
 }
 
 /// Parametric sketch text: a label turned into glyph contours, which are real geometry for profiles and
@@ -706,6 +772,9 @@ pub struct SketchText {
     /// Baked closed glyph polylines (world coordinates).
     #[serde(default)]
     pub glyphs: Vec<Vec<Point2>>,
+    /// The font these glyphs were baked from - see `FontRef`.
+    #[serde(default)]
+    pub font: FontRef,
 }
 
 /// What a body is for the purpose of export (see [`Project::export_kind`]): one policy for STEP and STL.
@@ -837,6 +906,11 @@ pub enum Constraint {
         /// (|dy|). Chosen by cursor position while placing it.
         #[serde(default)]
         axis: u8,
+        /// Where the text stands along the dimension line, as a share of it from its first end: 0.5 in the middle,
+        /// below 0 or above 1 past an arrow, the line then running on to the text as a shelf. Absent: the middle, or a
+        /// shelf past the second arrow when the text does not fit between them.
+        #[serde(default)]
+        at: Option<f64>,
     },
     /// Segments `a-b` and `c-d` are parallel.
     Parallel { a: Id, b: Id, c: Id, d: Id },
@@ -856,6 +930,15 @@ pub enum Constraint {
         /// A reference (driven) angle; see `Distance::driven`.
         #[serde(default)]
         driven: bool,
+        /// Where the arc of the dimension stands: its radius from the vertex, in sketch units; 0 is the default
+        /// distance on screen.
+        #[serde(default)]
+        off: f64,
+        /// Where the label stands along the arc, as a share of the angle from the side `b-a` towards `b-c`: 0.5 on the
+        /// bisector (also when absent), below 0 or above 1 past a side, the arc then running on to it. A share rather
+        /// than a direction, so the label keeps its place when the sides turn.
+        #[serde(default)]
+        at: Option<f64>,
     },
     /// Segments `a-b` and `c-d` are collinear (they lie on one straight line).
     Collinear { a: Id, b: Id, c: Id, d: Id },
@@ -891,6 +974,13 @@ pub enum Constraint {
         expr: String,
         #[serde(default)]
         driven: bool,
+        /// Where the arc of the dimension stands: its radius from the intersection, in sketch units; 0 is the
+        /// default distance on screen. Set while the dimension follows the cursor, as `off` of `Distance`.
+        #[serde(default)]
+        off: f64,
+        /// Where the label stands along the arc; see `Angle::at`.
+        #[serde(default)]
+        at: Option<f64>,
     },
     /// Radius or diameter dimension of the circle centred at `c`. `d` is the value — a radius, or a
     /// diameter when `diam` is set. `off` is the label offset; `expr` and `driven` behave as in `Distance`.
@@ -905,6 +995,10 @@ pub enum Constraint {
         driven: bool,
         #[serde(default)]
         diam: bool,
+        /// Where the text stands ON the dimension line, as a share of it from its start (the far rim of a diameter,
+        /// the centre of a radius), laid along the line; absent, the text stands on the shelf past the knee.
+        #[serde(default)]
+        at: Option<f64>,
     },
     /// Dimension: the perpendicular distance from point `p` to the line `a-b` equals `d`. Covers
     /// point-to-line, line-to-parallel-line and distance-to-axis dimensions. `off`, `expr` and `driven`
@@ -920,6 +1014,11 @@ pub enum Constraint {
         expr: String,
         #[serde(default)]
         driven: bool,
+        /// Where the text stands along the dimension line, as a share of it from its first end: 0.5 in the middle,
+        /// below 0 or above 1 past an arrow, the line then running on to the text as a shelf. Absent: the middle, or a
+        /// shelf past the second arrow when the text does not fit between them.
+        #[serde(default)]
+        at: Option<f64>,
     },
     /// Tangent (edge-to-edge) dimension: the distance between `c1` and `c2` corrected by the radii of their
     /// circles. `m1` and `m2` are in {-1, 0, +1}: 0 is an ordinary point, -1 the near edge of the circle,
@@ -936,6 +1035,9 @@ pub enum Constraint {
         expr: String,
         #[serde(default)]
         driven: bool,
+        /// Where the text stands along the dimension line; see `Distance::at`.
+        #[serde(default)]
+        at: Option<f64>,
     },
     /// Arc length dimension: the arc (centre `c`, endpoints `a` and `b`, direction `ccw`) has length `len`,
     /// equal to R * theta for radius R and swept angle theta. A driving one holds the length, a reference
@@ -976,12 +1078,33 @@ impl Constraint {
         }
     }
 
+    /// WHERE THE LABEL OF A DIMENSION STANDS - its offset, its place along its line or arc (NaN where there is none) and
+    /// the axis of a length - for the fingerprint of the document; `None` for a constraint with no label.
+    pub fn label_place(&self) -> Option<[f64; 3]> {
+        match *self {
+            Constraint::Distance { off, axis, at, .. } => Some([off, at.unwrap_or(f64::NAN), axis as f64]),
+            Constraint::DistancePL { off, at, .. } | Constraint::Diameter { off, at, .. } | Constraint::EdgeDistance { off, at, .. } => Some([off, at.unwrap_or(f64::NAN), 0.0]),
+            Constraint::ArcLength { off, .. } => Some([off, f64::NAN, 0.0]),
+            Constraint::Angle { off, at, .. } | Constraint::AngleLines { off, at, .. } => Some([off, at.unwrap_or(f64::NAN), 0.0]),
+            _ => None,
+        }
+    }
+
     /// Numeric value of a dimensional constraint (for fingerprints and comparisons); `None` for the rest.
     pub fn dim_value(&self) -> Option<f64> {
         match *self {
             Constraint::Distance { d, .. } | Constraint::DistancePL { d, .. } | Constraint::Diameter { d, .. } | Constraint::EdgeDistance { d, .. } => Some(d),
             Constraint::Angle { deg, .. } | Constraint::AngleLines { deg, .. } => Some(deg),
             Constraint::ArcLength { len, .. } => Some(len),
+            _ => None,
+        }
+    }
+
+    /// The formula a dimension is set by, as typed (empty when a number was typed); `None` for a constraint that is
+    /// not a dimension.
+    pub fn dim_expr(&self) -> Option<&str> {
+        match self {
+            Constraint::Distance { expr, .. } | Constraint::Angle { expr, .. } | Constraint::AngleLines { expr, .. } | Constraint::Diameter { expr, .. } | Constraint::DistancePL { expr, .. } | Constraint::EdgeDistance { expr, .. } | Constraint::ArcLength { expr, .. } => Some(expr),
             _ => None,
         }
     }
@@ -1562,6 +1685,50 @@ fn remap_constraint_via(c: &Constraint, map: &std::collections::HashMap<Id, Id>)
     nc
 }
 
+/// THE PALETTE OF A BODY'S COLOURS, given one per triangle, and the place of each triangle's colour in it. The places are
+/// bytes, so a palette holds 255. Up to that the distinct colours stand in the order they come. Past it - a scan, whose
+/// colours run to thousands - 255 are cut out of them by median, the colours weighed by how many triangles have them,
+/// and every colour takes the nearest; the first 255 met would leave a colour met later with nothing like it.
+pub fn palette_of(colours: &[[u8; 3]]) -> (Vec<[u8; 3]>, Vec<u8>) {
+    let mut place: std::collections::HashMap<[u8; 3], usize> = std::collections::HashMap::new();
+    let mut distinct: Vec<([u8; 3], u64)> = Vec::new();
+    for c in colours {
+        let k = *place.entry(*c).or_insert_with(|| {
+            distinct.push((*c, 0));
+            distinct.len() - 1
+        });
+        distinct[k].1 += 1;
+    }
+    if distinct.len() <= 255 {
+        return (distinct.iter().map(|(c, _)| *c).collect(), colours.iter().map(|c| place[c] as u8).collect());
+    }
+    // split the box whose colours spread widest along a channel, at the median of the triangles, until there are 255
+    let spread = |b: &[([u8; 3], u64)], ch: usize| b.iter().map(|(c, _)| c[ch]).max().unwrap_or(0) - b.iter().map(|(c, _)| c[ch]).min().unwrap_or(0);
+    let mut boxes = vec![distinct];
+    while boxes.len() < 255 {
+        let Some((bi, ch, _)) = boxes.iter().enumerate().filter(|(_, b)| b.len() > 1).flat_map(|(i, b)| (0..3).map(move |ch| (i, ch, spread(b, ch)))).max_by_key(|x| x.2) else { break };
+        let mut b = boxes.swap_remove(bi);
+        b.sort_unstable_by_key(|(c, _)| c[ch]);
+        let total: u64 = b.iter().map(|(_, n)| n).sum();
+        let mut acc = 0;
+        let cut = b.iter().position(|(_, n)| {
+            acc += n;
+            acc * 2 >= total
+        }).map_or(1, |k| k + 1).clamp(1, b.len() - 1);
+        let rest = b.split_off(cut);
+        boxes.push(b);
+        boxes.push(rest);
+    }
+    let palette: Vec<[u8; 3]> = boxes.iter().map(|b| {
+        let total: u64 = b.iter().map(|(_, n)| n).sum();
+        std::array::from_fn(|ch| ((b.iter().map(|(c, n)| u64::from(c[ch]) * n).sum::<u64>() + total / 2) / total) as u8)
+    }).collect();
+    let near = |c: &[u8; 3]| (0..palette.len()).min_by_key(|&k| (0..3).map(|i| u32::from(palette[k][i].abs_diff(c[i])).pow(2)).sum::<u32>()).unwrap_or(0) as u8;
+    let nearest: std::collections::HashMap<[u8; 3], u8> = place.keys().map(|c| (*c, near(c))).collect();
+    let places = colours.iter().map(|c| nearest[c]).collect();
+    (palette, places)
+}
+
 /// Default part colour from the palette, by index, so an assembly of many bodies is not monochrome. Soft,
 /// distinguishable tones; the palette wraps around.
 pub fn default_part_color(index: usize) -> [u8; 3] {
@@ -1607,6 +1774,11 @@ pub enum PlaneDef {
     /// Offset from another datum plane `plane` by `dist` along its normal (parametric through the `dist`
     /// feature dimension).
     OffsetPlane { plane: Id, dist: f64 },
+    /// Where a face stood whose body was deleted: fixed like `Manual`, and a sketch standing on it is red with the
+    /// reason until it is put on another face or plane.
+    FaceGone,
+    /// Where a datum plane stood that was deleted: the same, with its own reason.
+    PlaneGone,
 }
 
 
@@ -1657,6 +1829,7 @@ impl WorkPlane {
 type EdgeRenames = std::collections::HashMap<Id, std::collections::HashMap<u32, u32>>;
 
 mod assembly;
+pub use assembly::{ExportNode, ImportNode};
 pub mod contours;
 mod regen;
 pub use regen::{ArrayAxis, BodyOp, ChamferShape, CombineSpan, ExtrudeSpan, HoleTool, RevolveAxis, RevolveTurn};
@@ -1846,6 +2019,71 @@ impl Project {
     /// Fillet the corner at vertex `pid`, when exactly two edges meet there. The inner side is chosen by
     /// the bisector of the chords. Used both by click-on-corner and by the chain command. Returns whether
     /// it succeeded.
+    /// THE LARGEST FILLET RADIUS OR CHAMFER LEG A CORNER OF TWO LINES TAKES: the point of touching lies r / tan(theta / 2)
+    /// from the corner (theta the angle between the lines), and a leg lies along the line - neither may reach the far
+    /// end of the shorter line. `None` for a corner not made of two lines. The field of the tool refuses a value past it
+    /// in words, where the corner used to take it and do nothing, or cut it down without a word.
+    pub fn corner_limit(&self, si: usize, pid: Id, chamfer: bool) -> Option<f64> {
+        let edges = self.vertex_edges(si, pid);
+        if edges.len() != 2 {
+            return None;
+        }
+        let (pcx, pcy) = self.point_xy(si, pid)?;
+        let mut dirs = Vec::new();
+        for e in edges {
+            let (a, b) = self.line_ends(si, e)?;
+            let other = if a == pid { b } else { a };
+            let (ox, oy) = self.point_xy(si, other)?;
+            let l = (ox - pcx).hypot(oy - pcy);
+            if l < 1e-9 {
+                return None;
+            }
+            dirs.push(((ox - pcx) / l, (oy - pcy) / l, l));
+        }
+        let shorter = dirs[0].2.min(dirs[1].2);
+        if chamfer {
+            return Some(shorter);
+        }
+        let theta = (dirs[0].0 * dirs[1].0 + dirs[0].1 * dirs[1].1).clamp(-1.0, 1.0).acos();
+        Some(shorter * (theta / 2.0).tan())
+    }
+
+    /// THE LARGEST RADIUS "FILLET ALL" TAKES on the corners of a set of lines (every line of the sketch with `None`): a
+    /// line between two corners being rounded spends both touching points on itself, r / tan(a / 2) + r / tan(b / 2) of
+    /// its length, and a line with one corner rounded spends one. `None` when there is no corner of two lines to round.
+    /// A rectangle 40 x 30 takes up to 15, half its short side, where one corner alone takes 30.
+    pub fn all_corners_limit(&self, si: usize, only: Option<&std::collections::HashSet<Id>>) -> Option<f64> {
+        let s = self.sketches.get(si)?;
+        let lines: Vec<(Id, Id, Id)> = s.entities.iter().filter(|e| only.is_none_or(|o| o.contains(&e.id))).filter_map(|e| match e.kind {
+            EntityKind::Line { a, b } => Some((e.id, a, b)),
+            _ => None,
+        }).collect();
+        // the cotangent of half the angle at every corner of two lines, the corners being the points two lines of the set meet at
+        let mut cot: std::collections::HashMap<Id, f64> = std::collections::HashMap::new();
+        for &(_, a, b) in &lines {
+            for p in [a, b] {
+                if cot.contains_key(&p) || lines.iter().filter(|(_, x, y)| *x == p || *y == p).count() != 2 || self.vertex_edges(si, p).len() != 2 {
+                    continue;
+                }
+                if let Some(l) = self.corner_limit(si, p, false) {
+                    let (pcx, pcy) = self.point_xy(si, p)?;
+                    let ends: Vec<f64> = self.vertex_edges(si, p).iter().filter_map(|e| self.line_ends(si, *e)).filter_map(|(x, y)| self.point_xy(si, if x == p { y } else { x })).map(|(ox, oy)| (ox - pcx).hypot(oy - pcy)).collect();
+                    let shorter = ends.iter().copied().fold(f64::INFINITY, f64::min);
+                    cot.insert(p, shorter / l); // corner_limit = shorter * tan(theta / 2)
+                }
+            }
+        }
+        lines
+            .iter()
+            .filter_map(|&(_, a, b)| {
+                let spent = cot.get(&a).copied().unwrap_or(0.0) + cot.get(&b).copied().unwrap_or(0.0);
+                let (ax, ay) = self.point_xy(si, a)?;
+                let (bx, by) = self.point_xy(si, b)?;
+                (spent > 1e-12).then(|| (bx - ax).hypot(by - ay) / spent)
+            })
+            .fold(None, |m: Option<f64>, v| Some(m.map_or(v, |m| m.min(v))))
+    }
+
     pub fn fillet_at_vertex(&mut self, si: usize, pid: Id, r: f64) -> bool {
         let edges = self.vertex_edges(si, pid);
         if edges.len() != 2 {
@@ -2406,25 +2644,17 @@ impl Project {
         }
     }
 
-    /// Remove ghosts: orphaned meshes (a body with no timeline node that is not an import — for example a
-    /// primitive whose node was deleted while the mesh stayed) and features with a dangling source (a
-    /// `consumed()` body that is not valid). A body is valid when it has a timeline node or is listed in
-    /// `imported_bodies`. Runs in a loop, because deleting one body dangles its consumer. Returns the
-    /// bodies that were removed.
+    /// Remove ghosts: orphaned meshes, a body with no timeline node that is not an import - for example a
+    /// primitive whose node was deleted while the mesh stayed. A body is valid when it has a timeline node or is
+    /// listed in `imported_bodies`. A feature whose source is gone is NOT removed: it stays in the timeline, red
+    /// with the reason, for the person to repair or delete - taking it away here would be the cascade the delete
+    /// no longer makes unless asked. Returns the bodies that were removed.
     pub fn prune_dangling(&mut self) -> std::collections::HashSet<Id> {
-        let mut removed: std::collections::HashSet<Id> = std::collections::HashSet::new();
-        for _ in 0..1024 {
-            let mut valid: std::collections::HashSet<Id> = self.timeline.iter().flat_map(|n| n.kind.bodies()).collect();
-            valid.extend(self.imported_bodies.iter().copied());
-            let mut doomed: std::collections::HashSet<Id> = self.timeline.iter().filter(|n| n.kind.consumed().iter().any(|s| !valid.contains(s))).flat_map(|n| n.kind.bodies()).collect();
-            for b in self.bodies.iter().map(|b| b.id).collect::<Vec<_>>().into_iter().filter(|b| !valid.contains(b)) {
-                doomed.insert(b); // Orphaned mesh: no node and not an import.
-            }
-            if doomed.is_empty() {
-                break;
-            }
-            self.remove_bodies(&doomed);
-            removed.extend(doomed);
+        let mut valid: std::collections::HashSet<Id> = self.timeline.iter().flat_map(|n| n.kind.bodies()).collect();
+        valid.extend(self.imported_bodies.iter().copied());
+        let removed: std::collections::HashSet<Id> = self.bodies.iter().map(|b| b.id).filter(|b| !valid.contains(b)).collect();
+        if !removed.is_empty() {
+            self.remove_bodies(&removed);
         }
         // Orphaned connectors and joints: a connector whose owning component is gone, or whose anchor
         // references a body that no longer exists, is broken. Its joint resolves to a garbage frame and the
@@ -2925,31 +3155,59 @@ impl Project {
         }
         let (id, name) = (da.id, da.name.clone());
         let parent = Some(self.active_ctx());
+        // AN AXIS TAKEN FROM SOMETHING IS WHERE THAT THING IS ONLY ONCE A REBUILD HAS LOOKED: an edge, a round face or
+        // two points are resolved in the timeline pass. Left clean, a window that rebuilds only what is marked never
+        // ran that pass, and the axis stood at its default - the world Z through the origin.
+        let derived = !matches!(da.def, AxisDef::Manual { .. });
         self.datum_axes.push(da);
-        self.push_timeline(FeatureNode { id, name, kind: FeatureKind::DatumAxis { axis: id }, parent, dirty: false, suppressed: false });
+        self.push_timeline(FeatureNode { id, name, kind: FeatureKind::DatumAxis { axis: id }, parent, dirty: derived, suppressed: false });
         id
     }
 
     /// Delete a datum plane by id, from `planes` and from the timeline together. One method rather than
     /// logic inlined in the interface. Returns whether the plane existed.
+    /// Delete a datum plane ALONE, as a base is deleted (decided 24.09): what stands on it stays, red with the reason.
+    /// A sketch on it is put on a snapshot of where the plane stood (`PlaneDef::PlaneGone`), so it does not move and
+    /// goes red saying its plane was deleted; an offset plane built from it stays where it stands, a plane of its own.
     pub fn delete_plane(&mut self, id: Id) -> bool {
-        use crate::feature::{FeatureKind, SketchPlane};
-        let had = self.planes.iter().any(|p| p.id == id);
-        if !had {
+        use crate::feature::SketchPlane;
+        let Some(gone) = self.planes.iter().find(|p| p.id == id).cloned() else { return false };
+        let on_plane: Vec<(usize, Id)> = self.sketches.iter().enumerate().filter(|(_, s)| matches!(s.plane, SketchPlane::Datum(pid) if pid == id)).map(|(si, s)| (si, s.id)).collect();
+        if !on_plane.is_empty() {
+            let snap = self.add_plane(WorkPlane { name: "name-plane-deleted-frozen".into(), origin: gone.origin, normal: gone.normal, rot_deg: gone.rot_deg, def: PlaneDef::PlaneGone, ..Default::default() });
+            for (si, sid) in on_plane {
+                self.sketches[si].plane = SketchPlane::Datum(snap);
+                self.mark_node_dirty(sid); // the rebuild visits it and marks it red
+            }
+        }
+        for p in self.planes.iter_mut().filter(|p| matches!(p.def, PlaneDef::OffsetPlane { plane, .. } if plane == id)) {
+            p.def = PlaneDef::Manual; // it keeps the origin and the normal it was last resolved to
+        }
+        self.drop_plane_node(id)
+    }
+
+    /// Delete a datum plane WITH what is built on it (the "and what is built on it" box): the sketches on it and what
+    /// they make, and the offset planes built from it, recursively.
+    pub fn delete_plane_with_dependents(&mut self, id: Id) -> bool {
+        use crate::feature::SketchPlane;
+        if !self.planes.iter().any(|p| p.id == id) {
             return false;
         }
-        // Hard dependency: sketches placed on this datum plane have no frame without it, so they are deleted
-        // in cascade together with their bodies, exactly as `delete_sketch` does. Left dangling they would
-        // silently break features with "profile not found".
         let on_plane: Vec<Id> = self.sketches.iter().filter(|s| matches!(s.plane, SketchPlane::Datum(pid) if pid == id)).map(|s| s.id).collect();
         for sid in on_plane {
-            self.delete_sketch(sid);
+            self.delete_sketch_with_dependents(sid);
         }
-        // Child offset planes built from this one, recursively: without their source they cannot resolve.
         let children: Vec<Id> = self.planes.iter().filter(|p| matches!(p.def, PlaneDef::OffsetPlane { plane, .. } if plane == id)).map(|p| p.id).collect();
         for cid in children {
-            self.delete_plane(cid);
+            self.delete_plane_with_dependents(cid);
         }
+        self.drop_plane_node(id)
+    }
+
+    /// The plane itself goes, and the mirrors and splits that named it go red on the rebuild.
+    fn drop_plane_node(&mut self, id: Id) -> bool {
+        use crate::feature::FeatureKind;
+        let had = self.planes.iter().any(|p| p.id == id);
         // Neither mirror nor section degrades. The reference is left dangling so that regenerate sees the
         // missing plane and goes red honestly.
         //
@@ -3054,6 +3312,39 @@ impl Project {
         part
     }
 
+    /// WHERE A NEW SKETCH GOES: the part being worked in, or - when the context is an assembly - a new part made in it
+    /// and stood in, so a sketch always belongs to a part (a part is one body, and a sketch in an assembly has no body
+    /// to build). `Some(part)` when a part was made; the window steps into it.
+    pub fn part_to_draw_in(&mut self) -> Option<Id> {
+        let ctx = self.active_ctx();
+        if self.component_is_part(ctx) {
+            return None;
+        }
+        let part = self.add_part(self.free_part_name());
+        self.set_active_component(Some(part));
+        Some(part)
+    }
+
+    /// THE DOCUMENT OF A FIRST START: a part called Cube holding a sketch of a 20 x 20 square on XY and its extrusion
+    /// 20 up - a cube of 8000 mm^3. Opened into, it shows how the work goes here: a sketch, and a feature built on it.
+    /// Decided 25.09 on a report that a first start met a person with an empty part.
+    pub fn cube_sample(&mut self) -> Id {
+        let root = self.ensure_root();
+        self.set_active_component(Some(root));
+        let part = self.add_part("name-sample-cube");
+        self.set_active_component(Some(part));
+        let si = self.new_sketch("name-sketch-n#1");
+        let sid = self.sketches[si].id;
+        self.add_sketch_node(sid, "name-sketch-n#1");
+        self.add_rect_entity(si, -10.0, -10.0, 10.0, 10.0, crate::feature::Purpose::Real);
+        self.regen_sketch(si);
+        let body = self.add_extrude(sid, 20.0);
+        self.finish_base_body(body, 1);
+        // the person stands in the assembly and sees the part in it; stepping into it shows how it is made
+        self.set_active_component(Some(root));
+        part
+    }
+
     /// AN EMPTY DOCUMENT: the root assembly and nothing else.
     ///
     /// Reported behaviour: "in an empty project remove the empty part - a person opens the CAD and sees an
@@ -3068,7 +3359,9 @@ impl Project {
     /// an empty pane rather than a document.
     pub fn new_empty_document(&mut self) -> Id {
         let root = self.ensure_root();
-        self.set_active_component(None); // the context is the root itself, not a part inside it
+        // the context is the root itself, not a part inside it - named as the window names it, or the window's first
+        // frame names it so and the untouched document reads as changed
+        self.set_active_component(Some(root));
         root
     }
 
@@ -3308,7 +3601,21 @@ impl Project {
         if self.active_component.is_some_and(|a| subtree.contains(&a)) {
             self.active_component = None;
         }
+        self.drop_orphan_sources();
         bodies
+    }
+
+    /// AN IMPORT SOURCE GOES WITH WHAT CAME OF IT: a file no node of the timeline (an imported solid, a mesh piece)
+    /// and no sketch comes of any more is dropped. Reported behaviour: the part a file came in as was deleted and its
+    /// source still hung in the tree.
+    fn drop_orphan_sources(&mut self) {
+        use crate::feature::FeatureKind;
+        let mut used: std::collections::HashSet<Id> = self.sketches.iter().filter_map(|s| s.source).collect();
+        used.extend(self.timeline.iter().filter_map(|n| match n.kind {
+            FeatureKind::Import { source, .. } | FeatureKind::MeshPiece { source, .. } => Some(source),
+            _ => None,
+        }));
+        self.sources.retain(|s| used.contains(&s.id));
     }
 
     // --- Tree clipboard: copying and cutting sketches, parts and subassemblies. ---
@@ -3345,7 +3652,9 @@ impl Project {
     /// being a snapshot of self, so both share one id-remapping engine.
     pub fn clone_component(&mut self, id: Id, target_parent: Id) -> Option<Id> {
         let from = self.clone();
-        Self::clone_subtree_into(self, &from, id, target_parent)
+        let copy = Self::clone_subtree_into(self, &from, id, target_parent)?;
+        self.name_apart(&[copy], &|n| n.to_string()); // a copy is told from its original: "Part 1 (2)"
+        Some(copy)
     }
 
 
@@ -3373,7 +3682,7 @@ impl Project {
     /// Bodies are marked dirty and the application builds them with `regenerate(kernel)`. Returns the id of
     /// the inserted root (the first one when the product has several components). The mirror image of
     /// `clone_component`, with an external project as the source.
-    pub fn graft(&mut self, other: &Project, target_parent: Id) -> Option<Id> {
+    pub fn graft(&mut self, other: &Project, target_parent: Id, shown: &dyn Fn(&str) -> String) -> Option<Id> {
         if !self.components.iter().any(|c| c.id == target_parent) || self.component_is_part(target_parent) {
             return None;
         }
@@ -3381,6 +3690,7 @@ impl Project {
         let mut first = None;
         for t in tops {
             if let Some(nid) = Self::clone_subtree_into(self, other, t, target_parent) {
+                self.name_apart(&[nid], shown); // it keeps its own name, numbered when one reading the same is here
                 first.get_or_insert(nid);
             }
         }
@@ -3954,6 +4264,13 @@ impl Project {
         p
     }
 
+    /// A STATE BROUGHT BACK BY UNDO OR REDO HANDS OUT NO ID THE LIVE DOCUMENT HAS HANDED OUT ALREADY: the counter goes on
+    /// from the higher of the two. Brought back as it was, the counter gave the next node the id of the body the undo
+    /// took away, and a pick still held on that body named the new node instead - a shell laid on its own body, red.
+    pub fn keep_ids_past(&mut self, live: &Project) {
+        self.next_id = self.next_id.max(live.next_id);
+    }
+
     /// Take the source bytes from `live` (matched by id) into this project: the inverse of
     /// [`Project::clone_without_source_data`], used when restoring a snapshot. Sources no longer present in
     /// the live project stay empty, since nothing will read them.
@@ -3992,7 +4309,15 @@ impl Project {
         }
         for j in &mut self.joints {
             if let Some(l) = live.joints.iter().find(|l| l.id == j.id) {
-                j.drive = l.drive;
+                // A slot given by an expression keeps the value the rebuild evaluated: the live one is the old
+                // value of the parameter. Reported behaviour: a hinge angle typed as pa stayed at 90 deg after
+                // pa became 45.
+                let exprs = self.feat_dims.get(&j.id);
+                for (slot, key) in ["angle", "offset", "offset2"].into_iter().enumerate() {
+                    if !exprs.and_then(|d| d.get(key)).is_some_and(|e| !e.trim().is_empty()) {
+                        j.drive[slot] = l.drive[slot];
+                    }
+                }
                 j.flip = l.flip;
                 j.roll_flip = l.roll_flip;
                 j.flip_decided = l.flip_decided;
@@ -4094,9 +4419,27 @@ impl Project {
                 bits(p.x, &mut h);
                 bits(p.y, &mut h);
             }
+            // a line turned into construction leaves the profile; unseen here, the turn was no step and undo lost it
+            for e in &s.entities {
+                (e.id, e.construction).hash(&mut h);
+            }
             for c in &s.constraints {
                 if let Some(d) = c.dim_value() {
                     bits(d, &mut h);
+                }
+                // A LABEL MOVED IS AN EDIT OF THE DOCUMENT - it goes into the file - but not of what is built: counted
+                // with the placement, so dragging a label asks to save and rebuilds nothing
+                if placement {
+                    for v in c.label_place().unwrap_or([0.0; 3]) {
+                        bits(v, &mut h);
+                    }
+                }
+            }
+            // labels: a placed or retyped label is a change of the document like any line
+            for t in &s.texts {
+                (t.id, &t.text, t.construction).hash(&mut h);
+                for v in [t.x, t.y, t.height, t.angle] {
+                    bits(v, &mut h);
                 }
             }
         }
@@ -4154,6 +4497,15 @@ impl Project {
                     }
                 }
                 j.as_built.is_some().hash(&mut h);
+            }
+        }
+        // relations between mates move components and touch no body: their numbers are placement, like a mate's angle
+        for r in &self.relations {
+            (r.id, &r.name, r.kind as u8, r.a, r.slot_a, r.b, r.slot_b).hash(&mut h);
+            if placement {
+                bits(r.value, &mut h);
+                bits(r.phase, &mut h);
+                r.reversed.hash(&mut h);
             }
         }
         for r in &self.external_refs {
@@ -4461,7 +4813,10 @@ impl Project {
             nb.entry(b).or_default().push(a);
         }
         let live: std::collections::HashSet<u32> = self.regen_faces.get(&body).map(|f| f.iter().map(|x| x.id).collect()).unwrap_or_default();
-        let mut groups: std::collections::HashMap<u32, Vec<u32>> = std::collections::HashMap::new();
+        // IN THE ORDER OF THE ORIGINALS, not of a hash: the names are interned as the groups are walked, and a step back
+        // takes the interned names away, so the rebuild of a step forward hands them out again. Walked in hash order
+        // the same name came to the half of another side - the top of the right (40, 15, 7.5) went to the front.
+        let mut groups: std::collections::BTreeMap<u32, Vec<u32>> = std::collections::BTreeMap::new();
         for (piece, origin, _idx) in splits {
             groups.entry(origin).or_default().push(piece);
         }
@@ -5354,7 +5709,7 @@ mod library_extract_insert_tests {
         let before_next = host.next_id;
         let host_ids: std::collections::HashSet<Id> = host.components.iter().map(|c| c.id).chain(host.timeline.iter().map(|n| n.id)).collect();
 
-        let inserted = host.graft(&qpart, host.root).expect("insertion");
+        let inserted = host.graft(&qpart, host.root, &|n| n.to_string()).expect("insertion");
         // The inserted node is a first-class part under the host root.
         let ins = host.components.iter().find(|c| c.id == inserted).expect("the inserted component exists");
         assert_eq!(ins.kind, ComponentKind::Part, "what was inserted must be a part");
@@ -5379,7 +5734,7 @@ mod library_extract_insert_tests {
         let qpart = src.subproject_of(part).expect("extraction");
         let mut host = Project::default();
         let hpart = host.new_document(); // The active part.
-        assert!(host.graft(&qpart, hpart).is_none(), "a part inside a part is not allowed, so inserting into a part is refused");
+        assert!(host.graft(&qpart, hpart, &|n| n.to_string()).is_none(), "a part inside a part is not allowed, so inserting into a part is refused");
     }
 
     #[test]
@@ -5388,8 +5743,8 @@ mod library_extract_insert_tests {
         let qpart = src.subproject_of(part).expect("extraction");
         let mut host = Project::default();
         host.new_document();
-        let a = host.graft(&qpart, host.root).expect("first insertion");
-        let b = host.graft(&qpart, host.root).expect("second insertion");
+        let a = host.graft(&qpart, host.root, &|n| n.to_string()).expect("first insertion");
+        let b = host.graft(&qpart, host.root, &|n| n.to_string()).expect("second insertion");
         assert_ne!(a, b, "two insertions must give different roots");
         // Every component id is unique.
         let ids: Vec<Id> = host.components.iter().map(|c| c.id).collect();

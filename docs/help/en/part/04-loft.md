@@ -1,33 +1,32 @@
 # Loft
 
-Select the first section sketch, then click the following sections in the tree (at least two are
-needed) and press Enter.
+![A transition from a square at the bottom to a circle at the top — one operation.](img/part-loft.png)
 
-![A transition from a square at the bottom to a circle at the top — one feature.](img/part-loft.png)
+The body passes through sections in order: an adapter from a circle to a square, a blade, a streamlined housing.
 
-The body passes through all sections in order: an adapter from round to square, a blade, a
-streamlined housing.
+## How to do it
 
-## The order of the sections is the shape
+1. Select the first section sketch and press **Loft**.
+2. Click the next sections in the tree in order — at least two; the bar above shows **sections: N**.
+3. In the bar choose the faces — **Smooth** or **Ruled** (straight transitions between sections) — and the result:
+   **Add**, **Cut**, **Union**, **Intersection** with the body of the part, or **Surface**.
+4. **Enter** applies, **Esc** cancels.
 
-Sections are joined in the order they were picked. Mix the order up and you get a twisted body. The
-order is visible in the tree, and editing reads the same order.
+## The order of sections is the shape
 
-## Sections on different planes
+Sections are joined in the order they are picked. Mix the order up and you get a twisted body.
 
-Usually each section lies on its own plane, and the planes are spaced apart by datums. That makes
-the distance between sections **parametric**: move the datum and the adapter stretches.
+Usually each section lies on a datum plane of its own: move the plane and the adapter stretches.
 
-## A hint
+## Surface
 
-The closer the sections are in the number and placement of their corners, the smoother the
-transition. A circle and a square stitch well; a circle and a star — as luck has it.
+**Surface** is the same outline without caps on the end sections: a shell with no volume. That is how a side, a hood,
+a transition between two outlines are made. It becomes a body later — by [thickening](part/15-thicken) or
+[stitching](part/23-stitch) with neighbouring sheets.
 
-## Solid or surface
+## If it did not work
 
-The top bar chooses **what the result should be**: a separate body, a cut/join/intersection with the
-active body — or a **surface**. A surface differs from a solid by exactly the caps on the end
-sections: the skin is there, the volume is not.
-
-This is how a flange, a hood or a transition between two skins is made. Such a surface becomes a
-solid later — by **thickening** or by **stitching** it to neighbouring sheets.
+- **A loft needs at least 2 sections** — you picked one. Click another section in the tree.
+- The body is twisted — the sections were picked out of order. Open the loft with a double-click and pick again.
+- The closer the sections are in their number of corners, the smoother the transition: a circle and a square join
+  well, a circle and a star — as it happens.

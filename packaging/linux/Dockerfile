@@ -4,8 +4,8 @@
 # not an option: glibc would come out newer than the one on a friend's 24.04 LTS and the binary would not
 # start at all.
 #
-# OCCT 7.8.1 is built FROM SOURCE: apt on Ubuntu 22.04 carries only 7.5, while build.rs needs the merged
-# modules of 7.8 (TKDESTEP and the like). Only the modelling modules (Draw and Visualization are off - the
+# OCCT 7.9.3 is built FROM SOURCE - the version the program is developed and tested against: apt on Ubuntu
+# 22.04 carries only 7.5, while build.rs needs the merged modules of 7.8+ (TKDESTEP and the like). Only the modelling modules (Draw and Visualization are off - the
 # drawing here is our own, in egui/wgpu).
 FROM ubuntu:22.04
 
@@ -18,8 +18,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libssl-dev pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# --- OCCT 7.8.1 from source -> /opt/occt (only the modules that are needed) ---
-ARG OCCT_TAG=V7_8_1
+# --- OCCT 7.9.3 from source -> /opt/occt (only the modules that are needed) ---
+ARG OCCT_TAG=V7_9_3
 RUN wget -q "https://github.com/Open-Cascade-SAS/OCCT/archive/refs/tags/${OCCT_TAG}.tar.gz" -O /tmp/occt.tar.gz \
     && tar xf /tmp/occt.tar.gz -C /tmp \
     && cmake -S /tmp/OCCT-* -B /tmp/occt-build \

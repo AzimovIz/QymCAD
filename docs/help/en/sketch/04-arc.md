@@ -1,20 +1,27 @@
 # Arc
 
-Key **A**. Three ways, the switch is in the top bar.
+Key **A**.
 
 ![An arc by its centre and two ends.](img/sketch-arc.png)
 
-- **Centre — start — end**: the first click sets the centre, the second the start, the third the end.
-- **By three points**: start, end and a point on the arc.
-- **Tangent**: an arc continuing the chosen segment without a kink.
+## How to draw it
 
-## An arc is held by constraints
+Press **Arc** and choose the way in the bar above:
 
-Tangency between an arc and a neighbouring segment is a real constraint: move the segment and the arc
-stays tangent instead of splitting at the joint. The radius takes part in the solve as well, so equal
-radii and point-on-arc work just as they do for a circle.
+- **centre-start-end** — the first click places the centre, the second the start, the third the end;
+- **by 3 points** — the start, the end and a point on the arc;
+- **tangent** — an arc continuing the end of a segment already drawn without a kink.
 
-## A hint
+The arc once down opens its radius field: type a number and **Enter** — or keep drawing. **Esc** puts the tool down.
 
-Rounding a corner in a sketch is easier with the **Corner fillet** tool (click the corner of two
-lines): it places the arc and both tangencies for you.
+## An arc holds by constraints
+
+The tangency of an arc to the neighbouring segment is a constraint: move the segment and the arc stays tangent. The
+radius takes part in the solving, so equal radii and a point on the arc work as for a circle.
+
+A rounded corner is easier with [Corner fillet](sketch/16-corner): a click on the corner, and the arc lies down with
+both tangencies and a dimension.
+
+## If it did not work
+
+**tangent** draws nothing — there is nothing to continue: draw the segment the arc starts from first.

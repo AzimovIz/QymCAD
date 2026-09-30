@@ -59,6 +59,7 @@ mod tests {
         let before = app.project.timeline.len();
         app.chosen.sel = Sel::Sketch(si);
         app.start_feat_cmd(3); // revolve
+        app.tools.gsel.profiles.extend(cids.iter().copied()); // the contours clicked in the picker, as a person does
         // OUT OF THE CONTOUR PICKER FIRST. Creating a feature over MORE THAN ONE contour now opens on
         // the choice of contours, so the first Enter answers "these ones" and only the next one applies.
         // That is the path a person walks, and a check that skipped it would be checking a path nobody has.
@@ -104,6 +105,7 @@ mod tests {
         let (si, cids) = two_contours(&mut app);
         app.chosen.sel = Sel::Sketch(si);
         app.start_feat_cmd(3);
+        app.tools.gsel.profiles.extend(cids.iter().copied()); // the contours clicked in the picker, as a person does
         // OUT OF THE CONTOUR PICKER FIRST. Creating a feature over MORE THAN ONE contour now opens on
         // the choice of contours, so the first Enter answers "these ones" and only the next one applies.
         // That is the path a person walks, and a check that skipped it would be checking a path nobody has.
@@ -135,6 +137,7 @@ mod tests {
         let (si, cids) = two_contours(&mut app);
         app.chosen.sel = Sel::Sketch(si);
         app.start_feat_cmd(3);
+        app.tools.gsel.profiles.extend(cids.iter().copied()); // the contours clicked in the picker, as a person does
         // OUT OF THE CONTOUR PICKER FIRST. Creating a feature over MORE THAN ONE contour now opens on
         // the choice of contours, so the first Enter answers "these ones" and only the next one applies.
         // That is the path a person walks, and a check that skipped it would be checking a path nobody has.

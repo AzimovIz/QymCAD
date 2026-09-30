@@ -1,19 +1,21 @@
 # Spline
 
-Key **N**. A smooth curve through points: click the knots, a **double click** finishes it.
+Key **N**. A smooth curve through points.
 
 ![A spline through four points: a smooth curve passing through them.](img/sketch-spline.png)
 
-## Careful with definition
+## How to draw it
 
-A spline is the freest entity in a sketch: every knot has two degrees of freedom, and defining it
-completely with dimensions is next to impossible. That is fine for a shaped surface and bad for a
-critical outline.
+Press **Spline** and click the knots in order; a **double-click** places the last one and ends the curve. The knots
+can be dragged with the mouse later — the curve follows them.
 
-The rule is simple: where the shape is set by a **function** (a fairing, aerodynamics, ergonomics) a
-spline belongs; where it is set by a size (a fit, a hole, a joint) lines and arcs are better.
+## Mind the definition
 
-## A hint
+Each knot has two degrees of freedom, and pinning a spline down entirely with dimensions is next to impossible. That
+is fine for a styled shape and bad for a working outline: where a function sets the shape (a surround, aerodynamics,
+ergonomics), a spline fits; where a size does (a fit, a hole, a joint), lines and arcs are better.
 
-Pin the spline ends to their neighbours with coincidence, otherwise the outline will come apart at
-the joint on the first change.
+## If it did not work
+
+A contour with a spline does not extrude — the ends of the spline do not meet their neighbours. Pin them with the
+**Coincident** constraint to the ends of the neighbouring lines.

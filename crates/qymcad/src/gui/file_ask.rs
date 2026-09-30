@@ -16,8 +16,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
 use super::App;
-
-type PathFuture = std::pin::Pin<Box<dyn std::future::Future<Output = Option<rfd::FileHandle>> + Send>>;
+use crate::system::Chooser;
 
 /// A file chooser in flight, and what its answer is for.
 pub(crate) struct FileAsk {
@@ -33,7 +32,7 @@ impl App {
         if self.asking_for_a_file() {
             return;
         }
-        self.spawn_file_ask(Box::pin(dialog.pick_file()), then);
+        self.arm_file_ask(crate::system::choose_file(Chooser::Open, move || Box::pin(dialog.pick_file())), then);
     }
 
     /// Ask where to write. The same contract as [`App::ask_open_file`].
@@ -41,18 +40,7 @@ impl App {
         if self.asking_for_a_file() {
             return;
         }
-        self.spawn_file_ask(Box::pin(dialog.save_file()), then);
-    }
-
-    /// The future is BUILT here, on the frame thread, and only HELD by the worker. That split is not a
-    /// preference: on macOS the panel is put up inside the constructor and the main thread is what it is
-    /// put up from, while the waiting itself may happen anywhere.
-    fn spawn_file_ask(&mut self, fut: PathFuture, then: impl FnOnce(&mut App, PathBuf) + 'static) {
-        let (tx, rx) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            let _ = tx.send(pollster::block_on(fut).map(|h| h.path().to_path_buf()));
-        });
-        self.arm_file_ask(rx, then);
+        self.arm_file_ask(crate::system::choose_file(Chooser::Save, move || Box::pin(dialog.save_file())), then);
     }
 
     /// Hold `rx` and the continuation until [`App::poll_file_ask`] picks the answer up.
@@ -245,7 +233,7 @@ mod exporting_over_a_rebuild {
     /// so the test holds it: a dropped one would read as a job that has already finished.
     fn rebuilding(app: &mut App) -> std::sync::mpsc::Sender<qymcad_ui_state::JobResult> {
         let (tx, rx) = std::sync::mpsc::channel();
-        app.regen.busy = Some(qymcad_ui_state::Busy {
+        app.regen.busy = Some(qymcad_ui_state::Busy { started: std::time::Instant::now(),
             label: "rebuild".into(),
             rx,
             kind: qymcad_ui_state::BgKind::Regen,
@@ -264,7 +252,7 @@ mod exporting_over_a_rebuild {
 
         let mut app = App::default();
         let _job = rebuilding(&mut app);
-        crate::gui::io_jobs::write_step_to(&mut app.live, &mut app.project, &mut app.regen, &mut app.status, &path, &[], "");
+        crate::gui::io_jobs::write_exact_to(&mut app.live, &mut app.project, &mut app.regen, &mut app.status, &path, &crate::gui::io_jobs::ExportJob { format: qymcad_kernel::ExactFormat::Step, bodies: Vec::new(), note: String::new(), tree: Vec::new() });
 
         assert!(
             matches!(&app.regen.busy, Some(b) if b.kind == qymcad_ui_state::BgKind::Regen),
@@ -279,7 +267,7 @@ mod exporting_over_a_rebuild {
     fn the_stl_export_waits_its_turn_too() {
         let mut app = App::default();
         let _job = rebuilding(&mut app);
-        crate::gui::io_jobs::write_stl_to(qymcad_ui_state::editing_of!(app), &mut app.live, std::path::Path::new("/tmp/qym-never-written.stl"), &[], "", 0.1);
+        crate::gui::io_jobs::write_mesh_to(qymcad_ui_state::editing_of!(app), &mut app.live, std::path::Path::new("/tmp/qym-never-written.stl"), &crate::gui::io_jobs::MeshJob { format: qymcad_ui_state::MeshFormat::Stl, bodies: (&[]).to_vec(), note: ("").to_string(), deflection: 0.1, tree: Vec::new() });
         assert!(matches!(&app.regen.busy, Some(b) if b.kind == qymcad_ui_state::BgKind::Regen));
         assert_eq!(app.status, crate::i18n::tr("io-export-busy"));
     }

@@ -1,8 +1,7 @@
 //! THE GRAB RADIUS FOLLOWS THE ROLE OF THE TARGET, NOT THE PLACE IN THE CODE.
 //!
-//! There were 42 hard-wired thresholds in `pick.rs` and `sketching.rs`. The plan called that
-//! "thresholds differing for no reason" — a census showed that half of it is not so, and two different
-//! kinds of disorder have to be told apart.
+//! There were 42 hard-wired thresholds in `pick.rs` and `sketching.rs`, and they differed for two reasons
+//! that have to be told apart.
 //!
 //! **Between roles the difference is LEGITIMATE.** Aiming at a point is harder than aiming at a line:
 //! a point occupies a pixel, a line stretches across half the screen. Giving them one radius would

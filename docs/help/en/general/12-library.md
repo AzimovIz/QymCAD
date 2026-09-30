@@ -1,37 +1,33 @@
-# Parts library
+# The parts library
 
-Ready-made parts — motors, boards, profiles, gearboxes — are inserted from the library rather than
-rebuilt in every project.
+Finished products — motors, boards, profiles, gearboxes — are inserted from the library, not built again in every
+project.
 
-![The library window: categories on the left, items in a list, search on top.](img/library.png)
+![The library window: categories on the left, products in a list, search at the top.](img/library.png)
 
-## How to insert
+## How to insert one
 
-The **I** key (“Insert component”) puts a part into the current assembly: either an item from the
-library or a STEP or STL file from the disk. It goes **into the active assembly** — if a part is
-active there is nowhere to insert, and the program says so.
+Open **Windows -> Parts library** (or **Parts library** on the start screen). Categories are on the left, a search by
+name and tags at the top. Press **Insert** at the product you need — it goes **into the current assembly**. If you
+are inside a part, there is nowhere to insert it: the program says there is no active assembly — step out to the
+assembly.
 
-The library window opens from the panel and lists items by category; search and a refresh button are
-there too.
+A STEP or STL file from the disk is inserted with the key **I** ("Insert a component").
 
-## Your own parts
+## Your own products
 
-Any part or sub-assembly you have built can go into the library: **Save as a part** — a name and a
-category. From then on it sits next to the built-in ones and is inserted the same way.
+The right button on a part or a subassembly in the tree — **Save as a part…**: a name and a category, **Save**. From
+then on it stands in the library next to the built-in ones and is inserted the same way. Your products live in the
+user folder, not in the project: they outlive the project and a reinstall of the program. The project root is not
+saved as a product — a part or a subassembly is.
 
-Your own items live in the operating system’s user directory, not in the project: they outlive both the
-project and a reinstall of the program.
+## A product is an ordinary component
 
-The root of a project is not saved as an item — you save a part or a sub-assembly, not the whole
-document.
+What you insert lives in the assembly like any other part: it is moved, mated, patterned. A copy is brought into the
+document, so editing the library source does not reach projects already assembled after the fact.
 
-## An inserted item is an ordinary component
+## If it did not work
 
-It lives in the assembly like any other part: move it, mate it, put it in an array. A copy is brought
-into the document, so a later edit of the library original does not reach projects already assembled —
-and that is deliberate: someone else’s part should not change under your hands.
-
-## If an item is not found
-
-The list is read from the disk when the window opens. If an item file was renamed or deleted, the
-program says so at the moment of inserting rather than leaving an empty space.
+- A product is not inserted and the program says it is missing — its file was renamed or deleted. **Rescan the
+  folder** in the library window updates the list.
+- You pressed **Insert** and nothing appeared — you are inside a part; step out to the assembly.

@@ -103,12 +103,13 @@ mod tests {
         // nowhere to come from, and opening the tree shows a bare "Body 36" with no part around it.
         {
             let root = app.project.root;
+            // by the body's owner, not the node's parent: a pattern of components stands in the assembly and builds
+            // bodies that belong to its copies
             let orphan: Vec<u64> = app
                 .project
                 .timeline
                 .iter()
-                .filter(|n| n.parent == Some(root))
-                .flat_map(|n| n.kind.bodies())
+                .flat_map(|n| n.kind.bodies().into_iter().filter(move |b| n.owner_of(*b) == Some(root)))
                 .collect();
             // BY THE SAME SIGN THE TREE USES. In the root it shows THE MESHES that no timeline node produces
             // - the previous check looked for "bodies with no owner" and did not see those.
@@ -245,13 +246,14 @@ mod tests {
                     })
                     .collect();
                 // A CUT IS A LEGITIMATE EXCEPTION. The "split a body" tool exists precisely so that one body
-                // becomes several; after it, several bodies in a part are not a fault but work that was done
-                // deliberately. Without this proviso the check would forbid the tool itself.
+                // becomes several, and a cut through the body leaves its pieces bodies of the part the same way;
+                // after them, several bodies in a part are not a fault but work that was done deliberately. Without
+                // this proviso the check would forbid the tools themselves.
                 let was_split = app
                     .project
                     .timeline
                     .iter()
-                    .any(|nd| nd.parent == Some(owner) && matches!(nd.kind, qymcad_core::feature::FeatureKind::SplitBody { .. }));
+                    .any(|nd| nd.parent == Some(owner) && (matches!(nd.kind, qymcad_core::feature::FeatureKind::SplitBody { .. }) || nd.kind.cut_pieces().len() > 1));
                 if !was_split {
                     problems.push(format!("[{step}] part \"{name}\" has {n} visible bodies instead of one: {}", who.join(", ")));
                 }
@@ -302,19 +304,6 @@ mod tests {
     /// caller decides which, because only the caller knows what it expected.
     ///
     /// Type a string into the options bar of the text tool - without one there is nothing to draw.
-    fn hand_text(app: &mut App) {
-        app.tool_prefs.text = "CAD".into();
-    }
-
-    /// A pair of sketch entities to place a constraint on: two lines if there are any, otherwise two points.
-    fn app_sel_pair(sk: &qymcad_core::model::Sketch) -> Vec<(u8, u64)> {
-        let mut out: Vec<(u8, u64)> = sk.entities.iter().take(2).map(|e| (1u8, e.id)).collect();
-        if out.len() < 2 {
-            out = sk.points.iter().take(2).map(|p| (0u8, p.id)).collect();
-        }
-        out
-    }
-
     fn apply_tool(app: &mut App, kind: u8, problems: &mut Vec<String>, part: &str) -> bool {
         let before = app.project.timeline.len();
         // THE LAST SOLID BODY, not the last body of any kind: after a face copy or a patch the last one is A
@@ -540,8 +529,13 @@ mod tests {
             18 => {
                 // A CIRCULAR ARRAY OF A BODY: the axis comes from the command bar, the count from a field. The
                 // body stays one: the instances merge, as they do in a linear array.
+                // the body to repeat is clicked first, as a person does: a pattern with nothing picked is refused
                 let mut hand = Hand::new(app);
                 hand.look_at(c, scale).tool(18);
+                if !matches!(hand.app.chosen.sel, super::super::Sel::Mesh(..) | super::super::Sel::Face(..)) {
+                    let Some((t, _)) = face(hand.app, [0.0, 0.0, 1.0]) else { return false };
+                    hand.click(t);
+                }
                 hand.set("count", 3.0).set("angle", 360.0).enter();
             }
             27 => {
@@ -711,7 +705,10 @@ mod tests {
                     return false;
                 }
                 app.start_feat_cmd(32);
+                // the edges are the sheet's, and a click on one records whose it is: the part's current body is its
+                // solid, never a sheet beside it
                 app.tools.gsel.edges = edges.into_iter().collect();
+                app.edges.body = Some(sheet);
                 app.apply_feat_cmd();
                 qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
             }
@@ -743,6 +740,10 @@ mod tests {
             17 => {
                 let mut hand = Hand::new(app);
                 hand.look_at(c, scale).tool(17);
+                if !matches!(hand.app.chosen.sel, super::super::Sel::Mesh(..) | super::super::Sel::Face(..)) {
+                    let Some((t, _)) = face(hand.app, [0.0, 0.0, 1.0]) else { return false };
+                    hand.click(t);
+                }
                 hand.enter();
             }
             _ => return false,
@@ -808,7 +809,6 @@ mod tests {
         let si = app.create_sketch_on(qymcad_core::feature::SketchPlane::default());
         let mut hand = Hand::new(&mut app);
         hand.sk_tool(2).click2d(0.0, 0.0).click2d(60.0, 40.0);
-        app.project.regen_sketch(si);
         app.finish_sketch_edit();
         check_all(&mut app, "a rectangle was drawn", &mut problems);
 
@@ -844,7 +844,6 @@ mod tests {
         let si2 = app.create_sketch_on(qymcad_core::feature::SketchPlane::Face(body, key));
         let mut hand = Hand::new(&mut app);
         hand.sk_tool(3).click2d(30.0, 12.0).click2d(36.0, 12.0); // a circle of diameter 12
-        app.project.regen_sketch(si2);
         app.finish_sketch_edit();
         check_all(&mut app, "a sketch on a face of the housing", &mut problems);
 
@@ -881,7 +880,6 @@ mod tests {
         let si3 = app.create_sketch_on(qymcad_core::feature::SketchPlane::default());
         let mut hand = Hand::new(&mut app);
         hand.sk_tool(2).click2d(0.0, 0.0).click2d(60.0, 40.0);
-        app.project.regen_sketch(si3);
         app.finish_sketch_edit();
         app.chosen.sel = super::super::Sel::Sketch(si3);
         let mut hand = Hand::new(&mut app);
@@ -939,7 +937,6 @@ mod tests {
                     let si = app.create_sketch_on(qymcad_core::feature::SketchPlane::default());
                     let mut hand = Hand::new(&mut app);
                     hand.sk_tool(2).click2d(x + dx, 0.0).click2d(x + dx + 30.0, 30.0);
-                    app.project.regen_sketch(si);
                     app.finish_sketch_edit();
                     app.chosen.sel = super::super::Sel::Sketch(si);
                     let mut hand = Hand::new(&mut app);
@@ -1094,15 +1091,50 @@ mod tests {
                 check_all(&mut app, "the part was mirrored", &mut problems);
             }
             if let Some(&src) = with_body.get(1).or_else(|| with_body.first()) {
-                let lin = app.project.add_comp_pattern(src, CompPatternKind::Linear { dir: [0.0, 1.0, 0.0], step: 60.0, count: 3 });
+                let lin = app.project.add_comp_pattern(src, CompPatternKind::linear([0.0, 1.0, 0.0], 60.0, 3));
                 if lin == 0 {
                     problems.push("a linear array OF PARTS was not created".into());
                 }
                 qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
                 check_all(&mut app, "a linear array of parts", &mut problems);
+                if lin != 0 {
+                    // THE PATTERN REOPENED AND GROWN, as a person does it: its command opened again, four instances
+                    // instead of three, Enter - one node still, the copies kept
+                    let before = app.project.comp_pattern(lin).map(|p| p.copies).unwrap_or_default();
+                    app.start_comp_array_edit(lin);
+                    app.params.arr.count = 4;
+                    crate::gui::commands::apply_comp_array(&mut app.part_ctx());
+                    qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
+                    let after = app.project.comp_pattern(lin).map(|p| p.copies).unwrap_or_default();
+                    if after.len() != 3 || after[..before.len().min(3)] != before[..before.len().min(3)] {
+                        problems.push(format!("the linear array of parts grown to four holds the copies {after:?}, having held {before:?}"));
+                    }
+                    check_all(&mut app, "the linear array of parts grown to four", &mut problems);
+                    // THE SOURCE EDITED IN THE MIDDLE: a feature of the part made taller, and every copy follows
+                    let taller = app.project.timeline.iter_mut().find(|n| n.parent == Some(src) && matches!(n.kind, qymcad_core::feature::FeatureKind::Extrude { .. } | qymcad_core::feature::FeatureKind::Box3 { .. }));
+                    if let Some(n) = taller {
+                        match &mut n.kind {
+                            qymcad_core::feature::FeatureKind::Extrude { height, .. } => *height += 5.0,
+                            qymcad_core::feature::FeatureKind::Box3 { dz, .. } => *dz += 5.0,
+                            _ => {}
+                        }
+                        n.dirty = true;
+                        qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
+                        let vol = |c: u64| app.project.component_bodies(c).first().and_then(|b| app.project.mesh_index(*b)).map(|i| app.project.bodies[i].mesh.volume()).unwrap_or(0.0);
+                        let want = app.project.active_body(src).and_then(|b| app.project.mesh_index(b)).map(|i| app.project.bodies[i].mesh.volume()).unwrap_or(0.0);
+                        for c in &after {
+                            if (vol(*c) - want).abs() > 1e-3 * want.max(1.0) {
+                                problems.push(format!("the source of the array was made taller ({want:.1} mm^3) and the copy {c} holds {:.1}", vol(*c)));
+                            }
+                        }
+                        check_all(&mut app, "the source of the array of parts made taller", &mut problems);
+                    } else {
+                        problems.push("the source of the array of parts has no extrusion or box to make taller".into());
+                    }
+                }
             }
             if let Some(&src) = with_body.get(2).or_else(|| with_body.first()) {
-                let cir = app.project.add_comp_pattern(src, CompPatternKind::Circular { origin: [0.0, 0.0, 0.0], dir: [0.0, 0.0, 1.0], angle: 360.0, count: 4 });
+                let cir = app.project.add_comp_pattern(src, CompPatternKind::Circular { origin: [0.0, 0.0, 0.0], dir: [0.0, 0.0, 1.0], angle: 360.0, count: 4, axis: 0 });
                 if cir == 0 {
                     problems.push("a circular array OF PARTS was not created".into());
                 }
@@ -1143,7 +1175,6 @@ mod tests {
         let si4 = app.create_sketch_on(qymcad_core::feature::SketchPlane::default());
         let mut hand = Hand::new(&mut app);
         hand.sk_tool(2).click2d(0.0, 0.0).click2d(50.0, 30.0);
-        app.project.regen_sketch(si4);
         app.finish_sketch_edit();
         app.chosen.sel = super::super::Sel::Sketch(si4);
         let mut hand = Hand::new(&mut app);
@@ -1183,6 +1214,70 @@ mod tests {
         hand.enter();
         check_all(&mut app, "a linear array on the bracket", &mut problems);
 
+        // --- A PLATE CUT RIGHT THROUGH: two bodies of one part, then one of them a part of its own ---
+        app.exit_context();
+        let plate = app.project.add_part("Plate");
+        app.enter_component(plate);
+        let si6 = app.create_sketch_on(qymcad_core::feature::SketchPlane::default());
+        let mut hand = Hand::new(&mut app);
+        hand.sk_tool(2).click2d(0.0, 0.0).click2d(40.0, 30.0);
+        app.finish_sketch_edit();
+        app.chosen.sel = super::super::Sel::Sketch(si6);
+        let mut hand = Hand::new(&mut app);
+        hand.look_at([20.0, 15.0, 5.0], 8.0).tool(1).op(0).set("height", 10.0).enter();
+        check_all(&mut app, "the plate was extruded", &mut problems);
+        let si7 = app.create_sketch_on(qymcad_core::feature::SketchPlane::default());
+        let mut hand = Hand::new(&mut app);
+        hand.sk_tool(2).click2d(18.0, -5.0).click2d(22.0, 35.0); // a slot 4 wide across the whole plate
+        app.finish_sketch_edit();
+        app.chosen.sel = super::super::Sel::Sketch(si7);
+        let mut hand = Hand::new(&mut app);
+        hand.look_at([20.0, 15.0, 5.0], 8.0).tool(1).op(2).set("height", 10.0).enter();
+        check_all(&mut app, "a slot cut right through the plate", &mut problems);
+        let consumed = app.project.consumed_bodies();
+        let shown: Vec<u64> = app.project.component_bodies(plate).into_iter().filter(|b| !consumed.contains(b)).collect();
+        if shown.len() != 2 {
+            problems.push(format!("[plate] a slot through the plate left {} bodies of the part, two pieces were expected: {shown:?}", shown.len()));
+        } else {
+            let make = crate::i18n::tr("act-piece-to-part");
+            let mut hand = Hand::new(&mut app);
+            hand.look_at([20.0, 15.0, 5.0], 8.0).right_click([30.0, 15.0, 10.0]);
+            if !hand.press_word(&make, egui::pos2(0.0, 0.0)) {
+                problems.push("[plate] the right button on a piece offers no \"make a part\"".to_string());
+            }
+            hand.key(egui::Key::Enter);
+            let owners: std::collections::HashSet<Option<u64>> = shown.iter().map(|b| app.project.body_owner(*b)).collect();
+            let parts_of_pieces = app.project.components.iter().filter(|c| c.name.contains("Plate")).count();
+            if parts_of_pieces < 2 {
+                problems.push(format!("[plate] no part came of the piece: parts {parts_of_pieces}, owners {owners:?}, status {}", app.status));
+            }
+            check_all(&mut app, "a piece of the plate was made a part", &mut problems);
+        }
+
+        // --- A RISER: the top offset 5 up as a sheet, and the top replaced by it - the block grows to it ---
+        app.exit_context();
+        let riser = app.project.add_part("Riser");
+        app.enter_component(riser);
+        let si8 = app.create_sketch_on(qymcad_core::feature::SketchPlane::default());
+        let mut hand = Hand::new(&mut app);
+        hand.sk_tool(2).click2d(0.0, 0.0).click2d(40.0, 30.0);
+        app.finish_sketch_edit();
+        app.chosen.sel = super::super::Sel::Sketch(si8);
+        let mut hand = Hand::new(&mut app);
+        hand.look_at([20.0, 15.0, 5.0], 8.0).tool(1).op(0).set("height", 10.0).enter();
+        check_all(&mut app, "the riser was extruded", &mut problems);
+        let mut hand = Hand::new(&mut app);
+        hand.look_at([20.0, 15.0, 5.0], 8.0).tool(36).click([20.0, 15.0, 10.0]).set("dist", 5.0).enter();
+        check_all(&mut app, "the top of the riser offset 5 up", &mut problems);
+        let mut hand = Hand::new(&mut app);
+        hand.look_at([20.0, 15.0, 5.0], 8.0).tool(31).click([20.0, 2.0, 10.0]).click([20.0, 15.0, 15.0]).enter();
+        check_all(&mut app, "the top of the riser replaced by its offset", &mut problems);
+        let consumed = app.project.consumed_bodies();
+        let solid = app.project.component_bodies(riser).into_iter().filter(|b| !consumed.contains(b)).filter_map(|b| app.project.bodies.iter().find(|x| x.id == b && !x.sheet)).map(|b| b.mesh.volume()).next();
+        if solid.is_none_or(|v| (v - 18000.0).abs() > 1.0) {
+            problems.push(format!("[riser] the top replaced by the sheet 5 above: the solid is {solid:?} mm^3, 40 x 30 x 15 = 18000; status {}", app.status));
+        }
+
         // --- PARTS WITH THE SAME SET OF TOOLS IN A DIFFERENT ORDER ---
         //
         // Exactly what was asked for: whichever part is entered, all of the operations are there while the
@@ -1202,7 +1297,6 @@ mod tests {
             let si = app.create_sketch_on(qymcad_core::feature::SketchPlane::default());
             let mut hand = Hand::new(&mut app);
             hand.sk_tool(2).click2d(0.0, 0.0).click2d(40.0, 30.0);
-            app.project.regen_sketch(si);
             app.finish_sketch_edit();
             app.chosen.sel = super::super::Sel::Sketch(si);
             let mut hand = Hand::new(&mut app);
@@ -1294,18 +1388,21 @@ mod tests {
                     sk.entities.len() + sk.points.len() + sk.splines.len() + sk.texts.len() + sk.notes.len()
                 };
                 let before = count(&app);
-                if tool == 11 {
-                    hand_text(&mut app); // text is drawn from A STRING, typed into the options bar
-                }
                 let mut hand = Hand::new(&mut app);
-                hand.sk_tool(tool);
-                for (x, y) in pts {
+                if tool == 11 {
+                    hand.sk_text("CAD", 10.0); // text is drawn from A STRING, typed into the options bar
+                } else {
+                    hand.sk_tool(tool);
+                }
+                let (last, before_last) = pts.split_last().expect("every tool takes a click");
+                for (x, y) in before_last {
                     hand.click2d(*x, *y);
                 }
                 if tool == 9 {
-                    hand.finish_shape(); // a spline is finished separately - it does not know how many points are wanted
+                    hand.double_click2d(last.0, last.1); // a spline does not know how many nodes are wanted: a double click on the last one ends it
+                } else {
+                    hand.click2d(last.0, last.1);
                 }
-                app.project.regen_sketch(si);
                 let after = count(&app);
                 if after <= before {
                     problems.push(format!("sketch: the \"{name}\" tool drew nothing"));
@@ -1329,14 +1426,20 @@ mod tests {
             for (code, name) in codes {
                 let before = app.project.sketches[si].constraints.len();
                 let mut hand = Hand::new(&mut app);
-                // the selection for a constraint: the first two entities of the sketch, as they would be clicked
+                // the selection for a constraint: the first two entities of the sketch, clicked - the second with Shift
+                //
+                // THE FIRST PAIR OF LINES A HAND CAN CLICK. The constraints before this one act on the lines they are
+                // put on: "horizontal" and then "vertical" on the same two lines fold them to nothing, and a line of
+                // no length cannot be clicked.
                 hand.sk_select();
-                for (k, id) in app_sel_pair(&hand.app.project.sketches[si]) {
-                    hand.app.tools.sel_sk.items.push((k, id));
+                let lines: Vec<(u8, u64)> = hand.app.project.sketches[si].entities.iter().filter(|e| matches!(e.kind, qymcad_core::model::EntityKind::Line { .. })).map(|e| (1u8, e.id)).collect();
+                let pair = lines.windows(2).map(|w| w.to_vec()).find(|w| hand.select2d(w)).unwrap_or_default();
+                if pair.is_empty() {
+                    problems.push(format!("sketch: before the \"{name}\" constraint no pair of lines could be clicked"));
+                } else if hand.app.tools.sel_sk.items != pair {
+                    problems.push(format!("sketch: before the \"{name}\" constraint {pair:?} were clicked and {:?} is selected", hand.app.tools.sel_sk.items));
                 }
                 hand.constraint(code);
-                app.project.solve_sketch(si);
-                app.project.regen_sketch(si);
                 if app.project.sketches[si].constraints.len() == before && app.status.trim().is_empty() {
                     problems.push(format!("sketch: the \"{name}\" constraint did not take and SAID NOTHING about why"));
                 }
@@ -1363,7 +1466,6 @@ mod tests {
                     qymcad_ui_state::set_click_op(&mut qymcad_ui_state::tools_of!(app), &mut app.viewing.mode_3d, op);
                     let mut hand = Hand::new(&mut app);
                     hand.click2d(x, y);
-                    app.project.regen_sketch(si);
                     if count(&app) == before && app.status.trim().is_empty() {
                         problems.push(format!("sketch: \"{name}\" silently did nothing"));
                     }
@@ -1371,16 +1473,99 @@ mod tests {
                 }
                 qymcad_ui_state::set_click_op(&mut qymcad_ui_state::tools_of!(app), &mut app.viewing.mode_3d, 0);
 
-                // MOVING, COPYING AND ROTATING work on the selection rather than on the point under the cursor.
-                for (mode, name) in [(1u8, "move"), (2, "copy"), (3, "rotate")] {
-                    let mut hand = Hand::new(&mut app);
+                // MOVING, COPYING AND ROTATING GO THROUGH THE TOOL'S OWN DOOR: three clicks - what is being
+                // moved, the base point, the target - and for a turn the angle typed into the popup, every click
+                // and every key in a whole frame of the window.
+                //
+                // WHERE TO CLICK is found on the drawing as a person finds it: the last line of the sketch a click
+                // would really pick, at a place along it where no point, constraint glyph or dimension caption takes
+                // the click first. Two wrong answers were measured here while the place was guessed: the middle of
+                // a line has a node of the trims above sitting on it, and a line with constraints on it is covered
+                // by their glyphs - a click on either picks that and not the line.
+                let on_a_line = |a: &mut App| -> Option<(u64, (f64, f64))> {
+                    let lines: Vec<u64> = a.project.sketches[si].entities.iter().rev().filter(|e| matches!(e.kind, qymcad_core::model::EntityKind::Line { .. })).map(|e| e.id).collect();
+                    let mut hand = Hand::new(a);
                     hand.sk_tool(0);
-                    for (k, id) in app_sel_pair(&hand.app.project.sketches[si]) {
-                        hand.app.tools.sel_sk.items.push((k, id));
+                    lines.into_iter().find_map(|eid| hand.spot2d((1, eid)).map(|p| (eid, p)))
+                };
+                // The ends of a line by its id.
+                let ends_of = |a: &App, eid: u64| -> Option<((f64, f64), (f64, f64))> {
+                    let sk = &a.project.sketches[si];
+                    let at = |id: u64| sk.points.iter().find(|q| q.id == id).map(|q| (q.x, q.y));
+                    sk.entities.iter().find(|e| e.id == eid).and_then(|e| match e.kind {
+                        qymcad_core::model::EntityKind::Line { a: pa, b: pb } => Some((at(pa)?, at(pb)?)),
+                        _ => None,
+                    })
+                };
+                let mid = |(u, v): ((f64, f64), (f64, f64))| ((u.0 + v.0) / 2.0, (u.1 + v.1) / 2.0);
+                let worst = |a: &App| a.project.sketch_residuals(si).into_iter().fold(0.0_f64, f64::max);
+                // What the drawing looks like in one number, so "did nothing" can be told from "did something".
+                let shape_of = |a: &App| -> (usize, i64) {
+                    let sk = &a.project.sketches[si];
+                    let sum: f64 = sk.points.iter().map(|q| q.x.abs() + q.y.abs()).sum();
+                    (sk.entities.len(), (sum * 1e3) as i64)
+                };
+                // HALF OF WHAT WAS ASKED is the bar for "it went there": the base and the target snap, and the
+                // snap radius at this scale is under 2 mm of the 5.66 mm asked.
+                let (shift, asked) = ((4.0, 4.0), 4.0_f64.hypot(4.0));
+                for (mode, name, key) in [(1u8, "move", "tool-move"), (2, "copy", "tool-copy"), (3, "rotate", "tool-rotate")] {
+                    let Some((eid, on)) = on_a_line(&mut app) else {
+                        problems.push(format!("sketch: \"{name}\" found no line to work on"));
+                        continue;
+                    };
+                    let Some(source) = ends_of(&app, eid) else { continue };
+                    let before = shape_of(&app);
+                    let (ids_before, worst_before): (Vec<u64>, f64) = (app.project.sketches[si].entities.iter().map(|e| e.id).collect(), worst(&app));
+                    app.status.clear(); // so that what is said afterwards is said about THIS action
+                    let mut hand = Hand::new(&mut app);
+                    if mode == 3 {
+                        hand.sk_rotate(on, on, 30.0);
+                    } else {
+                        hand.sk_move(mode, on, on, (on.0 + shift.0, on.1 + shift.1));
                     }
-                    crate::gui::commands::start_move_tool(&mut qymcad_ui_state::tools_of!(hand.app), &mut hand.app.status, mode);
-                    hand.drag2d((0.0, 0.0), (4.0, 4.0));
-                    app.project.regen_sketch(si);
+                    if shape_of(&app) == before && app.status.trim().is_empty() {
+                        problems.push(format!("sketch: \"{name}\" silently did nothing"));
+                    }
+                    // WHERE IT LANDED, or the word that it was held.
+                    let held = app.status.contains(&crate::i18n::tr("sk-move-held")) || app.status.contains(&crate::i18n::tr("sk-turn-held"));
+                    let (m0, sk) = (mid(source), &app.project.sketches[si]);
+                    match mode {
+                        1 => match ends_of(&app, eid) {
+                            Some(now) if !held && (mid(now).0 - m0.0).hypot(mid(now).1 - m0.1) < asked / 2.0 => {
+                                problems.push(format!("sketch: \"move\" was asked for {asked:.2} mm and the line went {:.2} mm, saying {:?}", (mid(now).0 - m0.0).hypot(mid(now).1 - m0.1), app.status));
+                            }
+                            None => problems.push("sketch: \"move\" lost the line it moved".into()),
+                            _ => {}
+                        },
+                        2 => {
+                            let copies: Vec<u64> = sk.entities.iter().map(|e| e.id).filter(|id| !ids_before.contains(id)).collect();
+                            let away = copies.iter().filter_map(|c| ends_of(&app, *c)).any(|c| (mid(c).0 - m0.0).hypot(mid(c).1 - m0.1) >= asked / 2.0);
+                            if !away {
+                                problems.push(format!("sketch: \"copy\" made {} new entities and none stands {:.2} mm off its source - the copy lies on top of it; status {:?}", copies.len(), asked, app.status));
+                            }
+                        }
+                        _ => {
+                            let dir = |(u, v): ((f64, f64), (f64, f64))| (v.1 - u.1).atan2(v.0 - u.0).to_degrees();
+                            let turned = ends_of(&app, eid).map(|now| {
+                                let d = (dir(now) - dir(source)).rem_euclid(180.0);
+                                d.min(180.0 - d)
+                            });
+                            if !held && turned.is_none_or(|t| t < 15.0) {
+                                problems.push(format!("sketch: \"rotate\" was asked for 30 deg and the line turned {turned:?} deg, saying {:?}", app.status));
+                            }
+                        }
+                    }
+                    // THE CONSTRAINTS STILL HOLD: an edit that never asks the solver leaves a tie broken while its
+                    // glyph stays green.
+                    let worst_after = worst(&app);
+                    if worst_after > worst_before.max(1e-6) {
+                        problems.push(format!("sketch: \"{name}\" left a constraint unsatisfied: the worst residual went {worst_before:.2e} -> {worst_after:.2e}"));
+                    }
+                    // ONE STEP OF UNDO, named after the tool.
+                    let step = app.disk.edits.undo.last().map(|s| s.name.clone());
+                    if step.as_deref() != Some(crate::i18n::tr(key).as_str()) {
+                        problems.push(format!("sketch: \"{name}\" left the step of undo {step:?}, not {:?}", crate::i18n::tr(key)));
+                    }
                     check_all(&mut app, &format!("sketch: {name}"), &mut problems);
                 }
             }
@@ -1409,8 +1594,6 @@ mod tests {
                     for (x, y) in picks {
                         hand.click2d(*x, *y);
                     }
-                    app.project.solve_sketch(si);
-                    app.project.regen_sketch(si);
                     let after = dims_now(&app);
                     // A DIMENSION MUST EITHER TAKE OR SAY WHY NOT. A silent "nothing happened" is the worst
                     // outcome: the dimension is believed to be set while it is not there.
@@ -1479,7 +1662,7 @@ mod tests {
                     app.project.sketches[si].constraints.push(Constraint::Fixed { p: pts[0] });
                     app.project.sketches[si].constraints.push(Constraint::Fixed { p: pts[1] });
                     let d = 25.0;
-                    app.project.sketches[si].constraints.push(Constraint::Distance { a: pts[0], b: pts[1], d, off: 0.0, expr: String::new(), driven: false, axis: 0 });
+                    app.project.sketches[si].constraints.push(Constraint::Distance { a: pts[0], b: pts[1], d, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
                     app.project.solve_sketch(si);
                     app.project.regen_sketch(si);
                     let (_, red_after) = app.project.sketch_dof(si);
@@ -1502,13 +1685,40 @@ mod tests {
                 }
             }
 
-            // DRAGGING: a point is pulled by the mouse, and the sketch must recompute along with it.
-            if let Some(pt) = app.project.sketches[si].points.first().map(|p| (p.x, p.y)) {
-                let mut hand = Hand::new(&mut app);
-                hand.sk_tool(0).drag2d((pt.0, pt.1), (pt.0 + 5.0, pt.1 + 5.0));
-                app.project.solve_sketch(si);
-                app.project.regen_sketch(si);
-                check_all(&mut app, "sketch: a point was dragged", &mut problems);
+            // DRAGGING: a FREE point of the drawing is pulled by the mouse, and it must follow - the sketch
+            // recomputes along with it. Not the first point of the sketch: that is the origin, which does not move
+            // by design, and a drag of it proved nothing. The frame does not take the points of arcs, the frame of
+            // reference or a pinned point, and a point with another one within 3 mm could hand the press to its
+            // neighbour - none of those is picked.
+            let pick = {
+                let sk = &app.project.sketches[si];
+                let free = app.project.sketch_free_points(si);
+                let (system, held) = (sk.system_ids(), sk.held_points());
+                let arcs: Vec<u64> = sk
+                    .entities
+                    .iter()
+                    .flat_map(|e| match e.kind {
+                        qymcad_core::model::EntityKind::Arc { center, a, b, .. } => vec![center, a, b],
+                        _ => Vec::new(),
+                    })
+                    .collect();
+                sk.points
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, p)| free.get(*i) == Some(&true) && !system.contains(&p.id) && !held.contains(&p.id) && !arcs.contains(&p.id))
+                    .find(|(_, p)| sk.points.iter().all(|q| q.id == p.id || (q.x - p.x).hypot(q.y - p.y) > 3.0))
+                    .map(|(_, p)| (p.id, p.x, p.y))
+            };
+            match pick {
+                None => problems.push("sketch: the drawing has no free point to drag".into()),
+                Some((id, x, y)) => {
+                    Hand::new(&mut app).sk_tool(0).drag2d((x, y), (x + 5.0, y + 5.0));
+                    let went = app.project.sketches[si].points.iter().find(|p| p.id == id).map(|p| (p.x - x).hypot(p.y - y));
+                    if went.is_none_or(|d| d < 1.0) {
+                        problems.push(format!("sketch: a free point at ({x:.2}, {y:.2}) was dragged 7.07 mm and went {went:?} mm"));
+                    }
+                    check_all(&mut app, "sketch: a point was dragged", &mut problems);
+                }
             }
 
             app.finish_sketch_edit();
@@ -1997,7 +2207,10 @@ mod tests {
                     // drag the point FARTHEST from the origin - moving it must change the extent
                     let far = app.project.sketches[si].points.iter().max_by(|a, b| (a.x * a.x + a.y * a.y).total_cmp(&(b.x * b.x + b.y * b.y))).map(|p| (p.x, p.y));
                     if let Some((x, y)) = far {
-                        Hand::new(&mut app).drag2d((x, y), (x + 7.0, y + 7.0));
+                        // LOOKED AT CLOSE, as a person looks at a corner before pulling it 7 mm. Opened, the sketch
+                        // is framed with the whole part at 0.9 px a millimetre: the pull is 6 px there, and the corner
+                        // snaps back onto the outline of the body it was drawn on.
+                        Hand::new(&mut app).look2d((x, y)).drag2d((x, y), (x + 7.0, y + 7.0));
                     }
                     // LEAVING IS CTRL+ENTER, and Esc must NOT do it: Esc gives a tool back, finishing a
                     // context is the same act as leaving a part. The scenario used to press Esc here, which
@@ -2067,8 +2280,9 @@ mod tests {
         // ── DELETING A SKETCH A BODY STANDS ON ──────────────────────────────────────────
         //
         // Cascading deletion is where a document comes apart quietly: a body built on a sketch
-        // cannot exist without it. A person may remove the sketch, but then everything that stood on
-        // it must go with it - otherwise the timeline keeps nodes that build out of nothing.
+        // cannot exist without it. A person who ticks "delete what is built on it too" removes the
+        // sketch with everything that stood on it - nothing may stay that builds out of nothing. Without
+        // the tick the nodes stay red, which the acceptance points on dependencies check.
         {
             let victim = app.project.timeline.iter().find_map(|n| match n.kind {
                 qymcad_core::feature::FeatureKind::Extrude { sketch, body, .. } => Some((sketch, body)),
@@ -2084,7 +2298,7 @@ mod tests {
                 // so: a test door bypassing the deletion prompt is exactly the kind of "own door"
                 // that does the damage.
                 let si = app.project.sketch_index(sid).expect("the sketch is on the list");
-                app.execute_delete(qymcad_ui_state::Sel::Sketch(si));
+                app.execute_delete(qymcad_ui_state::Sel::Sketch(si), true);
                 qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
 
                 if app.project.sketches.iter().any(|s| s.id == sid) {
@@ -2171,7 +2385,7 @@ mod tests {
 
                 let ci = app.project.components.iter().position(|c| c.id == victim).expect("the part is on the list");
                 qymcad_ui_state::begin_edit(&mut app.disk.edits, &app.project, "delete a part with joints");
-                app.execute_delete(qymcad_ui_state::Sel::Component(ci));
+                app.execute_delete(qymcad_ui_state::Sel::Component(ci), false);
                 qymcad_ui_state::commit_edit(&mut app.rebuild_ctx());
                 qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
 
@@ -2218,7 +2432,7 @@ mod tests {
                 app.project
                     .timeline
                     .iter()
-                    .filter(|n| n.parent == Some(app.project.root) && !n.kind.bodies().is_empty())
+                    .filter(|n| n.kind.bodies().iter().any(|b| n.owner_of(*b) == Some(app.project.root)))
                     .count()
             };
             let root_bodies_before = bodies_in_root(&app);
@@ -2529,7 +2743,7 @@ mod tests {
                 crate::gui::commands::refresh_edges(&mut app.part_ctx());
                 let (pa, pb) = (aim(app, mine[0]), aim(app, mine[1]));
                 let mut hand = Hand::new(app);
-                hand.look_at([x + 30.0, 10.0, 5.0], 5.0).mate(kind).anchor(3).click(pa).click(pb);
+                hand.look_at([x + 30.0, 10.0, 5.0], 5.0).mate(kind).anchor(3).click(pa).click(pb).key(egui::Key::Enter).key(egui::Key::Escape);
                 qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
                 let j = app.project.joints.last().map(|x| x.id).expect("two clicks must create a joint");
                 let moving = app.project.body_owner(mine[1]).expect("the owner of the driven part");

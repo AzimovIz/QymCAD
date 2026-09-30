@@ -11,6 +11,7 @@ pub mod expr;
 pub mod feature;
 pub mod geom;
 pub mod measure;
+pub mod mesh_simplify;
 pub mod model;
 pub mod names;
 pub mod offset;

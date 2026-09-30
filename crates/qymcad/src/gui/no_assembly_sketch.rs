@@ -56,4 +56,20 @@ mod tests {
         let q = src[p..].find("Workbench::Assembly =>").map(|i| p + i).unwrap_or(src.len());
         assert!(src[p..q].contains("create_panel_sketch_button"), "the Part toolbar must have the sketch button");
     }
+
+    /// THE PENCIL PRESSED AGAIN IS PUT DOWN, as every tool button puts its tool down.
+    #[test]
+    fn the_pencil_pressed_again_is_put_down() {
+        let mut app = App::default();
+        super::super::joint_flow::tests::add_part_at(&mut app, 0.0);
+        qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
+        app.cancel_all_tools();
+        let hint = crate::i18n::tr("g-sketch-pick-hint");
+        let mut hand = crate::gui::hand::Hand::new(&mut app);
+        assert!(hand.press_hint(&hint), "no pencil button");
+        assert!(app.tools.picking.is_sketch_plane(), "the pencil is not in hand");
+        let mut hand = crate::gui::hand::Hand::new(&mut app);
+        assert!(hand.press_hint(&hint), "the pencil button is gone while the pencil is in hand");
+        assert!(!app.tools.picking.is_sketch_plane(), "pressed again, the pencil stays in hand");
+    }
 }

@@ -1,6 +1,6 @@
 # Thicken
 
-Click a face, set the thickness at the geometry (the sign chooses the side), press Enter. The face
+Press **Thicken**, click a face, type the **Thickness** at the geometry, **Enter**. The face
 grows a **plate of the given thickness**; the part stays one body.
 
 ![A new 10 mm thick body built from the top face of the plate.](img/part-thicken.png)
@@ -25,6 +25,8 @@ absorbed rather than left alongside.
 This is how the design layer returns to the timeline: **patch, thicken, combine**. A surface can be
 neither combined with a part nor printed; a solid can.
 
-## The sign of the thickness
+## If it did not work
 
-Plus and minus choose which side of the face the material grows to. Zero makes no sense.
+- The thickness is not taken — it must be more than zero; the plate grows outwards from the face. The field refuses
+  zero or a negative value in words.
+- The plate went into the body and added nothing — the program says so at the node.

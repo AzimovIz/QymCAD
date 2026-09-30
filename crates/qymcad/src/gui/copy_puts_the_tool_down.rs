@@ -23,11 +23,15 @@ mod tests {
         (app, si)
     }
 
-    /// Select every entity of the sketch — that is what the copy will take.
+    /// Select every entity of the sketch with Ctrl+A — that is what the copy will take.
+    ///
+    /// By the keys and not by writing the selection in: the window drops the selection on the first frame it
+    /// sees a sketch it has not seen open, so a selection written in before any frame is gone by the click.
     fn select_all(app: &mut App, si: usize) {
-        let ids: Vec<qymcad_core::model::Id> = app.project.sketches[si].entities.iter().map(|e| e.id).collect();
-        assert!(!ids.is_empty(), "setup: the sketch has no entities to copy");
-        app.tools.sel_sk.items = ids.into_iter().map(|id| (1u8, id)).collect();
+        Hand::canvas(app).ctrl(egui::Key::A);
+        let want = app.project.sketches[si].entities.len();
+        let got = app.tools.sel_sk.items.iter().filter(|(k, _)| *k == 1).count();
+        assert!(want > 0 && got == want, "setup: Ctrl+A selected {got} of the {want} entities to copy");
     }
 
     /// COPYING DROPS THE TOOL AND WHAT WAS HALF-BUILT WITH IT.
@@ -41,7 +45,7 @@ mod tests {
         assert_ne!(app.tools.armed.draw_kind(), 0, "setup: the tool is not in hand — there is nothing to check");
         assert!(!app.tools.tool.pts.is_empty(), "setup: the tool holds nothing half-built — the check would prove nothing");
 
-        app.clipboard_copy(false);
+        Hand::canvas(&mut app).copy(); // Ctrl+C
 
         assert_eq!(app.tools.armed.draw_kind(), 0, "the copy left the tool in hand: the next click has two claimants");
         assert!(app.tools.tool.pts.is_empty(), "a half-built shape was left on the canvas with nothing to finish it");
@@ -54,7 +58,7 @@ mod tests {
         select_all(&mut app, si);
         Hand::new(&mut app).sk_tool(1).click2d(30.0, 30.0);
 
-        app.clipboard_copy(false);
+        Hand::canvas(&mut app).copy(); // Ctrl+C
         assert!(app.side.clip.geom_pending.is_some(), "the copy was lost together with the tool");
     }
 
@@ -65,7 +69,7 @@ mod tests {
         select_all(&mut app, si);
         Hand::new(&mut app).sk_select();
 
-        app.clipboard_copy(false);
+        Hand::canvas(&mut app).copy(); // Ctrl+C
         assert!(app.side.clip.geom_pending.is_some(), "the copy did not arm with no tool in hand either");
         assert_eq!(app.tools.armed.draw_kind(), 0, "there was no tool, and one appeared");
     }
@@ -80,7 +84,7 @@ mod tests {
         Hand::new(&mut app).sk_tool(1).click2d(30.0, 30.0);
         let before = app.tools.armed.draw_kind();
 
-        app.clipboard_copy(false);
+        Hand::canvas(&mut app).copy(); // Ctrl+C
         assert_eq!(app.tools.armed.draw_kind(), before, "a copy with nothing selected took the tool away — a mis-press must not cost the drawing");
         assert!(!app.side.clip.geom_pending.is_some(), "with nothing selected there is nothing to copy");
     }
@@ -93,7 +97,7 @@ mod tests {
         let before = app.project.sketches[si].entities.len();
         Hand::new(&mut app).sk_tool(1).click2d(30.0, 30.0);
 
-        app.clipboard_copy(false);
+        Hand::canvas(&mut app).copy(); // Ctrl+C
         assert_eq!(app.project.sketches[si].entities.len(), before, "putting the tool down deleted geometry");
         let _ = Point2::new(0.0, 0.0);
     }

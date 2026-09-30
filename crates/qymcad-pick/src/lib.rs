@@ -35,16 +35,36 @@ pub fn resolve_face_sel(project: &Project, body: Id, key: &qymcad_core::feature:
 }
 
 /// The sketch point of `si` nearest to a screen position (within the threshold) -> its Id.
+///
+/// THE FRAME OF REFERENCE IS NOT GEOMETRY, and this is where that has to be honoured, because four points
+/// stand at or beside zero in any sketch a person has worked in: the origin, the anchor of the frame at the
+/// same (0,0), and the two axis guides at (1,0) and (0,1). At the ordinary zoom of 6 px per mm a guide is 6
+/// px away while the radius for a point is 10 - so a click at zero has four candidates and three of them
+/// belong to the frame.
+///
+/// The rule is the one `sketch_hit` already keeps for selection: the anchor and the guides are never handed
+/// out, and the origin yields to the person's own point standing in the same place. Without it a dimension
+/// clicked at zero attached to the anchor - a point that is drawn nowhere and can never be clicked again.
 pub fn nearest_sketch_point(pick: &PickCtx, rect: Rect, screen: Pos2, si: usize) -> Option<Id> {
     let s = pick.project.sketches.get(si)?;
+    // a system id of 0 means "not materialised yet" and must not match a real point
+    let is = |sys: Id, id: Id| sys != 0 && sys == id;
     let mut best: Option<(f32, Id)> = None;
+    let mut best_origin: Option<(f32, Id)> = None;
     for p in &s.points {
+        if is(s.frame, p.id) || s.axis_pts.iter().any(|g| is(*g, p.id)) {
+            continue; // the anchor and the guides are the frame, not the drawing
+        }
         let d = (qymcad_ui_state::Sheet { view: *pick.view, rect: rect }).at(Point2::new(p.x, p.y)).distance(screen);
-        if d <= grab(pick.set, Grab::Point) && best.is_none_or(|(bd, _)| d < bd) {
-            best = Some((d, p.id));
+        if d > grab(pick.set, Grab::Point) {
+            continue;
+        }
+        let slot = if is(s.origin, p.id) { &mut best_origin } else { &mut best };
+        if slot.is_none_or(|(bd, _)| d < bd) {
+            *slot = Some((d, p.id));
         }
     }
-    best.map(|(_, id)| id)
+    best.or(best_origin).map(|(_, id)| id)
 }
 
 /// The line entity nearest to a screen point -> ITS OWN id (not its ends).
@@ -98,16 +118,12 @@ pub fn nearest_line_entity(pick: &PickCtx, rect: Rect, pos: Pos2, si: usize) -> 
 }
 
 /// The vertex (sketch point) nearest to a screen point within the tolerance — for clicking a corner.
+///
+/// ONE FUNCTION, NOT TWO. This was a byte-for-byte copy of `nearest_sketch_point`, and the copy is exactly
+/// how a rule gets kept in one door and forgotten in the other: the fix for the frame would have landed in
+/// one of them.
 pub fn nearest_vertex(pick: &PickCtx, rect: Rect, pos: Pos2, si: usize) -> Option<Id> {
-    let s = pick.project.sketches.get(si)?;
-    let mut best: Option<(f32, Id)> = None;
-    for p in &s.points {
-        let d = (qymcad_ui_state::Sheet { view: *pick.view, rect: rect }).at(Point2::new(p.x, p.y)).distance(pos);
-        if d <= grab(pick.set, Grab::Point) && best.is_none_or(|(bd, _)| d < bd) {
-            best = Some((d, p.id));
-        }
-    }
-    best.map(|(_, id)| id)
+    nearest_sketch_point(pick, rect, pos, si)
 }
 
 /// The nearest line entity -> the Id of the entity (for trimming).
@@ -129,6 +145,25 @@ pub fn nearest_line_eid(pick: &PickCtx, rect: Rect, pos: Pos2, si: usize) -> Opt
     best.map(|(_, id)| id)
 }
 
+/// HOW FAR A SCREEN POINT IS FROM AN ARC, on screen: to its outline where the point stands within the arc's sweep, to the
+/// nearer end past it. Measured round the whole circle the arc lies on, a click where the cut half of a trimmed circle
+/// of radius 10 had been - (0, -10), nothing drawn there - took the upper half left.
+pub fn arc_screen_dist(sh: &qymcad_ui_state::Sheet, pos: Pos2, c: Point2, pa: Point2, pb: Point2, ccw: bool) -> f32 {
+    use std::f64::consts::TAU;
+    let sc = sh.at(c);
+    let r = ((pa.x - c.x).powi(2) + (pa.y - c.y).powi(2)).sqrt();
+    let rp = (sh.at(Point2::new(c.x + r, c.y)).x - sc.x).abs();
+    let w = qymcad_ui_state::to_world(&sh.view, sh.rect, pos);
+    let ang = |x: f64, y: f64| (y - c.y).atan2(x - c.x);
+    let (a0, a1, at) = (ang(pa.x, pa.y), ang(pb.x, pb.y), ang(w.x, w.y));
+    let along = |from: f64, to: f64| if ccw { (to - from).rem_euclid(TAU) } else { (from - to).rem_euclid(TAU) };
+    if along(a0, at) <= along(a0, a1) {
+        (sc.distance(pos) - rp).abs()
+    } else {
+        sh.at(pa).distance(pos).min(sh.at(pb).distance(pos))
+    }
+}
+
 /// The circle or arc entity nearest to a screen point -> its Id. It catches both the outline and the
 /// diameter or radius label (the position of the label is where `draw_sketch_dims` draws it).
 pub fn nearest_circle_entity(pick: &PickCtx, rect: Rect, pos: Pos2, si: usize) -> Option<Id> {
@@ -137,6 +172,8 @@ pub fn nearest_circle_entity(pick: &PickCtx, rect: Rect, pos: Pos2, si: usize) -
     let s = pick.project.sketches.get(si)?;
     let mut best: Option<(f32, Id)> = None;
     for e in &s.entities {
+        // an arc is caught along its own sweep (see `arc_screen_dist`)
+        let mut past_ends: Option<f32> = None;
         let (center, r, label) = match e.kind {
             EntityKind::Circle { center, r } => {
                 let Some(c) = sketch_pt(pick.project, si, center) else { continue };
@@ -153,13 +190,15 @@ pub fn nearest_circle_entity(pick: &PickCtx, rect: Rect, pos: Pos2, si: usize) -
                 let mid = Point2::new((pa.x + pb.x) / 2.0 - c.x, (pa.y + pb.y) / 2.0 - c.y);
                 let ml = (mid.x * mid.x + mid.y * mid.y).sqrt().max(1e-9);
                 let edge = Point2::new(c.x + mid.x / ml * r, c.y + mid.y / ml * r);
+                let EntityKind::Arc { ccw, .. } = e.kind else { continue };
+                past_ends = Some(arc_screen_dist(&sh, pos, c, pa, pb, ccw));
                 (c, r, (sh.at(edge).to_vec2() + egui::vec2(10.0, -8.0)).to_pos2())
             }
             _ => continue,
         };
         let sc = sh.at(center);
         let rp = (sh.at(Point2::new(center.x + r, center.y)).x - sc.x).abs();
-        let d_out = (sc.distance(pos) - rp).abs(); // by the outline of the circle
+        let d_out = past_ends.unwrap_or_else(|| (sc.distance(pos) - rp).abs()); // by the outline of the circle, or the arc
         let d_label = label.distance(pos); // by the diameter or radius label
         let d = d_out.min(d_label);
         if d <= grab(pick.set, Grab::Label) && best.is_none_or(|(bd, _)| d < bd) {
@@ -338,8 +377,8 @@ pub fn body_edges_cached(cache: &Caches, live: &LiveGeom, regen: &Rebuilding, bo
     }
     let shape = live.shapes.get(&body)?;
     // The kernel hands back a bare pair; it is named here, once, at the only place it is built.
-    let (polys, ids) = shape.edges_with_ids();
-    let v = std::rc::Rc::new(qymcad_ui_state::EdgePolys { polys, ids });
+    let (polys, ids, _, smooth) = shape.edges_full_smooth();
+    let v = std::rc::Rc::new(qymcad_ui_state::EdgePolys { polys, ids, smooth });
     let mut c = cache.pick_edges.borrow_mut();
     if c.rev != view_rev(regen) {
         c.rev = view_rev(regen);
@@ -395,6 +434,17 @@ pub fn fillet_vertex_at(scr: &Screen, armed: &qymcad_ui_state::Armed, edges: &Ed
         let d = scr.at(c.centroid).0.distance(screen);
         if d <= grab && best.as_ref().is_none_or(|(bd, _, _)| d < *bd) {
             best = Some((d, c.desc, c.centroid));
+        }
+    }
+    // THE CORNER IS TAKEN ONLY CLOSE UP when an edge is under the cursor too: past half the point grab the click is
+    // on the edge. Reported behaviour: the middle of a 5 mm edge, 8.3 px from the corner of an edge picked before,
+    // set a radius at that corner (point grab 10 px beat edge grab 8 px) and the edge was never added.
+    if let Some((d, _, _)) = best {
+        if d > grab / 2.0 {
+            let on_edge = project.regen_edges.get(&body).is_some_and(|es| es.iter().any(|e| screen_dist_seg(screen, scr.at(e.a).0, scr.at(e.b).0) <= qymcad_ui_state::grab::grab(scr.set, Grab::Curve)));
+            if on_edge {
+                return None;
+            }
         }
     }
     best.map(|(_, desc, p)| (desc, p))
@@ -477,6 +527,9 @@ pub fn sketch_at_3d(pn: &Painting, rect: Rect, screen: Pos2) -> Option<usize> {
         // must not depend on.
         if pn.sketch_hidden.contains(&pn.project.sketches[si].id) {
             continue; // hidden by its own checkbox - what is not drawn cannot be pointed at
+        }
+        if !qymcad_ui_state::sketch_shown_by_components(pn.project, pn.project.sketches[si].id, qymcad_ui_state::current_ctx_id(pn.active_path, pn.project)) {
+            continue; // hidden with its part - not drawn either
         }
         let frame = pn.project.sketch_frame(si).filter(|f| !f.is_identity());
         let lift = |q: Point2| -> [f64; 3] {
@@ -607,7 +660,7 @@ pub fn pick_vertex_pos(pn: &Painting, rect: Rect, pos: Pos2) -> Option<[f64; 3]>
     let basis = pn.cam.basis();
     let ctx = current_ctx_id(pn.active_path, pn.project);
     let mut best: Option<(f32, [f64; 3])> = None;
-    for (_mi, body) in shown_bodies(pn) {
+    for (_mi, body) in qymcad_ui_state::shown_bodies(pn) {
         // a cull by the bounding box: a body whose screen rectangle does not cover the cursor is not
         // worth walking
         if !body_bbox_hit(pn, body, rect, pos, &basis, 12.0) {
@@ -620,8 +673,15 @@ pub fn pick_vertex_pos(pn: &Painting, rect: Rect, pos: Pos2) -> Option<[f64; 3]>
             let v = [p[0] as f64, p[1] as f64, p[2] as f64];
             if is_identity12(&wt) { v } else { apply12(&wt, v) }
         };
-        for (poly, id) in polys.iter().zip(ids.iter().copied()) {
+        for (k, (poly, id)) in polys.iter().zip(ids.iter().copied()).enumerate() {
             if id == 0 || poly.len() < 2 {
+                continue;
+            }
+            // A CORNER IS WHERE EDGES MEET, not where the B-rep starts a closed curve or runs a seam: the rim of a hole
+            // has one vertex, on its seam, and a click on the rim took it - "vertex" instead of a circle of 10
+            let (first, last) = (poly[0], poly[poly.len() - 1]);
+            let closed = (0..3).all(|i| (first[i] - last[i]).abs() < 1e-5);
+            if closed || edges.smooth.get(k).copied().unwrap_or(false) {
                 continue;
             }
             for vert in [&poly[0], &poly[poly.len() - 1]] {
@@ -636,28 +696,6 @@ pub fn pick_vertex_pos(pn: &Painting, rect: Rect, pos: Pos2) -> Option<[f64; 3]>
     best.filter(|(d, _)| *d <= grab(pn.set, Grab::Point)).map(|(_, w)| w)
 }
 
-/// THE VISIBLE BODIES — as a list from a cache rather than recomputed for every body every frame.
-///
-/// Deciding whether a body is visible requires finding its owner (a linear walk over the timeline) and
-/// following the chain of tick boxes in the tree. That is not expensive in itself, but inside the
-/// picking loop it repeats for EVERY body on EVERY frame — and it is exactly that which hung the
-/// application while an edge or vertex anchor was being chosen.
-pub fn shown_bodies(pn: &Painting) -> Vec<(usize, qymcad_core::model::Id)> {
-    let ctx = current_ctx_id(pn.active_path, pn.project);
-    {
-        let c = pn.cache.shown_bodies.borrow();
-        if c.rev == view_rev(pn.regen) && c.value.ctx == ctx {
-            return c.value.list.clone();
-        }
-    }
-    let list: Vec<(usize, qymcad_core::model::Id)> = (0..pn.project.bodies.len())
-        .filter(|&mi| body_shown(pn.body_view(), mi))
-        .filter_map(|mi| pn.project.mesh_id(mi).map(|b| (mi, b)))
-        .collect();
-    pn.cache.shown_bodies.borrow_mut().put(view_rev(pn.regen), qymcad_ui_state::ShownBodies { ctx, list: list.clone() });
-    list
-}
-
 /// The nearest WORLD point on an edge of a visible body to the cursor (within the grab). It
 /// complements `pick_vertex_pos` (the vertices) — the origin of a sketch snaps not only to corners but
 /// to any point on an edge.
@@ -667,7 +705,7 @@ pub fn pick_edge_point(pn: &Painting, rect: Rect, pos: Pos2) -> Option<[f64; 3]>
     let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
     let ctx = current_ctx_id(pn.active_path, pn.project);
     let mut best: Option<(f32, [f64; 3])> = None;
-    for (_mi, body) in shown_bodies(pn) {
+    for (_mi, body) in qymcad_ui_state::shown_bodies(pn) {
         // a cull by the bounding box: a body whose screen rectangle does not cover the cursor is not
         // worth walking
         if !body_bbox_hit(pn, body, rect, pos, &basis, 12.0) {
@@ -743,7 +781,7 @@ pub fn face_under_cursor(pn: &Painting, rect: Rect, screen: Pos2) -> Option<(f64
         // precisely for that ("a sketch on the face of a neighbour gives an external reference"). The
         // filter was once applied unconditionally and broke the top-down associative sketch on a
         // neighbouring part.
-        if (pn.mirror.part.is_some() || pn.section.pick) && body_is_ghost(&DrawCtx { cam: &pn.cam, set: pn.set, scheme: pn.scheme, project: pn.project, active_path: pn.active_path }, mi) {
+        if (pn.mirror.in_hand() || pn.section.pick) && body_is_ghost(&DrawCtx { cam: &pn.cam, set: pn.set, scheme: pn.scheme, project: pn.project, active_path: pn.active_path }, mi) {
             continue;
         }
         let bid = pn.project.mesh_id(mi);
@@ -834,13 +872,64 @@ pub fn pick_cyl_face_axis_at(pn: &Painting, rect: Rect, screen: Pos2) -> Option<
     best.map(|(_, b, fid)| AxisHit::Face(b, fid))
 }
 
+/// A CORNER OR AN EDGE UNDER THE CURSOR, as the selection takes it with nothing in hand: a corner within the point
+/// grab first, then an edge within the curve grab - each only where no face stands in front of it. A corner is where
+/// edges meet: the seam of a closed rim and a smooth junction are not corners.
+pub fn edge_or_corner_under(pn: &Painting, rect: Rect, pos: Pos2) -> Option<Sel> {
+    let basis = pn.cam.basis();
+    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
+    let ctx = current_ctx_id(pn.active_path, pn.project);
+    let mut corner: Option<(f32, Sel, [f64; 3])> = None;
+    let mut edge: Option<(f32, Sel, [f64; 3])> = None;
+    for (_mi, body) in qymcad_ui_state::shown_bodies(pn) {
+        if !body_bbox_hit(pn, body, rect, pos, &basis, 12.0) {
+            continue;
+        }
+        let Some(edges) = body_edges_cached(pn.cache, pn.live, pn.regen, body) else { continue };
+        let wt = pn.project.body_display_transform(body, ctx);
+        let tp = |p: &[f32; 3]| -> [f64; 3] {
+            let v = [p[0] as f64, p[1] as f64, p[2] as f64];
+            if qymcad_core::feature::is_identity12(&wt) { v } else { qymcad_core::feature::apply12(&wt, v) }
+        };
+        for (k, (poly, id)) in edges.polys.iter().zip(edges.ids.iter().copied()).enumerate() {
+            if id == 0 || poly.len() < 2 {
+                continue;
+            }
+            let (first, last) = (poly[0], poly[poly.len() - 1]);
+            let closed = (0..3).all(|i| (first[i] - last[i]).abs() < 1e-5);
+            if !closed && !edges.smooth.get(k).copied().unwrap_or(false) {
+                for (end, vert) in [(false, &first), (true, &last)] {
+                    let w = tp(vert);
+                    let d = scr.at(w).0.distance(pos);
+                    if corner.as_ref().is_none_or(|(bd, _, _)| d < *bd) {
+                        corner = Some((d, Sel::Vertex(body, id, end), w));
+                    }
+                }
+            }
+            for seg in poly.windows(2) {
+                let (a3, b3) = (tp(&seg[0]), tp(&seg[1]));
+                let (pa, pb) = (scr.at(a3).0, scr.at(b3).0);
+                let ab = pb - pa;
+                let t = if ab.length_sq() > 1e-6 { ((pos - pa).dot(ab) / ab.length_sq()).clamp(0.0, 1.0) } else { 0.0 };
+                let d = (pa + ab * t).distance(pos);
+                if edge.as_ref().is_none_or(|(bd, _, _)| d < *bd) {
+                    let td = t as f64;
+                    edge = Some((d, Sel::Edge(body, id), [a3[0] + (b3[0] - a3[0]) * td, a3[1] + (b3[1] - a3[1]) * td, a3[2] + (b3[2] - a3[2]) * td]));
+                }
+            }
+        }
+    }
+    let seen = |hit: Option<(f32, Sel, [f64; 3])>, within: f32| hit.filter(|(d, _, w)| *d <= within && point_not_hidden(pn, rect, *w)).map(|(_, sel, _)| sel);
+    seen(corner, grab(pn.set, Grab::Point)).or_else(|| seen(edge, grab(pn.set, Grab::Curve)))
+}
+
 /// The edge under the cursor among ALL the visible bodies (for picking the axis of a connector) -> (the
 /// body, the persistent id of the edge).
 pub fn pick_edge_any(pn: &Painting, rect: Rect, pos: Pos2) -> Option<(Id, u32)> {
     let basis = pn.cam.basis();
     let ctx = current_ctx_id(pn.active_path, pn.project);
     let mut best: Option<(f32, Id, u32)> = None;
-    for (_mi, body) in shown_bodies(pn) {
+    for (_mi, body) in qymcad_ui_state::shown_bodies(pn) {
         // a cull by the bounding box: a body whose screen rectangle does not cover the cursor is not
         // worth walking
         if !body_bbox_hit(pn, body, rect, pos, &basis, 12.0) {
@@ -869,12 +958,23 @@ pub fn pick_edge_any(pn: &Painting, rect: Rect, pos: Pos2) -> Option<(Id, u32)> 
     best.filter(|(d, _, _)| *d <= grab(pn.set, Grab::Curve)).map(|(_, b, id)| (b, id))
 }
 
-/// A RAY INTO A FACE WITH NO SIDE EFFECTS: (the body, the persistent id of the face, the point of the
-/// hit in the world).
+/// IS POINT `w` IN SIGHT: no face stands in front of it where it is drawn, within 0.5 mm for the silhouette. A vertex
+/// or an edge beats a face only when it is not hidden behind one.
 ///
-/// Besides searching, `pick_face_3d` also CHANGES the selection, the set of faces of a command and the
-/// highlight — the measuring tool needs none of that and is harmed by it: measure a gap and lose the
-/// selection of the part. The search is the same, only clean.
+/// THE FACE IS ASKED AT THE POINT ITSELF, and its depth is the one at that pixel. The measure asked at the pointer, a
+/// few pixels off the corner, and took the depth of a point standing for the face's triangle (13.3, 0, 3.3) - 4.7 mm
+/// nearer than the corner (0, 0, 10) of a block in plain sight, which was taken as its face.
+pub fn point_not_hidden(pn: &Painting, rect: Rect, w: [f64; 3]) -> bool {
+    let basis = pn.cam.basis();
+    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
+    let (at, d) = scr.at(w);
+    // the depth of the face drawn at that very pixel, not of a point standing for its triangle
+    face_under_cursor(pn, rect, at).is_none_or(|(fd, _, _)| d <= fd + 0.5)
+}
+
+/// A RAY INTO A FACE WITH NO SIDE EFFECTS: (the body, the persistent id of the face, the point of the hit in the
+/// world). Picking a face for a command also changes the selection and the highlight; measuring and the right button
+/// need none of that and are harmed by it - measure a gap and lose the selection of the part.
 pub fn pick_face_ray(pn: &Painting, rect: Rect, screen: Pos2) -> Option<(qymcad_core::model::Id, u32, [f64; 3])> {
     let basis = pn.cam.basis();
     let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
@@ -1053,7 +1153,7 @@ pub fn pick_vertex_any(pn: &Painting, rect: Rect, pos: Pos2) -> Option<(Id, u32,
     let basis = pn.cam.basis();
     let ctx = current_ctx_id(pn.active_path, pn.project);
     let mut best: Option<(f32, Id, u32, bool)> = None;
-    for (_mi, body) in shown_bodies(pn) {
+    for (_mi, body) in qymcad_ui_state::shown_bodies(pn) {
         // a cull by the bounding box: a body whose screen rectangle does not cover the cursor is not
         // worth walking
         if !body_bbox_hit(pn, body, rect, pos, &basis, 12.0) {
@@ -1494,7 +1594,7 @@ pub fn infer_mate_anchor(pn: &qymcad_ui_state::Painting, rect: Rect, pos: Pos2) 
         let w = qymcad_core::feature::apply12(&wt, key.centroid);
         offer(scr.at(w).0.distance(pos), body, AnchorRef::FaceCenter(body, key));
     }
-    for (_mi, body) in shown_bodies(pn) {
+    for (_mi, body) in qymcad_ui_state::shown_bodies(pn) {
         if body != under {
             continue; // another part gives up no anchor, however close its edge turns out to be
         }
@@ -1540,4 +1640,31 @@ pub fn infer_mate_anchor(pn: &qymcad_ui_state::Painting, rect: Rect, pos: Pos2) 
     }
     let (body, key) = face?;
     Some((body, AnchorRef::FaceCenter(body, key)))
+}
+
+#[cfg(test)]
+mod arc_pick {
+    use qymcad_core::feature::Purpose;
+    use qymcad_core::model::Project;
+
+    /// A CLICK WHERE AN ARC IS NOT DOES NOT TAKE IT: the upper half of a circle of radius 10 (from (10, 0) round to
+    /// (-10, 0)) is caught on its top, and not at (0, -10), where the cut lower half had been.
+    #[test]
+    fn a_click_past_an_arc_does_not_take_it() {
+        let mut p = Project::default();
+        p.new_document();
+        let si = p.new_sketch("S");
+        let c = p.add_circle_entity(si, 0.0, 0.0, 10.0, Purpose::Real);
+        let _ = p.add_line_entity(si, -20.0, 0.0, 20.0, 0.0, Purpose::Real);
+        p.regen_sketch(si);
+        assert!(p.trim_curve(si, c, 0.0, -10.0), "the lower half of the circle trimmed");
+        let arc = p.sketches[si].entities.iter().find(|e| matches!(e.kind, qymcad_core::model::EntityKind::Arc { .. })).map(|e| e.id).expect("the upper arc");
+        let (set, view) = (qymcad_ui_state::Settings::default(), qymcad_ui_state::View2d::default());
+        let pick = qymcad_ui_state::PickCtx { project: &p, set: &set, view: &view };
+        let rect = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(800.0, 600.0));
+        let sh = qymcad_ui_state::Sheet { view, rect };
+        let at = |x: f64, y: f64| sh.at(qymcad_core::geom::Point2::new(x, y));
+        assert_eq!(super::nearest_circle_entity(&pick, rect, at(0.0, 10.0), si), Some(arc), "the top of the arc");
+        assert_eq!(super::nearest_circle_entity(&pick, rect, at(0.0, -10.0), si), None, "where the cut half had been");
+    }
 }

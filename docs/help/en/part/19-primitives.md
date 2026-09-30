@@ -1,29 +1,38 @@
 # Primitives
 
-A body without a sketch, from sizes alone. The buttons are in the “Primitives” group; the sizes are
-set at the geometry, Enter applies.
+A body without a sketch, from its sizes alone: a box, a cylinder, a sphere, a cone, a torus, a prism. The buttons are
+in the "Primitives" group.
 
-![A box and a cylinder — ready-made bodies, no sketch needed.](img/part-primitives.png)
+![A box and a cylinder — ready bodies, no sketch needed for them.](img/part-primitives.png)
 
-- **Box** (key **B**) — length, width, height.
-- **Cylinder** (key **Y**) — diameter and height.
-- **Sphere** — diameter.
-- **Cone** — bottom diameter, top diameter, height. A zero top diameter gives a sharp cone, a
-  non-zero one a truncated cone.
-- **Torus** — ring diameter and tube diameter.
-- **Prism** — the number of sides is set above, then the diameter and the height.
+## How to do it
 
-## Why bother when there is a sketch
+1. Press the button of a primitive: **Box** (key **B**), **Cylinder** (**Y**), **Sphere**, **Cone**, **Torus**,
+   **Prism**.
+2. Type the sizes into the fields at the geometry (which ones — below).
+3. Where to put it — click a vertex, a datum point, a plane or a face: the primitive stands there on its base.
+   Without a click it stands at the origin of the part.
+4. **Enter** applies, **Esc** cancels.
 
-Speed. For a roller, a boss, a pin or a blank a sketch is an extra step: the shape has nothing but
-two or three numbers, and those numbers are just as parametric as sketch dimensions.
+The fields of the sizes:
 
-## How they behave afterwards
+- **Box** — Length X, Width Y, Height Z;
+- **Cylinder** — Radius and Height;
+- **Sphere** — Radius;
+- **Cone** — Bottom radius, Top radius and Height; a top of 0 gives a sharp cone, above zero a frustum;
+- **Torus** — Ring R and Tube r;
+- **Prism** — Radius (circum.), Height and Sides (3 to 64).
 
-A primitive is a material feature like an extrusion: it carries the single body of the part. A second
-primitive will not create a second body, it merges with the first.
+The sizes take a formula and are edited later with a double-click on the timeline row, as for any operation.
 
-## When a sketch is better
+## What happens next
 
-As soon as the shape stops being described by those numbers — a flange, a flat, a groove is needed —
-move to a sketch. Assembling a complex part out of primitives costs more than drawing an outline.
+A part is one body: a second primitive does not make a second body, it merges with the first. As soon as the shape
+stops fitting these numbers — a flange, a flat, a slot — go to a sketch: assembling a complex part from primitives
+costs more than drawing the outline.
+
+## If it did not work
+
+- A field does not take a value — zero, negative or not a number; the reason is written at the field.
+- The torus is not built — the tube is not thinner than the ring: such a torus goes through itself. Make Tube r
+  smaller than Ring R.

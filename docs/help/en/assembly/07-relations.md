@@ -10,7 +10,7 @@ runs along it; drive one axis and the second one covers half the distance.
 
 ## How to add one
 
-Press **Relation** in the assembly bar, click the joints in the mate list and press **Enter**.
+Press **Relation** among the assembly tools on the left, click the joints in the mate list and press **Enter**.
 
 You pick finished joints, not geometry: a relation works on top of what is already there. If the
 joint you picked has no suitable degree, the program says so at once — “this joint has no free

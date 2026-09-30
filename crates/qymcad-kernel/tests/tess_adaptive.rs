@@ -134,3 +134,14 @@ fn huge_body_is_lighter_than_fixed_deflection() {
     );
     assert!(max_angle_step(&s) <= 0.32, "and the huge body still reads as smooth");
 }
+
+/// A HUGE BALL IS NOT MILLIONS OF TRIANGLES: a ball of r = 100 m - the largest a field takes - is drawn with at most
+/// 40 times the triangles of a ball of r = 10 mm. A ball's triangles go as the square of the segments around it, a
+/// cylinder's only as the segments, so the ceiling of 1 mm on the deflection, harmless for a cylinder of the same
+/// radius, gave the ball 2500 times the triangles and a window past 2 GB.
+#[test]
+fn a_huge_ball_is_not_millions_of_triangles() {
+    let small = tri_count(&Shape::sphere(10.0).expect("the small ball"), None);
+    let huge = tri_count(&Shape::sphere(100_000.0).expect("the huge ball"), None);
+    assert!(huge <= 40 * small, "a ball of r = 100 m has {huge} triangles against {small} of r = 10 mm: {:.0} times", huge as f64 / small as f64);
+}

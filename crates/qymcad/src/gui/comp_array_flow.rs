@@ -82,7 +82,7 @@ pub(super) mod tests {
         app.start_comp_array(1);
         app.on_escape();
         assert_eq!(app.side.carr.mode, 0, "the command is closed");
-        assert!(app.project.comp_patterns.is_empty(), "nothing was created");
+        assert!(app.project.comp_patterns().is_empty(), "nothing was created");
     }
 
     /// THE PREVIEW before Enter: the ghosts of the copies are drawn.
@@ -104,7 +104,7 @@ pub(super) mod tests {
     fn reopening_the_pattern_edits_it_in_place() {
         let mut app = App::default();
         let comp = assembly_with_part(&mut app);
-        let pid = app.project.add_comp_pattern(comp, CompPatternKind::Linear { dir: [1.0, 0.0, 0.0], step: 30.0, count: 3 });
+        let pid = app.project.add_comp_pattern(comp, CompPatternKind::linear([1.0, 0.0, 0.0], 30.0, 3));
         assert_ne!(pid, 0, "setup: the array is there");
         let copies_before = app.project.comp_pattern_of(comp).expect("the array").copies.clone();
 
@@ -126,7 +126,7 @@ pub(super) mod tests {
 
         app.params.arr.count = 5;
         crate::gui::commands::apply_comp_array(&mut app.part_ctx());
-        assert_eq!(app.project.comp_patterns.len(), 1, "a second array must not appear");
+        assert_eq!(app.project.comp_patterns().len(), 1, "a second array must not appear");
         let after = app.project.comp_pattern_of(comp).expect("the array").copies.clone();
         assert_eq!(after.len(), 4, "there are 5 instances now");
         assert_eq!(&after[..2], &copies_before[..], "the former copies kept their Ids — the mates on them are alive");
@@ -139,14 +139,14 @@ pub(super) mod tests {
     fn deleting_one_copy_removes_the_pattern_and_spares_the_source() {
         let mut app = App::default();
         let comp = assembly_with_part(&mut app);
-        app.project.add_comp_pattern(comp, CompPatternKind::Linear { dir: [1.0, 0.0, 0.0], step: 30.0, count: 4 });
+        app.project.add_comp_pattern(comp, CompPatternKind::linear([1.0, 0.0, 0.0], 30.0, 4));
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
         let copies = app.project.comp_pattern_of(comp).expect("the array").copies.clone();
 
         let ci = app.project.components.iter().position(|c| c.id == copies[1]).expect("the index of the copy");
-        app.execute_delete(Sel::Component(ci));
+        app.execute_delete(Sel::Component(ci), false);
 
-        assert!(app.project.comp_patterns.is_empty(), "the array must go whole");
+        assert!(app.project.comp_patterns().is_empty(), "the array must go whole");
         for c in &copies {
             assert!(!app.project.components.iter().any(|x| x.id == *c), "copy {c} must go");
         }
@@ -195,6 +195,39 @@ pub(super) mod tests {
                 "{what}: a copy of a part is marked with the ASSEMBLY icon ({sub_assembly_icon}) — it promises a node one enters, and there is nowhere to enter"
             );
         }
+    }
+
+    /// THE PATTERN IS ONE ROW IN THE TREE, ITS COPIES UNDER IT, AND A DOUBLE CLICK ON THE ROW REOPENS IT: seen in real
+    /// frames, the row found by its words, the copies' rows indented past the source's, the command opened by the
+    /// double click. Reported behaviour: the pattern had no row of its own - a copy per row, and the pattern reached
+    /// only through a copy's menu.
+    #[test]
+    fn the_pattern_is_one_row_with_its_copies_under_it() {
+        use crate::gui::a_component_stepped_into_is_not_lit::tests::{calm, double_click_at};
+        use crate::gui::import_door::tests::{frame, running};
+        let (mut app, ctx) = running();
+        super::super::joint_flow::tests::add_part_at(&mut app, 0.0);
+        calm(&mut app, &ctx); // the window rebuilds in the background: the body is there once it settles
+        let comp = app.project.mesh_id(0).and_then(|b| app.project.body_owner(b)).expect("the part");
+        let root = app.project.root;
+        app.set_context_to(root);
+        let pid = app.project.add_comp_pattern(comp, CompPatternKind::linear([1.0, 0.0, 0.0], 30.0, 3));
+        crate::gui::commands::resync_after_topology_change(&mut app.part_ctx());
+        calm(&mut app, &ctx);
+        let texts = frame(&mut app, &ctx, Vec::new());
+        let label = crate::gui::panels_tree::feature_row_label(&app.project, app.project.timeline.iter().position(|n| n.id == pid).expect("the node"));
+        let label: String = label.chars().filter(|c| !('\u{e000}'..='\u{f8ff}').contains(c)).collect::<String>().trim().to_string();
+        let row = texts.iter().filter(|(t, r)| *t == label && r.center().x < 400.0).map(|(_, r)| *r).collect::<Vec<_>>();
+        assert_eq!(row.len(), 1, "the pattern {label:?} has {} rows in the tree; on screen: {:?}", row.len(), texts.iter().map(|(t, _)| t).collect::<Vec<_>>());
+        let name_of = |c: u64| app.project.components.iter().find(|x| x.id == c).map(|x| crate::i18n::name(&x.name)).unwrap_or_default();
+        let at = |n: &str| texts.iter().find(|(t, r)| t == n && r.center().x < 400.0).map(|(_, r)| *r);
+        let src = at(&name_of(comp)).expect("the source's row");
+        for c in app.project.comp_pattern(pid).expect("the pattern").copies {
+            let r = at(&name_of(c)).unwrap_or_else(|| panic!("the copy {:?} has no row", name_of(c)));
+            assert!(r.min.y > row[0].min.y && r.min.x > src.min.x + 4.0, "the copy {:?} stands at {r:?}, not under the pattern at {:?} and indented past the source at {src:?}", name_of(c), row[0]);
+        }
+        double_click_at(&mut app, &ctx, row[0].center());
+        assert_eq!(app.side.carr.edit, pid, "a double click on the pattern's row did not reopen it; the status line: {}", app.status);
     }
 }
 

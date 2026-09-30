@@ -80,9 +80,17 @@ mod tests {
         let app = App::default();
         for lang in ["ru", "en"] {
             crate::i18n::set_language(lang);
-            for (key, n) in [("io-rebuilding-heavy-n", Some("28")), ("io-rebuilding-quiet", Some("28")), ("io-rebuilding", None), ("io-export-step", None), ("io-export-stl", None), ("io-loading", None), ("io-brep-restore", None)] {
-                let label = match n {
-                    Some(n) => crate::i18n::tr1(key, "n", n),
+            for (key, arg) in [
+                ("io-rebuilding-heavy-n", Some(("n", "28"))),
+                ("io-rebuilding-quiet", Some(("n", "28"))),
+                ("io-rebuilding", None),
+                ("io-export-exact", Some(("format", "STEP"))),
+                ("io-export-mesh", Some(("format", "STL"))),
+                ("io-loading", None),
+                ("io-brep-restore", None),
+            ] {
+                let label = match arg {
+                    Some((name, v)) => crate::i18n::tr1(key, name, v),
                     None => crate::i18n::tr(key),
                 };
                 let (card, texts) = painted(&app, &label, Some((9, 28)));

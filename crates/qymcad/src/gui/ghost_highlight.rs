@@ -37,13 +37,37 @@ mod tests {
     }
 
     /// And the pass is still chosen by `ghost`, which is why the two flags are not one word of three.
+    ///
+    /// On the CARD the same rule lives in two numbers rather than in a colour: the look of a body carries the
+    /// two flags as separate BITS, the fragment paints by the selection bit and the pass is picked by the
+    /// ghost bit. Written as one number of three - 0 ordinary, 1 selected, 2 a ghost - a selected ghost lost
+    /// its ghostliness and jumped into the opaque pass.
     #[test]
     fn the_pass_of_a_selected_ghost_is_still_the_blended_one() {
         let src = crate::gui::render_source::RENDER;
+        assert!(src.contains("if ghost { ghost_tris.push(tri) } else { tris.push(tri) }"), "on the CPU path the bucket is chosen by `ghost` alone, with no regard to the selection");
+
+        // THE CARD, checked by the look table rather than by the text of the source: a body of a neighbouring
+        // part, selected, must carry BOTH bits.
+        let mut app = App::default();
+        let root = app.project.root;
+        let first = crate::gui::scene_chunks::entering_a_context::part_inside(&mut app, root, 0.0);
+        crate::gui::scene_chunks::entering_a_context::part_inside(&mut app, root, 40.0);
+        app.win.context = true; // "in context": the neighbouring parts stay on screen as ghosts
+        qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
+        app.enter_component(first);
+        let ghostly = crate::gui::render_scene::scene_looks(&app.painting())
+            .iter()
+            .position(|l| l.state & qymcad_ui_state::LOOK_GHOST != 0)
+            .expect("setup: the neighbouring part must be a ghost");
+        app.chosen.sel = qymcad_ui_state::Sel::Mesh(ghostly);
+
+        let look = crate::gui::render_scene::scene_looks(&app.painting())[ghostly];
+        assert!(look.state & qymcad_ui_state::LOOK_HOT != 0, "the selection did not reach the look of the body");
+        assert!(look.state & qymcad_ui_state::LOOK_GHOST != 0, "selecting a ghost took its ghostliness away, and with it the blended pass");
         assert!(
-            src.contains("let al = if ghost { pn.set.ghost_alpha } else { 255 };"),
-            "the bucket is chosen by `ghost` alone, with no regard to the selection"
+            crate::gui::render_source::has(crate::viewport_gpu::SHADER, "if ((look.state & 2u) != 0u) {"),
+            "the shader must read the ghost as a bit of its own, not as a number of three"
         );
-        assert!(src.contains("if ghost { ghost_tris.push(tri) } else { tris.push(tri) }"), "and the same rule holds on the CPU path");
     }
 }

@@ -111,26 +111,35 @@ mod tests {
         assert!(dense(state).contains(&dense("pal.toolbar_bg()")), "and take its colour from it");
     }
 
-    /// CHANGING THE SCHEME INVALIDATES THE PICTURE CACHES.
+    /// CHANGING THE SCHEME REPAINTS THE VIEWPORT.
     ///
-    /// The raster of the viewport and the vertex buffer of the GPU are computed once and live until their
-    /// key changes. The colour of the bodies is already baked into those buffers — so without the scheme
-    /// in the key, switching the theme would leave the former picture on screen until the next edit of
-    /// the geometry. Exactly the report that the theme does not repaint the viewport, from another
-    /// side.
+    /// The raster of the viewport is computed once and lives until its key changes, and the colour of the
+    /// bodies is baked into it — so without the scheme in the key, switching the theme would leave the
+    /// former picture on screen until the next edit of the geometry. Exactly the report that the theme does
+    /// not repaint the viewport, from another side.
+    ///
+    /// On the CARD the colour no longer lives in the vertices: it sits in the look table, which is written
+    /// afresh on every frame. So the key of the vertex buffer must NOT move for a change of scheme — moving
+    /// it would send the whole scene to the card again (739 MB on the reference engine) for two numbers per
+    /// body.
     #[test]
-    fn switching_the_scheme_invalidates_the_picture_caches() {
+    fn switching_the_scheme_repaints_the_viewport() {
         let mut app = App::default();
         let ctx = egui::Context::default();
         let rect = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(800.0, 600.0));
+        crate::gui::joint_flow::tests::add_part_at(&mut app, 0.0);
+        qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
         app.set.scheme = "dark".into();
         crate::gui::apply_theme(&mut app.scheme, &app.set, &ctx);
         let (raster_dark, gpu_dark) = (qymcad_ui_state::view_key(&app.painting(), rect, 1.0), qymcad_ui_state::gpu_scene_key(&app.painting()));
+        let looks_dark = crate::gui::render_scene::scene_looks(&app.painting());
 
         app.set.scheme = "light".into();
         crate::gui::apply_theme(&mut app.scheme, &app.set, &ctx);
         assert_ne!(raster_dark, qymcad_ui_state::view_key(&app.painting(), rect, 1.0), "the key of the raster must change together with the scheme");
-        assert_ne!(gpu_dark, qymcad_ui_state::gpu_scene_key(&app.painting()), "the key of the vertex buffer must change together with the scheme");
+        assert_eq!(gpu_dark, qymcad_ui_state::gpu_scene_key(&app.painting()), "the scheme moved the key of the vertex buffer: the whole scene would go to the card for a change of colour");
+        let looks_light = crate::gui::render_scene::scene_looks(&app.painting());
+        assert_ne!(looks_dark[0].tint, looks_light[0].tint, "the new colour did not reach the look table, so on the card the body stays as it was");
     }
 
     /// THE SHADING OF BODIES GOES THROUGH THE SCHEME — both of its knobs, not one.

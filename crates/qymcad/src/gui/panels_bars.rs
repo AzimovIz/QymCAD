@@ -32,24 +32,19 @@ pub(crate) fn menu_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
         ui.menu_button(qymcad_i18n::tr("menu-file"), |ui| {
             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+            // A NEW PROJECT IS AN EMPTY ASSEMBLY: a part is made by "New part" of the start screen or of the assembly,
+            // by the person's own intent (decided 29.09) - a project that came with a part to delete made them clean up
             if ui.button(format!("{}  {}", ph::FILE, qymcad_i18n::tr("file-new"))).clicked() {
-                bc.ask.push(qymcad_ui_state::BarAsk::Nav(qymcad_ui_state::Nav::New));
+                bc.ask.push(qymcad_ui_state::BarAsk::Nav(qymcad_ui_state::Nav::NewAssembly));
                 ui.close();
             }
-            // TEMPLATES: the item is disabled rather than hidden, as the recent files are. An empty
-            // submenu explains itself, while a vanishing item leaves one guessing whether it ever existed.
-            let tpls = crate::templates::list();
-            ui.add_enabled_ui(!tpls.is_empty(), |ui| {
-                ui.menu_button(format!("{}  {}", ph::FILE_TEXT, qymcad_i18n::tr("file-new-from-template")), |ui| {
-                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
-                    for (name, path) in &tpls {
-                        if ui.button(name).on_hover_text(path).clicked() {
-                            bc.ask.push(qymcad_ui_state::BarAsk::Nav(qymcad_ui_state::Nav::NewFromTemplate(path.clone())));
-                            ui.close();
-                        }
-                    }
-                });
-            });
+            // TEMPLATES ARE CHOSEN IN THE CHOOSER, opened in the folder of templates, as a new document from a template is
+            // chosen in the professional systems. A submenu of saved templates stood here, disabled and silent while
+            // there were none: the item did nothing and said nothing.
+            if ui.button(format!("{}  {}", ph::FILE_TEXT, qymcad_i18n::tr("file-new-from-template"))).clicked() {
+                bc.ask.push(qymcad_ui_state::BarAsk::Nav(qymcad_ui_state::Nav::NewFromTemplate));
+                ui.close();
+            }
             if ui.button(format!("{}  {}", ph::PACKAGE, qymcad_i18n::tr("file-save-as-template"))).on_hover_text(qymcad_i18n::tr("file-save-as-template-hint")).clicked() {
                 bc.win.tpl_name = bc.project.meta.title.clone();
                 bc.win.open(WinKind::SaveTemplate);
@@ -60,13 +55,15 @@ pub(crate) fn menu_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
                 bc.ask.push(qymcad_ui_state::BarAsk::Nav(qymcad_ui_state::Nav::OpenDialog));
                 ui.close();
             }
-            // RECENT FILES: a basic expectation of any program that has files. The item is disabled
-            // rather than hidden: an empty submenu explains itself, while a vanishing item leaves one
-            // guessing whether it ever existed.
+            // RECENT FILES: a basic expectation of any program that has files. The submenu always opens: empty, it says
+            // so in words, and "Clear the list" stands in it disabled. A disabled item said nothing at all on a clean start.
             let recent = bc.set.recent.clone();
-            ui.add_enabled_ui(!recent.is_empty(), |ui| {
+            {
                 ui.menu_button(format!("{}  {}", ph::CLOCK_COUNTER_CLOCKWISE, qymcad_i18n::tr("file-recent")), |ui| {
                     ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+                    if recent.is_empty() {
+                        ui.label(egui::RichText::new(qymcad_i18n::tr("file-recent-empty")).weak());
+                    }
                     for path in &recent {
                         // the row shows THE FILE NAME with the full path in the tooltip: paths are longer than the menu
                         let name = std::path::Path::new(path).file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone());
@@ -76,12 +73,12 @@ pub(crate) fn menu_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
                         }
                     }
                     ui.separator();
-                    if ui.button(format!("{}  {}", ph::TRASH, qymcad_i18n::tr("file-recent-clear"))).clicked() {
+                    if ui.add_enabled(!recent.is_empty(), egui::Button::new(format!("{}  {}", ph::TRASH, qymcad_i18n::tr("file-recent-clear")))).clicked() {
                         bc.set.recent.clear();
                         ui.close();
                     }
                 });
-            });
+            }
             if ui.add(egui::Button::new(format!("{}  {}", ph::FLOPPY_DISK, qymcad_i18n::tr("file-save"))).shortcut_text("Ctrl+S")).clicked() {
                 bc.ask.push(qymcad_ui_state::BarAsk::Save);
                 ui.close();
@@ -95,30 +92,24 @@ pub(crate) fn menu_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
                 ui.close();
             }
             ui.separator();
-            if ui.button(format!("{}  {}", ph::FILE, qymcad_i18n::tr("file-import-dxf"))).clicked() {
-                bc.ask.push(qymcad_ui_state::BarAsk::PickDxf);
-                ui.close();
-            }
-            if ui.button(format!("{}  {}", ph::CUBE, qymcad_i18n::tr("file-import-stl"))).clicked() {
-                bc.ask.push(qymcad_ui_state::BarAsk::PickStl);
-                ui.close();
-            }
-            if ui.button(format!("{}  {}", ph::CUBE, qymcad_i18n::tr("file-import-step"))).clicked() {
-                bc.ask.push(qymcad_ui_state::BarAsk::PickStep);
-                ui.close();
-            }
-            if ui.button(format!("{}  {}", ph::POLYGON, qymcad_i18n::tr("file-import-svg"))).clicked() {
-                bc.ask.push(qymcad_ui_state::BarAsk::PickSvg);
+            // ONE DOOR FOR EVERY FORMAT: the file's extension decides what it becomes (see `import_door`)
+            let formats = qymcad_io::Format::names_of(&qymcad_io::Format::ALL);
+            if ui.button(format!("{}  {}", ph::FILE_ARROW_DOWN, qymcad_i18n::tr("file-import"))).on_hover_text(qymcad_i18n::tr1("file-import-hint", "formats", &formats)).clicked() {
+                bc.ask.push(qymcad_ui_state::BarAsk::Import(qymcad_ui_state::Want::Anything));
                 ui.close();
             }
             ui.separator();
-            if ui.button(format!("{}  {}", ph::EXPORT, qymcad_i18n::tr("file-export-step"))).on_hover_text(qymcad_i18n::tr("menu-export-step-hint")).clicked() {
-                bc.ask.push(qymcad_ui_state::BarAsk::ExportStep(qymcad_ui_state::ExportTarget::Project));
-                ui.close();
-            }
-            if ui.button(format!("{}  {}", ph::EXPORT, qymcad_i18n::tr("file-export-stl"))).on_hover_text(qymcad_i18n::tr("menu-export-stl-hint")).clicked() {
-                *bc.stl_export = Some(qymcad_ui_state::ExportTarget::Project);
-                ui.close();
+            // ONE ITEM, THE FORMATS INSIDE IT (see `export_menu`)
+            match crate::gui::export_menu::export_submenu(ui, crate::gui::export_menu::ExportFrom::Project) {
+                Some(crate::gui::export_menu::ExportChoice::Exact(f)) => {
+                    bc.ask.push(qymcad_ui_state::BarAsk::ExportExact(f, qymcad_ui_state::ExportTarget::Project));
+                    ui.close();
+                }
+                Some(crate::gui::export_menu::ExportChoice::Mesh(f)) => {
+                    *bc.mesh_export = Some((f, qymcad_ui_state::ExportTarget::Project));
+                    ui.close();
+                }
+                None => {}
             }
             ui.separator();
             if ui.button(format!("{}  {}", ph::SIGN_OUT, qymcad_i18n::tr("file-quit"))).clicked() {

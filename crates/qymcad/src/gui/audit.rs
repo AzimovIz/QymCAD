@@ -233,7 +233,7 @@ mod live_session {
         // deleting an operation is a transaction with a name of its own as well
         let n = app.disk.edits.undo.len();
         let last_feature = app.project.timeline.len().saturating_sub(1);
-        crate::gui::commands::delete_feature(&mut app.part_ctx(), last_feature);
+        crate::gui::commands::delete_feature(&mut app.part_ctx(), last_feature, false);
         assert_eq!(app.disk.edits.undo.len(), n + 1, "deleting an operation is one step");
         assert_eq!(app.disk.edits.undo.last().map(|s| s.name.clone()), Some(crate::i18n::tr("status-delete-feature")));
     }
@@ -472,7 +472,7 @@ mod live_session {
         let path = std::env::temp_dir().join("qym_bg_edit.qcad").to_string_lossy().to_string();
         crate::gui::io_jobs::spawn_save(&mut app.disk.io, &mut app.live, &mut app.project, &mut app.regen, &mut app.status, path.clone(), false);
         // WHILE THE WRITE IS UNDER WAY the document is edited
-        let si2 = rect(&mut app, 50.0, 0.0, 60.0, 10.0); // ASIDE from the plate, otherwise the union adds nothing
+        let si2 = rect(&mut app, 30.0, 0.0, 60.0, 10.0); // ACROSS the edge of the plate: inside it the union adds nothing, apart from it the part would be two pieces
         app.chosen.sel = Sel::Sketch(si2);
         run(&mut app, 1, &[("height", 5.0)]);
         let after = vol(&app);

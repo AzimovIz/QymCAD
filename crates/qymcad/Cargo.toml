@@ -8,6 +8,10 @@ repository.workspace = true
 homepage.workspace = true
 description = "QymCAD desktop app (egui + wgpu)"
 
+[lib]
+name = "qymcad"
+path = "src/lib.rs"
+
 [[bin]]
 name = "qymcad"
 path = "src/main.rs"
@@ -29,6 +33,7 @@ qymcad-render = { path = "../qymcad-render" }
 qymcad-assembly = { path = "../qymcad-assembly" }
 qymcad-sketch = { path = "../qymcad-sketch" }
 qymcad-part = { path = "../qymcad-part" }
+qymcad-meshfit = { path = "../qymcad-meshfit" } # the viewport draws where a body made of a mesh did not close
 bytemuck = { version = "1", features = ["derive"] }
 rfd = "0.17"
 # holding the file chooser's answer on a worker thread - the future is built on the frame thread, and
@@ -49,6 +54,9 @@ sys-locale = "0.3.2"
 unic-langid = "0.9.6"
 fluent-syntax = "0.12.0"
 ab_glyph = "0.2.32"
+# ONLY FOR THE CHECK that the viewport shader parses: a broken shader shows itself when the window opens,
+# which is too late and only on a machine with a GPU.
+naga = { version = "29", features = ["wgsl-in"] }
 
 # The icon is embedded into the .exe only when building FOR Windows (host = windows under CI). On Linux
 # and macOS the dependency is not pulled in at all, and build.rs cuts its windows block out through

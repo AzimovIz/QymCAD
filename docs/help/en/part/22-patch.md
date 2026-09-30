@@ -8,7 +8,8 @@ body before**: copying a face only repeats what exists, while a patch closes an 
 ## How
 
 1. Press **Patch**.
-2. Click the edges that define the boundary — at least two. Edges highlight as they do in Fillet;
+2. Click the edges that define the boundary: one closed edge (the rim of a hole) or a chain of several. Edges
+   highlight as they do in Fillet;
    clicking a face takes all of its edges at once.
 3. **Enter** — the surface appears; **Esc** — cancel.
 

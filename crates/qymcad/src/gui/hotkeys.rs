@@ -53,6 +53,15 @@ pub(crate) fn hotkeys_window(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Conte
     }
     let mut open = true;
     egui::Window::new(crate::i18n::tr("hotkeys-title")).open(&mut open).resizable(true).default_width(520.0).show(ctx, |ui| {
+        // ABOVE THE TABLE, NOT UNDER IT: why a key was refused and the way back to the factory keys. At the foot of the
+        // scrolled table they stood out of sight - a refused key said nothing a person could see.
+        if !wc.hotkeys.note.is_empty() {
+            ui.label(egui::RichText::new(&wc.hotkeys.note).color(wc.scheme.pal.error_mild()).small());
+        }
+        if !wc.set.hotkeys.is_empty() && ui.button(crate::i18n::tr("hotkeys-reset-all")).clicked() {
+            wc.set.hotkeys.clear();
+            wc.hotkeys.note.clear();
+        }
         egui::ScrollArea::vertical().max_height(560.0).show(ui, |ui| {
             for area in AREAS {
                 ui.label(egui::RichText::new(crate::i18n::tr(&format!("hotkeys-area-{area}"))).strong());
@@ -94,13 +103,6 @@ pub(crate) fn hotkeys_window(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Conte
             // conclusion drawn is about the program.
             ui.label(egui::RichText::new(crate::i18n::tr("hotkeys-alt-note")).weak().small());
             ui.label(egui::RichText::new(crate::i18n::tr("hotkeys-rebind-note")).weak().small());
-            if !wc.hotkeys.note.is_empty() {
-                ui.label(egui::RichText::new(&wc.hotkeys.note).color(wc.scheme.pal.error_mild()).small());
-            }
-            if !wc.set.hotkeys.is_empty() && ui.button(crate::i18n::tr("hotkeys-reset-all")).clicked() {
-                wc.set.hotkeys.clear();
-                wc.hotkeys.note.clear();
-            }
         });
     });
     wc.win.set(WinKind::Hotkeys, open);
@@ -179,16 +181,31 @@ mod tests {
         out
     }
 
-    const HANDLERS: [(&str, &str); 3] = [
-        ("part", "pub(super) fn part_hotkey(&mut self, key: egui::Key) {"),
-        ("assembly", "pub(super) fn assembly_hotkey(&mut self, key: egui::Key) {"),
-        ("sketch", "pub(super) fn sketch_hotkey(&mut self, key: egui::Key)"),
+    /// WHERE THE ACTIONS OF AN AREA ARE HANDLED. Two of them for the sketch: the drawing tools are named by a
+    /// table in the workbench crate ("this action means that tool"), and what is left in the window handles
+    /// the rest. A guard that read only the window would call every tool of the reference a phantom.
+    /// WHERE THE ACTIONS OF AN AREA LIVE, and whether that place is the one that HEARS THE KEY.
+    ///
+    /// Two places for the sketch: the window hears the key, and the workbench crate holds the table of "this
+    /// action means that drawing tool". The table hears no key and asks nothing about bindings - so the guard
+    /// that watches for a handler matching a raw key must not demand `hotkey_action` of it, while the guards
+    /// that compare the reference with the code must read both.
+    const HANDLERS: [(&str, &str, bool); 4] = [
+        ("part", "pub(super) fn part_hotkey(&mut self, key: egui::Key) {", true),
+        ("assembly", "pub(super) fn assembly_hotkey(&mut self, key: egui::Key) {", true),
+        ("sketch", "pub(super) fn sketch_hotkey(&mut self, key: egui::Key)", true),
+        ("sketch", "pub fn tool_for_action(action: &str) -> Option<u8>", false),
     ];
 
-    fn handler_sources() -> [(&'static str, &'static str, &'static str); 3] {
+    fn handler_sources() -> [(&'static str, &'static str, &'static str, bool); 4] {
         let gui = include_str!("../gui.rs");
         let sketching = crate::gui::sketch_source::SKETCH;
-        [(HANDLERS[0].0, HANDLERS[0].1, gui), (HANDLERS[1].0, HANDLERS[1].1, gui), (HANDLERS[2].0, HANDLERS[2].1, sketching)]
+        [
+            (HANDLERS[0].0, HANDLERS[0].1, gui, HANDLERS[0].2),
+            (HANDLERS[1].0, HANDLERS[1].1, gui, HANDLERS[1].2),
+            (HANDLERS[2].0, HANDLERS[2].1, sketching, HANDLERS[2].2),
+            (HANDLERS[3].0, HANDLERS[3].1, sketching, HANDLERS[3].2),
+        ]
     }
 
     /// THE REFERENCE IS CHECKED AGAINST THE CODE: every action of a handler is in the table.
@@ -199,7 +216,7 @@ mod tests {
     /// diverging from the code rather than from a letter.
     #[test]
     fn every_handled_action_is_documented() {
-        for (area, sig, src) in handler_sources() {
+        for (area, sig, src, _) in handler_sources() {
             for a in actions_in(body_of(src, sig)) {
                 assert!(
                     HOTKEYS.iter().any(|r| r.area == area && r.action == a),
@@ -212,8 +229,16 @@ mod tests {
     /// AND THE OTHER WAY ROUND: the reference holds no phantom actions the code does not handle.
     #[test]
     fn the_reference_lists_no_phantom_actions() {
-        for (area, sig, src) in handler_sources() {
-            let acts = actions_in(body_of(src, sig));
+        // EVERY PLACE OF THE AREA AT ONCE. An area may be handled in more than one place - the sketch names its
+        // drawing tools in the workbench crate and the rest in the window - and an action found in either of
+        // them is handled.
+        for area in HANDLERS.iter().map(|h| h.0).collect::<std::collections::BTreeSet<_>>() {
+            let mut acts: Vec<String> = Vec::new();
+            for (a, sig, src, _) in handler_sources() {
+                if a == area {
+                    acts.extend(actions_in(body_of(src, sig)));
+                }
+            }
             for r in HOTKEYS.iter().filter(|r| r.area == area) {
                 assert!(acts.contains(&r.action.to_string()), "the reference promises \"{}\" in \"{area}\" and the code handles no such action", r.action);
             }
@@ -227,9 +252,9 @@ mod tests {
     /// crash, it quietly disobeys.
     #[test]
     fn no_handler_matches_a_raw_key() {
-        for (area, sig, src) in handler_sources() {
+        for (area, sig, src, hears_the_key) in handler_sources() {
             let body = body_of(src, sig);
-            assert!(body.contains("hotkey_action("), "the handler \"{area}\" has stopped asking `hotkey_action`");
+            assert!(!hears_the_key || body.contains("hotkey_action("), "the handler \"{area}\" has stopped asking `hotkey_action`");
             // COMMENTS EXCLUDED: `Key::E` stands in them lawfully, as an explanation of why it is no
             // longer done that way. A guard that trips over an explanation teaches people to erase
             // explanations.

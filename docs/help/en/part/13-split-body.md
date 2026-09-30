@@ -29,8 +29,9 @@ face itself but “five millimetres from it” — and that stays parametric.
 
 ## What you get
 
-Both pieces stay in the document as **independent bodies**. They can be hidden one at a time,
-exported separately, and each given its own continuation in the timeline. The original body becomes
+Both pieces stay in the document as **independent bodies** of one part — rows of the **Bodies** list in the part's
+tree. They can be hidden one at a time, exported separately, each given its own continuation in the timeline, and
+moved into a part of its own with the right button -> **Make a part**. The original body becomes
 consumed — it is no longer shown and does not go into exports.
 
 ## The cutting plane

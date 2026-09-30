@@ -330,3 +330,32 @@ fn component_placement_survives_serde() {
     assert_eq!(back.component_transform(part), tr(5.0, 7.0, 9.0));
     assert!(back.is_grounded(part), "the grounded flag survived serialisation");
 }
+
+/// AN EMPTY DOCUMENT WORKS IN ITS ROOT, named as such: the window names the context it opens in, and a document
+/// that left it unnamed read as changed on the window's first frame.
+///
+/// Reported behaviour: a program just started, with nothing done in it, titled its document unsaved.
+#[test]
+fn an_empty_document_works_in_its_root() {
+    let mut p = qymcad_core::model::Project::default();
+    let root = p.new_empty_document();
+    assert_eq!(p.active_component, Some(root), "the empty document works in its root, and it names {:?}", p.active_component);
+}
+
+
+/// A SKETCH STARTED IN AN ASSEMBLY GOES INTO A NEW PART: the assembly gets a part and the sketch belongs to it, while
+/// in a part the sketch stays in that part and no part is made.
+#[test]
+fn a_sketch_started_in_an_assembly_goes_into_a_new_part() {
+    let mut p = qymcad_core::model::Project::default();
+    p.new_empty_document();
+    let parts_before = p.components.iter().filter(|c| p.component_is_part(c.id)).count();
+    let made = p.part_to_draw_in().expect("a part is made for the sketch in an empty assembly");
+    assert!(p.component_is_part(made) && p.active_ctx() == made, "the sketch has no part to stand in");
+    let si = p.new_sketch("s");
+    let sid = p.sketches[si].id;
+    p.add_sketch_node(sid, "s");
+    assert!(p.sketch_owner(sid) == Some(made), "the sketch belongs to {:?}, not to the part made for it", p.sketch_owner(sid));
+    assert!(p.part_to_draw_in().is_none(), "standing in a part, another part was made for a sketch");
+    assert!(p.components.iter().filter(|c| p.component_is_part(c.id)).count() == parts_before + 1, "more than one part was made");
+}

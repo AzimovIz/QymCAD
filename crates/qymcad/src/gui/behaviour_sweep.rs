@@ -129,7 +129,7 @@ mod tests {
         for c in COMMANDS {
             let mut app = stage(c.workbench);
             app.status.clear();
-            app.run_command(c.code);
+            app.run_command(c.code, &egui::Context::default());
             if !started(&app, c.launch) && app.status.trim().is_empty() {
                 mute.push(format!("{} ({})", c.code, c.workbench));
             }
@@ -147,7 +147,7 @@ mod tests {
         let mut stuck: Vec<String> = Vec::new();
         for c in COMMANDS {
             let mut app = stage(c.workbench);
-            app.run_command(c.code);
+            app.run_command(c.code, &egui::Context::default());
             app.on_escape();
             let t = tail(&app);
             if !t.is_empty() {
@@ -173,7 +173,7 @@ mod tests {
             }
             let mut app = stage(c.workbench);
             let before = qymcad_ui_state::edit_key(&app.draw_ctx());
-            app.run_command(c.code);
+            app.run_command(c.code, &egui::Context::default());
             app.on_escape();
             if qymcad_ui_state::edit_key(&app.draw_ctx()) != before {
                 dirty.push(c.code.to_string());

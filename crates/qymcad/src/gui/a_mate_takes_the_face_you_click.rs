@@ -85,7 +85,7 @@ mod tests {
         let hit_body = crate::gui::pick::pick_body_at(&app.painting(), viewport(), at).and_then(|mi| app.project.mesh_id(mi));
         assert_eq!(hit_body, Some(body), "setup: there must be a part under the cursor, and there is {hit_body:?}");
         assert!(
-            matches!(app.pick_sketch_plane_at(viewport(), at), Some(SketchPlane::World(_))),
+            matches!(crate::gui::pick::pick_sketch_plane_at(&app.painting(), viewport(), at), Some(SketchPlane::World(_))),
             "GUARD: there is no trap — the datum plane does not intercept this click, so there is nothing to check"
         );
 

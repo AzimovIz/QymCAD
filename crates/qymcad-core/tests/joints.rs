@@ -1571,6 +1571,35 @@ fn a_group_carries_its_parts_along_without_any_connectors() {
     assert!(drift < 1e-6, "the group members drifted apart by {drift:.3} mm: was {apart0:?}, now {apart1:?}");
 }
 
+/// A PART OF A GROUP MOVED BY HAND CARRIES THE GROUP WITH IT. The group reads where its members stand when the
+/// problem is assembled, so a hand that puts one member somewhere else by its placement alone breaks the group
+/// for good: the next solve takes the broken placement as the one to hold. Reported behaviour: the second part
+/// went 18 along X by the arm of its gizmo and the third, grouped with it, stayed.
+#[test]
+fn a_part_of_a_group_moved_by_hand_carries_the_group() {
+    let mut p = Project::default();
+    let c = parts(&mut p, 4);
+    let (a, b, d, e) = (c[0], c[1], c[2], c[3]);
+    p.set_grounded(a, true);
+    set_transform(&mut p, b, tr(60.0, 0.0, 0.0));
+    set_transform(&mut p, d, tr(120.0, 0.0, 0.0));
+    set_transform(&mut p, e, tr(180.0, 0.0, 0.0));
+    p.add_group(&[b, d]);
+    // turned a quarter about Z and moved: the other member turns about the same point and goes the same way
+    let turned = [0.0, -1.0, 0.0, 78.0, 1.0, 0.0, 0.0, 5.0, 0.0, 0.0, 1.0, 0.0];
+    assert!(p.move_component_by_hand(b, turned), "a member of a group nobody grounded could not be moved");
+    p.solve_joints();
+    let at = |p: &Project, c: Id| apply12(&p.world_transform(c), [0.0; 3]);
+    let (bb, dd, ee) = (at(&p, b), at(&p, d), at(&p, e));
+    assert!((bb[0] - 78.0).abs() < 1e-6 && (bb[1] - 5.0).abs() < 1e-6, "the part moved by hand stands at {bb:?}, not at [78, 5, 0]");
+    assert!((dd[0] - 78.0).abs() < 1e-6 && (dd[1] - 65.0).abs() < 1e-6, "the group did not carry its other member: it stands at {dd:?}, [78, 65, 0] was expected");
+    assert!((ee[0] - 180.0).abs() < 1e-6, "a part outside the group moved: it stands at {ee:?}");
+    // a group holding a grounded part does not move by hand
+    p.add_group(&[a, e]);
+    assert!(!p.move_component_by_hand(e, tr(0.0, 0.0, 50.0)), "a part grouped with the grounded one was moved");
+    assert!((at(&p, e)[2]).abs() < 1e-9, "a part grouped with the grounded one was moved");
+}
+
 /// A group grounds nothing.
 ///
 /// Grouped bodies are not fixed: a group relates them only to each other, and one of them still has to be
@@ -1629,6 +1658,30 @@ fn parallel_holds_the_direction_and_nothing_else() {
     // Pulling the body in is not promised: its placement stays as it was set.
     let moved = ((after[0] - before[0]).powi(2) + (after[1] - before[1]).powi(2) + (after[2] - before[2]).powi(2)).sqrt();
     assert!(moved < 1e-6, "the parallel mate pulled the body {moved:.3} mm although it must hold direction only");
+}
+
+/// A TAB FAR FROM THE SLOT COMES TO IT, IT DOES NOT TURN. The tab's plane lies in the mid-plane of the walls, so it
+/// looks the way they do; with the point alone a tab 120 away met the mid-plane by turning about its own origin.
+#[test]
+fn a_tab_far_from_the_slot_comes_to_it_rather_than_turning() {
+    // the measured case: three parts standing at zero with their bodies built 60 apart, the walls on the first two
+    // (both grounded), 20 and 80 along X, the tab on the third at 140
+    let mut p = Project::default();
+    let c = parts(&mut p, 3);
+    p.set_grounded(c[0], true);
+    p.set_grounded(c[1], true);
+    let plane_at = |p: &mut Project, owner: Id, x: f64| {
+        let id = p.add_connector(owner, AnchorRef::BasePlane(qymcad_core::feature::BasePlane::YZ));
+        p.connectors.iter_mut().find(|k| k.id == id).expect("the connector").offset_xyz = [10.0, 5.0, x];
+        id
+    };
+    let (w1, w2, tab) = (plane_at(&mut p, c[0], 20.0), plane_at(&mut p, c[1], 80.0), plane_at(&mut p, c[2], 140.0));
+    p.add_width(&[w1, w2], tab);
+    p.solve_joints();
+    let m = p.world_transform(c[2]);
+    let turned = (1.0 - m[0]).abs() + (1.0 - m[5]).abs() + (1.0 - m[10]).abs();
+    assert!(turned < 1e-6, "the tab turned to meet the mid-plane instead of coming to it: {m:?}");
+    assert!((m[3] + 90.0).abs() < 1e-6, "the tab's plane did not come to 50, halfway between 20 and 80: its part stands at x {}", m[3]);
 }
 
 /// A width constraint puts a body midway between two walls.

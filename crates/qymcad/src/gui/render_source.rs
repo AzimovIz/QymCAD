@@ -47,8 +47,8 @@ pub(crate) fn has(src: &str, what: &str) -> bool {
     // THE TRAILING COMMA GOES TOO, and that is not tidiness. Breaking a call across lines gives it one:
     // `draw_split_preview(pn, painter, rect);` becomes `draw_split_preview(\n pn,\n painter,\n rect,\n);`
     // and without spaces that is `...rect,);` against `...rect);`. Measured with this very check - it went
-    // red on a rewrap that changed nothing. A formatter over the whole tree is a step of the plan, so a
-    // guard that a rewrap can break is a guard that will break on that day, all of them at once.
+    // red on a rewrap that changed nothing. A guard that a rewrap can break breaks on the day the tree is
+    // formatted, all of them at once.
     let flat = |s: &str| dense(s).replace(",)", ")").replace(",]", "]").replace(",}", "}");
     flat(src).contains(&flat(what))
 }

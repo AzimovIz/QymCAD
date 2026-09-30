@@ -1,6 +1,8 @@
 # Mirror a body
 
-Key **M**. Select the body, click the mirror **plane, datum or face** in the viewport, press Enter.
+Key **M**. Select the body, click the mirror **plane, datum plane or face** in the viewport, press **Enter**. The
+**With the original (union)** tick keeps the source half and merges the reflection with it into one body; without it
+only the reflection stays.
 
 ![A plate with a hole and its reflection — one feature, not two parts.](img/part-mirror.png)
 

@@ -8,9 +8,11 @@ any step, change a number, and everything below rebuilds.
 
 ## A part is ONE body
 
-The first material feature creates a body, each next one carries it further: an extrusion adds
-material, a cut removes it, a fillet reshapes it. Intermediate states do not pile up as separate
-bodies — you always see the result of the chain.
+The first feature creates a body, each next one carries it further: an extrusion adds material, a cut
+removes it, a fillet reshapes it. Intermediate states do not pile up as separate bodies — you always see
+the result of the chain. The exception is pieces: [Split body](part/13-split-body) and a cut that goes right through the body leave the
+pieces bodies of one part. The pieces are rows of the **Bodies** list in the part's tree. The right button on a piece, on the canvas or in the
+tree, -> **Make a part**: a name is asked beside the cursor, **Enter** moves the piece into a part of its own.
 
 ## Two kinds of commands
 
@@ -21,15 +23,20 @@ bodies — you always see the result of the chain.
 Plus **primitives** — box, cylinder, sphere, cone, torus, prism: a body without a sketch, from sizes
 alone.
 
-## The command contract
+## How every command works
 
-The same for all of them: pick what it stands on (an outline, edges, a face), set the values in the
-top bar or right at the geometry, watch the **preview**: **Enter** applies, **Esc** cancels. Until
-Enter the document is unchanged.
-
-Every numeric field takes a formula: `40/2`, `len*2`. Names come from the global parameters.
+- **Selection.** A click on the part takes the face, edge or vertex under the cursor; what will be taken
+  is highlighted before the click. A double click takes the whole body. A frame dragged from empty space
+  takes what falls inside it.
+- **What is selected before the command** is taken at once; with nothing selected the tool waits for you
+  to point at what to take.
+- **Modes** are in the top bar, **values** in fields right at the geometry; a field takes a formula:
+  `40/2`, `len*2`.
+- **The preview** shows the result before it is applied. A value the geometry will not accept is refused
+  at the field before **Enter**, with the reason.
+- **Enter** applies, **Esc** cancels. Until **Enter** the document is unchanged.
 
 ## Editing what is built
 
-A double click on a feature in the tree reopens the same command with the same fields. Change and
+A double click on a timeline row reopens the same command with the same fields. Change and
 apply — it rebuilds, and so does everything that depends on it.

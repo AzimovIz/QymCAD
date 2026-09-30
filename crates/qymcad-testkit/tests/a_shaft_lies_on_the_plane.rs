@@ -88,14 +88,14 @@ fn a_tangent_puts_the_shaft_on_the_plane() {
     );
 }
 
-/// A SHAFT STANDING ON ITS END CANNOT BE LAID DOWN BY A TANGENCY — AND THAT DOES NOT TEAR THE
-/// ASSEMBLY APART.
+/// A SHAFT STANDING ON ITS END IS LAID DOWN ON THE PLANE.
 ///
-/// A cylinder whose axis is perpendicular to the plane is never tangent to it: no such position
-/// exists and the solver has nothing to look for. What matters is that the part STAYS WHERE IT IS
-/// instead of drifting into a compromise — if it does not converge, nothing moves.
+/// A cylinder whose axis is perpendicular to the plane is never tangent to it where it stands, and from there the
+/// solver has nothing to follow: the derivative of "axis parallel to the plane" vanishes at a right angle. The
+/// tangency is asked for all the same, so on creation the free part is turned a quarter about a line across the
+/// axis, and the solve then lays it on the face - as a person expects of a shaft stood on a plate.
 #[test]
-fn a_shaft_standing_on_its_end_is_left_alone() {
+fn a_shaft_standing_on_its_end_is_laid_down() {
     let mut p = Project::default();
     p.new_document();
     let (cp, bp) = plate(&mut p);
@@ -106,27 +106,20 @@ fn a_shaft_standing_on_its_end_is_left_alone() {
 
     let f = p.regen_faces.get(&bp).and_then(|fs| fs.iter().filter(|f| f.normal[2] > 0.99).max_by(|a, b| a.area.partial_cmp(&b.area).unwrap()).cloned()).expect("top of the plate");
     let plane = FaceKey { index: 0, centroid: [f.centroid.x, f.centroid.y, f.centroid.z], normal: f.normal, id: f.id };
-    let cyl = p
-        .regen_faces
-        .get(&bs)
-        .expect("faces of the shaft")
-        .iter()
-        .find_map(|f| {
-            let k = FaceKey { index: 0, centroid: [f.centroid.x, f.centroid.y, f.centroid.z], normal: f.normal, id: f.id };
-            p.face_cylinder(bs, &k).map(|_| k)
-        })
-        .expect("cylindrical face");
+    let (cyl, radius) = cyl_face(&p, bs);
 
-    // the shaft STANDS (axis along Z, same as the plane normal) — the degenerate position
+    // the shaft STANDS (axis along Z, the same as the plane normal)
     p.move_component(cs, [20.0, 20.0, 40.0]);
-    let before = apply12(&p.world_transform(cs), [0.0, 0.0, 0.0]);
-    p.add_tangent(cp, AnchorRef::FaceCenter(bp, plane), cs, AnchorRef::FaceCenter(bs, cyl));
+    p.add_tangent(cp, AnchorRef::FaceCenter(bp, plane), cs, AnchorRef::FaceCenter(bs, cyl.clone()));
     p.solve_joints();
-    let after = apply12(&p.world_transform(cs), [0.0, 0.0, 0.0]);
 
-    let moved = ((after[0] - before[0]).powi(2) + (after[1] - before[1]).powi(2) + (after[2] - before[2]).powi(2)).sqrt();
-    assert!(moved < 1e-9, "a tangency that cannot exist dragged the part {moved:.3} mm");
-    assert!(p.mates_conflict, "an unsatisfiable tangency is not flagged as a conflict — the user would think everything is fine");
+    let (o, ax, _) = p.face_cylinder(bs, &cyl).expect("the side of the shaft");
+    let m = p.world_transform(cs);
+    let axis_z = m[8] * ax[0] + m[9] * ax[1] + m[10] * ax[2];
+    let at = apply12(&m, o);
+    assert!(axis_z.abs() < 1e-6, "the shaft was not laid down: its axis still rises {axis_z:.4} out of the plane");
+    assert!((at[2] - plane.centroid[2] - radius).abs() < 1e-3, "the shaft lies with its axis {:.3} above the face, the radius is {radius:.3}", at[2] - plane.centroid[2]);
+    assert!(!p.mates_conflict, "a tangency that was met is flagged as a conflict");
 }
 
 /// A shaft of arbitrary radius and length — the second cylinder for cylinder-to-cylinder tangency.
@@ -338,4 +331,20 @@ fn a_shaft_inside_a_bore_touches_at_the_difference_of_radii() {
     );
     // AND IT DID NOT POP OUT: the sum of the radii would be 13, and the shaft stood inside.
     assert!(between < r_bore, "the shaft popped out of the bore: {between:.3} between the axes at bore radius {r_bore:.3}");
+}
+
+/// A SQUAT CYLINDER IS NOT A SPHERE EITHER. Its side is meshed with no inner vertices, both rims lie on one sphere,
+/// and at radius 10 and length 20 the facets lean only 0.95 off the radial direction of that sphere - enough to
+/// pass for one. Reported behaviour: a cylinder of radius 10 tangent to a block came to rest 14.14 = sqrt(10^2 +
+/// 10^2) off the face, tangency having been counted against a sphere.
+#[test]
+fn a_squat_cylinder_is_not_taken_for_a_sphere() {
+    let mut p = Project::default();
+    p.new_document();
+    let (_, b) = shaft_of(&mut p, "squat shaft", 10.0, 20.0);
+    let r = qymcad_testkit::open_like_the_app(&mut p);
+    assert!(r.errors.is_empty(), "did not build: {:?}", r.errors);
+    let (side, radius) = cyl_face(&p, b);
+    assert!((radius - 10.0).abs() < 0.2, "the side of the shaft reads radius {radius:.3}, not 10");
+    assert!(p.face_sphere(b, &side).is_none(), "the side of a squat shaft was taken for a sphere: {:?}", p.face_sphere(b, &side));
 }

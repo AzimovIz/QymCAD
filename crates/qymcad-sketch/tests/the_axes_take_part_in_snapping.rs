@@ -31,7 +31,7 @@ fn a_sketch_with_a_construction_circle() -> Bench {
     b.project.add_circle_entity(si, 40.0, 0.0, 25.0, qymcad_core::feature::Purpose::Construction);
     b.project.regen_sketch(si);
     b.sketch_ses.editing = Some(sid);
-    b.view = qymcad_ui_state::View2d { center: egui::Vec2::ZERO, scale: 4.0, initialized: true };
+    b.view = qymcad_ui_state::View2d { center: egui::Vec2::ZERO, scale: 4.0, initialized: true, fit: 4.0 };
     b
 }
 
@@ -85,7 +85,7 @@ fn the_cursor_sticks_where_a_construction_line_crosses_the_y_axis() {
     b.project.add_line_entity(si, -30.0, 10.0, 60.0, 55.0, qymcad_core::feature::Purpose::Construction);
     b.project.regen_sketch(si);
     b.sketch_ses.editing = Some(sid);
-    b.view = qymcad_ui_state::View2d { center: egui::Vec2::ZERO, scale: 4.0, initialized: true };
+    b.view = qymcad_ui_state::View2d { center: egui::Vec2::ZERO, scale: 4.0, initialized: true, fit: 4.0 };
 
     // Held CLOSE to the crossing: half a unit away the nearest answer is a different one - where the line
     // meets a grid line - and it is a legitimate snap of the same rank that simply happens to be nearer.

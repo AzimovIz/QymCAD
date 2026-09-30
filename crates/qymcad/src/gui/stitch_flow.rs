@@ -137,7 +137,7 @@ mod tests {
     #[test]
     fn the_tool_shows_what_is_picked() {
         let src = crate::gui::render_source::RENDER;
-        let a = src.find("} else if pn.armed.cmd_kind() == 33 {").expect("the stitch must have a drawing block of its own");
+        let a = src.find("} else if pn.armed.cmd_kind() == 33 || pn.armed.cmd_kind() == 35 {").expect("the stitch must have a drawing block of its own");
         let b = src[a..].find("} else if pn.armed.cmd_kind() == 26 {").map(|i| a + i).unwrap_or(src.len());
         assert!(src[a..b].contains("egui::Mesh::default()"), "the picked sheets must be highlighted with a fill");
     }

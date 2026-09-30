@@ -72,3 +72,20 @@ fn parameter_name_is_matched_as_a_whole_identifier() {
     assert!(!qymcad_core::expr::mentions("HOLE_D", "D"), "D is not the tail of HOLE_D");
     assert!(!qymcad_core::expr::mentions("", "L"));
 }
+
+/// A background rebuild brought back takes the live placement, except a mate value given by an expression: that one
+/// is what the rebuild evaluated, and the live one is the parameter's old value. Reported behaviour: a hinge angle
+/// typed as a parameter stayed at its old turn when the parameter changed.
+#[test]
+fn a_rebuild_keeps_the_mate_value_its_expression_gave() {
+    let mut live = Project::default();
+    live.new_document();
+    let j = live.add_joint(0, 0, qymcad_core::feature::JointKind::Revolute);
+    live.set_feat_dim(j, "angle", "PA".into());
+    live.joints[0].drive = [Some(90.0), Some(3.0), None];
+    let mut rebuilt = live.clone();
+    rebuilt.joints[0].drive = [Some(45.0), Some(7.0), None];
+    rebuilt.take_placement_from(&live);
+    assert!(rebuilt.joints[0].drive[0] == Some(45.0), "the angle given as PA kept the old live value: {:?}", rebuilt.joints[0].drive);
+    assert!(rebuilt.joints[0].drive[1] == Some(3.0), "the offset given by no expression did not take the live value: {:?}", rebuilt.joints[0].drive);
+}

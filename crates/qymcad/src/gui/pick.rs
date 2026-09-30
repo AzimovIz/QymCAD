@@ -6,19 +6,10 @@
 //! noticed them drifting apart.
 
 pub(crate) use qymcad_pick::*;
-pub(crate) use qymcad_ui_state::PickCtx;
+pub(crate) use qymcad_ui_state::{shown_bodies, PickCtx}; // the visible bodies live beside their cache, in ui-state
 use super::*;
 
 impl App {
-    /// A RAY INTO A FACE WITH NO SIDE EFFECTS: (the body, the persistent id of the face, the point of the
-    /// hit in the world).
-    ///
-    /// Besides searching, `pick_face_3d` also CHANGES the selection, the set of faces of a command and the
-    /// highlight — the measuring tool needs none of that and is harmed by it: measure a gap and lose the
-    /// selection of the part. The search is the same, only clean.
-    pub(super) fn pick_face_ray(&self, rect: Rect, screen: Pos2) -> Option<(qymcad_core::model::Id, u32, [f64; 3])> {
-        pick_face_ray(&self.painting(), rect, screen)
-    }
 
 
 
@@ -50,16 +41,10 @@ impl App {
     }
 
 
-    pub(super) fn pick_sketch_plane_at(&self, rect: Rect, screen: Pos2) -> Option<qymcad_core::feature::SketchPlane> {
-        pick_sketch_plane_at(&self.painting(), rect, screen)
-    }
 
 
     /// The DATUM POINT under the cursor -> (its Id, its world position). For a two-point axis (kept
     /// parametric through `TwoPoints`).
-    pub(super) fn pick_datum_point_at(&self, rect: Rect, pos: Pos2) -> Option<(Id, [f64; 3])> {
-        pick_datum_point_at(&self.painting(), rect, pos)
-    }
 
 
 
@@ -176,36 +161,13 @@ impl App {
 
     /// Choose a font of one's own (TTF or OTF) — the bytes go into the cache.
     pub(super) fn pick_font(&mut self) {
-        self.ask_open_file(rfd::AsyncFileDialog::new().add_filter(crate::i18n::tr("pk-font"), &["ttf", "otf", "TTF", "OTF"]), |app, p| match std::fs::read(&p) {
-            Ok(b) => {
-                app.font_cache = Some(b);
-                app.status = crate::i18n::tr1("pk-font-is", "name", &p.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default());
-            }
-            Err(e) => app.status = crate::i18n::tr1("pk-font-error", "error", &e.to_string()),
-        });
+        self.ask_open_file(rfd::AsyncFileDialog::new().add_filter(crate::i18n::tr("pk-font"), &["ttf", "otf", "TTF", "OTF"]), font_answer);
     }
 
 
-    pub(super) fn pick_dxf(&mut self) {
-        self.ask_open_file(rfd::AsyncFileDialog::new().add_filter("DXF", &["dxf"]), |app, p| app.open_dxf(p.to_string_lossy().into_owned()));
-    }
-
-    pub(super) fn pick_stl(&mut self) {
-        self.ask_open_file(rfd::AsyncFileDialog::new().add_filter("STL", &["stl"]), |app, p| crate::gui::open_stl(&mut app.regen, p.to_string_lossy().into_owned()));
-    }
-
-    pub(super) fn pick_step(&mut self) {
-        self.ask_open_file(rfd::AsyncFileDialog::new().add_filter("STEP", &["step", "stp"]), |app, p| crate::gui::open_step(&mut app.regen, p.to_string_lossy().into_owned()));
-    }
-
-    pub(super) fn pick_svg(&mut self) {
-        self.ask_open_file(rfd::AsyncFileDialog::new().add_filter("SVG", &["svg"]), |app, p| {
-            let path = p.to_string_lossy().into_owned();
-            match import_svg(&path) {
-                Ok(sk) => app.arm_sketch_import(sk.curves, &path),
-                Err(e) => app.status = crate::i18n::tr1("pk-svg-error", "error", &e.to_string()),
-            }
-        });
+    /// Bring a file in through the one door (see `import_door`).
+    pub(super) fn pick_import(&mut self, want: qymcad_ui_state::Want) {
+        self.ask_open_file(super::import_door::import_dialog(want), super::import_door::import_answer(want));
     }
 
 
@@ -276,6 +238,7 @@ impl App {
             self.status = crate::i18n::tr("pk-no-round-rim");
             return;
         };
+        if qymcad_part::thread_let_go(&mut self.part_ctx(), body, eid) { return; }
         // The axis is turned ALONG THE CHOSEN FACE: a thread runs where the cylinder itself lies. Computing
         // it over the whole mesh ("where there are more vertices") will not do — with a chamfer at the end
         // the rim ends up at its base, and on a part such as a boss the thread ran INTO THE AIR, towards the
@@ -296,7 +259,7 @@ impl App {
         // the size comes FROM THE GEOMETRY — all that is left is choosing a standard (the nominal is
         // already filled in)
         if self.tools.cmd.edit.is_none() {
-            qymcad_ui_state::set_thread_params(&mut self.tools.cmd, self.params.thread);
+            crate::gui::commands::seed_thread_params(&mut self.part_ctx()); // sized to the cylinder picked
         }
         self.status = crate::i18n::trn(
             "pk-thread-target",
@@ -381,7 +344,7 @@ impl App {
                 let (pc, dc) = scr.at(wc);
                 if point_in_tri(screen, pa, pb, pc) {
                     let depth = tri_depth_at(screen, pa, da, pb, db, pc, dc);
-                    if best.is_none_or(|(bd, _, _)| depth < bd) {
+                    if qymcad_ui_state::nearer_hit(depth, self.project.bodies[mi].sheet, best.map(|(bd, bm, _)| (bd, self.project.bodies[bm].sheet)), self.tools.armed.cmd_kind() == 33 || (self.tools.armed.cmd_kind() == 31 && !self.tools.gsel.faces.is_empty() && self.params.repl_surface.is_none()) || self.tools.armed.cmd_kind() == 34) {
                         best = Some((depth, mi, ti));
                     }
                 }
@@ -404,19 +367,16 @@ impl App {
                     self.chosen.sel = Sel::Mesh(mi);
                 }
             } else {
-                // A face is selected ONLY under a command that asks for one (the shell, the hole); an
-                // ordinary click in a Part selects THE BODY and switches on the move gizmo.
-                let want_face = matches!(self.tools.armed.cmd_kind(), 6 | 7 | 23 | 25 | 26 | 28 | 30 | 31);
+                // A face is selected under a command that asks for one (the shell, the hole) and with nothing in
+                // hand - where a corner or an edge under the cursor goes first; other commands take THE BODY.
+                let want_face = matches!(self.tools.armed.cmd_kind(), 6 | 7 | 23 | 25 | 26 | 28 | 30 | 31 | 36) || !self.tools.armed.commanding();
                 let fi = if want_face { self.project.bodies.get(mi).and_then(|b| b.faces.iter().position(|f| f.triangles.contains(&(ti as u32)))) } else { None };
-                self.chosen.sel = match fi {
-                    Some(fi) => Sel::Face(mi, fi),
-                    None => Sel::Mesh(mi),
-                };
+                let grip = qymcad_pick::edge_or_corner_under(&self.painting(), rect, screen); qymcad_part::take_under_click(&mut self.part_ctx(), mi, fi, grip);
                 // The shell and the draft: multi-selection of faces strictly within ONE body — the ids of
                 // faces are local to a body (OCCT numbers them from zero in each). A click on a face of
                 // ANOTHER body starts the selection afresh on it, otherwise the ids of neighbouring bodies
                 // get confused and the highlight leaks across.
-                if matches!(self.tools.armed.cmd_kind(), 6 | 23 | 25 | 26 | 28 | 30) && fi.is_some() {
+                if matches!(self.tools.armed.cmd_kind(), 6 | 23 | 25 | 26 | 28 | 30 | 36) && fi.is_some() {
                     // command 31 is NOT included here: there a click on ANOTHER body means "here is the
                     // surface" rather than "start the selection afresh" (see below).
                     let clicked_body = self.project.mesh_id(mi);
@@ -426,24 +386,19 @@ impl App {
                         self.tools.gsel.faces_body = clicked_body;
                     }
                 }
-                // The shell: a click on a face ADDS or REMOVES its id from the multi-selection (by the
-                // persistent id)
+                // The shell: a click on a face ADDS or REMOVES its id from the multi-selection (by the persistent id)
                 if self.tools.armed.cmd_kind() == 6 {
-                    if let Some(id) = fi.and_then(|fi| self.project.bodies.get(mi).and_then(|b| b.faces.get(fi))).map(|f| f.id) {
-                        if !self.tools.gsel.faces.remove(&id) {
-                            self.tools.gsel.faces.insert(id);
-                        }
-                    }
+                    let id = fi.and_then(|fi| self.project.bodies.get(mi).and_then(|b| b.faces.get(fi))).map(|f| f.id);
+                    qymcad_part::toggle_face(&mut self.part_ctx(), id, false);
                 }
                 // PUSH FACE: the face is EXACTLY ONE — a click replaces the previous one rather than
                 // accumulating a set. Pushing several faces by one offset means a different result on each
                 // of them (their normals differ), and that cannot be predicted.
                 // THICKEN follows the same logic: the face is EXACTLY ONE, and one plate comes out of it.
-                if self.tools.armed.cmd_kind() == 25 || self.tools.armed.cmd_kind() == 28 {
-                    if let Some(id) = fi.and_then(|fi| self.project.bodies.get(mi).and_then(|b| b.faces.get(fi))).map(|f| f.id) {
-                        self.tools.gsel.faces.clear();
-                        self.tools.gsel.faces.insert(id);
-                    }
+                if matches!(self.tools.armed.cmd_kind(), 7 | 25 | 26 | 28 | 30 | 36) {
+                    let id = fi.and_then(|fi| self.project.bodies.get(mi).and_then(|b| b.faces.get(fi))).map(|f| f.id);
+                    let only_one = matches!(self.tools.armed.cmd_kind(), 7 | 25 | 28);
+                    qymcad_part::toggle_face(&mut self.part_ctx(), id, only_one); qymcad_part::place_hole_at(&mut self.part_ctx(), rect, screen);
                 }
                 // REMOVE FACE: a multi-selection — a feature may consist of several faces (a stepped hole,
                 // a boss with a chamfer). A click adds or removes.
@@ -457,13 +412,13 @@ impl App {
                     let clicked = self.project.mesh_id(mi);
                     let is_sheet = self.project.bodies.get(mi).is_some_and(|b| b.sheet);
                     if is_sheet && self.side.trim.keep.is_none() {
-                        if let (Some(id), Some((_, _, at))) = (clicked, self.pick_face_ray(rect, screen)) {
+                        if let (Some(id), Some((_, _, at))) = (clicked, pick_face_ray(&self.painting(), rect, screen)) {
                             self.side.trim.keep = Some((id, at));
                             self.status = crate::i18n::tr("msg-trim-pick-tool");
                         }
                     } else if let Some(id) = clicked {
                         if self.side.trim.keep.map(|(b, _)| b) == Some(id) {
-                            self.side.trim.keep = None; // a repeated click on the same sheet starts afresh
+                            (self.side.trim.keep, self.chosen.sel) = (None, Sel::None); // a repeated click on the same sheet starts afresh, unlit
                             self.status = crate::i18n::tr("msg-trim");
                         } else {
                             self.side.trim.tool = if self.side.trim.tool == Some(id) { None } else { Some(id) };
@@ -471,23 +426,13 @@ impl App {
                         }
                     }
                 }
-                // STITCH: a click on a SHEET adds it to the set or removes it. Clicking a body is
-                // pointless — surfaces are what get stitched, and that must be said at once rather than
-                // after Enter.
-                if self.tools.armed.cmd_kind() == 33 {
+                // A CLICK ON A WHOLE BODY, for the tools that take one - stitching sheets, recognising a mesh. What
+                // the click MEANS belongs to the workbench; the window only says what was under it.
+                if matches!(self.tools.armed.cmd_kind(), 33 | 35) {
                     let clicked = self.project.mesh_id(mi);
                     let is_sheet = self.project.bodies.get(mi).is_some_and(|b| b.sheet);
-                    match (is_sheet, clicked) {
-                        (true, Some(id)) => {
-                            if let Some(at) = self.params.stitch_parts.iter().position(|x| *x == id) {
-                                self.params.stitch_parts.remove(at);
-                            } else {
-                                self.params.stitch_parts.push(id);
-                            }
-                            self.status = crate::i18n::tr1("msg-stitch-picked", "n", &self.params.stitch_parts.len().to_string());
-                        }
-                        _ => self.status = crate::i18n::tr("msg-stitch-only-sheets"),
-                    }
+                    let is_mesh = clicked.is_some_and(|id| self.project.timeline.iter().any(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::MeshPiece { body, .. } if body == id)));
+                    qymcad_part::pick_body_for_tool(&mut self.part_ctx(), clicked, is_sheet, is_mesh);
                 }
                 if self.tools.armed.cmd_kind() == 31 {
                     let clicked = self.project.mesh_id(mi);
@@ -500,16 +445,7 @@ impl App {
                             self.tools.gsel.faces.clear();
                             self.tools.gsel.faces_body = clicked;
                         }
-                        if !self.tools.gsel.faces.remove(&id) {
-                            self.tools.gsel.faces.insert(id);
-                        }
-                    }
-                }
-                if matches!(self.tools.armed.cmd_kind(), 26 | 30) {
-                    if let Some(id) = fi.and_then(|fi| self.project.bodies.get(mi).and_then(|b| b.faces.get(fi))).map(|f| f.id) {
-                        if !self.tools.gsel.faces.remove(&id) {
-                            self.tools.gsel.faces.insert(id);
-                        }
+                        qymcad_part::toggle_face(&mut self.part_ctx(), Some(id), false);
                     }
                 }
                 // The draft: in the neutral-face mode a click sets the neutral face (by the persistent
@@ -520,18 +456,23 @@ impl App {
                             self.params.draft.neutral = if self.params.draft.neutral == id { 0 } else { id };
                             self.params.draft.pick_neutral = false;
                             self.tools.gsel.faces.remove(&id); // the neutral face cannot also be a drafted one
-                        } else if !self.tools.gsel.faces.remove(&id) {
-                            self.tools.gsel.faces.insert(id);
+                        } else {
+                            qymcad_part::toggle_face(&mut self.part_ctx(), Some(id), false);
                         }
                     }
                 }
             }
-        } else if matches!(self.chosen.sel, Sel::Face(..) | Sel::Mesh(..) | Sel::Component(..)) {
-            // a click into emptiness clears the selection of a face, a body or a component
-            self.chosen.sel = Sel::None;
+        } else {
+            qymcad_part::click_on_nothing(&mut self.part_ctx());
         }
     }
 
 
 
+}
+
+/// WHAT THE ANSWER OF THE FILE CHOOSER DOES FOR A FONT: the bytes are read and become the font of the text tool.
+/// A function and not a closure inside `pick_font`, so that a check gives the chooser's answer to this same door.
+pub(crate) fn font_answer(app: &mut App, path: std::path::PathBuf) {
+    app.status = qymcad_ui_state::choose_font(&mut app.font_cache, &mut app.tool_prefs.font, &path.to_string_lossy());
 }

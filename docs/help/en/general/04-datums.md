@@ -1,27 +1,41 @@
-# Datums: planes, axes, points
+# Datum planes, axes and points
 
-A datum is auxiliary geometry to build from: a plane for a sketch, an axis for a revolve or an array,
-a point as a reference.
+Datum geometry is what you build from when there is no face or edge of your own: a plane for a sketch, an axis for a
+revolve or a pattern, a point for an axis or a dimension.
 
-![A datum plane next to the part: you can sketch on it where there is no face.](img/datum-plane.png)
+![A datum plane beside the part: you can draw on it where there is no face.](img/datum-plane.png)
 
-- **Datum plane** — a sketch does not have to lie on a face of the part. A plane offset from a base
-  plane or from a face gives you a place where no face exists yet.
-- **Datum axis** — an axis of revolution, of a circular array, of symmetry.
-- **Datum point** — a reference for dimensions, the centre of an array, an anchor for a hole.
+## Datum plane — key D
 
-## Datums are parametric
+Press **Datum plane**, click a base plane (XY, XZ, YZ), another datum plane or a face of the part, type the **Offset**
+into the field at the geometry and press **Enter**. The offset may be negative and takes a formula.
 
-A datum is given not by coordinates but by a **definition**: “20 mm off this face”, “an axis through
-these two points”. So it follows the geometry: change the part and the datum rebuilds, and with it
-everything that stood on it.
+## Datum axis
 
-The offset takes a formula, like any numeric field.
+Press **Datum axis** and choose how to set it in the bar above:
 
-## Why bother when there is a face
+- click a **straight edge** — the axis runs along it;
+- click a **cylindrical face** — the axis runs along the axis of the cylinder;
+- **2 points** — click two vertices, the axis passes through them;
+- **By hand** — type the origin (O.x, O.y, O.z) and the direction (Dir.x, Dir.y, Dir.z).
 
-A sketch on a face is tied to that face. If the face disappears — eaten by a fillet, say — the sketch
-is left without support. A datum lives its own life and has no such dependency.
+**Enter** makes the axis.
 
-Second: a datum exists before any body is built. You start from one when there is nothing to build on
-yet.
+## Datum point
+
+Press **Datum point**: in the **Coordinates** mode type X, Y, Z, in the **To a vertex** mode click a vertex of the part.
+**Enter** makes the point.
+
+## A datum follows the geometry
+
+A plane taken from a face, an axis along an edge or a cylinder, a point on a vertex remember what they were taken
+from: the part changes — the datum rebuilds, and everything standing on it with it. A plane taken from a base plane
+and an axis or a point given in numbers do not depend on the part — you start from them when there is nothing yet to
+build on.
+
+## If it did not work
+
+- The datum is red — what it was taken from is gone: a fillet ate the face, an edge went away after an edit. Open the
+  datum with a double-click and pick it again.
+- An axis by two points is not made — the vertices coincide. An axis "By hand" with a zero direction is not made
+  either.

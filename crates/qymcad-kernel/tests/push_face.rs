@@ -37,20 +37,17 @@ fn pushing_a_face_inwards_removes_exactly_that_much_material() {
     assert!(pushed.is_valid(), "the body has to stay valid");
 }
 
-/// A curved face is rejected explicitly rather than handled silently and wrongly.
+/// The side of a cylinder between its flat ends moves as an offset of itself: 2 out makes the radius 12, the volume
+/// pi x 12^2 x 20. A prism along one direction would be no offset of a cylinder, so it is never used for one.
 #[test]
-fn a_curved_face_is_refused_rather_than_silently_wrong() {
+fn the_side_of_a_cylinder_is_offset() {
     let cyl = qymcad_kernel::Shape::cylinder(10.0, 20.0).expect("the cylinder was built");
-    // the side face of a cylinder: the one that has an axis, since `face_axis` answers only for cylindrical
-    // faces
-    let side = (1u32..64).find(|&id| cyl.face_axis(id).is_some());
-    if let Some(side) = side {
-        assert!(
-            cyl.push_face(side, 2.0).is_none(),
-            "moving a curved face is a different operation, a surface offset; doing it in passing would give \
-             a silently wrong result on the first filleted part"
-        );
-    }
+    // the side face of a cylinder: the one that has an axis, since `face_axis` answers only for cylindrical faces
+    let side = (1u32..64).find(|&id| cyl.face_axis(id).is_some()).expect("the side of the cylinder");
+    let pushed = cyl.push_face(side, 2.0).expect("the side of the cylinder pushed out");
+    let want = std::f64::consts::PI * 144.0 * 20.0;
+    assert!((pushed.volume() - want).abs() < 0.5, "the side pushed 2 out: {:.1}, a cylinder of radius 12 is {want:.1}", pushed.volume());
+    assert!(pushed.is_valid(), "the body has to stay valid");
 }
 
 /// The persistent id of the top face: the planar one whose centre has the greatest Z.

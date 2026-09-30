@@ -21,7 +21,19 @@ pub(crate) const PANELS: &str = concat!(
     "\n",
     include_str!("panels_props.rs"),
     "\n",
+    // the properties of an edge and of a corner, which the properties panel opens
+    include_str!("props_pick.rs"),
+    "\n",
+    // the frame drawn in space and its right-button menu
+    include_str!("frame_select.rs"),
+    "\n",
+    // the "make a part" item of a piece, on the canvas and on its row of the tree, and the name it asks
+    include_str!("piece_part.rs"),
+    "\n",
     include_str!("panels_bars.rs"),
+    "\n",
+    // the export submenu the File menu and the tree's component menu both open
+    include_str!("export_menu.rs"),
     "\n",
     include_str!("panels_windows.rs"),
 );
@@ -39,6 +51,8 @@ pub(crate) const WINDOWS: &str = concat!(
     include_str!("report_problem.rs"),
     "\n",
     include_str!("file_ask.rs"),
+    "\n",
+    include_str!("import_scale.rs"),
     "\n",
     include_str!("io_jobs.rs"),
     "\n",
@@ -107,8 +121,9 @@ mod tests {
         // KEYED BY PATH, not by file name. Every workbench crate is a single `lib.rs`, so an exception
         // written as "lib.rs" would have quietly excused the Part, the sketcher and the assembly along with
         // the one file it was meant for.
-        const NOT_A_PANEL: [(&str, &str); 3] = [
+        const NOT_A_PANEL: [(&str, &str); 4] = [
             ("qymcad/src/gui/input.rs", "keyboard handling: it draws nothing, it only takes a frame's context to read keys from"),
+            ("qymcad-part/src/trial.rs", "the trial build of a command: it draws nothing, it only keeps its verdict in a frame's context memory"),
             ("qymcad/src/gui/expr_field.rs", "a widget drawn INTO a panel, not a panel: it is reached through the panels that place it"),
             (
                 "qymcad-shell/src/lib.rs",
@@ -158,7 +173,11 @@ mod tests {
             // functions in the middle of a file, and cutting there hid everything below it: `viewcube.rs`
             // drew from its first day and this check never saw it, because one test-only function stood
             // above the drawing. It became visible only when that function was moved out.
-            let prod = text.split("#[cfg(test)]\nmod ").next().unwrap_or("");
+            //
+            // Whatever its visibility: a test module opened to the checks next door (`pub(crate) mod tests`, so
+            // that another check can reuse its helpers) is still a test module, and reading it as production
+            // reported the door that opens files as an unread panel.
+            let prod = ["#[cfg(test)]\nmod ", "#[cfg(test)]\npub(crate) mod ", "#[cfg(test)]\npub(super) mod "].iter().fold(text.as_str(), |t, cut| t.split(cut).next().unwrap_or(""));
             let draws = prod.contains("ui: &mut egui::Ui") || prod.contains("egui::Window::new") || prod.contains("ctx: &egui::Context");
             if !draws {
                 continue;
@@ -282,6 +301,8 @@ mod tests {
             "PartCtx::workbench",  // read
             "PropsCtx::workbench", // read
             "StatusCtx::cursor",   // read: where the pointer is, printed as two numbers and changed by nobody
+            "TextCtx::tool_text_height", // read: the height the preview of the text tool is baked at
+            "TextCtx::writes_note", // read: a note asks its letters of the interface's font
             "TreeCtx::workbench",  // read
             "WinCtx::file_ask_open", // read: a window does not open a second file dialogue over the first
             "WinCtx::workbench",     // read: the command search puts its own commands first

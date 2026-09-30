@@ -31,6 +31,7 @@ fn main() {
         .include(&inc)
         .file("src/occt_bridge.cpp")
         .file("src/occt_helical.cpp")
+        .file("src/occt_faces.cpp")
         .file("src/occt_io.cpp")
         .warnings(false);
     if msvc {
@@ -44,7 +45,9 @@ fn main() {
     println!("cargo:rustc-link-search=native={libdir}");
     // OCCT 7.8 and later use consolidated modules.
     for lib in [
-        "TKDESTEP", "TKXSBase", "TKDE", "TKMesh", "TKShHealing", "TKFillet", "TKOffset", "TKBool", "TKPrim", "TKBO",
+        // TKXCAF, TKLCAF, TKCAF, TKCDF: the document machinery that reads a STEP with its tree, names and colours
+        "TKXCAF", "TKLCAF", "TKCAF", "TKCDF",
+        "TKDESTEP", "TKDEIGES", "TKXSBase", "TKDE", "TKMesh", "TKShHealing", "TKFillet", "TKOffset", "TKBool", "TKPrim", "TKBO",
         // TKFeat holds `BRepFeat_SplitShape`, which splits faces without cutting the body
         "TKFeat", "TKGeomAlgo", "TKTopAlgo", "TKBRep", "TKGeomBase", "TKG3d", "TKG2d", "TKMath", "TKernel",
     ] {
@@ -56,7 +59,7 @@ fn main() {
     }
     // `src/cxx_runtime.rs` is on this list because it is `include!`d rather than imported: cargo does not
     // see through the macro, and without the line an edit there would not rebuild the script.
-    for f in ["src/occt_bridge.cpp", "src/occt_helical.cpp", "src/occt_io.cpp", "src/occt_common.hpp", "src/cxx_runtime.rs"] {
+    for f in ["src/occt_bridge.cpp", "src/occt_helical.cpp", "src/occt_faces.cpp", "src/occt_io.cpp", "src/occt_common.hpp", "src/cxx_runtime.rs"] {
         println!("cargo:rerun-if-changed={f}");
     }
     println!("cargo:rerun-if-env-changed=OCCT_INCLUDE_DIR");

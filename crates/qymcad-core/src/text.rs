@@ -14,11 +14,24 @@ struct Outline {
 }
 
 impl Outline {
+    /// Close off the loop being collected.
+    ///
+    /// A POINT REPEATED AT THE SEAM IS A SEGMENT OF ZERO LENGTH, and OCCT will not build a wire out of one:
+    /// the extrusion of the contour comes back empty and the rebuild says "Extrude failed (check the
+    /// contour)". The two font formats differ exactly here - a glyf outline (TTF) closes by RETURNING to its
+    /// starting point, a CFF one (OTF) does not.
+    ///
+    /// Reported behaviour: "only the built-in font extrudes, I tried four fonts of my own and none works".
+    /// Measured: the system default there was an .otf and every font chosen by hand was a .ttf; each TTF loop
+    /// carried exactly one such pair and not one of them extruded.
     fn flush(&mut self) {
-        if self.cur.len() >= 3 {
-            self.contours.push(std::mem::take(&mut self.cur));
-        } else {
-            self.cur.clear();
+        let mut c = std::mem::take(&mut self.cur);
+        c.dedup_by(|a, b| a.0 == b.0 && a.1 == b.1);
+        while c.len() >= 2 && c[0] == c[c.len() - 1] {
+            c.pop();
+        }
+        if c.len() >= 3 {
+            self.contours.push(c);
         }
     }
 }
@@ -62,11 +75,16 @@ impl ttf_parser::OutlineBuilder for Outline {
     }
 }
 
-/// The contours of the string `text` at a height of `height` mm, with its lower-left corner at (ox, oy).
+/// The contours of the string `text` at a height of `height` mm, with its lower-left corner at (ox, oy),
+/// drawn with face number `index` of the file.
 ///
 /// Every glyph yields its own contours: an outer loop plus the inner loops of letters such as O and A.
-pub fn text_outline_contours(font: &[u8], text: &str, height: f64, ox: f64, oy: f64) -> Vec<Contour> {
-    let Ok(face) = ttf_parser::Face::parse(font, 0) else {
+///
+/// THE FACE INDEX IS NOT ALWAYS ZERO. A `.ttc` collection holds several faces in one file - a family with its
+/// weights, or several families outright - and zero would silently draw the first of them whatever the person
+/// chose from the list.
+pub fn text_outline_contours(font: &[u8], index: u32, text: &str, height: f64, ox: f64, oy: f64) -> Vec<Contour> {
+    let Ok(face) = ttf_parser::Face::parse(font, index) else {
         return Vec::new();
     };
     let upem = face.units_per_em() as f64;
@@ -95,4 +113,43 @@ pub fn text_outline_contours(font: &[u8], text: &str, height: f64, ox: f64, oy: 
         pen += face.glyph_hor_advance(gid).unwrap_or(0) as f64;
     }
     out
+}
+
+/// What a face inside a font file calls itself: the family and the style, as "Liberation Sans" and "Bold".
+///
+/// The typographic names (ids 16 and 17) are preferred over the plain ones (1 and 2): for a face like
+/// "Semibold Italic" the plain family carries the style with it and would name a family nobody has, so the
+/// list of installed fonts would show one family per weight.
+pub fn face_name(font: &[u8], index: u32) -> Option<(String, String)> {
+    let face = ttf_parser::Face::parse(font, index).ok()?;
+    let pick = |want: u16| {
+        face.names()
+            .into_iter()
+            .find(|n| n.name_id == want && n.is_unicode())
+            .and_then(|n| n.to_string())
+            .filter(|s| !s.trim().is_empty())
+    };
+    let family = pick(ttf_parser::name_id::TYPOGRAPHIC_FAMILY).or_else(|| pick(ttf_parser::name_id::FAMILY))?;
+    let style = pick(ttf_parser::name_id::TYPOGRAPHIC_SUBFAMILY).or_else(|| pick(ttf_parser::name_id::SUBFAMILY)).unwrap_or_else(|| "Regular".into());
+    Some((family, style))
+}
+
+/// The family name alone - what is shown in the bar and recorded with a label.
+pub fn family_name(font: &[u8], index: u32) -> Option<String> {
+    face_name(font, index).map(|(f, _)| f)
+}
+
+/// How many faces a file holds: a `.ttc` collection carries several, an ordinary font one.
+pub fn faces_in(font: &[u8]) -> u32 {
+    ttf_parser::fonts_in_collection(font).unwrap_or(1)
+}
+
+/// Can this face draw every character of `text` - that is, is there anything to write with.
+///
+/// An icon font has thousands of glyphs and not one letter; chosen by mistake it writes nothing at all, and
+/// the sketch comes out empty with no complaint from anybody. Whitespace is not asked about: it advances the
+/// pen and needs no glyph.
+pub fn can_write(font: &[u8], index: u32, text: &str) -> bool {
+    let Ok(face) = ttf_parser::Face::parse(font, index) else { return false };
+    text.chars().filter(|c| !c.is_whitespace()).all(|c| face.glyph_index(c).is_some())
 }

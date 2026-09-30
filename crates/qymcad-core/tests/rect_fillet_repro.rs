@@ -70,8 +70,8 @@ fn rect_dims_then_fillet_stays_solvable() {
     // edge dimensions: width 40 on the bottom, height 30 on the right edge, plus the corner anchored at the
     // origin
     p.sketches[si].constraints.push(Constraint::Fixed { p: c00 });
-    p.sketches[si].constraints.push(Constraint::Distance { a: c00, b: c40, d: 40.0, off: 0.0, expr: String::new(), driven: false, axis: 0 });
-    p.sketches[si].constraints.push(Constraint::Distance { a: c40, b: c43, d: 30.0, off: 0.0, expr: String::new(), driven: false, axis: 0 });
+    p.sketches[si].constraints.push(Constraint::Distance { a: c00, b: c40, d: 40.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
+    p.sketches[si].constraints.push(Constraint::Distance { a: c40, b: c43, d: 30.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
     p.solve_sketch(si);
     assert!(p.sketch_conflicts(si).is_empty(), "there are no conflicts before filleting");
 
@@ -136,8 +136,8 @@ fn filleted_rect_stays_associative_on_edits() {
     let corner = |p: &Project, x: f64, y: f64| p.sketches[si].points.iter().find(|q| (q.x - x).abs() < 1e-6 && (q.y - y).abs() < 1e-6).map(|q| q.id).unwrap();
     let (c00, c40, c43) = (corner(&p, 0.0, 0.0), corner(&p, 40.0, 0.0), corner(&p, 40.0, 30.0));
     p.sketches[si].constraints.push(Constraint::Fixed { p: c00 });
-    p.sketches[si].constraints.push(Constraint::Distance { a: c00, b: c40, d: 40.0, off: 0.0, expr: String::new(), driven: false, axis: 0 });
-    p.sketches[si].constraints.push(Constraint::Distance { a: c40, b: c43, d: 30.0, off: 0.0, expr: String::new(), driven: false, axis: 0 });
+    p.sketches[si].constraints.push(Constraint::Distance { a: c00, b: c40, d: 40.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
+    p.sketches[si].constraints.push(Constraint::Distance { a: c40, b: c43, d: 30.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
     p.solve_sketch(si);
     p.fillet_all_corners(si, 5.0);
     p.solve_sketch(si);
@@ -167,4 +167,44 @@ fn filleted_rect_stays_associative_on_edits() {
     eprintln!("after the radius change to 8: residual={r2} extents={mx2:.2}×{my2:.2}, expecting the same 50×30");
     assert!(r2 < 1.0 && (mx2 - 50.0).abs() < 0.1 && (my2 - 30.0).abs() < 0.1, "changing the radius does not move the extents: {mx2:.2}×{my2:.2}");
     assert!(one_closed(&p, si), "the contour is intact after the radius change");
+}
+
+/// ROUNDING EVERY CORNER LEAVES NO CORNER BEHIND: a rectangle of 4 corners rounded is 4 lines and 4 arcs on 12 points -
+/// 8 where the arcs meet the sides and 4 centres. A corner point nothing draws any more is a point the sketch shows and
+/// the solver counts for nothing.
+///
+/// Reported behaviour: after "fillet all" the rectangle held 14 or 15 points.
+#[test]
+fn rounding_every_corner_leaves_no_corner_point_behind() {
+    let mut fails = Vec::new();
+    for r in [0.01, 5.0, 14.9] {
+        let mut p = Project::default();
+        let _part = p.new_document();
+        let sid = p.add_sketch("rect", vec![], None);
+        p.add_sketch_node(sid, "Sketch");
+        let si = p.sketch_index(sid).unwrap();
+        p.add_rect_entity(si, 0.0, 0.0, 40.0, 30.0, qymcad_core::feature::Purpose::Real);
+        let done = p.fillet_all_corners(si, r);
+        let s = &p.sketches[si];
+        let used: std::collections::HashSet<_> = s.entities.iter().flat_map(qymcad_core::model::entity_points).chain(s.system_ids()).collect();
+        let loose: Vec<_> = s.points.iter().filter(|q| !used.contains(&q.id)).map(|q| (q.id, q.x, q.y)).collect();
+        if done != 4 || !loose.is_empty() {
+            fails.push(format!("R{r}: {done} corners rounded, points drawn by nothing: {loose:?}"));
+        }
+    }
+    assert!(fails.is_empty(), "{}", fails.join("\n"));
+}
+
+/// "FILLET ALL" KNOWS HOW FAR IT GOES: on a rectangle 40 x 30 the two arcs of the short side meet at 15, half of it,
+/// where one corner alone would take 30; past that the tool refuses in words before it is applied.
+#[test]
+fn all_corners_of_a_rectangle_take_half_the_short_side() {
+    let mut p = Project::default();
+    let _part = p.new_document();
+    let sid = p.add_sketch("rect", vec![], None);
+    p.add_sketch_node(sid, "Sketch");
+    let si = p.sketch_index(sid).unwrap();
+    p.add_rect_entity(si, 0.0, 0.0, 40.0, 30.0, qymcad_core::feature::Purpose::Real);
+    let lim = p.all_corners_limit(si, None).expect("a rectangle has corners to round");
+    assert!((lim - 15.0).abs() < 1e-9, "the limit of all the corners is {lim}, not 15");
 }

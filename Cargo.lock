@@ -3158,6 +3158,7 @@ dependencies = [
  "fluent-syntax",
  "image",
  "include_dir",
+ "naga",
  "pollster",
  "qymcad-assembly",
  "qymcad-core",
@@ -3165,6 +3166,7 @@ dependencies = [
  "qymcad-i18n",
  "qymcad-io",
  "qymcad-kernel",
+ "qymcad-meshfit",
  "qymcad-part",
  "qymcad-paths",
  "qymcad-pick",
@@ -3181,6 +3183,13 @@ dependencies = [
  "time",
  "unic-langid",
  "winresource",
+]
+
+[[package]]
+name = "qymcad-acceptance"
+version = "0.1.0"
+dependencies = [
+ "qymcad",
 ]
 
 [[package]]
@@ -3238,7 +3247,7 @@ dependencies = [
  "dxf",
  "qymcad-core",
  "ron",
- "stl_io",
+ "serde_json",
  "usvg",
  "zip",
 ]
@@ -3249,6 +3258,17 @@ version = "0.1.0"
 dependencies = [
  "cc",
  "qymcad-core",
+ "qymcad-meshfit",
+]
+
+[[package]]
+name = "qymcad-meshfit"
+version = "0.1.0"
+dependencies = [
+ "nalgebra 0.35.0",
+ "qymcad-core",
+ "qymcad-io",
+ "qymcad-kernel",
 ]
 
 [[package]]
@@ -3259,6 +3279,8 @@ dependencies = [
  "egui-phosphor 0.11.0",
  "qymcad-core",
  "qymcad-i18n",
+ "qymcad-kernel",
+ "qymcad-meshfit",
  "qymcad-pick",
  "qymcad-render",
  "qymcad-scheme",
@@ -3343,6 +3365,7 @@ dependencies = [
 name = "qymcad-ui-state"
 version = "0.1.0"
 dependencies = [
+ "ab_glyph",
  "bytemuck",
  "egui 0.35.0",
  "egui-phosphor 0.11.0",
@@ -3968,12 +3991,6 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
-
-[[package]]
-name = "stl_io"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "567641995c51a3b8befddb13e1826187bcf7eb7ca8d13746bfd1cc5a22e89fa8"
 
 [[package]]
 name = "strict-num"

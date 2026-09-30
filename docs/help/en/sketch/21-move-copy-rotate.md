@@ -6,7 +6,7 @@ Three buttons of one kind: select the entities, then say where.
 
 - **Move** — click the base point, click the target. The selection travels there.
 - **Copy** — the same, but the original stays.
-- **Rotate** — click the centre, then type the angle.
+- **Rotate** — click the centre, then type the angle in the field at the geometry.
 
 ## This edits the sketch, it does not build
 

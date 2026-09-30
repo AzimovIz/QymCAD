@@ -622,8 +622,8 @@ mod tests {
             };
             let (bl, br, tl) = (corner(&app, (true, true)), corner(&app, (false, true)), corner(&app, (true, false)));
             app.project.sketches[si].constraints.push(qymcad_core::model::Constraint::Fixed { p: bl });
-            app.project.sketches[si].constraints.push(qymcad_core::model::Constraint::Distance { a: bl, b: br, d: 50.0, off: 0.0, expr: String::new(), driven: false, axis: 1 });
-            app.project.sketches[si].constraints.push(qymcad_core::model::Constraint::Distance { a: bl, b: tl, d: 36.0, off: 0.0, expr: String::new(), driven: false, axis: 2 });
+            app.project.sketches[si].constraints.push(qymcad_core::model::Constraint::Distance { a: bl, b: br, d: 50.0, off: 0.0, expr: String::new(), driven: false, axis: 1, at: None });
+            app.project.sketches[si].constraints.push(qymcad_core::model::Constraint::Distance { a: bl, b: tl, d: 36.0, off: 0.0, expr: String::new(), driven: false, axis: 2, at: None });
             sketch_frame(&mut app, si, "sketch-dimensions", 1);
         }
 
@@ -1026,7 +1026,7 @@ mod tests {
             let post = app.project.components.len();
             part_with_plate(&mut app, "post", 14.0, 14.0, 30.0, [10.0, 13.0, 8.0]);
             let pid = app.project.components.get(post).map(|c| c.id).expect("the post component");
-            app.project.add_comp_pattern(pid, qymcad_core::model::CompPatternKind::Linear { dir: [1.0, 0.0, 0.0], step: 22.0, count: 4 });
+            app.project.add_comp_pattern(pid, qymcad_core::model::CompPatternKind::linear([1.0, 0.0, 0.0], 22.0, 4));
             qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
             app.viewing.mode_3d = true;
             still(&mut app, "assembly-array");
@@ -1414,9 +1414,10 @@ mod tests {
         // tool makes: `bake_text_glyphs` takes the outlines from the interface font.
         {
             let (mut app, si) = empty_sketch();
-            let glyphs = qymcad_ui_state::bake_text_glyphs(&mut app.font_cache, -34.0, -8.0, 22.0, "QYM CAD");
+            let font = app.font_cache.for_tool(&mut app.tool_prefs.font).map(|(f, _)| f).unwrap_or_default();
+            let glyphs = qymcad_ui_state::bake_text_glyphs(&mut app.font_cache, &font, -34.0, -8.0, 22.0, "QYM CAD");
             assert!(!glyphs.is_empty(), "the glyphs did not bake - the shot would be empty");
-            app.project.add_sketch_text(si, qymcad_core::model::TextSpec { at: qymcad_core::geom::Point2::new(-34.0, -8.0), height: 22.0, angle: 0.0, text: "QYM CAD".to_string(), glyphs }, qymcad_core::feature::Purpose::Real);
+            app.project.add_sketch_text(si, qymcad_core::model::TextSpec { at: qymcad_core::geom::Point2::new(-34.0, -8.0), height: 22.0, angle: 0.0, text: "QYM CAD".to_string(), glyphs, font }, qymcad_core::feature::Purpose::Real);
             app.project.regen_sketch(si);
             sketch_still(&mut app, si, "sketch-text");
         }

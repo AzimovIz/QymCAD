@@ -281,8 +281,7 @@ mod tests {
             off: 0.0,
             expr: String::new(),
             driven: false,
-            axis: 0,
-        });
+            axis: 0, at: None });
         assert!(app.project.add_named_dim("len".into(), sid, vec![pts[0], pts[1]]));
 
         let mut t = Table::new();
@@ -332,8 +331,7 @@ mod tests {
             off: 0.0,
             expr: String::new(),
             driven: false,
-            axis: 0,
-        });
+            axis: 0, at: None });
         assert!(app.project.add_named_dim("len".into(), sid, pts));
         // We leave the part so that the jump is visible: it must also ENTER it.
         app.exit_context();
@@ -380,7 +378,7 @@ mod tests {
             Some(qymcad_core::model::EntityKind::Circle { center, .. }) => center,
             _ => panic!("the circle was not created"),
         };
-        app.project.sketches[si].constraints.push(Constraint::Diameter { c, d: 90.0, off: 0.0, expr: String::new(), driven: false, diam: true });
+        app.project.sketches[si].constraints.push(Constraint::Diameter { c, d: 90.0, off: 0.0, expr: String::new(), driven: false, diam: true, at: None });
         app.project.regen_sketch(si);
         let prof = app.project.contour_id(0).unwrap_or(0);
         app.project.add_extrude_on(sid, prof, 10.0, qymcad_core::feature::Reach::Forward, 0.0);

@@ -118,7 +118,7 @@ fn entity_circle_regen_keeps_contour_id() {
     assert!((r0 - 5.0).abs() < 0.2, "the starting radius is ~5, got {r0}");
 
     // a Ø24 dimension means r = 12, and the solver rebuilds the contour
-    p.sketches[si].constraints.push(Constraint::Diameter { c: center, d: 24.0, off: 0.0, expr: String::new(), driven: false, diam: true });
+    p.sketches[si].constraints.push(Constraint::Diameter { c: center, d: 24.0, off: 0.0, expr: String::new(), driven: false, diam: true, at: None });
     p.solve_sketch(si);
 
     let r1 = p.contours[p.contour_index(cid).unwrap()].as_circle().unwrap().1;
@@ -139,6 +139,21 @@ fn project_roundtrips_through_ron() {
     let ron = to_ron(&p).expect("serialize");
     let back = from_ron(&ron).expect("deserialize");
     assert_eq!(back.contours.len(), 1);
+}
+
+/// A NODE THAT DID NOT BUILD IS STILL RED AFTER SAVE AND OPEN, with its reason and its warning: opening does not
+/// rebuild, so a reason not written to the file was simply gone.
+///
+/// Reported behaviour: a cut that removed nothing was red with its reason; saved and opened, the node stood green.
+#[test]
+fn a_node_keeps_its_reason_through_save_and_open() {
+    use qymcad_core::errors::CoreError;
+    let mut p = Project::default();
+    p.regen_errors.insert(7, CoreError::CutRemovedNothing);
+    p.regen_warnings.insert(9, CoreError::EmptyResult);
+    let back = from_ron(&to_ron(&p).expect("serialize")).expect("deserialize");
+    assert_eq!(back.regen_errors.get(&7), Some(&CoreError::CutRemovedNothing), "the red node lost its reason");
+    assert_eq!(back.regen_warnings.get(&9), Some(&CoreError::EmptyResult), "the yellow node lost its warning");
 }
 
 
@@ -428,12 +443,12 @@ fn step_import_single_solid_makes_one_part() {
     // A single STEP solid becomes one part with an imported base body that can be built upon.
     use qymcad_core::feature::ComponentKind;
     use qymcad_core::geom::Mesh;
-    use qymcad_core::model::Project;
+    use qymcad_core::model::{ImportNode, Project};
     let mut p = Project::default();
     let root = p.ensure_root();
     let src = p.add_source("cube.step", vec![1, 2, 3]);
     let body = p.add_mesh(Mesh::default());
-    let created = p.import_bodies_as_parts(vec![(body, "Cube".into(), src, 0)], "cube").expect("created");
+    let created = p.import_tree_as_parts(vec![ImportNode { name: "Cube".into(), body: Some(body), ..Default::default() }], src, "cube").expect("created");
 
     assert_eq!(p.component_kind(created), Some(ComponentKind::Part), "a single solid becomes a part");
     assert_eq!(p.components.iter().find(|c| c.id == created).unwrap().parent, Some(root), "in the root");
@@ -447,15 +462,15 @@ fn step_import_multi_solid_makes_subassembly() {
     // Several solids become a sub-assembly holding one part per solid.
     use qymcad_core::feature::ComponentKind;
     use qymcad_core::geom::Mesh;
-    use qymcad_core::model::Project;
+    use qymcad_core::model::{ImportNode, Project};
     let mut p = Project::default();
     let root = p.ensure_root();
     let src = p.add_source("asm.step", vec![9]);
     let b0 = p.add_mesh(Mesh::default());
     let b1 = p.add_mesh(Mesh::default());
     let b2 = p.add_mesh(Mesh::default());
-    let solids = vec![(b0, "A".into(), src, 0), (b1, "B".into(), src, 1), (b2, "C".into(), src, 2)];
-    let asm = p.import_bodies_as_parts(solids, "asm").expect("created");
+    let solids = [(b0, "A", 0), (b1, "B", 1), (b2, "C", 2)].map(|(body, name, solid)| ImportNode { name: name.into(), body: Some(body), solid, ..Default::default() }).to_vec();
+    let asm = p.import_tree_as_parts(solids, src, "asm").expect("created");
 
     assert_eq!(p.component_kind(asm), Some(ComponentKind::Assembly), "several solids become a sub-assembly");
     assert_eq!(p.components.iter().find(|c| c.id == asm).unwrap().parent, Some(root));

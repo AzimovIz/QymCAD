@@ -36,7 +36,9 @@ impl App {
 /// promise to be careful.
 pub(crate) fn start_screen_visible(win: &qymcad_ui_state::Windows, project: &qymcad_core::model::Project, project_path: &Option<String>) -> bool {
     // ASKED FOR MEANS SHOWN. The rule below is about a screen that raises ITSELF.
-    win.start_asked || (win.is(WinKind::Start) && project.timeline.is_empty() && project_path.is_none())
+    // A BODY IS SOMETHING TOO: an imported mesh comes in with no node on the timeline, and the screen stayed over
+    // it and took the wheel.
+    win.start_asked || (win.is(WinKind::Start) && project.timeline.is_empty() && project.bodies.is_empty() && project_path.is_none())
 }
 
 /// THE START SCREEN: the recent files on the left, where to begin on the right.

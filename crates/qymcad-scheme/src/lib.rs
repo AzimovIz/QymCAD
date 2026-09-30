@@ -39,11 +39,10 @@
 //! `240,200,90` - one and the same amber, typed four times from memory. One role, different numbers.
 //! Those are brought under one name: the disagreement is exactly the disease.
 //!
-//! Where the difference within one role was VISIBLE, the names stayed separate at first: merging them
-//! would have changed the look, and the look was transcribed as it is. Such places went into the plan as
-//! questions - and so the measuring line, amber in 3D and green in the sketch, became one green line by
-//! decision. The cut line, which had shared its name by an accidental match of colour, got one of its own:
-//! they are different tools.
+//! Where the difference within one role was VISIBLE, merging the names would change the look, so it was
+//! decided case by case: the measuring line, amber in 3D and green in the sketch, is one green line. The cut
+//! line, which had shared its name by an accidental match of colour, has one of its own: they are different
+//! tools.
 use egui::Color32;
 use serde::{Deserialize, Serialize};
 

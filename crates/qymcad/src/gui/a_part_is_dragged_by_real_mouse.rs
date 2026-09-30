@@ -31,6 +31,25 @@ mod tests {
         egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed: down, modifiers: Default::default() }
     }
 
+    /// HOVER, PRESS `button`, LEAD `steps` x 14 px TO THE RIGHT, RELEASE - with Shift held through it all when `shift`,
+    /// exactly as a hand does, one frame for each.
+    fn lead(app: &mut App, ctx: &egui::Context, at: egui::Pos2, button: egui::PointerButton, shift: bool, steps: usize) {
+        lead_with(app, ctx, at, button, egui::Modifiers { shift, ..Default::default() }, steps);
+    }
+
+    fn lead_with(app: &mut App, ctx: &egui::Context, at: egui::Pos2, button: egui::PointerButton, modifiers: egui::Modifiers, steps: usize) {
+        let run = |app: &mut App, events: Vec<egui::Event>| {
+            let _ = ctx.run_ui(egui::RawInput { modifiers, ..frame(events) }, |c| app.viewport(c));
+        };
+        run(app, vec![egui::Event::PointerMoved(at)]);
+        run(app, vec![egui::Event::PointerButton { pos: at, button, pressed: true, modifiers }]);
+        for k in 1..=steps {
+            run(app, vec![egui::Event::PointerMoved(at + egui::vec2(14.0 * k as f32, 0.0))]);
+        }
+        let end = at + egui::vec2(14.0 * steps as f32, 0.0);
+        run(app, vec![egui::Event::PointerButton { pos: end, button, pressed: false, modifiers }]);
+    }
+
     fn origin_of(app: &App, comp: Id) -> [f64; 3] {
         qymcad_core::feature::apply12(&app.project.world_transform(comp), [0.0, 0.0, 0.0])
     }
@@ -78,7 +97,7 @@ mod tests {
         (mine[1], comps[1])
     }
 
-    /// THE BUTTON WAS HELD ON THE PART AND LED — AND THE PART MOVED.
+    /// SHIFT AND THE LEFT BUTTON WERE HELD ON THE PART AND LED — AND THE PART MOVED.
     #[test]
     fn holding_the_button_on_a_part_and_moving_actually_moves_it() {
         let mut app = App::default();
@@ -91,19 +110,67 @@ mod tests {
         let at = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: viewport(), basis: &basis }.at(aim(&app, body)).0;
         let was = origin_of(&app, comp);
 
-        // HOVER, PRESS, LEAD OVER SEVERAL FRAMES, RELEASE — exactly like a hand.
-        let _ = ctx.run_ui(frame(vec![egui::Event::PointerMoved(at)]), |c| app.viewport(c));
-        let _ = ctx.run_ui(frame(vec![press(at, true)]), |c| app.viewport(c));
-        for k in 1..=6 {
-            let p = at + egui::vec2(14.0 * k as f32, 0.0);
-            let _ = ctx.run_ui(frame(vec![egui::Event::PointerMoved(p)]), |c| app.viewport(c));
-        }
-        let _ = ctx.run_ui(frame(vec![press(at + egui::vec2(84.0, 0.0), false)]), |c| app.viewport(c));
+        // SHIFT AND THE LEFT BUTTON ON THE PART - the one gesture that takes a part without its gizmo
+        lead(&mut app, &ctx, at, egui::PointerButton::Primary, true, 6);
 
         let now = origin_of(&app, comp);
         let moved = ((now[0] - was[0]).powi(2) + (now[1] - was[1]).powi(2) + (now[2] - was[2]).powi(2)).sqrt();
         assert!(moved > 1.0, "the button was held on the part and led — and it moved by {moved:.3} mm ({was:?} -> {now:?})");
         assert!(!qymcad_assembly::joint_drag_active(&app.side.joint, &app.dragged.part_pull), "the button was released — the hand must let go");
+    }
+
+    /// WHILE A TOOL PICKS FACES, THE HAND DOES NOT MOVE PARTS. Width, tangent, group, grounding, relation and
+    /// connector tools all read clicks on parts; a drag across one turns the view instead, as it does while the
+    /// anchors of a mate are picked. Reported behaviour: with the width tool on, a drag meant to turn the view to the
+    /// far wall carried the first part off by 25 and 30.
+    #[test]
+    fn a_tool_that_picks_faces_leaves_the_parts_where_they_stand() {
+        for tool in 0..6 {
+            let mut app = App::default();
+            let (body, comp) = a_slider_pair(&mut app);
+            match tool {
+                0 => app.start_width_pick(),
+                1 => app.start_tangent_pick(),
+                2 => app.start_group_pick(),
+                3 => app.start_ground_pick(),
+                4 => app.start_relation_pick(),
+                _ => app.start_conn_pick(),
+            }
+            let ctx = egui::Context::default();
+            super::super::install_fonts(&ctx);
+            let _ = ctx.run_ui(frame(Vec::new()), |c| app.viewport(c));
+            let basis = app.viewing.cam.basis();
+            let at = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: viewport(), basis: &basis }.at(aim(&app, body)).0;
+            let was = origin_of(&app, comp);
+            lead(&mut app, &ctx, at, egui::PointerButton::Primary, true, 6);
+            let now = origin_of(&app, comp);
+            assert!(now == was, "tool {tool} picks faces, a drag went across the part and carried it from {was:?} to {now:?}");
+        }
+    }
+
+    /// A FRAME DRAWN FROM EMPTY SPACE TAKES THE PARTS IT ENCLOSES and turns nothing. Reported behaviour: a frame
+    /// drawn round two parts took nothing - the drag turned the view.
+    #[test]
+    fn a_frame_from_empty_space_takes_the_parts_it_encloses() {
+        let mut app = App::default();
+        let _ = a_slider_pair(&mut app);
+        app.viewing.cam.scale = 3.0; // both parts well inside the canvas
+        let ctx = egui::Context::default();
+        super::super::install_fonts(&ctx);
+        let _ = ctx.run_ui(frame(Vec::new()), |c| app.viewport(c));
+        let (yaw, pitch) = (app.viewing.cam.yaw, app.viewing.cam.pitch);
+        let canvas = app.viewing.view_rect;
+        let (from, to) = (canvas.min + egui::vec2(6.0, 6.0), canvas.max - egui::vec2(6.0, 6.0));
+        let _ = ctx.run_ui(frame(vec![egui::Event::PointerMoved(from)]), |c| app.viewport(c));
+        let _ = ctx.run_ui(frame(vec![press(from, true)]), |c| app.viewport(c));
+        for k in 1..=8 {
+            let _ = ctx.run_ui(frame(vec![egui::Event::PointerMoved(from + (to - from) * (k as f32 / 8.0))]), |c| app.viewport(c));
+        }
+        let _ = ctx.run_ui(frame(vec![press(to, false)]), |c| app.viewport(c));
+        let _ = ctx.run_ui(frame(Vec::new()), |c| app.viewport(c));
+        assert!(app.viewing.cam.yaw == yaw && app.viewing.cam.pitch == pitch, "the frame turned the view");
+        assert!(app.chosen.tree_sel.multi.len() == 2, "a frame round both parts took {:?}", app.chosen.tree_sel.multi);
+        assert!(matches!(app.chosen.sel, qymcad_ui_state::Sel::Component(_)), "the frame chose no part");
     }
 
     /// THE JOINT HAS A VALUE SET — THE PART IS STILL DRAGGED, AND THE NUMBER FOLLOWS IT.
@@ -134,12 +201,7 @@ mod tests {
         let at = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: viewport(), basis: &basis }.at(aim(&app, body)).0;
         let was = origin_of(&app, comp);
 
-        let _ = ctx.run_ui(frame(vec![egui::Event::PointerMoved(at)]), |c| app.viewport(c));
-        let _ = ctx.run_ui(frame(vec![press(at, true)]), |c| app.viewport(c));
-        for k in 1..=6 {
-            let _ = ctx.run_ui(frame(vec![egui::Event::PointerMoved(at + egui::vec2(14.0 * k as f32, 0.0))]), |c| app.viewport(c));
-        }
-        let _ = ctx.run_ui(frame(vec![press(at + egui::vec2(84.0, 0.0), false)]), |c| app.viewport(c));
+        lead(&mut app, &ctx, at, egui::PointerButton::Primary, true, 6);
 
         let now = origin_of(&app, comp);
         let moved = ((now[0] - was[0]).powi(2) + (now[1] - was[1]).powi(2) + (now[2] - was[2]).powi(2)).sqrt();
@@ -165,11 +227,78 @@ mod tests {
 
         let basis = app.viewing.cam.basis();
         let at = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: viewport(), basis: &basis }.at(aim(&app, body)).0;
-        let _ = ctx.run_ui(frame(vec![egui::Event::PointerMoved(at)]), |c| app.viewport(c));
-        let _ = ctx.run_ui(frame(vec![press(at, true)]), |c| app.viewport(c));
-        let _ = ctx.run_ui(frame(vec![egui::Event::PointerMoved(at + egui::vec2(30.0, 0.0))]), |c| app.viewport(c));
-        let _ = ctx.run_ui(frame(vec![press(at + egui::vec2(30.0, 0.0), false)]), |c| app.viewport(c));
+        lead(&mut app, &ctx, at, egui::PointerButton::Primary, true, 2);
 
         assert!(!qymcad_assembly::joint_drag_active(&app.side.joint, &app.dragged.part_pull), "after the release the hand stayed busy: the next drag will go to the part instead of the view");
+    }
+
+    /// THE MIDDLE AND THE RIGHT BUTTON, AND THE LEFT WITHOUT SHIFT, TURN THE VIEW over a part and leave it where it
+    /// stands. Reported behaviour: with the cursor on a part the middle and the right button carried the part, not the
+    /// view; the view is to turn as it always did, and a part is taken with Shift and the left button.
+    #[test]
+    fn the_buttons_without_shift_on_a_part_turn_the_view() {
+        for button in [egui::PointerButton::Middle, egui::PointerButton::Secondary, egui::PointerButton::Primary] {
+            let mut app = App::default();
+            let (body, comp) = a_slider_pair(&mut app);
+            let ctx = egui::Context::default();
+            super::super::install_fonts(&ctx);
+            let _ = ctx.run_ui(frame(Vec::new()), |c| app.viewport(c));
+            let basis = app.viewing.cam.basis();
+            let at = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: viewport(), basis: &basis }.at(aim(&app, body)).0;
+            let (was, yaw) = (origin_of(&app, comp), app.viewing.cam.yaw);
+            lead(&mut app, &ctx, at, button, false, 6);
+            let now = origin_of(&app, comp);
+            assert!(now == was, "{button:?} led across the part and carried it from {was:?} to {now:?}");
+            assert!(app.viewing.cam.yaw != yaw, "{button:?} led across the part and the view did not turn");
+        }
+    }
+
+    /// EVERY LAYOUT OF THE MOUSE KEEPS ITS VIEW OVER A PART: the turn and the move of each, begun on a part with its
+    /// own one button, move the view and leave the part (a chord of two buttons, or a movement with no button, is
+    /// passed over). Ours alone takes the part with Shift and the left button; every other layout is the one of its
+    /// own program, which has no such gesture, and leaves the part where it stands.
+    #[test]
+    fn every_layout_keeps_its_view_over_a_part_and_takes_it_with_shift() {
+        let mut problems = Vec::new();
+        for nav in qymcad_ui_state::MouseNav::ALL {
+            for (what, g) in [("turn", nav.rotate()), ("move", nav.pan())] {
+                let button = if g.any_button { egui::PointerButton::Middle } else if g.buttons.len() == 1 { g.buttons[0] } else { continue };
+                if g.shift && button == egui::PointerButton::Primary {
+                    continue; // the part's own gesture, begun on a part (ours: Shift and any button moves the view)
+                }
+                let mut app = App::default();
+                app.set.mouse_nav = nav;
+                let (body, comp) = a_slider_pair(&mut app);
+                let ctx = egui::Context::default();
+                super::super::install_fonts(&ctx);
+                let _ = ctx.run_ui(frame(Vec::new()), |c| app.viewport(c));
+                let basis = app.viewing.cam.basis();
+                let at = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: viewport(), basis: &basis }.at(aim(&app, body)).0;
+                let (was, cam) = (origin_of(&app, comp), (app.viewing.cam.yaw, app.viewing.cam.pitch, app.viewing.cam.target));
+                let modifiers = egui::Modifiers { shift: g.shift, ctrl: g.ctrl, command: g.ctrl, alt: g.alt, ..Default::default() };
+                lead_with(&mut app, &ctx, at, button, modifiers, 6);
+                if origin_of(&app, comp) != was {
+                    problems.push(format!("{nav:?}: the {what} of the view with {button:?} begun on a part carried the part"));
+                }
+                if (app.viewing.cam.yaw, app.viewing.cam.pitch, app.viewing.cam.target) == cam {
+                    problems.push(format!("{nav:?}: the {what} of the view with {button:?} begun on a part did not move the view"));
+                }
+            }
+            let mut app = App::default();
+            app.set.mouse_nav = nav;
+            let (body, comp) = a_slider_pair(&mut app);
+            let ctx = egui::Context::default();
+            super::super::install_fonts(&ctx);
+            let _ = ctx.run_ui(frame(Vec::new()), |c| app.viewport(c));
+            let basis = app.viewing.cam.basis();
+            let at = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: viewport(), basis: &basis }.at(aim(&app, body)).0;
+            let was = origin_of(&app, comp);
+            lead(&mut app, &ctx, at, egui::PointerButton::Primary, true, 6);
+            let moved = origin_of(&app, comp) != was;
+            if moved != (nav == qymcad_ui_state::MouseNav::QymCad) {
+                problems.push(format!("{nav:?}: Shift and the left button on a part {} it", if moved { "took" } else { "did not take" }));
+            }
+        }
+        assert!(problems.is_empty(), "{}", problems.join("\n"));
     }
 }

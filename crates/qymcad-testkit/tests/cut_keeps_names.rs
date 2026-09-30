@@ -36,7 +36,7 @@ fn moving_the_cut_sketch_keeps_the_face_names() {
         .and_then(|es| es.iter().find(|e| e.radius > 1e-6).map(|e| e.id))
         .unwrap_or(0);
     let body = if round != 0 {
-        let t = p.add_thread(body, round, qymcad_core::thread::ThreadSpec::default(), 10.0, 0.0, 0.0);
+        let t = p.add_thread(body, round, qymcad_core::thread::ThreadSpec { nominal_d: 40.0, ..Default::default() }, 10.0, 0.0, 0.0); // M40 on the cylinder of 40
         eprintln!("SETUP: a thread on edge {round}, body {t}");
         t
     } else {

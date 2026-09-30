@@ -63,6 +63,8 @@ pub(crate) fn crash_notice(crash_report: &mut Vec<std::path::PathBuf>, ctx: &egu
     let mut open = true;
     let mut dismiss = false;
     egui::Window::new(format!("{} {}", ph::WARNING, crate::i18n::tr("crash-title")))
+        // OVER EVERY WINDOW, the start screen too: it stood on the same layer and took the click meant for "Close"
+        .order(egui::Order::Foreground)
         .open(&mut open)
         .collapsible(false)
         .resizable(false)
@@ -681,7 +683,7 @@ pub(crate) fn params_rows_ui(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui
                         .on_hover_text(crate::gui::error_words::expr_error_text(&e));
                 }
             }
-            if ui.button(ph::TRASH).clicked() {
+            if ui.button(ph::TRASH).on_hover_text(crate::i18n::tr("par-delete")).clicked() {
                 *remove = Some(i);
             }
             ui.end_row();
@@ -762,18 +764,31 @@ pub(crate) fn params_rows_ui(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui
         match a {
             Act::Rename(i, nm) => {
                 let old = wc.project.parameters[i].name.clone();
-                // ONE OPERATION, ONE UNDO STEP, AND THE REFERENCES FOLLOW THE NAME.
-                let mut ed = qymcad_ui_state::edit_over(wc.rebuild(), crate::i18n::tr("par-rename-step"));
-                let done = ed.project().rename_driver(&old, &nm);
-                drop(ed);
+                // ONE OPERATION, ONE UNDO STEP, AND THE REFERENCES FOLLOW THE NAME - the name of a row just added
+                // being part of adding it
+                let done = if fresh_row(wc, i) {
+                    let done = wc.project.rename_driver(&old, &nm);
+                    qymcad_ui_state::fold_into_last_step(wc.edits, wc.project);
+                    done
+                } else {
+                    let mut ed = qymcad_ui_state::edit_over(wc.rebuild(), crate::i18n::tr("par-rename-step"));
+                    let done = ed.project().rename_driver(&old, &nm);
+                    drop(ed);
+                    done
+                };
                 if done.is_err() {
                     *wc.status = crate::i18n::tr1("par-name-bad", "name", &nm);
                 }
             }
             Act::SetExpr(i, e) => {
-                let mut ed = qymcad_ui_state::edit_over(wc.rebuild(), crate::i18n::tr("par-edit-step"));
-                ed.project().parameters[i].expr = e;
-                drop(ed);
+                if fresh_row(wc, i) {
+                    wc.project.parameters[i].expr = e; // the first value of a row just added is part of adding it
+                    qymcad_ui_state::fold_into_last_step(wc.edits, wc.project);
+                } else {
+                    let mut ed = qymcad_ui_state::edit_over(wc.rebuild(), crate::i18n::tr("par-edit-step"));
+                    ed.project().parameters[i].expr = e;
+                    drop(ed);
+                }
                 *dirty = true;
             }
             Act::SetDriver(k, v) => {
@@ -860,7 +875,9 @@ pub(crate) fn params_window(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Contex
         }
         ui.separator();
         if ui.button(format!("{} {}", ph::PLUS, crate::i18n::tr("win-add-param"))).clicked() {
-            wc.project.parameters.push(Param { name: String::new(), expr: String::new(), value: 0.0 });
+            let mut ed = qymcad_ui_state::edit_over(wc.rebuild(), crate::i18n::tr("win-add-param"));
+            ed.project().parameters.push(Param { name: String::new(), expr: String::new(), value: 0.0 });
+            drop(ed);
             dirty = true;
         }
         // THE DRIVERS LIVE IN THE TABLE ITSELF (see `params_rows_ui`) rather than in a separate list below.
@@ -869,8 +886,11 @@ pub(crate) fn params_window(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Contex
         // is the one place where the project's WHOLE set of numbers is visible and editable; two different
         // lists with different rules have no business here.
     });
+    // a step of undo like every edit of the table: a parameter deleted by mistake comes back with Ctrl+Z
     if let Some(i) = remove {
-        wc.project.parameters.remove(i);
+        let mut ed = qymcad_ui_state::edit_over(wc.rebuild(), crate::i18n::tr("par-delete-step"));
+        ed.project().parameters.remove(i);
+        drop(ed);
         dirty = true;
     }
     if dirty {
@@ -879,6 +899,13 @@ pub(crate) fn params_window(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Contex
     if !open {
         wc.win.close(WinKind::Params);
     }
+}
+
+/// A ROW BEING ADDED: the last step of the history added it and it has no value yet, so its name and its first value
+/// finish that step rather than making two more. Reported behaviour: one Ctrl+Z after adding "w = 40" left "w" with
+/// no value - adding, naming and valuing were three steps.
+fn fresh_row(wc: &qymcad_ui_state::WinCtx, i: usize) -> bool {
+    wc.project.parameters.get(i).is_some_and(|p| p.expr.is_empty()) && wc.edits.undo.last().is_some_and(|s| s.name == crate::i18n::tr("win-add-param"))
 }
 
 /// A GLOBAL PARAMETER EDIT HAS BEEN APPLIED. A method of its own, because this path has to be TESTABLE: the
@@ -970,7 +997,7 @@ pub(crate) fn settings_window(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Cont
                     // this is a single OS command, and it reads plainly as one.
                     if ui.small_button(format!("{}  {}", ph::FOLDER_OPEN, crate::i18n::tr("settings-open-folder"))).clicked() {
                         let (bin, args) = crate::gui::reveal_command(ui.ctx().os(), &dir);
-                        if let Err(e) = std::process::Command::new(bin).args(&args).spawn() {
+                        if let Err(e) = crate::system::start(bin, &args) {
                             wc.scheme.note = crate::i18n::tr1("settings-open-folder-failed", "error", &e.to_string());
                         }
                     }
@@ -1059,12 +1086,25 @@ pub(crate) fn settings_section_body(wc: &mut qymcad_ui_state::WinCtx, ui: &mut e
             if show("settings-show-start") {
                 ui.checkbox(&mut wc.set.show_start_screen, crate::i18n::tr("settings-show-start")).on_hover_text(crate::i18n::tr("settings-show-start-hint"));
             }
+            if show("settings-import-ask") {
+                ui.checkbox(&mut wc.set.import_ask_always, crate::i18n::tr("settings-import-ask")).on_hover_text(crate::i18n::tr("settings-import-ask-hint"));
+            }
             if show("settings-autosave") {
                 ui.horizontal(|ui| {
                     ui.label(crate::i18n::tr("settings-autosave"));
                     ui.add(egui::DragValue::new(&mut wc.set.autosave_secs).range(0..=3600).suffix(crate::i18n::tr("unit-seconds")));
                 });
                 ui.label(egui::RichText::new(crate::i18n::tr("settings-autosave-hint")).weak().small());
+            }
+            if show("settings-kernel-threads") {
+                ui.horizontal(|ui| {
+                    ui.label(crate::i18n::tr("settings-kernel-threads"));
+                    // zero is not a number here but a word: "all but one". The word lives in the catalogue.
+                    ui.add(egui::DragValue::new(&mut wc.set.kernel_threads).range(0..=64).custom_formatter(|n, _| {
+                        if n <= 0.0 { crate::i18n::tr("settings-kernel-threads-auto") } else { format!("{n:.0}") }
+                    }));
+                });
+                ui.label(egui::RichText::new(crate::i18n::tr("settings-kernel-threads-hint")).weak().small());
             }
             if show("settings-undo-cap") {
                 ui.horizontal(|ui| {
@@ -1351,6 +1391,25 @@ pub(crate) fn settings_section_body(wc: &mut qymcad_ui_state::WinCtx, ui: &mut e
             if show("settings-auto-constrain") {
                 ui.checkbox(&mut wc.set.auto_constrain, crate::i18n::tr("settings-auto-constrain")).on_hover_text(crate::i18n::tr("settings-auto-constrain-hint"));
             }
+            if show("settings-dim-name") {
+                ui.checkbox(&mut wc.set.dim_show_name, crate::i18n::tr("settings-dim-name")).on_hover_text(crate::i18n::tr("settings-dim-name-hint"));
+            }
+            if show("settings-dim-formula") {
+                ui.checkbox(&mut wc.set.dim_show_formula, crate::i18n::tr("settings-dim-formula")).on_hover_text(crate::i18n::tr("settings-dim-formula-hint"));
+            }
+            if show("settings-dim-font") {
+                ui.horizontal(|ui| {
+                    ui.label(crate::i18n::tr("settings-dim-font"));
+                    wc.set.dim_font = qymcad_ui_state::step_buttons(ui, wc.set.dim_font, 1.0, qymcad_ui_state::DIM_FONT_RANGE, &crate::i18n::tr("settings-dim-font-smaller"), &crate::i18n::tr("settings-dim-font-larger"));
+                });
+            }
+            if show("settings-dim-text") {
+                ui.horizontal(|ui| {
+                    ui.label(crate::i18n::tr("settings-dim-text"));
+                    ui.selectable_value(&mut wc.set.dim_text, qymcad_ui_state::DimTextTurn::AlongLine, crate::i18n::tr("settings-dim-text-along"));
+                    ui.selectable_value(&mut wc.set.dim_text, qymcad_ui_state::DimTextTurn::Horizontal, crate::i18n::tr("settings-dim-text-level"));
+                });
+            }
         }
         Sec::Part => {
             egui::Grid::new("settings_def").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
@@ -1582,7 +1641,19 @@ pub(crate) fn nav_dialog(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Context) 
         return;
     }
     let mut choice: Option<u8> = None; // 0 save, 1 do not save, 2 cancel
+    // THE QUESTION HOLDS THE WINDOW: a backdrop over the whole window takes every click, and the question stands above
+    // it - as `egui::Modal` does it, but with a window of its own, which names itself to assistive technology and to
+    // a check where a modal names itself to nobody. Reported behaviour: a click on "Edit the sketch" behind the
+    // question opened the sketch.
+    // the backdrop is the splash ground of the scheme, let through at 40 percent
+    let backdrop = wc.scheme.pal.splash_bg().gamma_multiply(0.4);
+    egui::Area::new(egui::Id::new("unsaved_backdrop")).order(egui::Order::Foreground).fixed_pos(egui::pos2(0.0, 0.0)).show(ctx, |ui| {
+        let all = ui.ctx().content_rect();
+        ui.allocate_rect(all, egui::Sense::click_and_drag());
+        ui.painter().rect_filled(all, 0.0, backdrop);
+    });
     egui::Window::new(format!("{}  {}", ph::WARNING, crate::i18n::tr("win-unsaved")))
+        .order(egui::Order::Tooltip)
         .collapsible(false)
         .resizable(false)
         .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
@@ -1601,6 +1672,9 @@ pub(crate) fn nav_dialog(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Context) 
                 }
             });
         });
+    if choice.is_none() && ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+        choice = Some(2); // Esc answers as Cancel does
+    }
     match choice {
         Some(0) => {
             wc.ask.push(qymcad_ui_state::WinAsk::Save);
@@ -1633,11 +1707,11 @@ pub(crate) fn nav_dialog(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Context) 
     }
 }
 
-/// The modal dialogue for choosing the STL quality (the deflection) before an export.
-pub(crate) fn stl_quality_dialog(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Context) {
-    let Some(target) = *wc.stl_export else { return };
+/// The modal dialogue for choosing the mesh quality (the deflection) before an export.
+pub(crate) fn mesh_quality_dialog(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Context) {
+    let Some((format, target)) = *wc.mesh_export else { return };
     let mut choice: Option<Option<f64>> = None; // None = close; Some(Some(defl)) = export; Some(None) = cancel
-    egui::Window::new(crate::i18n::tr("stl-title"))
+    egui::Window::new(crate::i18n::tr1("mesh-title", "format", crate::gui::mesh_entry(format).name()))
         .collapsible(false)
         .resizable(false)
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
@@ -1663,10 +1737,10 @@ pub(crate) fn stl_quality_dialog(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::C
         });
     match choice {
         Some(Some(defl)) => {
-            *wc.stl_export = None;
-            wc.ask.push(qymcad_ui_state::WinAsk::ExportStl(target, defl));
+            *wc.mesh_export = None;
+            wc.ask.push(qymcad_ui_state::WinAsk::ExportMesh(format, target, defl));
         }
-        Some(None) => *wc.stl_export = None,
+        Some(None) => *wc.mesh_export = None,
         None => {}
     }
 }
@@ -1684,12 +1758,17 @@ pub(crate) fn confirm_delete_popup(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui:
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
         .show(ctx, |ui| {
             ui.label(crate::i18n::tr1("confirm-delete-what", "what", &what));
-            // WHAT WILL GO WITH IT, BY NAME. A general line saying "along with its dependants" is true but does
-            // not answer "what am I about to lose"; a list does, and it comes from the same core query as the
-            // lineage in the properties card.
+            // WHAT STANDS ON IT, BY NAME, and a tick that decides its fate: by default it stays in the timeline,
+            // red with the reason, for the person to repair; ticked, it goes too. A general line saying "along with
+            // its dependants" is true but does not answer "what am I about to lose"; a list does, and it comes
+            // from the same core query as the lineage in the properties card.
             if cascade.is_empty() {
                 ui.label(egui::RichText::new(crate::i18n::tr("confirm-cascade")).weak().small());
             } else {
+                ui.checkbox(&mut wc.deferred.delete_dependents, crate::i18n::tr("confirm-with-dependents"));
+                if !wc.deferred.delete_dependents {
+                    ui.label(egui::RichText::new(crate::i18n::tr("confirm-dependents-stay")).weak().small());
+                }
                 ui.label(egui::RichText::new(crate::i18n::tr1("confirm-cascade-n", "n", &cascade.len().to_string())).weak().small());
                 for n in cascade.iter().take(8) {
                     ui.label(egui::RichText::new(format!("  · {n}")).weak().small());
@@ -1711,9 +1790,10 @@ pub(crate) fn confirm_delete_popup(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui:
         });
     if do_del {
         wc.deferred.delete = None;
-        wc.ask.push(qymcad_ui_state::WinAsk::Delete(sel));
+        wc.ask.push(qymcad_ui_state::WinAsk::Delete(sel, std::mem::take(&mut wc.deferred.delete_dependents)));
     } else if cancel {
         wc.deferred.delete = None;
+        wc.deferred.delete_dependents = false;
     }
 }
 

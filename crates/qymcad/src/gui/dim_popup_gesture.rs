@@ -29,8 +29,7 @@ mod tests {
             off: 0.0,
             expr: String::new(),
             driven: false,
-            axis: 0,
-        });
+            axis: 0, at: None });
         let ci = app.project.sketches[si].constraints.len() - 1;
         app.chosen.sel = Sel::Sketch(si);
         app.tools.inline = InlineEdit::Dim(ci);

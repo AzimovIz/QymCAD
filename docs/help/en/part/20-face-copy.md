@@ -24,4 +24,4 @@ down the timeline keeps rebuilding as usual.
   when it changes. Otherwise the picked list is stored.
 - **A surface has no volume.** It takes no part in mass properties and never goes to machining: it is
   a sheet, not a solid. The document knows the difference.
-- **The source body does not disappear.** If the part vanished after a copy, that is not this tool.
+- **The source body does not disappear**: the copy stands beside it, the part stays as it was.

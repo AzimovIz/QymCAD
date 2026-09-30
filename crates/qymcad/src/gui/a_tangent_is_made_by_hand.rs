@@ -7,6 +7,7 @@
 //! Tangency is the one mate that needs no connectors: two selected surfaces are enough.
 #[cfg(test)]
 mod tests {
+    use crate::gui::hand::Hand;
     use super::super::App;
     use qymcad_core::feature::{ConstraintKind, FaceKey};
     use qymcad_core::model::Id;
@@ -99,7 +100,10 @@ mod tests {
         let c = app.project.mate_constraints.first().cloned().expect("the tangency was not created");
         assert_eq!(c.kind, ConstraintKind::Tangent, "the wrong constraint was created: {:?}", c.kind);
         assert_eq!(c.faces.len(), 2, "a tangency must have two surfaces: {:?}", c.faces);
-        assert!(!app.side.joint.tangent_pick.is_some(), "the tool was not released after the second pick");
+        assert!(app.side.joint.tangent_pick.is_some(), "the second pick put the tool down before Enter: there is nothing left to cancel");
+        Hand::new(&mut app).key(egui::Key::Enter);
+        assert!(app.project.mate_constraints.iter().any(|x| x.id == c.id), "Enter did not keep the tangency");
+        assert!(!app.side.joint.tangent_pick.is_some(), "the tool was not released after Enter");
 
         let texts = panel_text(&mut app);
         let want = crate::i18n::name(&c.name);
@@ -116,12 +120,27 @@ mod tests {
         let mut app = App::default();
         let (plate, _shaft) = plate_and_shaft(&mut app);
         let f = flat_face(&app, plate);
+        // the other plane of the plate: the face looking down, a face of its own
+        let g = app.project.regen_faces.get(&plate).and_then(|fs| fs.iter().position(|x| x.normal[2] < -0.99).map(|i| (i, fs[i].clone()))).map(|(i, x)| FaceKey { index: i as u32 + 1, centroid: [x.centroid.x, x.centroid.y, x.centroid.z], normal: x.normal, id: x.id }).expect("the bottom face");
         app.start_tangent_pick();
         qymcad_assembly::tangent_pick_click(&mut app.joint_ctx(), plate, f);
-        qymcad_assembly::tangent_pick_click(&mut app.joint_ctx(), plate, f);
+        qymcad_assembly::tangent_pick_click(&mut app.joint_ctx(), plate, g);
 
         assert!(app.project.mate_constraints.is_empty(), "a tangency was assembled from two planes");
         assert!(app.side.joint.tangent_pick.is_some(), "the tool was dropped instead of letting a cylinder be pointed at");
         assert_eq!(app.status, crate::i18n::tr("j-tangent-need-cylinder"), "the person was not told what is wrong: {}", app.status);
+    }
+
+    /// THE SURFACE CLICKED AGAIN IS LET GO, as a second click on any pick.
+    #[test]
+    fn a_surface_clicked_again_is_let_go() {
+        let mut app = App::default();
+        let (plate, _shaft) = plate_and_shaft(&mut app);
+        let f = flat_face(&app, plate);
+        app.start_tangent_pick();
+        qymcad_assembly::tangent_pick_click(&mut app.joint_ctx(), plate, f);
+        assert_eq!(app.side.joint.tangent_pick.as_ref().map_or(0, |s| s.len()), 1, "setup: the first surface is taken");
+        qymcad_assembly::tangent_pick_click(&mut app.joint_ctx(), plate, f);
+        assert_eq!(app.side.joint.tangent_pick.as_ref().map_or(9, |s| s.len()), 0, "the surface clicked again was not let go");
     }
 }

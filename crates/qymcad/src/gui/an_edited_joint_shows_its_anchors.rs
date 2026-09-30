@@ -58,7 +58,7 @@ mod tests {
             })
             .collect();
         let mut hand = Hand::new(app);
-        hand.look_at([30.0, 10.0, 5.0], 7.0).mate(JointKind::Slider).click(aim[0]).click(aim[1]);
+        hand.look_at([30.0, 10.0, 5.0], 7.0).mate(JointKind::Slider).click(aim[0]).click(aim[1]).key(egui::Key::Enter).key(egui::Key::Escape);
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
         app.project.joints.last().map(|j| j.id).expect("the joint was created")
     }
@@ -69,7 +69,7 @@ mod tests {
         let jid = a_joint_being_edited(&mut app);
 
         // NO TOOL IN HAND — as it is when a person is simply editing an existing joint.
-        crate::gui::assembly_tools::drop_assembly_tools(&mut app.side.joint);
+        crate::gui::assembly_tools::drop_assembly_tools(&mut app.joint_ctx());
         app.side.joint.edit = None;
         let quiet = shapes(&mut app);
 

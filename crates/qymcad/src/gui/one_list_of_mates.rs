@@ -80,11 +80,11 @@ mod tests {
         // TWO REVOLUTE JOINTS — by hand, two clicks each.
         let (pa, pb) = (aim(app, mine[0]), aim(app, mine[1]));
         let mut hand = Hand::new(app);
-        hand.look_at([30.0, 10.0, 5.0], 6.0).mate(JointKind::Revolute).anchor(3).click(pa).click(pb);
+        hand.look_at([30.0, 10.0, 5.0], 6.0).mate(JointKind::Revolute).anchor(3).click(pa).click(pb).key(egui::Key::Enter).key(egui::Key::Escape);
         let first = app.project.joints.last().map(|j| j.id).expect("the first joint");
         let (pc, pd) = (aim(app, mine[2]), aim(app, mine[3]));
         let mut hand = Hand::new(app);
-        hand.look_at([230.0, 10.0, 5.0], 6.0).mate(JointKind::Revolute).anchor(3).click(pc).click(pd);
+        hand.look_at([230.0, 10.0, 5.0], 6.0).mate(JointKind::Revolute).anchor(3).click(pc).click(pd).key(egui::Key::Enter).key(egui::Key::Escape);
         let second = app.project.joints.last().map(|j| j.id).expect("the second joint");
         assert_ne!(first, second, "setup: there should be two joints");
 

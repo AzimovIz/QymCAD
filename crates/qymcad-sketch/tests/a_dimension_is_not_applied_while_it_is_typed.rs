@@ -42,7 +42,7 @@ fn a_rectangle_with_a_width_dimension() -> (Project, usize, usize) {
     let mut ids: Vec<(u64, f64, f64)> = p.sketches[si].points.iter().map(|q| (q.id, q.x, q.y)).collect();
     ids.sort_by(|a, b| a.2.total_cmp(&b.2).then(a.1.total_cmp(&b.1)));
     let (a, b) = (ids[0].0, ids[1].0);
-    p.sketches[si].constraints.push(Constraint::Distance { a, b, d: 100.0, off: 0.0, expr: String::new(), driven: false, axis: 0 });
+    p.sketches[si].constraints.push(Constraint::Distance { a, b, d: 100.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
     let ci = p.sketches[si].constraints.len() - 1;
     p.solve_sketch(si);
     (p, si, ci)
@@ -61,7 +61,7 @@ fn a_length_that_cannot_exist_is_not_handed_to_the_solver() {
     let mut bad = Vec::new();
     for v in [-100.0f64, -1.0, 0.0] {
         let (mut p, si, ci) = a_rectangle_with_a_width_dimension();
-        let took = qymcad_sketch::set_dim_value(&mut p, si, ci, v);
+        let took = qymcad_sketch::set_dim_value(&mut p, si, ci, v).is_ok();
         p.solve_sketch(si);
         let edge = lower_edge(&p, si);
         if took || (edge - 100.0).abs() > 1e-3 {
@@ -81,16 +81,17 @@ fn a_length_that_cannot_exist_is_not_handed_to_the_solver() {
 #[test]
 fn an_ordinary_value_is_still_taken() {
     let (mut p, si, ci) = a_rectangle_with_a_width_dimension();
-    assert!(qymcad_sketch::set_dim_value(&mut p, si, ci, 60.0), "60 mm is an ordinary width and it was refused");
+    assert!(qymcad_sketch::set_dim_value(&mut p, si, ci, 60.0).is_ok(), "60 mm is an ordinary width and it was refused");
     p.solve_sketch(si);
     assert!((lower_edge(&p, si) - 60.0).abs() < 1e-3, "the edge is {:.3} instead of 60", lower_edge(&p, si));
 }
 
 /// AN ANGLE MAY BE NEGATIVE, and refusing it would be a new defect in place of the old one.
 ///
-/// A negative angle means the other way round; there is no such thing as the other way round for a length.
+/// The angle between two lines is their opening: over 0 and under 180 deg. A sign is not a side - the side is where
+/// the dimension stands - so -30, 0 and 180 are refused and 30 is taken.
 #[test]
-fn a_negative_angle_is_still_allowed() {
+fn the_angle_between_lines_is_an_opening() {
     let mut p = Project::default();
     p.new_document();
     let si = p.new_sketch("S");
@@ -98,9 +99,12 @@ fn a_negative_angle_is_still_allowed() {
     p.add_line_entity(si, 0.0, 0.0, 30.0, 30.0, qymcad_core::feature::Purpose::Real);
     p.regen_sketch(si);
     let q: Vec<u64> = p.sketches[si].points.iter().map(|x| x.id).collect();
-    p.sketches[si].constraints.push(Constraint::AngleLines { a: q[0], b: q[1], c: q[0], d: q[2], deg: 45.0, expr: String::new(), driven: false });
+    p.sketches[si].constraints.push(Constraint::AngleLines { a: q[0], b: q[1], c: q[0], d: q[2], deg: 45.0, expr: String::new(), driven: false, off: 0.0, at: None });
     let ci = p.sketches[si].constraints.len() - 1;
-    assert!(qymcad_sketch::set_dim_value(&mut p, si, ci, -30.0), "a negative angle means the other way round and must be allowed");
+    for bad in [-30.0, 0.0, 180.0, 1791.0] {
+        assert_eq!(qymcad_sketch::set_dim_value(&mut p, si, ci, bad), Err("sk-angle-range"), "{bad} deg between two lines was taken");
+    }
+    assert!(qymcad_sketch::set_dim_value(&mut p, si, ci, 30.0).is_ok(), "30 deg between two lines was refused");
 }
 
 /// THE RADIUS FIELD DOES NOT REBUILD THE CIRCLE ON EVERY LETTER.
@@ -126,7 +130,7 @@ fn erasing_the_diameter_does_not_resize_the_circle_until_it_is_finished() {
     let eid = b.project.sketches[si].entities[0].id;
     b.inline = qymcad_ui_state::InlineEdit::Circle(eid);
     b.dim.focus = true;
-    b.view = qymcad_ui_state::View2d { center: egui::Vec2::ZERO, scale: 4.0, initialized: true };
+    b.view = qymcad_ui_state::View2d { center: egui::Vec2::ZERO, scale: 4.0, initialized: true, fit: 4.0 };
 
     let radius = |b: &qymcad_ui_state::Bench| match b.project.sketches[si].entities[0].kind {
         qymcad_core::model::EntityKind::Circle { r, .. } => r,

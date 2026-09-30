@@ -35,12 +35,12 @@ impl App {
         if open_search {
             crate::gui::command_search::toggle_command_search(&mut self.win);
         }
-        if !ctx.egui_wants_keyboard_input() && ctx.input(|i| i.key_pressed(egui::Key::F1)) {
+        if ctx.input(|i| i.key_pressed(egui::Key::F1)) { // F1 types nothing: a field holding the keyboard does not stop it
             let a = self.help_for_context();
             self.open_help(a);
         }
         // Enter confirms an array if one is active and the focus is not in a text field
-        if self.tools.armed.pat_op() != 0 && !ctx.egui_wants_keyboard_input() && ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+        if self.tools.armed.pat_op() != 0 && ((!ctx.egui_wants_keyboard_input() && ctx.input(|i| i.key_pressed(egui::Key::Enter))) || qymcad_ui_state::bar_enter_take(ctx)) {
             self.confirm_pattern();
         }
         // Enter confirms A COMPONENT ARRAY (in an assembly)
@@ -50,10 +50,10 @@ impl App {
         // Returning to the choice of contours of an active sketch command goes by the "U" key through
         // `part_hotkey` (not "C": C is the circle in a sketch and the chamfer in a Part, and it clashed
         // while editing a feature).
-        // Enter inside a Part command. For a sketch command in 2D (choosing a profile, multi-select
-        // included): the first Enter CONFIRMS the choice and takes one into 3D to set the dimension (the
+        // Enter inside a Part command - and in a field of its bar (sides, copies), that field keeping the keyboard. For
+        // a sketch command in 2D the first Enter CONFIRMS the choice and takes one into 3D to set the dimension (the
         // gizmo or the field), the second applies it.
-        if self.tools.armed.commanding() && !ctx.egui_wants_keyboard_input() && ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+        if self.tools.armed.commanding() && ((!ctx.egui_wants_keyboard_input() && ctx.input(|i| i.key_pressed(egui::Key::Enter))) || qymcad_ui_state::bar_enter_take(ctx)) {
             let sketch_cmd = matches!(self.tools.armed.cmd_kind(), 1 | 3);
             if self.tools.picking.contour().is_some() {
                 // in the half-sketcher of choosing the contour of a slot a CLICK on the contour is
@@ -61,7 +61,7 @@ impl App {
             } else if sketch_cmd && !self.viewing.mode_3d && !self.tools.gsel.profiles.is_empty() {
                 self.viewing.mode_3d = true; // the choice is ready -> into 3D to enter the height or angle
                 self.status = crate::i18n::tr("in-drag-or-type");
-            } else {
+            } else if qymcad_ui_state::bar_fields_valid(ctx) {
                 crate::gui::commands::apply_feat_cmd(&mut self.part_ctx());
             }
         }
@@ -135,17 +135,7 @@ impl App {
         }
         // X switches the selected entities into or out of construction geometry
         if !ctx.egui_wants_keyboard_input() && ctx.input(|i| !i.modifiers.any() && i.key_pressed(egui::Key::X)) {
-            if let Sel::Sketch(si) = self.chosen.sel {
-                if qymcad_ui_state::edit_si(&self.project, &self.sketch_ses) == Some(si) {
-                    let eids: Vec<Id> = self.tools.sel_sk.items.iter().filter(|(k, _)| *k == 1).map(|(_, id)| *id).collect();
-                    if !eids.is_empty() {
-                        let now = self.project.toggle_construction(si, &eids);
-                        self.project.solve_sketch(si);
-                        qymcad_ui_state::invalidate(&mut self.regen);
-                        self.status = if now { crate::i18n::tr("in-made-construction") } else { crate::i18n::tr("in-made-normal") };
-                    }
-                }
-            }
+            qymcad_ui_state::construction_selected(qymcad_ui_state::editing_of!(self), &self.tools.sel_sk, &self.sketch_ses);
         }
         // Ctrl+C / Ctrl+X / Ctrl+V — the clipboard.
         // While editing a sketch with entities selected: copying and pasting GEOMETRY.
@@ -183,19 +173,11 @@ impl App {
         if std::mem::take(&mut self.side.clip.os_ping) {
             ctx.output_mut(|o| o.commands.push(egui::OutputCommand::CopyText("qymcad-tree-clip".to_string())));
         }
-        // Undo and redo: Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y (not taken away from text fields)
-        if !ctx.egui_wants_keyboard_input() {
-            let (do_undo, do_redo) = ctx.input(|i| {
-                let cmd = i.modifiers.command;
-                let z = i.key_pressed(egui::Key::Z);
-                let y = i.key_pressed(egui::Key::Y);
-                (cmd && z && !i.modifiers.shift, cmd && ((z && i.modifiers.shift) || y))
-            });
-            if do_undo {
-                self.undo();
-            } else if do_redo {
-                self.redo();
-            }
+        let (do_undo, do_redo) = qymcad_ui_state::undo_keys(ctx, &mut self.tools.place, &mut self.tools.inline, self.sketch_ses.editing.is_some());
+        if do_undo {
+            self.undo();
+        } else if do_redo {
+            self.redo();
         }
     }
 
@@ -254,7 +236,7 @@ impl App {
             self.side.joint.edit_repick = None; // the pick of a new anchor is cancelled first, the editing is NOT left
             self.status = crate::i18n::tr("in-anchor-swap-cancelled");
         } else if self.side.joint.edit.is_some() {
-            qymcad_ui_state::exit_joint_edit(&mut self.side.joint, &mut self.status);
+            qymcad_assembly::joint_edit_leave(&mut self.joint_ctx());
         } else if self.side.joint.ground_pick {
             self.side.joint.ground_pick = false;
             self.status = crate::i18n::tr("in-ground-off");
@@ -271,7 +253,7 @@ impl App {
         // `escape_drops_every_assembly_tool`, and it is the same disease that already produced a class of
         // troubles with the highlight: the modes are enumerated by name and a new one is forgotten.
         else if !self.armed_assembly_tools().is_empty() {
-            crate::gui::assembly_tools::drop_assembly_tools(&mut self.side.joint);
+            crate::gui::assembly_tools::drop_assembly_tools(&mut self.joint_ctx());
             self.status = crate::i18n::tr("in-assembly-tool-cancelled");
         } else if self.tools.pending_import.curves.is_some() {
             self.tools.pending_import.curves = None;
@@ -279,6 +261,8 @@ impl App {
         } else if let Some(k) = self.tools.picking.cancel_key() {
             self.tools.picking.clear(); // the modes Escape simply puts down; the words come from the mode itself
             self.status = crate::i18n::tr(k);
+        } else if self.side.section.pick {
+            self.status = qymcad_part::section_escape(&mut self.side.section, &mut self.regen);
         } else if self.tools.picking.plane_face().is_some() {
             self.tools.picking.set_plane_face(None);
             self.status = crate::i18n::tr("in-plane-face-cancelled");
@@ -302,30 +286,18 @@ impl App {
             self.tools.armed = qymcad_ui_state::Armed::None;
             self.tools.tool.move_base = None;
             self.status = crate::i18n::tr("in-move-cancelled");
-        } else if self.side.clip.geom_place {
-            self.side.clip.geom_place = false;
+        } else if self.side.clip.geom_place.is_some() {
+            self.side.clip.geom_place = None;
             self.status = crate::i18n::tr("in-insert-cancelled");
         } else if self.side.clip.geom_pending.is_some() {
             self.side.clip.geom_pending = None;
             self.status = crate::i18n::tr("in-copy-cancelled");
         } else if self.tools.place.dim.is_some() {
-            // a provisional length of a line (the second element is awaited) — cancel it; otherwise
-            // leave the dimension where it is
-            if self.tools.dim.first.is_some() {
-                if let (Sel::Sketch(si), Some(ci)) = (self.chosen.sel, self.tools.place.dim) {
-                    if ci < self.project.sketches[si].constraints.len() {
-                        self.project.sketches[si].constraints.remove(ci);
-                        self.project.solve_sketch(si);
-                        qymcad_ui_state::invalidate(&mut self.regen);
-                    }
-                }
-            }
-            self.tools.place.dim = None;
-            self.tools.dim.first = None;
+            qymcad_sketch::cancel_placing_dim(&mut self.sketch_ctx()); // a provisional length goes without a trace
         } else if self.tools.dim.first.is_some() {
             self.tools.dim.first = None; // cancel the first reference (the point)
         } else if !self.tools.tool.pts.is_empty() {
-            self.tools.tool.pts.clear(); // break off the construction under way
+            crate::gui::sketching::end_construction(&mut self.sketch_ctx()); // a spline is finished, anything else broken off
         } else if let Some(msg) = qymcad_ui_state::release_armed_sketch_tool(&mut qymcad_ui_state::tools_of!(self)) {
             // ONE RUNG FOR EVERY SKETCH TOOL IN HAND, and the tool itself says what to clear. There used to
             // be a rung per family here and none for the editing tools, so mirror, offset, fillet, chamfer

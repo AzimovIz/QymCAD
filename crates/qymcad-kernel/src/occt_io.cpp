@@ -131,10 +131,12 @@ static TopoDS_Shape make_hole_tool(int kind, double dia, double depth, double di
     TopoDS_Shape tool = BRepPrimAPI_MakeCylinder(down, dia * 0.5, depth).Shape();
     if (kind == 1 && dia2 > dia && depth2 > 0.0) {
         TopoDS_Shape cb = BRepPrimAPI_MakeCylinder(down, dia2 * 0.5, depth2).Shape(); // the counterbore
-        tool = BRepAlgoAPI_Fuse(tool, cb).Shape();
+        BRepAlgoAPI_Fuse fuse;
+        if (qym_boolean(fuse, tool, cb)) tool = fuse.Shape();
     } else if (kind == 2 && dia2 > dia && depth2 > 0.0) {
         TopoDS_Shape cs = BRepPrimAPI_MakeCone(down, dia2 * 0.5, dia * 0.5, depth2).Shape(); // the countersink cone
-        tool = BRepAlgoAPI_Fuse(tool, cs).Shape();
+        BRepAlgoAPI_Fuse fuse;
+        if (qym_boolean(fuse, tool, cs)) tool = fuse.Shape();
     }
     return tool;
 }
@@ -180,7 +182,8 @@ extern "C" QymShape* qym_shape_hole_stepped(const QymShape* s, int kind, const d
         tool = BRepBuilderAPI_Transform(tool, t, Standard_True).Shape();
         TopTools_DataMapOfShapeInteger tool_ids;
         name_bore_faces(tool, dia, bore, tool_ids, extra_names, n_extra);
-        BRepAlgoAPI_Cut algo(s->shape, tool);
+        BRepAlgoAPI_Cut algo;
+        qym_boolean(algo, s->shape, tool);
         TopoDS_Shape res = algo.Shape();
         if (res.IsNull()) return nullptr;
         QymShape* q = new QymShape{res, {}, {}, {}, {}};
@@ -217,7 +220,8 @@ extern "C" QymShape* qym_shape_holes_stepped(const QymShape* s, int kind, const 
                 tool_ids = one_ids;
                 continue;
             }
-            BRepAlgoAPI_Fuse fu(all_tools, one);
+            BRepAlgoAPI_Fuse fu;
+            qym_boolean(fu, all_tools, one);
             TopoDS_Shape merged = fu.Shape();
             if (merged.IsNull()) return nullptr;
             TopTools_DataMapOfShapeInteger out;
@@ -228,7 +232,8 @@ extern "C" QymShape* qym_shape_holes_stepped(const QymShape* s, int kind, const 
             tool_ids = out;
         }
         if (all_tools.IsNull()) return nullptr;
-        BRepAlgoAPI_Cut algo(s->shape, all_tools);
+        BRepAlgoAPI_Cut algo;
+        qym_boolean(algo, s->shape, all_tools);
         TopoDS_Shape res = algo.Shape();
         if (res.IsNull()) return nullptr;
         QymShape* q = new QymShape{res, {}, {}, {}, {}};
@@ -301,17 +306,71 @@ static void why_no_named_edges(const char* where, const QymShape* s, size_t aske
     why(where, msg);
 }
 
+// AN EDGE A BLEND CAN RUN ALONG: not the point of a pole (no line at all), not the seam of a round face (the face meets
+// itself there, nothing to round), and with a face on either side. Handed to the kernel, the bevel of every edge of a
+// ball cut by a quarter crashed the program outright (SIGSEGV in the corner of three bevels at the pole).
+static TopTools_IndexedDataMapOfShapeListOfShape faces_of_edges(const TopoDS_Shape& body) {
+    TopTools_IndexedDataMapOfShapeListOfShape e2f;
+    TopExp::MapShapesAndAncestors(body, TopAbs_EDGE, TopAbs_FACE, e2f);
+    return e2f;
+}
+static bool bladeable(const TopoDS_Edge& e, const TopTools_IndexedDataMapOfShapeListOfShape& e2f) {
+    if (BRep_Tool::Degenerated(e)) return false;
+    if (!e2f.Contains(e)) return false;
+    const TopTools_ListOfShape& fl = e2f.FindFromKey(e);
+    if (fl.Extent() != 2) return false;
+    // closed on one of its faces and bounding another is still an edge: the cut that lies along a seam leaves one so,
+    // and that is what the moving of seams is for
+    return !fl.First().IsSame(fl.Last());
+}
+
+// AN EDGE ALONG A SEAM: closed on a round face - the face comes round to it from both sides - and bounding another face
+// too. The cut that lies on the seam of a round face leaves its edge so; the kernel handed one crashes outright in the
+// corner of three bevels at a pole (SIGSEGV), and elsewhere fails, so its seam is moved BEFORE the blend is tried.
+static bool along_a_seam(const QymShape* s, const uint32_t* idx, size_t n) {
+    const TopTools_IndexedDataMapOfShapeListOfShape e2f = faces_of_edges(s->shape);
+    for (int i = 1; i <= e2f.Extent(); ++i) {
+        const TopTools_ListOfShape& fl = e2f.FindFromIndex(i);
+        if (fl.Extent() != 2 || fl.First().IsSame(fl.Last()) || !s->eids.IsBound(e2f.FindKey(i))) continue;
+        const TopoDS_Edge e = TopoDS::Edge(e2f.FindKey(i));
+        if (!BRep_Tool::IsClosed(e, TopoDS::Face(fl.First())) && !BRep_Tool::IsClosed(e, TopoDS::Face(fl.Last()))) continue;
+        const uint32_t id = (uint32_t)s->eids.Find(e);
+        for (size_t k = 0; k < n; ++k) if (idx[k] == id) return true;
+    }
+    return false;
+}
+static QymShape* off_seams(const QymShape* s, const uint32_t* idx, size_t n, const std::function<QymShape*(const QymShape*)>& op);
+// The blend tried on the body with its seams moved first; when that cannot be done the edge is refused rather than
+// handed to the kernel as it is.
+static QymShape* off_seams_first(const QymShape* s, const uint32_t* idx, size_t n, const std::function<QymShape*(const QymShape*)>& op) {
+    if (QymShape* q = off_seams(s, idx, n, op)) return q;
+    why("blend/seam", "an edge lies along the seam of a round face, and the seam could not be moved off it");
+    return nullptr;
+}
+
+// declared here, defined beside the rounding of named edges: the blends of every edge meet the same seams
+static QymShape* off_seams(const QymShape* s, const uint32_t* idx, size_t n, const std::function<QymShape*(const QymShape*)>& op);
+static std::vector<uint32_t> every_edge(const QymShape* s);
+
 extern "C" QymShape* qym_shape_fillet_all(const QymShape* s, double r) {
     if (!s) return why("fillet/asked", "there is no body to round"), nullptr;
     if (r <= 0.0) return why("fillet/asked", "the radius is zero"), nullptr;
     try {
+        const std::vector<uint32_t> every = every_edge(s);
+        if (along_a_seam(s, every.data(), every.size())) return off_seams_first(s, every.data(), every.size(), [&](const QymShape* m) { return qym_shape_fillet_all(m, r); });
         BRepFilletAPI_MakeFillet mk(s->shape);
         TopTools_IndexedMapOfShape edges;
         TopExp::MapShapes(s->shape, TopAbs_EDGE, edges);
         if (edges.Extent() == 0) return why("fillet/edges", "the body has no edges at all"), nullptr;
-        for (int i = 1; i <= edges.Extent(); ++i) mk.Add(r, TopoDS::Edge(edges(i)));
+        const TopTools_IndexedDataMapOfShapeListOfShape e2f = faces_of_edges(s->shape);
+        for (int i = 1; i <= edges.Extent(); ++i)
+            if (bladeable(TopoDS::Edge(edges(i)), e2f)) mk.Add(r, TopoDS::Edge(edges(i)));
         mk.Build();
-        if (!mk.IsDone()) return why("fillet/build", "the kernel could not round every edge of the body at this radius"), nullptr;
+        if (!mk.IsDone() || !BRepCheck_Analyzer(mk.Shape()).IsValid()) {
+            const std::vector<uint32_t> all = every_edge(s);
+            if (QymShape* q = off_seams(s, all.data(), all.size(), [&](const QymShape* m) { return qym_shape_fillet_all(m, r); })) return q;
+            return why("fillet/build", "the kernel could not round every edge of the body at this radius"), nullptr;
+        }
         QymShape* q = new QymShape{mk.Shape(), {}, {}, {}, {}};
         propagate_ids(mk, s->shape, TopAbs_FACE, s->fids, q->shape, q->fids); // faces keep their ids; the fillets are new
         propagate_ids(mk, s->shape, TopAbs_EDGE, s->eids, q->shape, q->eids);
@@ -325,13 +384,21 @@ extern "C" QymShape* qym_shape_chamfer_all(const QymShape* s, double d) {
     if (!s) return why("chamfer/asked", "there is no body to bevel"), nullptr;
     if (d <= 0.0) return why("chamfer/asked", "the setback is zero"), nullptr;
     try {
+        const std::vector<uint32_t> every = every_edge(s);
+        if (along_a_seam(s, every.data(), every.size())) return off_seams_first(s, every.data(), every.size(), [&](const QymShape* m) { return qym_shape_chamfer_all(m, d); });
         BRepFilletAPI_MakeChamfer mk(s->shape);
         TopTools_IndexedMapOfShape edges;
         TopExp::MapShapes(s->shape, TopAbs_EDGE, edges);
         if (edges.Extent() == 0) return why("chamfer/edges", "the body has no edges at all"), nullptr;
-        for (int i = 1; i <= edges.Extent(); ++i) mk.Add(d, TopoDS::Edge(edges(i)));
+        const TopTools_IndexedDataMapOfShapeListOfShape e2f = faces_of_edges(s->shape);
+        for (int i = 1; i <= edges.Extent(); ++i)
+            if (bladeable(TopoDS::Edge(edges(i)), e2f)) mk.Add(d, TopoDS::Edge(edges(i)));
         mk.Build();
-        if (!mk.IsDone()) return why("chamfer/build", "the kernel could not bevel every edge of the body at this setback"), nullptr;
+        if (!mk.IsDone() || !BRepCheck_Analyzer(mk.Shape()).IsValid()) {
+            const std::vector<uint32_t> all = every_edge(s);
+            if (QymShape* q = off_seams(s, all.data(), all.size(), [&](const QymShape* m) { return qym_shape_chamfer_all(m, d); })) return q;
+            return why("chamfer/build", "the kernel could not bevel every edge of the body at this setback"), nullptr;
+        }
         QymShape* q = new QymShape{mk.Shape(), {}, {}, {}, {}};
         propagate_ids(mk, s->shape, TopAbs_FACE, s->fids, q->shape, q->fids);
         propagate_ids(mk, s->shape, TopAbs_EDGE, s->eids, q->shape, q->eids);
@@ -393,7 +460,8 @@ extern "C" QymShape* qym_shape_shell(const QymShape* s, double offset, const uin
             } else if (shrunk.ShapeType() != TopAbs_SOLID && shrunk.ShapeType() != TopAbs_COMPSOLID && shrunk.ShapeType() != TopAbs_COMPOUND) {
                 return why("shell/offset", "the offset came back as neither a solid nor a shell, so nothing can be cut with it"), nullptr;
             }
-            BRepAlgoAPI_Cut wall(shape, shrunk);
+            BRepAlgoAPI_Cut wall;
+            qym_boolean(wall, shape, shrunk);
             if (!wall.IsDone()) return why("shell/wall", "the shrunk copy could not be cut out of the body to leave a wall"), nullptr;
             TopoDS_Shape res = wall.Shape();
             double depth = std::abs(offset) * 2.0; // certainly through the wall: beyond it is already empty
@@ -404,7 +472,8 @@ extern "C" QymShape* qym_shape_shell(const QymShape* s, double offset, const uin
                 nv.Normalize();
                 BRepPrimAPI_MakePrism pr(f, nv * (-depth));
                 if (!pr.IsDone()) return why("shell/opening", "the face to open could not be extruded through the wall"), nullptr;
-                BRepAlgoAPI_Cut open(res, pr.Shape());
+                BRepAlgoAPI_Cut open;
+                qym_boolean(open, res, pr.Shape());
                 if (!open.IsDone()) return why("shell/opening", "the opening could not be cut out of the walled body"), nullptr;
                 res = open.Shape();
             }
@@ -574,35 +643,33 @@ extern "C" QymShape* qym_shape_shell(const QymShape* s, double offset, const uin
 // A CENTRED shell: a wall of thickness `t` centred on the original surface. The solid is grown by +t/2
 // outwards (MakeOffsetShape) and then hollowed by -t inwards (the open faces `ids` are mapped through
 // Generated).
+// A WALL CENTRED ON THE SURFACE: half the thickness outward, half inward, the open faces open where they were. It is
+// made of the two halves the shell already builds right - a wall of t / 2 outward and a wall of t / 2 inward from the
+// same surface - fused along that surface. Grown whole by t / 2 and then hollowed by t, as it was, the open face went
+// up by t / 2 with the rest and the hollowing took nothing out: a block 40 x 30 x 10 opened on top came out 16055.5
+// mm^3, more than the 12000 of the block itself, with no hollow and a wall standing 1 mm above the open face.
 extern "C" QymShape* qym_shape_shell_center(const QymShape* s, double t, const uint32_t* ids, size_t n) {
     if (!s || t < 1e-9 || n == 0) return nullptr;
     try {
-        BRepOffsetAPI_MakeOffsetShape mko;
-        mko.PerformByJoin(s->shape, t * 0.5, 1.0e-3);
-        if (!mko.IsDone()) return nullptr;
-        TopoDS_Shape grown = mko.Shape();
-        // the source's open faces (by id) -> their images on the grown solid (Generated)
-        TopTools_ListOfShape removeGrown;
-        for (TopExp_Explorer ex(s->shape, TopAbs_FACE); ex.More(); ex.Next()) {
-            uint32_t fid = s->fids.IsBound(ex.Current()) ? static_cast<uint32_t>(s->fids.Find(ex.Current())) : 0u;
-            if (fid == 0) continue;
-            bool open = false;
-            for (size_t k = 0; k < n; ++k) {
-                if (ids[k] == fid) { open = true; break; }
-            }
-            if (!open) continue;
-            const TopTools_ListOfShape& gen = mko.Generated(ex.Current());
-            for (TopTools_ListIteratorOfListOfShape it(gen); it.More(); it.Next()) {
-                if (it.Value().ShapeType() == TopAbs_FACE) removeGrown.Append(it.Value());
-            }
-        }
-        if (removeGrown.IsEmpty()) return nullptr;
-        BRepOffsetAPI_MakeThickSolid mk;
-        mk.MakeThickSolidByJoin(grown, removeGrown, -t, 1.0e-3);
-        mk.Build();
-        if (!mk.IsDone()) return nullptr;
-        // with a double history (offset then thicken) id propagation is unreliable, so the names are seeded anew
-        return seeded(mk.Shape());
+        std::unique_ptr<QymShape> out(qym_shape_shell(s, t * 0.5, ids, n, nullptr, nullptr, 0));
+        if (!out) return nullptr;
+        std::unique_ptr<QymShape> in(qym_shape_shell(s, -t * 0.5, ids, n, nullptr, nullptr, 0));
+        if (!in) return nullptr;
+        BRepAlgoAPI_Fuse fuse;
+        if (!qym_boolean(fuse, out->shape, in->shape)) return why("shell/center", "the two halves of the wall did not join"), nullptr;
+        QymShape* q = new QymShape{fuse.Shape(), {}, {}, {}, {}};
+        // the names of either half go on: the faces of the part as the outward half moved them, its walls as the
+        // inward half named them
+        propagate_ids(fuse, out->shape, TopAbs_FACE, out->fids, q->shape, q->fids);
+        propagate_ids(fuse, in->shape, TopAbs_FACE, in->fids, q->shape, q->fids);
+        propagate_ids(fuse, out->shape, TopAbs_EDGE, out->eids, q->shape, q->eids);
+        propagate_ids(fuse, in->shape, TopAbs_EDGE, in->eids, q->shape, q->eids);
+        // the surface the halves met on is glued away: the side of a wall is one face, not two
+        q->shape = unify_monolithic(q->shape, q->fids, q->eids, &q->absorbed);
+        int nf = next_local(q->fids), ne = next_local(q->eids);
+        fill_unnamed(q->shape, TopAbs_FACE, q->fids, nf);
+        fill_unnamed(q->shape, TopAbs_EDGE, q->eids, ne);
+        return q;
     } QYM_WHY_CATCH("edge operation")
     return nullptr;
 }
@@ -819,8 +886,10 @@ extern "C" void qym_edges_free(QymEdges* e) { delete e; }
 // drift by ordinal.
 static int add_fillet_edges_by_id(BRepFilletAPI_MakeFillet& mk, const QymShape* s, double r, const uint32_t* idx, size_t n) {
     int added = 0;
+    TopTools_MapOfShape seen; // an edge is met once for every face it bounds: it is added once
+    const TopTools_IndexedDataMapOfShapeListOfShape e2f = faces_of_edges(s->shape);
     for (TopExp_Explorer ex(s->shape, TopAbs_EDGE); ex.More(); ex.Next()) {
-        if (!s->eids.IsBound(ex.Current())) continue;
+        if (!s->eids.IsBound(ex.Current()) || !seen.Add(ex.Current()) || !bladeable(TopoDS::Edge(ex.Current()), e2f)) continue;
         uint32_t id = static_cast<uint32_t>(s->eids.Find(ex.Current()));
         for (size_t k = 0; k < n; ++k) {
             if (idx[k] == id) { mk.Add(r, TopoDS::Edge(ex.Current())); ++added; break; }
@@ -830,8 +899,10 @@ static int add_fillet_edges_by_id(BRepFilletAPI_MakeFillet& mk, const QymShape* 
 }
 static int add_chamfer_edges_by_id(BRepFilletAPI_MakeChamfer& mk, const QymShape* s, double d, const uint32_t* idx, size_t n) {
     int added = 0;
+    TopTools_MapOfShape seen; // an edge is met once for every face it bounds: it is added once
+    const TopTools_IndexedDataMapOfShapeListOfShape e2f = faces_of_edges(s->shape);
     for (TopExp_Explorer ex(s->shape, TopAbs_EDGE); ex.More(); ex.Next()) {
-        if (!s->eids.IsBound(ex.Current())) continue;
+        if (!s->eids.IsBound(ex.Current()) || !seen.Add(ex.Current()) || !bladeable(TopoDS::Edge(ex.Current()), e2f)) continue;
         uint32_t id = static_cast<uint32_t>(s->eids.Find(ex.Current()));
         for (size_t k = 0; k < n; ++k) {
             if (idx[k] == id) { mk.Add(d, TopoDS::Edge(ex.Current())); ++added; break; }
@@ -961,16 +1032,515 @@ static void name_blend_faces(BRepBuilderAPI_MakeShape& mk, const QymShape* s, Qy
 
 }
 
+// NAMES CARRIED BY PLACE from `old` to `now`: a face or an edge of `now` lying where a named one of `old` lay - the
+// same centre and area for a face, the same centre and length for an edge, to 1e-6 - takes its name. For an operation
+// that hands on no history and moves nothing but what it removes. Two named things of `old` landing on one of `now`:
+// the first keeps it, the other is recorded in `absorbed` as yielded to it. `out` may be `was`.
+static void names_by_place(TopAbs_ShapeEnum ty, const TopoDS_Shape& old, const TopTools_DataMapOfShapeInteger& was, const TopoDS_Shape& now,
+                           TopTools_DataMapOfShapeInteger& out, std::vector<std::pair<unsigned, unsigned>>* absorbed) {
+    auto key = [&](const TopoDS_Shape& sh) -> std::array<double, 4> {
+        GProp_GProps g;
+        if (ty == TopAbs_EDGE) BRepGProp::LinearProperties(sh, g); else BRepGProp::SurfaceProperties(sh, g);
+        const gp_Pnt c = g.CentreOfMass();
+        return {c.X(), c.Y(), c.Z(), g.Mass()};
+    };
+    std::vector<std::pair<std::array<double, 4>, int>> known;
+    TopTools_IndexedMapOfShape olds;
+    TopExp::MapShapes(old, ty, olds);
+    for (int i = 1; i <= olds.Extent(); ++i)
+        if (was.IsBound(olds(i))) known.push_back({key(olds(i)), was.Find(olds(i))});
+    TopTools_IndexedMapOfShape news;
+    TopExp::MapShapes(now, ty, news);
+    std::vector<std::array<double, 4>> nk;
+    for (int i = 1; i <= news.Extent(); ++i) nk.push_back(key(news(i)));
+    TopTools_DataMapOfShapeInteger res;
+    for (const auto& [k, id] : known) {
+        int best = 0;
+        double bd = 1e-6;
+        for (int i = 1; i <= news.Extent(); ++i) {
+            double d = 0.0;
+            for (int j = 0; j < 4; ++j) d = std::max(d, std::abs(k[j] - nk[i - 1][j]));
+            if (d < bd) { bd = d; best = i; }
+        }
+        if (best == 0) continue;
+        if (!res.IsBound(news(best))) res.Bind(news(best), id);
+        else if (absorbed && (id & QYM_NAMED) && (res.Find(news(best)) & QYM_NAMED) && id != res.Find(news(best)))
+            absorbed->emplace_back((unsigned)id, (unsigned)res.Find(news(best)));
+    }
+    out = res;
+}
+
+// A FACE NARROWER THAN THE PRECISION IS A CRACK, NOT A FACE: taken out, its neighbours meeting across where it lay,
+// and the number taken out returned. A rounding of a radius equal to the width of the wall it runs into takes on the
+// step back of 2e-8 (the limiting case) and leaves 4e-8 of that wall standing - a strip of 1.6e-7 mm^2 beside the next
+// corner - and a rounding of that corner afterwards fails: of four corners of two 2 mm pockets rounded R2 after R2 on
+// their far corners, the two with the strip beside them refused and the other two took (+1.29 mm^3 each), and with the
+// strips taken out all four take. It sits in the common `finish` funnel: any operation can leave such a strip.
+// Only a body with a face under 1e-3 mm^2 is looked at, and the result is kept only if it is sound, has fewer faces
+// and the same volume.
+// IS THE FACE A CRACK? Under 1e-3 mm^2 of area AND narrow: its width - twice the area over the length of its border -
+// under 1e-5 mm. The strip a limiting rounding leaves is 1.6e-7 mm^2 along millimetres, 4e-8 wide; a triangle of a
+// mesh as small as 2e-4 mm^2 is 1e-2 wide, and the area alone took thousands of those for cracks on every operation
+// over a body made of a mesh (800 of 800 faces of a 0.2 mm ball).
+static bool crack_face(const TopoDS_Shape& f) {
+    // a rough area first: the question is only whether it is small, and the full integration over the fitted walls of
+    // a simplified handle took 1.4 s of an 11.6 s node for 162 faces none of which was
+    GProp_GProps rough;
+    BRepGProp::SurfaceProperties(f, rough, 0.1);
+    if (rough.Mass() >= 1e-2) return false;
+    GProp_GProps g;
+    BRepGProp::SurfaceProperties(f, g);
+    if (g.Mass() >= 1e-3) return false;
+    GProp_GProps border;
+    BRepGProp::LinearProperties(f, border);
+    return border.Mass() > 0.0 && 2.0 * g.Mass() / border.Mass() < 1e-5;
+}
+
+// How many faces of the body are cracks.
+extern "C" int qym_shape_sliver_count(const QymShape* s) {
+    if (!s || s->shape.IsNull()) return 0;
+    try {
+        int n = 0;
+        for (TopExp_Explorer fx(s->shape, TopAbs_FACE); fx.More(); fx.Next()) n += crack_face(fx.Current());
+        return n;
+    } catch (...) { return 0; }
+}
+
+extern "C" int qym_shape_drop_slivers(QymShape* s) {
+    if (!s || s->shape.IsNull()) return 0;
+    try {
+        int cracks = 0, before = 0; // not `small`: a macro of the Windows headers
+        for (TopExp_Explorer fx(s->shape, TopAbs_FACE); fx.More(); fx.Next()) {
+            ++before;
+            cracks += crack_face(fx.Current());
+        }
+        if (cracks == 0) return 0;
+        // on a copy: the fixing edits the edges and faces it is handed in place, whether or not its result is kept -
+        // run on the body itself it took names off a threaded shaft it then left as it was (88 faces, 86 names)
+        const TopoDS_Shape copy = BRepBuilderAPI_Copy(s->shape).Shape();
+        Handle(ShapeFix_FixSmallFace) fix = new ShapeFix_FixSmallFace();
+        fix->Init(copy);
+        fix->SetPrecision(1e-6);
+        fix->SetMaxTolerance(1e-5);
+        fix->Perform();
+        const TopoDS_Shape out = fix->FixShape();
+        if (out.IsNull() || !BRepCheck_Analyzer(out).IsValid()) return 0;
+        int after = 0;
+        for (TopExp_Explorer fx(out, TopAbs_FACE); fx.More(); fx.Next()) ++after;
+        if (after >= before) return 0;
+        GProp_GProps v0, v1;
+        BRepGProp::VolumeProperties(s->shape, v0);
+        BRepGProp::VolumeProperties(out, v1);
+        if (std::abs(v1.Mass() - v0.Mass()) > 1e-6 * std::max(1.0, std::abs(v0.Mass()))) return 0;
+        // the names by where things lie: the fixing hands on no history, and every edge and face but the strips
+        // stays where it was to 1e-6 - the two long sides of a strip become one edge, one name keeping it and the
+        // other recorded as yielded to it, so a reference to either still finds the edge
+        int nf = next_local(s->fids), ne = next_local(s->eids);
+        names_by_place(TopAbs_FACE, s->shape, s->fids, out, s->fids, &s->absorbed);
+        names_by_place(TopAbs_EDGE, s->shape, s->eids, out, s->eids, &s->absorbed);
+        // what moved by more than 1e-6 with the strips gone - the neighbours they were cut from - is named afresh
+        fill_unnamed(out, TopAbs_FACE, s->fids, nf);
+        fill_unnamed(out, TopAbs_EDGE, s->eids, ne);
+        s->shape = out;
+        return before - after;
+    } catch (...) { return 0; } // it did not work out; the solid stays as it was, no worse
+}
+
+// A SEAM ON THE END OF AN EDGE TO BE BLENDED, moved away.
+//
+// A closed round face - a cylinder, a cone, a ball, a torus - carries its seam as an edge. Where that seam starts on a vertex of an
+// edge to be rounded, it continues the edge in a straight line, and the rolling ball has to end against an edge
+// that goes straight on: the kernel gives up at any radius. Measured: of eight edges of a symmetric part one would
+// not take 8.6, nor 2, because the seam of the round corner beside it ran up from its end; at the other corners the
+// seam lay elsewhere and the same edge took any radius. The seam is where the face happened to be made, not a
+// property of the shape - on any part a person builds it can fall on the end of an edge.
+//
+// The face is cut in two along the line of its surface opposite the seam, both halves are laid on the same surface
+// turned half a turn - whose own seam is that very line - and glued back: the same surface, the same body, the seam
+// now opposite the edge. Names travel through every step. Returns whether any seam was moved.
+static thread_local int again = 0; // the rounding tried once more after its seams were moved
+// THE SAME SURFACE WITH ITS SEAM HALF A TURN AWAY from the seam edge `seam` of face `f`. A seam stands where the
+// parameter starts: a round surface turned half a turn about its own axis is the very same surface with its parameter
+// starting opposite. A seam along the other parameter - the circle of a torus - moves with the torus made a circle swept
+// about the axis, the circle starting on its far side. Null when it cannot be moved.
+struct Turn {
+    Handle(Geom_Surface) surface; // the same surface, its seam half a turn away
+    double du = 0.0, dv = 0.0;    // what a point's parameters gain on it: the old (u, v) is the new (u + du, v + dv)
+};
+
+static Turn turned_surface(const TopoDS_Face& f, const TopoDS_Edge& seam) {
+    TopLoc_Location loc;
+    const Handle(Geom_Surface) g = BRep_Tool::Surface(f, loc);
+    if (g.IsNull() || !loc.IsIdentity()) return {};
+    // which parameter the seam cuts across: it runs along the other one, at a constant value of its own
+    Standard_Real a, b;
+    const Handle(Geom2d_Curve) pc = BRep_Tool::CurveOnSurface(seam, f, a, b);
+    if (pc.IsNull()) return {};
+    const gp_Pnt2d p0 = pc->Value(a), p1 = pc->Value(b);
+    const bool at_u = std::abs(p1.X() - p0.X()) < std::abs(p1.Y() - p0.Y()); // a seam at a constant U
+    Handle(Geom_Surface) base = g;
+    if (auto tr = Handle(Geom_RectangularTrimmedSurface)::DownCast(g)) base = tr->BasisSurface();
+    // turned half a turn about its own axis, a round surface's angle of every point drops by pi
+    auto about_axis = [&](gp_Ax3 ax) { ax.Rotate(ax.Axis(), M_PI); return ax; };
+    if (at_u) {
+        if (auto c = Handle(Geom_CylindricalSurface)::DownCast(base)) return {new Geom_CylindricalSurface(about_axis(c->Position()), c->Radius()), -M_PI, 0.0};
+        if (auto c = Handle(Geom_ConicalSurface)::DownCast(base)) return {new Geom_ConicalSurface(about_axis(c->Position()), c->SemiAngle(), c->RefRadius()), -M_PI, 0.0};
+        if (auto c = Handle(Geom_SphericalSurface)::DownCast(base)) return {new Geom_SphericalSurface(about_axis(c->Position()), c->Radius()), -M_PI, 0.0};
+        if (auto c = Handle(Geom_ToroidalSurface)::DownCast(base)) return {new Geom_ToroidalSurface(about_axis(c->Position()), c->MajorRadius(), c->MinorRadius()), -M_PI, 0.0};
+        if (auto c = Handle(Geom_SurfaceOfRevolution)::DownCast(base)) {
+            Handle(Geom_Curve) turned = Handle(Geom_Curve)::DownCast(c->BasisCurve()->Copy());
+            turned->Rotate(c->Axis(), M_PI);
+            return {new Geom_SurfaceOfRevolution(turned, c->Axis()), -M_PI, 0.0};
+        }
+        return {};
+    }
+    // a torus across its tube: the same torus as a circle swept about the axis, the circle starting on its far side
+    if (auto c = Handle(Geom_ToroidalSurface)::DownCast(base)) {
+        const gp_Ax3& p = c->Position();
+        if (!p.Direct()) return {};
+        const gp_Pnt centre = p.Location().Translated(gp_Vec(p.XDirection()) * c->MajorRadius());
+        // the circle C(v) = centre + r (cos v X + sin v Z): its normal is X ^ Z = -Y; started at -X it is C(v' + pi)
+        const Handle(Geom_Circle) tube = new Geom_Circle(gp_Ax2(centre, p.YDirection().Reversed(), p.XDirection().Reversed()), c->MinorRadius());
+        return {new Geom_SurfaceOfRevolution(tube, p.Axis()), 0.0, -M_PI};
+    }
+    return {};
+}
+
+// THE PIECES OF A ROUND FACE LAID ON THE TURNED SURFACE, their edges and vertices where they were: the lines on each piece
+// are the old ones moved by the shift of the parameters, exactly, the poles of a ball included - worked out afresh by
+// projection they come out a period off at a pole, and the piece is then wrong in the plane of its parameters.
+class TurnPieces : public BRepTools_Modification {
+public:
+    struct On { Handle(Geom_Surface) surface; double du, dv; };
+    std::vector<On> on;
+    TopTools_DataMapOfShapeInteger face_to; // a piece -> its entry in `on`
+
+    Standard_Boolean NewSurface(const TopoDS_Face& F, Handle(Geom_Surface)& S, TopLoc_Location& L, Standard_Real& Tol, Standard_Boolean& RevWires, Standard_Boolean& RevFace) override {
+        if (!face_to.IsBound(F)) return Standard_False;
+        S = on[face_to.Find(F)].surface;
+        L = TopLoc_Location();
+        Tol = BRep_Tool::Tolerance(F);
+        RevWires = RevFace = Standard_False;
+        return Standard_True;
+    }
+    Standard_Boolean NewCurve(const TopoDS_Edge&, Handle(Geom_Curve)&, TopLoc_Location&, Standard_Real&) override { return Standard_False; }
+    Standard_Boolean NewPoint(const TopoDS_Vertex&, gp_Pnt&, Standard_Real&) override { return Standard_False; }
+    Standard_Boolean NewCurve2d(const TopoDS_Edge& E, const TopoDS_Face& F, const TopoDS_Edge&, const TopoDS_Face&, Handle(Geom2d_Curve)& C, Standard_Real& Tol) override {
+        if (!face_to.IsBound(F)) return Standard_False;
+        const On& o = on[face_to.Find(F)];
+        Standard_Real a, b;
+        const Handle(Geom2d_Curve) old = BRep_Tool::CurveOnSurface(E, F, a, b);
+        if (old.IsNull()) return Standard_False;
+        C = Handle(Geom2d_Curve)::DownCast(old->Copy());
+        C->Translate(gp_Vec2d(o.du, o.dv));
+        Tol = BRep_Tool::Tolerance(E);
+        return Standard_True;
+    }
+    Standard_Boolean NewParameter(const TopoDS_Vertex&, const TopoDS_Edge&, Standard_Real&, Standard_Real&) override { return Standard_False; }
+    GeomAbs_Shape Continuity(const TopoDS_Edge& E, const TopoDS_Face& F1, const TopoDS_Face& F2, const TopoDS_Edge&, const TopoDS_Face&, const TopoDS_Face&) override {
+        return BRep_Tool::Continuity(E, F1, F2);
+    }
+};
+
+// A BLEND TRIED AGAIN OFF THE SEAMS: when a rounding or a bevel did not come out, the seams on the ends of its edges
+// are moved away (move_seams_off) and `op` is run once more on that body; what comes out is glued back so the lines
+// the moving left behind do not stay on the part. Null when there was no seam to move or it did not help.
+static QymShape* off_seams(const QymShape* s, const uint32_t* idx, size_t n, const std::function<QymShape*(const QymShape*)>& op);
+
+// THE LINES OF A FACE ALONG ITS PARAMETERS MADE EXACT: the cutting of a closed face lays its new lines as splines of the
+// eighth degree, a hair off the circle of a ball's meridian (1e-5), and a line like that turned into the seam spoils
+// the blend at the pole - the ball whose seam lies there exactly takes the same edge (the volume 454.364 either way).
+// A line whose trace on the face runs straight along one parameter IS the iso line of the surface: given it, it is exact.
+static void exact_isos(const TopoDS_Face& f) {
+    TopLoc_Location sl;
+    const Handle(Geom_Surface) surf = BRep_Tool::Surface(f, sl);
+    if (surf.IsNull() || !sl.IsIdentity()) return;
+    BRep_Builder bb;
+    for (TopExp_Explorer ex(f, TopAbs_EDGE); ex.More(); ex.Next()) {
+        const TopoDS_Edge e = TopoDS::Edge(ex.Current());
+        if (BRep_Tool::Degenerated(e)) continue;
+        Standard_Real c0, c1, p0, p1;
+        TopLoc_Location cl;
+        const Handle(Geom_Curve) c3 = BRep_Tool::Curve(e, cl, c0, c1);
+        if (c3.IsNull() || !cl.IsIdentity() || !Handle(Geom_BSplineCurve)::DownCast(c3)) continue;
+        Handle(Geom2d_Curve) pc = BRep_Tool::CurveOnSurface(e, f, p0, p1);
+        if (auto tr = Handle(Geom2d_TrimmedCurve)::DownCast(pc)) pc = tr->BasisCurve();
+        const Handle(Geom2d_Line) ln = Handle(Geom2d_Line)::DownCast(pc);
+        if (ln.IsNull()) continue;
+        const gp_Pnt2d o = ln->Location();
+        const gp_Dir2d d = ln->Direction();
+        const bool along_v = std::abs(d.X()) < 1e-12, along_u = std::abs(d.Y()) < 1e-12;
+        if (!along_v && !along_u) continue;
+        // the iso line and where the trace starts on it: the edge at its parameter t lies at iso(at + sense * t)
+        Handle(Geom_Curve) iso = along_v ? surf->UIso(o.X()) : surf->VIso(o.Y());
+        if (auto tr = Handle(Geom_TrimmedCurve)::DownCast(iso)) iso = tr->BasisCurve(); // a meridian comes trimmed to the poles
+        const double at = along_v ? o.Y() : o.X(), sense = along_v ? d.Y() : d.X();
+        Handle(Geom_Curve) exact;
+        if (auto l = Handle(Geom_Line)::DownCast(iso)) {
+            exact = new Geom_Line(gp_Ax1(l->Value(at), sense > 0 ? l->Position().Direction() : l->Position().Direction().Reversed()));
+        } else if (auto ci = Handle(Geom_Circle)::DownCast(iso)) {
+            const gp_Pnt centre = ci->Location();
+            gp_Pnt start;
+            gp_Vec tangent;
+            ci->D1(at, start, tangent);
+            const gp_Dir x(gp_Vec(centre, start)), y(tangent * sense);
+            exact = new Geom_Circle(gp_Ax2(centre, x.Crossed(y), x), ci->Radius());
+        }
+        if (exact.IsNull()) continue;
+        // no worse than the spline it replaces, over its own range
+        double off = 0.0;
+        for (int k = 0; k <= 8; ++k) {
+            const double t = c0 + (c1 - c0) * k / 8.0;
+            off = std::max(off, exact->Value(t).Distance(c3->Value(t)));
+        }
+        if (off > 10.0 * BRep_Tool::Tolerance(e) + 1e-7) continue;
+        bb.UpdateEdge(e, exact, BRep_Tool::Tolerance(e));
+    }
+}
+
+static bool move_seams_off(QymShape* q, const uint32_t* idx, size_t n) {
+    // the vertices of the edges to be blended, by where they stand: the seam and the edge may each carry their own
+    // vertex at the one point
+    std::vector<gp_Pnt> ends;
+    for (TopExp_Explorer ex(q->shape, TopAbs_EDGE); ex.More(); ex.Next()) {
+        if (!q->eids.IsBound(ex.Current())) continue;
+        const uint32_t id = (uint32_t)q->eids.Find(ex.Current());
+        for (size_t k = 0; k < n; ++k)
+            if (idx[k] == id) {
+                for (TopExp_Explorer vx(ex.Current(), TopAbs_VERTEX); vx.More(); vx.Next()) ends.push_back(BRep_Tool::Pnt(TopoDS::Vertex(vx.Current())));
+                break;
+            }
+    }
+    auto on_end = [&](const gp_Pnt& p) { for (const auto& e : ends) if (e.Distance(p) < 1e-5) return true; return false; };
+    // the round faces to turn: a face whose seam has a vertex on the end of an edge to be blended, with that seam
+    std::vector<std::pair<TopoDS_Face, TopoDS_Edge>> to_turn;
+    for (TopExp_Explorer fx(q->shape, TopAbs_FACE); fx.More(); fx.Next()) {
+        const TopoDS_Face f = TopoDS::Face(fx.Current());
+        for (TopExp_Explorer ex(f, TopAbs_EDGE); ex.More(); ex.Next()) {
+            const TopoDS_Edge e = TopoDS::Edge(ex.Current());
+            if (!BRep_Tool::IsClosed(e, f)) continue;
+            bool touches = false;
+            for (TopExp_Explorer vx(e, TopAbs_VERTEX); vx.More() && !touches; vx.Next()) touches = on_end(BRep_Tool::Pnt(TopoDS::Vertex(vx.Current())));
+            if (touches) { to_turn.push_back({f, e}); break; }
+        }
+    }
+    if (to_turn.empty()) return false;
+    // every closed face cut in two, opposite its seam: no half is closed any more, so each can be laid on the turned
+    // surface, and the cut is where that surface's own seam lies - glued back, the face takes its seam there. Cut in
+    // thirds instead, the gluing put the seam on a third's line, 120 deg off, and the blend at a ball's pole failed
+    ShapeUpgrade_ShapeDivideClosed div(q->shape);
+    div.SetNbSplitPoints(1);
+    if (!div.Perform()) return false;
+    const Handle(ShapeBuild_ReShape) ctx = div.GetContext();
+    QymShape cut{div.Result(), {}, {}, {}, {}};
+    auto carry = [&](const TopTools_DataMapOfShapeInteger& from, TopTools_DataMapOfShapeInteger& to) {
+        for (TopTools_DataMapIteratorOfDataMapOfShapeInteger it(from); it.More(); it.Next()) {
+            TopoDS_Shape now = ctx->Value(it.Key());
+            if (now.IsNull()) continue;
+            // a face cut in pieces keeps its name on the first; the others are named afresh
+            TopExp_Explorer first(now, it.Key().ShapeType());
+            const TopoDS_Shape& one = first.More() ? first.Current() : now;
+            if (!to.IsBound(one)) to.Bind(one, it.Value());
+        }
+    };
+    carry(q->fids, cut.fids);
+    carry(q->eids, cut.eids);
+    // EVERY PIECE of such a face laid on the same round surface turned half a turn: glued back, the pieces make the one
+    // face again, its seam now opposite, and nothing goes straight on from the end of the edge any more. All of them, not
+    // only the two either side of the seam: a piece left on the old surface keeps a line between it and the turned ones,
+    // and that line - a meridian of a ball - runs into the end of the edge at the pole just as the seam did
+    Handle(TurnPieces) turn = new TurnPieces();
+    for (const auto& [face, seam] : to_turn) {
+        const Turn t = turned_surface(face, seam);
+        if (t.surface.IsNull()) continue;
+        for (TopExp_Explorer px(ctx->Value(face), TopAbs_FACE); px.More(); px.Next()) {
+            const TopoDS_Face piece = TopoDS::Face(px.Current());
+            // each piece on its own copy of the surface, its lines moved by the shift and by whole periods so that the
+            // piece lies in one run of the parameters: two pieces sharing one surface would share one line between them,
+            // a period apart on either side of the new seam
+            Standard_Real u0, u1, v0, v1;
+            BRepTools::UVBounds(piece, u0, u1, v0, v1);
+            const Handle(Geom_Surface) own = Handle(Geom_Surface)::DownCast(t.surface->Copy());
+            auto into_period = [](double mid, double d, bool periodic, double period) {
+                if (!periodic || d == 0.0) return d;
+                const double at = mid + d;
+                return d - std::floor(at / period) * period; // the piece's middle in [0, period)
+            };
+            const double du = into_period(0.5 * (u0 + u1), t.du, own->IsUPeriodic(), own->IsUPeriodic() ? own->UPeriod() : 0.0);
+            const double dv = into_period(0.5 * (v0 + v1), t.dv, own->IsVPeriodic(), own->IsVPeriodic() ? own->VPeriod() : 0.0);
+            turn->face_to.Bind(piece, (int)turn->on.size());
+            turn->on.push_back({own, du, dv});
+        }
+    }
+    if (turn->on.empty()) return false;
+    BRepTools_Modifier mod(cut.shape, turn);
+    if (!mod.IsDone()) return false;
+    TopoDS_Shape remade = mod.ModifiedShape(cut.shape);
+    for (TopTools_DataMapIteratorOfDataMapOfShapeInteger it(turn->face_to); it.More(); it.Next()) exact_isos(TopoDS::Face(mod.ModifiedShape(it.Key())));
+    auto through = [&](TopTools_DataMapOfShapeInteger& ids) {
+        TopTools_DataMapOfShapeInteger out;
+        for (TopTools_DataMapIteratorOfDataMapOfShapeInteger it(ids); it.More(); it.Next()) {
+            TopoDS_Shape now;
+            try { now = mod.ModifiedShape(it.Key()); } catch (...) { continue; }
+            if (!now.IsNull() && !out.IsBound(now)) out.Bind(now, it.Value());
+        }
+        ids = out;
+    };
+    through(cut.fids);
+    through(cut.eids);
+    // A NAME THE HISTORY DID NOT HAND ON is found by where the thing lies: the cutting and the healing rebuild a seam
+    // edge and its neighbours without saying what became of them, while every edge and face but the one face turned
+    // stays where it was - the same ends and middle for an edge, the same centre and area for a face
+    auto by_place = [&](TopAbs_ShapeEnum ty, const TopTools_DataMapOfShapeInteger& was, TopTools_DataMapOfShapeInteger& now) {
+        std::vector<std::pair<std::array<double, 7>, int>> known;
+        auto key = [&](const TopoDS_Shape& sh) -> std::array<double, 7> {
+            if (ty == TopAbs_EDGE) {
+                // the centre and the length of the line: neither depends on which way it runs or where a closed one
+                // starts - the circle of a tube starts elsewhere once its seam is moved
+                GProp_GProps g;
+                BRepGProp::LinearProperties(sh, g);
+                const gp_Pnt c = g.CentreOfMass();
+                return {c.X(), c.Y(), c.Z(), g.Mass(), 0.0, 0.0, 0.0};
+            }
+            GProp_GProps g;
+            BRepGProp::SurfaceProperties(sh, g);
+            const gp_Pnt c = g.CentreOfMass();
+            return {c.X(), c.Y(), c.Z(), g.Mass(), 0.0, 0.0, 0.0};
+        };
+        TopTools_IndexedMapOfShape olds;
+        TopExp::MapShapes(q->shape, ty, olds);
+        for (int i = 1; i <= olds.Extent(); ++i)
+            if (was.IsBound(olds(i))) known.push_back({key(olds(i)), was.Find(olds(i))});
+        // the place decides where it is exact: a thing lying just where a named one lay takes that name, whatever the
+        // history handed it, and the name is taken off anything else that carried it
+        TopTools_IndexedMapOfShape news;
+        TopExp::MapShapes(remade, ty, news);
+        for (int i = 1; i <= news.Extent(); ++i) {
+            const auto k = key(news(i));
+            for (const auto& [kk, id] : known) {
+                bool same = true;
+                for (int j = 0; j < 7 && same; ++j) same = std::abs(k[j] - kk[j]) < 1e-6;
+                if (!same) continue;
+                std::vector<TopoDS_Shape> other;
+                for (TopTools_DataMapIteratorOfDataMapOfShapeInteger it(now); it.More(); it.Next())
+                    if (it.Value() == id && !it.Key().IsSame(news(i))) other.push_back(it.Key());
+                for (const auto& o : other) now.UnBind(o);
+                if (now.IsBound(news(i))) now.UnBind(news(i));
+                now.Bind(news(i), id);
+                break;
+            }
+        }
+    };
+    by_place(TopAbs_EDGE, q->eids, cut.eids);
+    // AN EDGE TO BE BLENDED CUT IN PIECES by the cutting of a face closed both ways - the circle of a tube - hands its
+    // name to every piece lying on it: the blend takes the chain, and the gluing after it joins the pieces again
+    for (TopTools_DataMapIteratorOfDataMapOfShapeInteger it(q->eids); it.More(); it.Next()) {
+        bool asked = false;
+        for (size_t k = 0; k < n && !asked; ++k) asked = idx[k] == (uint32_t)it.Value();
+        if (!asked) continue;
+        Standard_Real w0, w1;
+        const Handle(Geom_Curve) whole = BRep_Tool::Curve(TopoDS::Edge(it.Key()), w0, w1); // placed in space
+        if (whole.IsNull()) continue;
+        int pieces = 0;
+        bool found = false;
+        for (TopTools_DataMapIteratorOfDataMapOfShapeInteger jt(cut.eids); jt.More() && !found; jt.Next()) found = jt.Value() == it.Value();
+        if (found) continue;
+        TopTools_IndexedMapOfShape news;
+        TopExp::MapShapes(remade, TopAbs_EDGE, news);
+        for (int i = 1; i <= news.Extent(); ++i) {
+            BRepAdaptor_Curve c(TopoDS::Edge(news(i)));
+            bool on = true;
+            for (double t : {0.0, 0.5, 1.0}) {
+                const gp_Pnt pnt = c.Value(c.FirstParameter() + t * (c.LastParameter() - c.FirstParameter()));
+                ShapeAnalysis_Curve sac;
+                gp_Pnt proj;
+                Standard_Real prm;
+                on = on && sac.Project(whole, pnt, 1e-6, proj, prm) < 1e-6;
+            }
+            if (on && !cut.eids.IsBound(news(i))) { cut.eids.Bind(news(i), it.Value()); ++pieces; }
+        }
+    }
+    by_place(TopAbs_FACE, q->fids, cut.fids);
+    int nf = next_local(q->fids), ne = next_local(q->eids);
+    fill_unnamed(remade, TopAbs_FACE, cut.fids, nf);
+    fill_unnamed(remade, TopAbs_EDGE, cut.eids, ne);
+    // THE VERTICES THE BODY HAD are kept through the gluing: the lines meeting at one are then not joined into a line
+    // made afresh - a circle joined so comes out running the other way (its axis -Z where it was +Z), and the bevel of
+    // a cone and a plane is refused on it (the top of a cut cone: taken with its own circle, refused with the new one)
+    TopTools_MapOfShape keep;
+    for (TopExp_Explorer vx(q->shape, TopAbs_VERTEX); vx.More(); vx.Next()) {
+        const TopoDS_Shape a = ctx->Value(vx.Current());
+        if (a.IsNull() || a.ShapeType() != TopAbs_VERTEX) continue;
+        try { const TopoDS_Shape b = mod.ModifiedShape(a); if (!b.IsNull()) keep.Add(b); } catch (...) {}
+    }
+    TopoDS_Shape glued = unify_monolithic(remade, cut.fids, cut.eids, &q->absorbed, &keep);
+    // HEALED before the blend: the gluing leaves the faces of the ball all forward, a wire of one against its face, and
+    // the blend at the pole then comes out with a face turned wrong (BRepCheck_BadOrientationOfSubshape) and less taken
+    // off (455.673 of 458.129 left); healed first it takes what the ball with its seam there takes (454.364)
+    {
+        ShapeFix_Shape heal(glued);
+        heal.Perform();
+        const Handle(ShapeBuild_ReShape) hc = heal.Context();
+        auto healed = [&](TopTools_DataMapOfShapeInteger& ids) {
+            TopTools_DataMapOfShapeInteger out;
+            for (TopTools_DataMapIteratorOfDataMapOfShapeInteger it(ids); it.More(); it.Next()) {
+                TopoDS_Shape now = hc.IsNull() ? it.Key() : hc->Value(it.Key());
+                if (now.IsNull()) continue;
+                if (now.ShapeType() != it.Key().ShapeType()) {
+                    TopExp_Explorer first(now, it.Key().ShapeType());
+                    if (!first.More()) continue;
+                    now = first.Current();
+                }
+                if (!out.IsBound(now)) out.Bind(now, it.Value());
+            }
+            ids = out;
+        };
+        healed(cut.fids);
+        healed(cut.eids);
+        glued = heal.Shape();
+    }
+    q->shape = glued;
+    q->fids = cut.fids;
+    q->eids = cut.eids;
+    return true;
+}
+
+static QymShape* off_seams(const QymShape* s, const uint32_t* idx, size_t n, const std::function<QymShape*(const QymShape*)>& op) {
+    if (again > 0) return nullptr;
+    QymShape moved{s->shape, s->fids, s->eids, s->fsplit_of, s->fsplit_idx};
+    if (!move_seams_off(&moved, idx, n)) return nullptr;
+    ++again;
+    QymShape* q = op(&moved);
+    --again;
+    // the lines the moving left are glued away: the part keeps the faces it had, with the blend on it
+    if (q) q->shape = unify_monolithic(q->shape, q->fids, q->eids, &q->absorbed);
+    return q;
+}
+
+// Every edge of a body as the list of their names, for the blends that take every edge.
+static std::vector<uint32_t> every_edge(const QymShape* s) {
+    std::vector<uint32_t> out;
+    for (TopTools_DataMapIteratorOfDataMapOfShapeInteger it(s->eids); it.More(); it.Next()) out.push_back((uint32_t)it.Value());
+    return out;
+}
+
 extern "C" QymShape* qym_shape_fillet_edges(const QymShape* s, double r, const uint32_t* idx, size_t n, const unsigned* names, const unsigned* corners,
                                  const unsigned* all_names, size_t n_all) {
     if (!s) return why("fillet/asked", "there is no body to round"), nullptr;
     if (r <= 0.0) return why("fillet/asked", "the radius is zero"), nullptr;
     if (n == 0) return why("fillet/asked", "not one edge was named to round"), nullptr;
     try {
+        if (along_a_seam(s, idx, n)) return off_seams_first(s, idx, n, [&](const QymShape* m) { return qym_shape_fillet_edges(m, r, idx, n, names, corners, all_names, n_all); });
         BRepFilletAPI_MakeFillet mk(s->shape);
         if (add_fillet_edges_by_id(mk, s, r, idx, n) == 0) return why_no_named_edges("fillet/edges", s, n), nullptr;
         mk.Build();
-        if (!mk.IsDone()) return why("fillet/build", "the kernel could not round these edges at this radius"), nullptr;
+        // built but not whole is a failure too: the rounding against a seam that goes straight on from its end comes
+        // back as a body the check refuses
+        if (!mk.IsDone() || !BRepCheck_Analyzer(mk.Shape()).IsValid()) {
+            // a seam on the end of an edge is moved away and the rounding tried once more
+            if (QymShape* q = off_seams(s, idx, n, [&](const QymShape* m) { return qym_shape_fillet_edges(m, r, idx, n, names, corners, all_names, n_all); })) return q;
+            return why("fillet/build", "the kernel could not round these edges at this radius"), nullptr;
+        }
         QymShape* q = new QymShape{mk.Shape(), {}, {}, {}, {}};
         // ORDER OF WORK: ALL THE NAMES FIRST, THE NUMBERS AFTERWARDS.
         //
@@ -1008,14 +1578,15 @@ extern "C" QymShape* qym_shape_fillet_edges(const QymShape* s, double r, const u
 // the kernel. A match is found by the nearest point within tolerance; an end with no entry takes the default
 // radius.
 extern "C" QymShape* qym_shape_fillet_at_vertices(const QymShape* s, double r_default, const uint32_t* idx, size_t n,
-                                       const double* vpts, const double* vrads, size_t m, double tol) {
+                                       const double* vpts, const double* vrads, size_t m_count, double tol) {
     if (!s) return why("fillet/asked", "there is no body to round"), nullptr;
     if (r_default <= 0.0) return why("fillet/asked", "the default radius is zero"), nullptr;
     if (n == 0) return why("fillet/asked", "not one edge was named to round"), nullptr;
     try {
+        if (along_a_seam(s, idx, n)) return off_seams_first(s, idx, n, [&](const QymShape* m) { return qym_shape_fillet_at_vertices(m, r_default, idx, n, vpts, vrads, m_count, tol); });
         auto radius_at = [&](const gp_Pnt& p) -> double {
             double best = tol > 0.0 ? tol : 1e-6, out = r_default;
-            for (size_t k = 0; k < m; ++k) {
+            for (size_t k = 0; k < m_count; ++k) {
                 const double dx = p.X() - vpts[3 * k], dy = p.Y() - vpts[3 * k + 1], dz = p.Z() - vpts[3 * k + 2];
                 const double d = std::sqrt(dx * dx + dy * dy + dz * dz);
                 if (d <= best) { best = d; out = vrads[k]; }
@@ -1038,7 +1609,10 @@ extern "C" QymShape* qym_shape_fillet_at_vertices(const QymShape* s, double r_de
         }
         if (added == 0) return why_no_named_edges("fillet/edges", s, n), nullptr;
         mk.Build();
-        if (!mk.IsDone()) return why("fillet/build", "the kernel could not round these edges with the radii given at their vertices"), nullptr;
+        if (!mk.IsDone() || !BRepCheck_Analyzer(mk.Shape()).IsValid()) {
+            if (QymShape* q = off_seams(s, idx, n, [&](const QymShape* m) { return qym_shape_fillet_at_vertices(m, r_default, idx, n, vpts, vrads, m_count, tol); })) return q;
+            return why("fillet/build", "the kernel could not round these edges with the radii given at their vertices"), nullptr;
+        }
         QymShape* q = new QymShape{mk.Shape(), {}, {}, {}, {}};
         propagate_ids(mk, s->shape, TopAbs_FACE, s->fids, q->shape, q->fids);
         propagate_ids(mk, s->shape, TopAbs_EDGE, s->eids, q->shape, q->eids);
@@ -1052,6 +1626,7 @@ extern "C" QymShape* qym_shape_fillet_var(const QymShape* s, double r1, double r
     if (r1 <= 0.0 || r2 <= 0.0) return why("fillet/asked", "one end of the variable radius is zero"), nullptr;
     if (n == 0) return why("fillet/asked", "not one edge was named to round"), nullptr;
     try {
+        if (along_a_seam(s, idx, n)) return off_seams_first(s, idx, n, [&](const QymShape* m) { return qym_shape_fillet_var(m, r1, r2, idx, n); });
         BRepFilletAPI_MakeFillet mk(s->shape);
         int added = 0;
         for (TopExp_Explorer ex(s->shape, TopAbs_EDGE); ex.More(); ex.Next()) {
@@ -1063,7 +1638,10 @@ extern "C" QymShape* qym_shape_fillet_var(const QymShape* s, double r1, double r
         }
         if (added == 0) return why_no_named_edges("fillet/edges", s, n), nullptr;
         mk.Build();
-        if (!mk.IsDone()) return why("fillet/build", "the kernel could not round these edges with a radius running between the two ends"), nullptr;
+        if (!mk.IsDone() || !BRepCheck_Analyzer(mk.Shape()).IsValid()) {
+            if (QymShape* q = off_seams(s, idx, n, [&](const QymShape* m) { return qym_shape_fillet_var(m, r1, r2, idx, n); })) return q;
+            return why("fillet/build", "the kernel could not round these edges with a radius running between the two ends"), nullptr;
+        }
         QymShape* q = new QymShape{mk.Shape(), {}, {}, {}, {}};
         propagate_ids(mk, s->shape, TopAbs_FACE, s->fids, q->shape, q->fids);
         propagate_ids(mk, s->shape, TopAbs_EDGE, s->eids, q->shape, q->eids);
@@ -1077,10 +1655,15 @@ extern "C" QymShape* qym_shape_chamfer_edges(const QymShape* s, double d, const 
     if (d <= 0.0) return why("chamfer/asked", "the setback is zero"), nullptr;
     if (n == 0) return why("chamfer/asked", "not one edge was named to bevel"), nullptr;
     try {
+        if (along_a_seam(s, idx, n)) return off_seams_first(s, idx, n, [&](const QymShape* m) { return qym_shape_chamfer_edges(m, d, idx, n, names, corners, all_names, n_all); });
         BRepFilletAPI_MakeChamfer mk(s->shape);
         if (add_chamfer_edges_by_id(mk, s, d, idx, n) == 0) return why_no_named_edges("chamfer/edges", s, n), nullptr;
         mk.Build();
-        if (!mk.IsDone()) return why("chamfer/build", "the kernel could not bevel these edges at this setback"), nullptr;
+        if (!mk.IsDone() || !BRepCheck_Analyzer(mk.Shape()).IsValid()) {
+            // the same seam as a rounding meets: moved off the ends of the edges, and the bevel tried once more
+            if (QymShape* q = off_seams(s, idx, n, [&](const QymShape* m) { return qym_shape_chamfer_edges(m, d, idx, n, names, corners, all_names, n_all); })) return q;
+            return why("chamfer/build", "the kernel could not bevel these edges at this setback"), nullptr;
+        }
         QymShape* q = new QymShape{mk.Shape(), {}, {}, {}, {}};
         int nf = next_local(s->fids), ne = next_local(s->eids);
         carry_ids(mk, s->shape, TopAbs_FACE, s->fids, q->fids, nf, false, &q->fsplit_of, &q->fsplit_idx);
@@ -1105,6 +1688,7 @@ extern "C" QymShape* qym_shape_chamfer_edges_asym(const QymShape* s, double a, d
     if (a <= 0.0) return why("chamfer/asked", "the first setback is zero"), nullptr;
     if (n == 0) return why("chamfer/asked", "not one edge was named to bevel"), nullptr;
     try {
+        if (along_a_seam(s, idx, n)) return off_seams_first(s, idx, n, [&](const QymShape* m) { return qym_shape_chamfer_edges_asym(m, a, b, mode, flip, ref_face, idx, n); });
         BRepFilletAPI_MakeChamfer mk(s->shape);
         TopTools_IndexedDataMapOfShapeListOfShape efMap;
         TopExp::MapShapesAndAncestors(s->shape, TopAbs_EDGE, TopAbs_FACE, efMap);
@@ -1146,7 +1730,10 @@ extern "C" QymShape* qym_shape_chamfer_edges_asym(const QymShape* s, double a, d
         }
         if (added == 0) return why_no_named_edges("fillet/edges", s, n), nullptr;
         mk.Build();
-        if (!mk.IsDone()) return why("chamfer/build", "the kernel could not bevel these edges with two setbacks"), nullptr;
+        if (!mk.IsDone() || !BRepCheck_Analyzer(mk.Shape()).IsValid()) {
+            if (QymShape* q = off_seams(s, idx, n, [&](const QymShape* m) { return qym_shape_chamfer_edges_asym(m, a, b, mode, flip, ref_face, idx, n); })) return q;
+            return why("chamfer/build", "the kernel could not bevel these edges with two setbacks"), nullptr;
+        }
         QymShape* q = new QymShape{mk.Shape(), {}, {}, {}, {}};
         propagate_ids(mk, s->shape, TopAbs_FACE, s->fids, q->shape, q->fids);
         propagate_ids(mk, s->shape, TopAbs_EDGE, s->eids, q->shape, q->eids);
@@ -1344,13 +1931,52 @@ extern "C" QymShape* qym_shape_thicken_face_join(const QymShape* s, uint32_t fid
         }
         TopoDS_Face face;
         BRepOffset_MakeOffset mk;
-        TopoDS_Shape plate = thicken_plate(s, fid, thickness, face, mk);
-        if (plate.IsNull()) return why_no_named_faces("thicken/face", s, fid), nullptr;
-        // THE PLATE ENTERS THE BOOLEAN ALREADY NAMED, or its faces get numbers and everything put on them (an
-        // edge fillet, a sketch on the offset side) drifts with the first edit.
-        QymShape plate_named{plate, {}, {}, {}, {}};
-        name_thicken(mk, face, s, &plate_named, fmap, nf_, emap, ne_);
-        BRepAlgoAPI_Fuse fu(s->shape, plate);
+        TopoDS_Shape plate;
+        QymShape plate_named{TopoDS_Shape(), {}, {}, {}, {}};
+        // A FLAT FACE IS THICKENED BY A PRISM along its normal: the walls come out as the surfaces the prism sweeps
+        // (a plane from a line, a cylinder from a circle), the same the part's own walls stand on, so they merge
+        // with them. The offset of the face made its walls anew, and the top of a cylinder thickened 3 kept a seam
+        // where the top had been - two cylindrical faces of one side.
+        for (TopExp_Explorer ex(s->shape, TopAbs_FACE); ex.More() && face.IsNull(); ex.Next())
+            if (s->fids.IsBound(ex.Current()) && (uint32_t)s->fids.Find(ex.Current()) == fid) face = TopoDS::Face(ex.Current());
+        if (!face.IsNull() && BRepAdaptor_Surface(face).GetType() == GeomAbs_Plane) {
+            const gp_Ax3 frame = BRepAdaptor_Surface(face).Plane().Position();
+            gp_Dir n = frame.XDirection().Crossed(frame.YDirection());
+            if (face.Orientation() == TopAbs_REVERSED) n.Reverse();
+            BRepPrimAPI_MakePrism pr(face, gp_Vec(n) * thickness);
+            pr.Build();
+            if (pr.IsDone()) {
+                plate = pr.Shape();
+                plate_named.shape = plate;
+                auto pick = [](const unsigned* m, size_t n, unsigned key) -> unsigned {
+                    for (size_t i = 0; i + 1 < n * 2; i += 2)
+                        if (m[i] == key) return m[i + 1];
+                    return 0u;
+                };
+                const unsigned own = (unsigned)s->fids.Find(face);
+                plate_named.fids.Bind(pr.FirstShape(), (int)own);
+                const unsigned off = fmap ? pick(fmap, nf_, own) : 0u;
+                if (off != 0 && !plate_named.fids.IsBound(pr.LastShape())) plate_named.fids.Bind(pr.LastShape(), (int)off);
+                for (TopExp_Explorer ee(face, TopAbs_EDGE); ee.More(); ee.Next()) {
+                    if (!s->eids.IsBound(ee.Current())) continue;
+                    const unsigned wall = emap ? pick(emap, ne_, (unsigned)s->eids.Find(ee.Current())) : 0u;
+                    if (wall == 0) continue;
+                    for (TopTools_ListIteratorOfListOfShape it(pr.Generated(ee.Current())); it.More(); it.Next())
+                        if (it.Value().ShapeType() == TopAbs_FACE && !plate_named.fids.IsBound(it.Value())) plate_named.fids.Bind(it.Value(), (int)wall);
+                }
+            }
+        }
+        if (plate.IsNull()) {
+            face = TopoDS_Face();
+            plate = thicken_plate(s, fid, thickness, face, mk);
+            if (plate.IsNull()) return why_no_named_faces("thicken/face", s, fid), nullptr;
+            // THE PLATE ENTERS THE BOOLEAN ALREADY NAMED, or its faces get numbers and everything put on them (an
+            // edge fillet, a sketch on the offset side) drifts with the first edit.
+            plate_named.shape = plate;
+            name_thicken(mk, face, s, &plate_named, fmap, nf_, emap, ne_);
+        }
+        BRepAlgoAPI_Fuse fu;
+        qym_boolean(fu, s->shape, plate);
         if (!fu.IsDone()) return why("thicken/join", "the plate did not join the part"), nullptr;
         TopoDS_Shape res = fu.Shape();
         if (res.IsNull()) return why("thicken/join", "the join came out empty"), nullptr;
@@ -1403,7 +2029,8 @@ extern "C" QymShape* qym_shape_split_faces(const QymShape* s, const double* orig
     if (!origin || !normal) return why("split face/asked", "the cutting plane has no origin or no normal"), nullptr;
     try {
         gp_Pln pln(gp_Pnt(origin[0], origin[1], origin[2]), gp_Dir(normal[0], normal[1], normal[2]));
-        BRepAlgoAPI_Section sec(s->shape, pln, Standard_False);
+        BRepAlgoAPI_Section sec(s->shape, pln, Standard_False); // Standard_False: do not run it yet - the options come first
+        qym_configure(sec);
         sec.ComputePCurveOn1(Standard_True);
         sec.Approximation(Standard_True);
         sec.Build();
@@ -1470,9 +2097,7 @@ extern "C" QymShapeList* qym_shape_split_by_plane(const QymShape* s, const doubl
         args.Append(s->shape);
         tools.Append(cutter);
         BRepAlgoAPI_Splitter algo;
-        algo.SetArguments(args);
-        algo.SetTools(tools);
-        algo.Build();
+        qym_boolean_many(algo, args, tools);
         if (!algo.IsDone() || algo.HasErrors()) return nullptr;
         TopoDS_Shape res = algo.Shape();
         if (res.IsNull()) return nullptr;
@@ -1526,9 +2151,7 @@ extern "C" QymShape* qym_shape_trim(const QymShape* s, const QymShape* tool, con
         args.Append(s->shape);
         tools.Append(tool->shape);
         BRepAlgoAPI_Splitter algo;
-        algo.SetArguments(args);
-        algo.SetTools(tools);
-        algo.Build();
+        qym_boolean_many(algo, args, tools);
         if (!algo.IsDone() || algo.HasErrors()) return why("trim/cut", "the kernel could not cut the body with this tool"), nullptr;
         TopoDS_Shape res = algo.Shape();
         if (res.IsNull()) return why("trim/cut", "the cut came out empty"), nullptr;
@@ -1628,6 +2251,7 @@ extern "C" QymShape* qym_shape_remove_faces(const QymShape* s, const uint32_t* i
         // out_reason means not found, 0 means it did not work out.
         if (faces.IsEmpty()) { if (out_reason) *out_reason = -1; return why_no_named_faces("remove face/faces", s, ids[0]), nullptr; }
         BRepAlgoAPI_Defeaturing algo;
+        qym_configure(algo);
         algo.SetShape(s->shape);
         algo.AddFacesToRemove(faces);
         algo.Build();
@@ -1657,13 +2281,46 @@ extern "C" QymShape* qym_shape_remove_faces(const QymShape* s, const uint32_t* i
     return nullptr;
 }
 
+// The history of an offset spoken as a `BRepBuilderAPI_MakeShape`, so the names are carried by the one `carry_ids`.
+class OffsetHistory : public BRepBuilderAPI_MakeShape {
+public:
+    explicit OffsetHistory(BRepOffset_MakeOffset& m) : mk(m) { myShape = m.Shape(); Done(); }
+    void Build(const Message_ProgressRange& = Message_ProgressRange()) override {}
+    const TopTools_ListOfShape& Generated(const TopoDS_Shape& s) override { return mk.Generated(s); }
+    // the faces an offset leaves in place are rebuilt too, and `Modified` says nothing of them (10 names of 10 lost
+    // on a pushed wall of a shell): their images are asked of the offset's own image of faces and edges, and only
+    // what is in the result counts
+    const TopTools_ListOfShape& Modified(const TopoDS_Shape& s) override {
+        const TopTools_ListOfShape& own = mk.Modified(s);
+        if (!own.IsEmpty()) return own;
+        myGenerated.Clear();
+        const BRepAlgo_Image& img = s.ShapeType() == TopAbs_FACE ? mk.OffsetFacesFromShapes() : mk.OffsetEdgesFromShapes();
+        if (!img.HasImage(s)) return myGenerated;
+        TopTools_ListOfShape last;
+        img.LastImage(s, last);
+        if (in_result.IsEmpty()) {
+            TopExp::MapShapes(myShape, TopAbs_FACE, in_result);
+            TopExp::MapShapes(myShape, TopAbs_EDGE, in_result);
+        }
+        for (TopTools_ListIteratorOfListOfShape it(last); it.More(); it.Next())
+            if (!it.Value().IsSame(s) && in_result.Contains(it.Value())) myGenerated.Append(it.Value());
+        return myGenerated;
+    }
+    Standard_Boolean IsDeleted(const TopoDS_Shape& s) override { return mk.IsDeleted(s); }
+    void SetResult(const TopoDS_Shape& r) { myShape = r; in_result.Clear(); }
+private:
+    BRepOffset_MakeOffset& mk;
+    TopTools_IndexedMapOfShape in_result;
+};
+
 // PUSH AND PULL A FACE — direct modelling.
 //
-// The planar face `fid` moves along its own normal by `dist`: positive adds material, negative cuts it away.
-// It is done with a prism raised from the face itself and a boolean with the solid — that is, EXACTLY, from the
-// original surface rather than from its tessellation. Curved faces are deliberately not supported: offsetting a
-// cylinder or a sphere is a surface offset, a different operation with different behaviour at the junctions,
-// and doing it "along the way" would give a silently wrong result on the first filleted part.
+// The face `fid` moves along its own normal by `dist`: positive adds material, negative cuts it away. Between
+// flat neighbours it is an offset of that one face, the neighbours meeting it by intersection - a flat face or a
+// curved one alike (the side of a cylinder of 10 pushed 2 is a cylinder of 12). A flat face with a curved neighbour
+// falls back to a prism raised from the face and a boolean, EXACTLY from the original surface rather than its
+// tessellation; a curved face with a curved neighbour is refused, since extending a rounding is a different operation
+// and doing it "along the way" gives a silently wrong result on the first filleted part.
 //
 // The names of faces and edges are carried over the same way as in a boolean (`carry_ids`): otherwise the
 // references of fillets and chamfers would drift after the very first push or pull.
@@ -1679,23 +2336,19 @@ extern "C" QymShape* qym_shape_push_face(const QymShape* s, uint32_t fid, double
         }
         if (target.IsNull()) return why_no_named_faces("push face/face", s, fid), nullptr;
         BRepAdaptor_Surface ad(target);
-        // planar faces only; see the comment above
-        if (ad.GetType() != GeomAbs_Plane) return why("push face/face", "only a flat face can be pushed, and this one is curved"), nullptr;
-        gp_Dir n = ad.Plane().Axis().Direction();
-        if (target.Orientation() == TopAbs_REVERSED) n.Reverse();
-        gp_Vec v(n);
-        v *= std::abs(dist);
-        if (dist < 0) v.Reverse();
-        BRepPrimAPI_MakePrism prism(target, v);
-        prism.Build();
-        if (!prism.IsDone()) return why("push face/tool", "the face could not be extruded into the tool that moves it"), nullptr;
-        TopoDS_Shape tool = prism.Shape();
-        if (tool.IsNull()) return why("push face/tool", "the tool that moves the face came out empty"), nullptr;
-
-        // THE IMAGE OF THE PULLED FACE ITSELF is the prism's cap: that is what ends up in the new position.
-        TopoDS_Shape moved = prism.LastShape();
-
-        auto finish = [&](BRepBuilderAPI_MakeShape& algo, const TopoDS_Shape& res) -> QymShape* {
+        const bool flat = ad.GetType() == GeomAbs_Plane;
+        // the normal of the surface is XDir ^ YDir, which is the axis only for a right-handed frame: the plane of a
+        // chamfer comes left-handed, its axis points into the body, and a push of +1 or -1 left the body as it was
+        gp_Vec v(0, 0, 1);
+        if (flat) {
+            const gp_Ax3 frame = ad.Plane().Position();
+            gp_Dir n = frame.XDirection().Crossed(frame.YDirection());
+            if (target.Orientation() == TopAbs_REVERSED) n.Reverse();
+            v = gp_Vec(n);
+            v *= std::abs(dist);
+            if (dist < 0) v.Reverse();
+        }
+        auto finish = [&](BRepBuilderAPI_MakeShape& algo, const TopoDS_Shape& res, const TopoDS_Shape& moved) -> QymShape* {
             if (res.IsNull()) return why("push face/build", "the body came back empty after moving the face"), nullptr;
             QymShape* q = new QymShape{res, {}, {}, {}, {}};
             int nf = next_local(s->fids);
@@ -1717,6 +2370,68 @@ extern "C" QymShape* qym_shape_push_face(const QymShape* s, uint32_t fid, double
             q->shape = unify_monolithic(q->shape, q->fids, q->eids, &q->absorbed);
             return q;
         };
+        // THE FACE MOVES AND ITS NEIGHBOURS FOLLOW: an offset of this one face, the others at zero, joined by
+        // intersection, so the faces beside it extend or trim to meet it. The face of a 2 x 2 chamfer on a 40 long
+        // edge pushed 1 out leaves legs of 0.586 (+73.1 mm^3), 1 in legs of 3.414 (-153.1); a prism raised from the
+        // face instead stands on it as a slab with walls square to it (+113.1).
+        // only where every face beside it is flat: curved neighbours extended by intersection run off (a rim between
+        // two roundings pushed 5 gained 19178 mm^3 for a strip of 2 x 36)
+        bool flat_ring = true;
+        {
+            TopTools_IndexedDataMapOfShapeListOfShape e2f;
+            TopExp::MapShapesAndAncestors(s->shape, TopAbs_EDGE, TopAbs_FACE, e2f);
+            for (TopExp_Explorer ee(target, TopAbs_EDGE); ee.More() && flat_ring; ee.Next()) {
+                const int k = e2f.FindIndex(ee.Current());
+                if (k < 1) continue;
+                for (TopTools_ListIteratorOfListOfShape it(e2f.FindFromIndex(k)); it.More(); it.Next())
+                    if (!it.Value().IsSame(target) && BRepAdaptor_Surface(TopoDS::Face(it.Value())).GetType() != GeomAbs_Plane) flat_ring = false;
+            }
+        }
+        if (flat_ring) {
+            BRepOffset_MakeOffset mk;
+            mk.Initialize(s->shape, 0.0, 1.0e-6, BRepOffset_Skin, Standard_True, Standard_False, GeomAbs_Intersection, Standard_False);
+            mk.SetOffsetOnFace(target, dist);
+            mk.MakeOffsetShape();
+            // the offset of a solid comes back as its skin; the part is the solid inside it
+            TopoDS_Shape got = mk.IsDone() ? mk.Shape() : TopoDS_Shape();
+            if (!got.IsNull() && got.ShapeType() != TopAbs_SOLID) {
+                TopoDS_Shape skin;
+                int solids = 0, shells = 0;
+                for (TopExp_Explorer x(got, TopAbs_SOLID); x.More(); x.Next()) { skin = x.Current(); ++solids; }
+                if (solids == 0)
+                    for (TopExp_Explorer x(got, TopAbs_SHELL); x.More(); x.Next()) { skin = x.Current(); ++shells; }
+                if (solids == 1) got = skin;
+                else if (solids == 0 && shells == 1) {
+                    BRepBuilderAPI_MakeSolid ms(TopoDS::Shell(skin));
+                    got = ms.IsDone() ? TopoDS_Shape(ms.Solid()) : TopoDS_Shape();
+                    if (!got.IsNull()) { BRepLib::OrientClosedSolid(TopoDS::Solid(got)); }
+                } else got = TopoDS_Shape();
+            }
+            GProp_GProps was, now;
+            if (!got.IsNull()) { BRepGProp::VolumeProperties(s->shape, was); BRepGProp::VolumeProperties(got, now); }
+            GProp_GProps fa;
+            BRepGProp::SurfaceProperties(target, fa);
+            // a face moved by d changes the body by about its area x d; three times that is no push but a run-off
+            const bool fits = !got.IsNull() && std::abs(now.Mass() - was.Mass()) <= 3.0 * fa.Mass() * std::abs(dist) + 1e-6;
+            if (fits && BRepCheck_Analyzer(got).IsValid()) {
+                OffsetHistory h(mk);
+                h.SetResult(got);
+                TopoDS_Shape moved;
+                const TopTools_ListOfShape& im = mk.Modified(target);
+                if (!im.IsEmpty()) moved = im.First();
+                else if (!mk.Generated(target).IsEmpty()) moved = mk.Generated(target).First();
+                return finish(h, got, moved);
+            }
+        }
+        // a curved face moves only as an offset of itself: a prism along one direction is no offset of a cylinder
+        if (!flat) return why("push face/face", flat_ring ? "the offset of this curved face did not close into a body" : "a curved face moves only between flat neighbours"), nullptr;
+        BRepPrimAPI_MakePrism prism(target, v);
+        prism.Build();
+        if (!prism.IsDone()) return why("push face/tool", "the face could not be extruded into the tool that moves it"), nullptr;
+        TopoDS_Shape tool = prism.Shape();
+        if (tool.IsNull()) return why("push face/tool", "the tool that moves the face came out empty"), nullptr;
+        // THE IMAGE OF THE PULLED FACE ITSELF is the prism's cap: that is what ends up in the new position.
+        TopoDS_Shape moved = prism.LastShape();
         if (dist > 0) {
             // THE ORDER OF THE OPERANDS CHANGES THE RESULT, AND THAT IS NOT A MATTER OF STYLE.
             //
@@ -1734,21 +2449,22 @@ extern "C" QymShape* qym_shape_push_face(const QymShape* s, uint32_t fid, double
             // history), and if the result does not pass the check, the reverse one. The name history works in
             // both: it is kept by subshape, not by argument number.
             BRepAlgoAPI_Fuse direct;
-            { TopTools_ListOfShape aa, bbl; aa.Append(s->shape); bbl.Append(tool); direct.SetArguments(aa); direct.SetTools(bbl); direct.SetNonDestructive(Standard_True); direct.Build(); }
+            { TopTools_ListOfShape aa, bbl; aa.Append(s->shape); bbl.Append(tool); direct.SetNonDestructive(Standard_True); qym_boolean_many(direct, aa, bbl); }
             if (direct.IsDone() && !direct.Shape().IsNull() && BRepCheck_Analyzer(direct.Shape()).IsValid()) {
-                return finish(direct, direct.Shape());
+                return finish(direct, direct.Shape(), moved);
             }
             BRepAlgoAPI_Fuse swapped;
-            { TopTools_ListOfShape aa, bbl; aa.Append(tool); bbl.Append(s->shape); swapped.SetArguments(aa); swapped.SetTools(bbl); swapped.SetNonDestructive(Standard_True); swapped.Build(); }
+            { TopTools_ListOfShape aa, bbl; aa.Append(tool); bbl.Append(s->shape); swapped.SetNonDestructive(Standard_True); qym_boolean_many(swapped, aa, bbl); }
             if (swapped.IsDone() && !swapped.Shape().IsNull() && BRepCheck_Analyzer(swapped.Shape()).IsValid()) {
-                return finish(swapped, swapped.Shape());
+                return finish(swapped, swapped.Shape(), moved);
             }
-            return finish(direct, direct.Shape()); // neither way worked; the barrier in the model will refuse
+            return finish(direct, direct.Shape(), moved); // neither way worked; the barrier in the model will refuse
         }
         // A cut is asymmetric by meaning: the operands cannot be swapped, since "solid minus prism" is not the
         // same as "prism minus solid". If the result is invalid, the barrier refuses.
-        BRepAlgoAPI_Cut algo(s->shape, tool);
-        return finish(algo, algo.Shape());
+        BRepAlgoAPI_Cut algo;
+        qym_boolean(algo, s->shape, tool);
+        return finish(algo, algo.Shape(), moved);
     } QYM_WHY_CATCH("edge operation")
     return nullptr;
 }
@@ -1756,14 +2472,13 @@ extern "C" QymShape* qym_shape_push_face(const QymShape* s, uint32_t fid, double
 
 extern "C" QymShapeList* qym_step_solids(const char* path) {
     try {
-        STEPControl_Reader r;
-        if (r.ReadFile(path) != IFSelect_RetDone) return nullptr;
-        r.TransferRoots();
-        TopoDS_Shape shape = r.OneShape();
-        if (shape.IsNull()) return nullptr;
+        // the same walk as the import (`step_tree`), so that body k of a reopened document is the one it was
         QymShapeList* lst = new QymShapeList();
-        for (TopExp_Explorer ex(shape, TopAbs_SOLID); ex.More(); ex.Next()) lst->shapes.push_back(ex.Current());
-        if (lst->shapes.empty()) lst->shapes.push_back(shape);
+        QymTree tree;
+        if (!step_tree(path, tree, lst->shapes)) {
+            delete lst;
+            return nullptr;
+        }
         return lst;
     } catch (...) {
         return nullptr; // an exception crossing the C ABI aborts the process, so an honest refusal goes back instead
@@ -1794,6 +2509,7 @@ extern "C" void qym_shapelist_free(QymShapeList* l) {
 // error.
 extern "C" int qym_step_write(const QymShape** shapes, const double* mats, size_t n, const char* path) {
     try {
+        std::lock_guard<std::mutex> one_at_a_time(xstep_lock());
         Interface_Static::SetCVal("write.step.unit", "MM");
         STEPControl_Writer writer;
         for (size_t i = 0; i < n; ++i) {

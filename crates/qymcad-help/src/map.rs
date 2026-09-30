@@ -31,10 +31,12 @@ pub const PART: &[(u8, &str)] = &[
     (29, "part/14-split-face"),
     (28, "part/15-thicken"),
     (30, "part/20-face-copy"),
+    (36, "part/27-offset-surface"),
     (31, "part/21-surface-replace"),
     (32, "part/22-patch"),
     (33, "part/23-stitch"),
     (34, "part/24-trim"),
+    (35, "part/26-recognise"),
     (16, "part/16-mirror"),
     (17, "part/17-linear-array"),
     (18, "part/18-circular-array"),
@@ -76,9 +78,11 @@ pub const SKETCH: &[(&str, u8, &str)] = &[
     ("click", 1, "sketch/12-trim"),
     ("click", 2, "sketch/13-extend"),
     ("click", 3, "sketch/14-break"),
-    ("click", 4, "sketch/15-project"),
+    // the numbers the buttons take: 4 the fillet of a corner, 5 its chamfer, 6 the projection (of edges and of a body
+    // alike - one tool)
+    ("click", 4, "sketch/16-corner"),
     ("click", 5, "sketch/16-corner"),
-    ("click", 6, "sketch/17-project-body"),
+    ("click", 6, "sketch/15-project"),
     ("mod", 0, "sketch/18-delete"),
     ("mod", 1, "sketch/19-mirror"),
     ("mod", 6, "sketch/20-offset"),
@@ -140,8 +144,20 @@ pub const TOOLBAR: &[(&str, &str)] = &[
     ("tb-fillet-all-hint", "sketch/16-corner"),
     // construction geometry and the selection arrow are described in the sketch section rather than
     // by articles of their own
-    ("tb-construction-hint", "sketch/index"),
-    ("tb-select-hint", "sketch/index"),
+    ("tb-construction-hint", "sketch/23-construction"),
+    ("tb-select-hint", "sketch/24-select"),
+    ("con-coincident-hint", "sketch/17-constraints"),
+    ("con-horizontal-hint", "sketch/17-constraints"),
+    ("con-vertical-hint", "sketch/17-constraints"),
+    ("con-parallel-hint", "sketch/17-constraints"),
+    ("con-perpendicular-hint", "sketch/17-constraints"),
+    ("con-equal", "sketch/17-constraints"),
+    ("con-collinear-hint", "sketch/17-constraints"),
+    ("con-concentric-hint", "sketch/17-constraints"),
+    ("con-tangent-hint", "sketch/17-constraints"),
+    ("con-symmetric-hint", "sketch/17-constraints"),
+    ("con-midpoint-hint", "sketch/17-constraints"),
+    ("con-fix", "sketch/17-constraints"),
     // the assembly buttons: grounding and connectors are in the mates article, the contents in the
     // components one
     ("tb-ground-hint", "assembly/02-joints"),
@@ -184,6 +200,7 @@ pub const NOT_A_TOOL: &[&str] = &[
     "tb-pick-body-a-first",
     "tb-pick-part-first",
     "tb-mirror-pick-plane",
+    "tb-mirror-pick-part",
 ];
 
 /// The article of a bar button (one that does not launch a numbered command).
@@ -213,6 +230,15 @@ pub fn part_article(kind: u8) -> Option<&'static str> {
 /// The article of the active Sketch tool.
 pub fn sketch_article(handle: &str, n: u8) -> Option<&'static str> {
     SKETCH.iter().find(|(h, k, _)| *h == handle && *k == n).map(|(_, _, a)| *a)
+}
+
+/// THE ARTICLE OF THE SKETCH TOOL IN HAND, whichever kind it is: a drawing tool, a dimension, a tool acting on a click
+/// (trim, extend, break, the corner, the projection), a button editing the picked (delete, mirror, offset). F1 asked the
+/// first two only, and on the corner, the mirror or the projection opened the article of the workbench.
+pub fn sketch_tool_article(draw: u8, dim: u8, click: u8, modify: Option<u8>) -> Option<&'static str> {
+    [("sk", (draw > 0).then_some(draw)), ("dim", (dim > 0).then_some(dim)), ("click", (click > 0).then_some(click)), ("mod", modify)]
+        .into_iter()
+        .find_map(|(h, n)| n.and_then(|n| sketch_article(h, n)))
 }
 
 /// Every article promised by the table (without repeats).

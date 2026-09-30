@@ -167,3 +167,41 @@ fn the_trimmed_surface_follows_the_base() {
     let a: f64 = p.regen_faces[&left].iter().map(|f| f.area).sum();
     assert!((a - 1800.0).abs() < 10.0, "the piece must grow with the plate: 30x60 = 1800 mm^2, and it came out {a:.1}");
 }
+
+/// A TRIM THAT CUTS NOTHING STAYS A SURFACE. The sheet lies on the top face of its own plate, so the plate does not
+/// divide it: the node goes red with the reason, and the body it lays down is the sheet passed through - a sheet
+/// still, not a solid of one face that counts as a second body of the part.
+///
+/// Reported behaviour: after such a trim the part "holds 2 bodies" - the passed-through copy lost its mark of a sheet.
+#[test]
+fn a_trim_that_cuts_nothing_passes_the_sheet_through_as_a_sheet() {
+    let (mut p, body, sheet) = plate_with_sheet();
+    let trimmed = p.add_trim(sheet, body, [30.0, 20.0, 12.0]);
+    let (rep, _) = qymcad_testkit::regenerate(&mut p);
+    assert!(!rep.errors.is_empty(), "a sheet lying on the face of its body is not divided by it: the node must go red");
+    let out = p.bodies.iter().find(|b| b.id == trimmed).expect("the trim lays its body down");
+    assert!(out.sheet, "the sheet passed through a red trim is still a sheet, and it came out a solid");
+}
+
+/// MATERIAL ADDED AFTER A FACE COPY JOINS THE SOLID, NOT THE SHEET. The copy is the last body of the part, but a
+/// sheet is not the body a boss is united with: the boss grows on the plate, the plate is one solid holding both,
+/// and the sheet stands beside it untouched.
+///
+/// Reported behaviour: a boss extruded after a face copy went red "Boolean failed" and took the sheet with it.
+#[test]
+fn material_added_after_a_face_copy_joins_the_solid() {
+    let (mut p, plate, sheet) = plate_with_sheet();
+    let sid = p.add_line_sketch("boss", vec![Point2::new(10.0, 10.0), Point2::new(20.0, 10.0), Point2::new(20.0, 20.0), Point2::new(10.0, 20.0)], true);
+    let si = p.sketch_index(sid).unwrap();
+    p.regen_sketch(si);
+    p.add_sketch_node(sid, "boss");
+    let closed: Vec<u64> = p.sketches[si].contour_ids.iter().copied().filter(|c| p.contour_profile_xy(*c).is_some()).collect();
+    let boss = p.add_extrude_multi(sid, closed, 20.0, qymcad_core::feature::Reach::Forward, 0.0, vec![]);
+    let joined = p.finish_base_body(boss, 0);
+    let (rep, _) = qymcad_testkit::regenerate(&mut p);
+    assert!(rep.errors.is_empty(), "the boss must join the plate: {:?}", rep.errors);
+    let consumed = p.consumed_bodies();
+    assert!(consumed.contains(&plate) && !consumed.contains(&sheet), "the boss is united with the plate, and the sheet stands untouched: consumed {consumed:?}");
+    assert!(p.bodies.iter().any(|b| b.id == sheet && b.sheet), "the sheet is still a sheet");
+    assert!(p.bodies.iter().any(|b| b.id == joined && !b.sheet), "what the boss made is a solid");
+}

@@ -1,28 +1,35 @@
 # Hole
 
-Key **O**. Select the body, click a face, set the diameter and the depth, press Enter.
+Key **O**.
 
 ![A through hole in the top face: the command remembers the face, not coordinates.](img/part-hole.png)
 
-## Why not a circular cut
+## How to do it
 
-A hole keeps a **reference to the face**, not coordinates. So it travels with the face: change the
-part higher up the history and the hole stays where it was meant to be, not where the coordinates
-happened to land.
+1. Press **Hole** and click a face — the centre of the hole goes to the point of the click. A second click at another
+   point of the same face moves the centre; a click at the same place lets the face go.
+2. At the geometry — **Diameter** and **Depth**, and **Shift 1** and **Shift 2 from the face centre** if the position
+   is to be given in numbers.
+3. **Kind** in the bar above: **Simple**, **Counterbore** or **Countersink**; a counterbore and a countersink add
+   **Recess Ø** and **Recess depth**. The preview shows the walls of the hole before it is applied.
+4. **Enter** applies, **Esc** cancels.
 
-A circular cut has no such link and can drift after a change.
+**Placement -> By a sketch**: click a sketch on the face with isolated points — a hole goes into each. Their positions
+are then edited by the sketch's dimensions.
 
-## Layout by points
+## Why not a cut with a circle
 
-If the sketch on the face has points, holes can be placed at them — then their position is parametric
-and is edited by the sketch dimensions.
+A hole keeps **a reference to the face**: edit the part higher up the timeline, and the hole stays on its face rather
+than where the coordinates happened to land.
 
-## Depth
+A through hole is a depth well past the thickness. A thread in a finished hole is cut by [Thread](part/10-thread).
 
-A blind hole is given by a number, a through hole by a depth deliberately larger than the wall or by
-the matching mode. For a thread use the **Thread** command on the finished hole.
+## If it did not work
+
+- The diameter is not taken — the hole is wider than the face; the reason is written at the field.
+- **By a sketch** places nothing — the sketch has no isolated points: add them with the **Point** tool.
 
 ## See also
 
-- [Thread](part/10-thread) — how to cut one in a hole.
-- [Linear array](part/17-linear-array) — a row of holes as one feature.
+- [Thread](part/10-thread) — how to cut it in the hole.
+- [Linear pattern](part/17-linear-array) — a row of holes as one operation.

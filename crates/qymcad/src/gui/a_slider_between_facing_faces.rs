@@ -54,6 +54,7 @@ mod tests {
         hand.look_at([40.0, 10.0, 5.0], 6.0).mate(JointKind::Slider).anchor(0);
         qymcad_assembly::joint_pick_face_click_for_test(&mut app.joint_ctx(), mine[0], ka);
         qymcad_assembly::joint_pick_face_click_for_test(&mut app.joint_ctx(), mine[1], kb);
+        Hand::new(&mut app).key(egui::Key::Enter).key(egui::Key::Escape); // the joint stands as a preview until Enter keeps it; Esc puts the tool down
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
 
         let jid = app.project.joints.last().map(|j| j.id).expect("two face picks must create a joint");

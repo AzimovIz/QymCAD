@@ -86,7 +86,7 @@ mod tests {
         // there would be nothing to check. The channel is held open — the worker is "computing".
         let (_tx, rx) = std::sync::mpsc::channel();
         app.waiting.splash_until = None; // the startup splash is a separate case, it mutes the frame legitimately
-        app.regen.busy = Some(super::super::Busy { label: "rebuild".into(), rx, kind: super::super::BgKind::Regen, pulse: None, quiet: false });
+        app.regen.busy = Some(super::super::Busy { started: std::time::Instant::now(), label: "rebuild".into(), rx, kind: super::super::BgKind::Regen, pulse: None, quiet: false });
         let mut swallowed = true;
         let _ = ctx.run_ui(Default::default(), |c| swallowed = app.tick_async(c.ctx()));
         assert!(app.regen.regen_running(), "setup: the rebuild must be running");
@@ -165,7 +165,7 @@ mod quiet_is_visible {
         let ctx = egui::Context::default();
         super::super::install_fonts(&ctx);
         app.waiting.splash_until = None;
-        app.regen.busy = Some(super::super::Busy { label: "rebuild".into(), rx, kind: super::super::BgKind::Regen, pulse: None, quiet: true });
+        app.regen.busy = Some(super::super::Busy { started: std::time::Instant::now(), label: "rebuild".into(), rx, kind: super::super::BgKind::Regen, pulse: None, quiet: true });
         let mut swallowed = true;
         let _ = ctx.run_ui(Default::default(), |c| swallowed = app.tick_async(c.ctx()));
         assert!(!swallowed, "a quiet rebuild has no right to eat the frame");

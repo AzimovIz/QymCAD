@@ -31,14 +31,14 @@ finish-args:
 modules:
   # --- the kernel, from source ---
   #
-  # 7.8.1, and only the modelling modules: Draw and Visualization are off, the drawing here is our own in
+  # 7.9.3, and only the modelling modules: Draw and Visualization are off, the drawing here is our own in
   # egui and wgpu. The same version and the same module set as the Linux, Windows and macOS builds - one
   # kernel for every system beats four different ones.
   - name: occt
     buildsystem: cmake-ninja
     config-opts:
       # THE KERNEL DECLARES AN OLD MINIMUM. CMake 4 removed compatibility with anything below 3.5, and
-      # OCCT 7.8.1 still says `cmake_minimum_required(VERSION 3.1)`. Measured on the first build against
+      # OCCT 7.8.1 still said `cmake_minimum_required(VERSION 3.1)`, and parts of 7.9.3's tree still say 3.2. Measured on the first build against
       # the 25.08 SDK: "Compatibility with CMake < 3.5 has been removed from CMake" and the module stopped
       # before configuring. This is CMake's own way out, and it belongs to the kernel's age rather than to
       # anything of ours - it goes when OCCT is updated.
@@ -57,8 +57,8 @@ modules:
       - -DUSE_GLES2=OFF
     sources:
       - type: archive
-        url: https://github.com/Open-Cascade-SAS/OCCT/archive/refs/tags/V7_8_1.tar.gz
-        sha256: 7321af48c34dc253bf8aae3f0430e8cb10976961d534d8509e72516978aa82f5
+        url: https://github.com/Open-Cascade-SAS/OCCT/archive/refs/tags/V7_9_3.tar.gz
+        sha256: 5ecf094ec6b12d5413dfb851d8c3590c354058aee556e32e408bdfbf8c357d57
     cleanup:
       - /include
       - /lib/cmake
@@ -90,13 +90,14 @@ modules:
       - install -Dm644 LICENSE /app/share/licenses/tech.qymis.cad/LICENSE
       - install -Dm644 THIRD-PARTY-NOTICES.md /app/share/licenses/tech.qymis.cad/THIRD-PARTY-NOTICES.md
     sources:
-      # THE COMMIT IS NAMED BESIDE THE TAG. Flathub asks for it, and the reason is plain: a tag can be
-      # moved, and then a build that "reproduced a release" would reproduce something else. The pair is
-      # updated by packaging/flatpak/update-manifest.sh.
+      # A COMMIT AND NOTHING ELSE. Flathub asks for a commit because a tag can be moved, and then a build
+      # that "reproduced a release" would reproduce something else. It is not paired with a tag here:
+      # flatpak-builder stops when a tag and a commit disagree, and they disagree whenever a packaging fix
+      # lands after the tag was cut - which is how this manifest got its first working picture addresses,
+      # the tagged tree still holding the unfilled ones. Updated by packaging/flatpak/update-manifest.sh.
       - type: git
         url: https://github.com/QymIs-Tech/QymCAD.git
-        tag: v0.1.0-dev.20260910
-        commit: 14db0597bf7579b993f789284f443b00b3309fb5
+        commit: 2a3201e3a8a3be44b5daa6991f170b27a9bccd05
       # Generated, never written by hand - see packaging/flatpak/README.md. It lists every crate of the
       # lock file as its own source, because the build cannot reach crates.io.
       - cargo-sources.json

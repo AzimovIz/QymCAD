@@ -507,6 +507,58 @@ impl Mesh {
         (n, len * 0.5, ctr)
     }
 
+    /// Smoothed normals at the corners of the triangles, `3 * t + k` for corner `k` of triangle `t`, smoothed only
+    /// where the surface turns by less than `crease_deg` between two triangles. For a mesh that shares its vertices
+    /// across its sharp edges too - a mesh from a file - where `vertex_normals` smooths the light over every edge: a
+    /// corner takes the area-weighted normals of the triangles around its vertex that turn from its own by less than
+    /// the crease, so a fillet stays round and an edge stays sharp.
+    pub fn corner_normals(&self, crease_deg: f64) -> Vec<[f64; 3]> {
+        let raw: Vec<[f64; 3]> = (0..self.tris.len())
+            .map(|i| {
+                let t = self.triangle(i);
+                let u = [t[1].x - t[0].x, t[1].y - t[0].y, t[1].z - t[0].z];
+                let v = [t[2].x - t[0].x, t[2].y - t[0].y, t[2].z - t[0].z];
+                [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]
+            })
+            .collect();
+        let len = |a: [f64; 3]| (a[0] * a[0] + a[1] * a[1] + a[2] * a[2]).sqrt();
+        let unit: Vec<[f64; 3]> = raw.iter().map(|&a| if len(a) > 0.0 { a.map(|c| c / len(a)) } else { [0.0; 3] }).collect();
+        // the triangles around every vertex, as ranges of one list
+        let mut start = vec![0usize; self.verts.len() + 1];
+        for t in &self.tris {
+            for &v in t {
+                start[v as usize + 1] += 1;
+            }
+        }
+        for i in 0..self.verts.len() {
+            start[i + 1] += start[i];
+        }
+        let mut fill = start.clone();
+        let mut around = vec![0u32; start[self.verts.len()]];
+        for (i, t) in self.tris.iter().enumerate() {
+            for &v in t {
+                around[fill[v as usize]] = i as u32;
+                fill[v as usize] += 1;
+            }
+        }
+        let cos = crease_deg.to_radians().cos();
+        let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+        let mut out = Vec::with_capacity(self.tris.len() * 3);
+        for (i, t) in self.tris.iter().enumerate() {
+            for &v in t {
+                let mut a = [0.0; 3];
+                for &s in &around[start[v as usize]..start[v as usize + 1]] {
+                    let s = s as usize;
+                    if s == i || dot(unit[s], unit[i]) >= cos {
+                        (0..3).for_each(|k| a[k] += raw[s][k]);
+                    }
+                }
+                out.push(if len(a) > 0.0 { a.map(|c| c / len(a)) } else { unit[i] });
+            }
+        }
+        out
+    }
+
     /// Smoothed per-vertex normals for Gouraud shading. The normal of a vertex is the average of the normals of the
     /// adjacent triangles weighted by their area, so larger facets weigh more, which is stable under subdivision.
     ///
@@ -1150,6 +1202,29 @@ pub fn cyl_side_from_mesh(mesh: &Mesh, axis_pt: [f64; 3], axis_dir: [f64; 3], r:
     Some(cyl_face_is_internal(mesh, &on_cyl, axis_pt, ax))
 }
 
+/// HOW FAR THE CYLINDER OF RADIUS `r` RUNS along `axis_dir` from its rim at `axis_pt`, read off the mesh: the farthest
+/// vertex of the triangles lying on it, ahead of the rim. `None` when the mesh shows no such cylinder.
+pub fn cyl_span_from_mesh(mesh: &Mesh, axis_pt: [f64; 3], axis_dir: [f64; 3], r: f64) -> Option<f64> {
+    let al = (axis_dir[0] * axis_dir[0] + axis_dir[1] * axis_dir[1] + axis_dir[2] * axis_dir[2]).sqrt();
+    if al < 1e-12 || r <= 1e-9 {
+        return None;
+    }
+    let ax = [axis_dir[0] / al, axis_dir[1] / al, axis_dir[2] / al];
+    let band = (0.05 * r).max(1e-3); // the tolerance for "lies on the cylinder", as `cyl_side_from_mesh` has it
+    let along = |p: &Point3| (p.x - axis_pt[0]) * ax[0] + (p.y - axis_pt[1]) * ax[1] + (p.z - axis_pt[2]) * ax[2];
+    let on = |p: &Point3| {
+        let t = along(p);
+        let d = [p.x - axis_pt[0] - ax[0] * t, p.y - axis_pt[1] - ax[1] * t, p.z - axis_pt[2] - ax[2] * t];
+        ((d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt() - r).abs() <= band
+    };
+    mesh.tris
+        .iter()
+        .filter(|t| t.iter().all(|&v| on(&mesh.verts[v as usize])))
+        .flat_map(|t| t.iter().map(|&v| along(&mesh.verts[v as usize])))
+        .filter(|t| *t >= -band)
+        .fold(None, |m: Option<f64>, t| Some(m.map_or(t, |m| m.max(t))))
+}
+
 /// A section cap computed from the mesh: a closed slice of a body by a plane, with no B-rep involved.
 ///
 /// A section that leaves bodies hollow inside is not how a section is expected to read; a plane must draw a closed
@@ -1427,6 +1502,25 @@ pub fn triangulate_with_holes(outer: &[Point2], holes: &[Vec<Point2>]) -> Vec<[P
 #[cfg(test)]
 mod normal_tests {
     use super::*;
+
+    // THE CORNERS OF A SHARED EDGE: the roof of `vertex_normals_shared_edge_averages_bisector` turns by 90 degrees and
+    // stays sharp - a corner of each face is lit by its face - while a fold of 10 degrees is smoothed into the bisector.
+    #[test]
+    fn corner_normals_keep_a_sharp_edge_sharp_and_smooth_a_shallow_fold() {
+        let roof = |z: f64| Mesh {
+            verts: vec![Point3::new(0.0, 0.0, 0.0), Point3::new(1.0, 0.0, 0.0), Point3::new(1.0, 1.0, 0.0), Point3::new(2.0, 0.0, z), Point3::new(2.0, 1.0, z)],
+            tris: vec![[0, 1, 2], [1, 3, 4], [1, 4, 2]],
+        };
+        // the roof's second face turned straight up: its corners at the shared vertex 1 keep their faces' normals
+        let sharp = Mesh { verts: vec![Point3::new(0.0, 0.0, 0.0), Point3::new(1.0, 0.0, 0.0), Point3::new(1.0, 1.0, 0.0), Point3::new(1.0, 0.0, 1.0), Point3::new(1.0, 1.0, 1.0)], tris: vec![[0, 1, 2], [1, 2, 4], [1, 4, 3]] };
+        let n = sharp.corner_normals(30.0);
+        assert!((n[1][2] - 1.0).abs() < 1e-9, "the flat face's corner at the edge is {:?}, not +Z", n[1]);
+        assert!((n[3][0] - 1.0).abs() < 1e-9, "the upright face's corner at the edge is {:?}, not +X", n[3]);
+        // a fold of 10 degrees: the corners at the fold are smoothed, the far ones keep their faces
+        let fold = roof((10.0f64).to_radians().tan()).corner_normals(30.0);
+        assert!(fold[1][0] < -1e-3 && fold[1][2] > 0.99, "the flat face's corner at the fold is not smoothed: {:?}", fold[1]);
+        assert!(fold[0][0].abs() < 1e-9, "the far corner of the flat face is smoothed: {:?}", fold[0]);
+    }
 
     // A flat quad of two triangles with shared vertices: the vertex normal equals the face normal, +Z.
     #[test]

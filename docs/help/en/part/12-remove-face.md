@@ -1,12 +1,15 @@
 # Remove face
 
-Click the faces of a feature — a hole, a boss, a pocket — and press Enter. The feature is taken away
-and the neighbouring faces extend and meet each other.
+A feature of the part — a hole, a boss, a pocket — is taken away with its faces, and the neighbouring faces extend and
+meet each other.
 
 ![Before and after: the hole goes away with its face, and the neighbouring faces close up by themselves.](img/part-remove-face/)
 
-Select all the faces of the feature: for a hole that is the cylinder (and the bottom, if it is
-blind), for a boss its side and top.
+## How to do it
+
+1. Press **Remove face** and click the faces of the feature — all of them: for a hole the cylinder (and the bottom if it
+   is blind), for a boss its side and top. Faces selected before the command are taken at once.
+2. **Enter** applies, **Esc** cancels.
 
 ## What it is for
 
@@ -17,7 +20,7 @@ to roll back: a detail can only be removed together with its faces.
 The second use is taking away what should not be in the model: a hole for an old fastener, a pad from
 a previous revision.
 
-## When it will not work
+## If it did not work
 
 If the neighbouring faces cannot be stretched to meet — deleting a face where half the part
 converges, say — the command refuses: there is nothing to close such a gap with.

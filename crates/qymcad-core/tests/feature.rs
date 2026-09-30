@@ -315,7 +315,7 @@ fn thread_feature_associative_via_circular_edge() {
     let mut p = Project::default();
     let sid = square(&mut p, "s");
     let src = p.add_extrude(sid, 10.0);
-    let thr = p.add_thread(src, 42, qymcad_core::thread::ThreadSpec { nominal_d: 10.0, pitch: 1.5, internal: false, ..Default::default() }, 8.0, 0.0, 0.0);
+    let thr = p.add_thread(src, 42, qymcad_core::thread::ThreadSpec { nominal_d: 8.0, pitch: 1.25, internal: false, ..Default::default() }, 8.0, 0.0, 0.0); // M8 on the edge of radius 4
     p.regenerate(&k);
     assert!(p.mesh_index(thr).is_some(), "the thread body must be built (the modifier produced a body)");
     // The kernel received the axis (centre at z = 5) and the radius (4) from the edge: associativity.
@@ -336,12 +336,12 @@ fn thread_validates_depth_vs_radius() {
     let mut p = Project::default();
     let sid = square(&mut p, "s");
     let src = p.add_extrude(sid, 10.0);
-    // External thread: a depth of 5 against a radius of 4 would push the profile past the axis, which has to
-    // produce a readable error.
-    let thr = p.add_thread(src, 42, qymcad_core::thread::ThreadSpec { nominal_d: 30.0, pitch: 20.0, internal: false, ..Default::default() }, 8.0, 0.0, 0.0);
+    // External M8 with a pitch of 20: a depth of 12.3 against a radius of 4 would push the profile past the axis,
+    // which has to produce a readable error.
+    let thr = p.add_thread(src, 42, qymcad_core::thread::ThreadSpec { nominal_d: 8.0, pitch: 20.0, internal: false, ..Default::default() }, 8.0, 0.0, 0.0);
     p.regenerate(&k);
     let err = p.regen_errors.get(&thr).cloned();
-    eprintln!("thread error (depth 5 > r 4): {err:?}");
+    eprintln!("thread error (depth 12.3 > r 4): {err:?}");
     // Checked by error code rather than by a word: a substring check would go blind on any text edit or
     // translation.
     assert!(
@@ -364,7 +364,7 @@ fn thread_deep_profile_reaches_kernel_no_error() {
     let src = p.add_extrude(sid, 10.0);
     // A depth of 5 against a pitch of 5 at 60 degrees used to be rejected; it now builds as a sharp V with a
     // capped depth.
-    let thr = p.add_thread(src, 42, qymcad_core::thread::ThreadSpec { nominal_d: 10.0, pitch: 5.0, internal: false, ..Default::default() }, 100.0, 0.0, 0.0);
+    let thr = p.add_thread(src, 42, qymcad_core::thread::ThreadSpec { nominal_d: 50.0, pitch: 5.0, internal: false, ..Default::default() }, 100.0, 0.0, 0.0); // M50 on the edge of radius 25
     p.regenerate(&k);
     let err = p.regen_errors.get(&thr).cloned();
     eprintln!("deep, sharp profile: err={err:?}");
@@ -723,7 +723,7 @@ fn delete_plane_cascades_sketch_on_datum() {
     let sid = p.sketches[si].id;
     p.add_sketch_node(sid, "s");
     let body = p.add_extrude(sid, 5.0);
-    assert!(p.delete_plane(pl));
+    assert!(p.delete_plane_with_dependents(pl));
     assert!(p.sketch_index(sid).is_none(), "a sketch on a deleted plane must be removed in the cascade");
     assert!(p.timeline_index(body).is_none(), "the body of the sketch must be removed in the cascade");
     assert!(!p.planes.iter().any(|x| x.id == pl), "the plane must be deleted");
@@ -1062,7 +1062,7 @@ fn delete_sketch_cascades_dependent_bodies() {
     let fil = p.add_fillet(body, 1.0, Vec::<u32>::new()); // Depends on the body, so it cascades too.
     let before = p.timeline.len();
     assert!(before >= 3, "the nodes are a sketch, an extrude and a fillet");
-    let removed = p.delete_sketch(sid);
+    let removed = p.delete_sketch_with_dependents(sid);
     assert!(removed.contains(&body) && removed.contains(&fil), "both bodies must be removed by the cascade: {removed:?}");
     assert!(p.sketch_index(sid).is_none(), "the sketch must be deleted");
     assert!(p.timeline.iter().all(|n| n.kind.body() != Some(body) && n.kind.body() != Some(fil)), "the body nodes must be deleted");
@@ -1307,9 +1307,9 @@ fn delete_base_cascades_to_move() {
 }
 
 #[test]
-fn prune_removes_dangling_move_and_orphan_mesh() {
-    // Simulating an older defect: the base node is deleted directly, without a cascade, leaving an orphaned
-    // mesh and a dangling move.
+fn prune_removes_the_orphan_mesh_and_leaves_its_consumer_red() {
+    // The base node is deleted alone, leaving an orphaned mesh and a move standing on it. The mesh goes; the move
+    // stays in the timeline, red with the reason, for the person to repair or delete.
     let mut p = part_project();
     let sid = square(&mut p, "square");
     p.add_sketch_node(sid, "square");
@@ -1322,9 +1322,10 @@ fn prune_removes_dangling_move_and_orphan_mesh() {
     p.timeline.retain(|n| n.kind.body() != Some(base)); // Remove only the base node; the mesh is left orphaned.
     assert!(p.mesh_index(base).is_some(), "the base mesh must be left orphaned");
     let removed = p.prune_dangling();
-    assert!(removed.contains(&base) && removed.contains(&mv), "pruning must remove the orphaned base and the dangling move: {removed:?}");
-    assert!(p.mesh_index(base).is_none() && p.mesh_index(mv).is_none(), "the ghost meshes must be deleted");
-    assert!(p.timeline.iter().all(|n| n.kind.body() != Some(mv)), "pruning must remove the move node");
+    assert_eq!(removed, std::collections::HashSet::from([base]), "pruning removes the orphaned base and nothing else");
+    assert!(p.timeline.iter().any(|n| n.kind.body() == Some(mv)), "the move went with its base");
+    p.regenerate(&k);
+    assert_eq!(p.regen_errors.get(&mv), Some(&qymcad_core::errors::CoreError::SourceBodyDeleted), "the move stands on nothing and says nothing");
 }
 
 #[test]
@@ -1673,7 +1674,7 @@ fn skeleton_named_dim_drives_parameter() {
     let si = p.sketch_index(sid).unwrap();
     let pts: Vec<Id> = p.sketches[si].points.iter().map(|pt| pt.id).collect();
     let (a, b) = (pts[0], pts[1]);
-    p.sketches[si].constraints.push(Constraint::Distance { a, b, d: 30.0, off: 0.0, expr: String::new(), driven: false, axis: 0 });
+    p.sketches[si].constraints.push(Constraint::Distance { a, b, d: 30.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
     assert!(p.add_named_dim("len".into(), sid, vec![a, b]), "the dimension must be named as a driver");
     assert_eq!(p.param_map().get("len"), Some(&30.0), "a named dimension must be visible as a parameter");
     assert_eq!(p.eval_expr("len*2").unwrap(), 60.0, "a part must be able to reference it from an expression");

@@ -1,23 +1,32 @@
 # Revolve
 
-Key **R**. Select an outline, set the axis and the angle above, press Enter.
+Key **R**.
 
-![A profile away from the axis gives a ring; here it is revolved through 270°.](img/part-revolve.png)
+![A profile away from the axis gives a ring; here it is turned by 270°.](img/part-revolve.png)
 
-## What comes out
+A contour turns about an axis and sweeps a body: a full turn gives a body of revolution, a partial one a sector.
 
-The outline turns around the axis and sweeps a body. A full turn gives a body of revolution, a
-partial one gives a sector. A coordinate axis or a datum axis serves as the axis.
+## How to do it
 
-## The outline rule
+1. Select a sketch or contours — or press **Revolve** and click contours.
+2. Choose the axis in the bar above (the choices are below).
+3. Type the **Angle** at the geometry (1 to 360°) and press **Enter**. **Esc** cancels.
 
-The outline must not cross the axis: the body would turn itself inside out. Usually the outline is
-drawn on one side of the axis, and the axis itself is drawn as a **construction** line — it will not
-become part of the profile but stays visible as support.
+The axis of the revolve:
 
-## Revolve can cut too
+- **X** or **Y** — the sketch's own axes;
+- **sketch axis** — click a line of the sketch itself (draw it as construction: it stays out of the profile);
+- **pick an axis (3D)** — click a straight body edge, a cylindrical face or a datum axis.
 
-Like extrude, revolve comes in adding and cutting flavours: a groove on a shaft is easier to make by
-revolving the groove profile as a cut than by building it out of separate bodies.
+The bar also has **Add / Cut / Intersect** — as for an extrusion (a groove on a shaft is easiest as its profile revolved
+as a cut); **One side / Symmetric**; **Flip** — turn the other way.
 
-Several outlines go as **one** feature, just as with extrude.
+Several contours go into **one** timeline row, as with an extrusion.
+
+## If it did not work
+
+- The body is not built — the contour crosses the axis: the body would turn itself inside out. Draw the contour on
+  one side of the axis.
+- The axis is not taken — it does not lie in the sketch plane. The axis of a revolve must lie in the same plane as the
+  contour.
+- The angle is not taken — it is outside 1…360° or not a number; the reason is written at the field.

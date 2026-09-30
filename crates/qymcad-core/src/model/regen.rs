@@ -601,6 +601,86 @@ impl Project {
         self.regenerate_watched(kernel, &crate::feature::NoWatch)
     }
 
+    /// DOES THIS NODE HAVE TO BE REBUILT, given what is dirty so far.
+    ///
+    /// Asked in three places - the plan, the waves and the rebuild itself - and the three had grown their own
+    /// copies of the answer. A copy that forgets one of the reasons (a moved sketch plane, the live input of a
+    /// mirrored part) does not fail: it silently rebuilds less than it should, and the document comes out
+    /// almost right.
+    fn node_needs(&self, i: usize, dirty: &std::collections::HashSet<Id>) -> bool {
+        let Some(nd) = self.timeline.get(i) else { return false };
+        let self_dirty = nd.dirty || self.regen_errors.get(&nd.id).is_some_and(|e| !e.retryable());
+        self_dirty || self.node_reads_any(i, dirty)
+    }
+
+    /// DOES NODE `i` READ ANYTHING IN `set` - its inputs, the body under its sketch, or the live source of a
+    /// mirrored or instanced part.
+    ///
+    /// One answer for two questions: "is its input dirty" (`node_needs`) and "is its input still to be rebuilt"
+    /// (`ready_from`). The second used to be a copy of the first that had lost the part mirror and the part
+    /// instance on the way.
+    pub(super) fn node_reads_any(&self, i: usize, set: &std::collections::HashSet<Id>) -> bool {
+        let Some(nd) = self.timeline.get(i) else { return false };
+        let kind = &nd.kind;
+        kind.inputs().iter().any(|id| set.contains(id))
+            || kind.inputs().iter().any(|&inp| self.sketch_plane_body(inp).is_some_and(|pb| set.contains(&pb)))
+            || matches!(kind, FeatureKind::MirrorPart { src_comp, .. } if self.active_body_before(*src_comp, i).is_some_and(|b| set.contains(&b)))
+            || matches!(kind, FeatureKind::PartInstance { .. } | FeatureKind::ComponentPattern { .. }) && kind.copy_source().and_then(|s| self.active_body_before(s, i)).is_some_and(|b| set.contains(&b))
+    }
+
+    /// THE NODES OF A REBUILD LAID OUT IN WAVES: those that can be computed at the same time stand together.
+    ///
+    /// The first wave holds the nodes whose inputs nothing in this rebuild produces; the second, those that
+    /// depend only on the first, and so on. Nothing here touches geometry: it is arithmetic over the graph the
+    /// timeline already carries (`kind.inputs()`), and it answers whether there is anything to compute side by
+    /// side at all.
+    ///
+    /// The order within a wave is the order of the timeline, and the union of the waves is exactly the set a
+    /// sequential pass would rebuild: the waves say WHEN, never WHETHER.
+    pub fn rebuild_waves(&self) -> Vec<Vec<Id>> {
+        let plan = self.regen_plan();
+        let want: std::collections::HashSet<Id> = plan.nodes.iter().copied().collect();
+        // what each output of this rebuild is ready after: the wave of the node that made it
+        let mut ready_after: std::collections::HashMap<Id, usize> = std::collections::HashMap::new();
+        let mut waves: Vec<Vec<Id>> = Vec::new();
+        for (i, nd) in self.timeline.iter().enumerate() {
+            if !want.contains(&nd.id) {
+                continue;
+            }
+            // THE INPUTS THAT THIS REBUILD ITSELF PRODUCES. An input made outside it (a body nobody touches)
+            // is ready before the first wave and puts no one in a queue.
+            let mut after = 0usize;
+            let note = |id: Id, after: &mut usize| {
+                if let Some(w) = ready_after.get(&id) {
+                    *after = (*after).max(*w + 1);
+                }
+            };
+            for id in nd.kind.inputs() {
+                note(id, &mut after);
+                // a sketch drawn on a face of a body waits for that body, and the timeline does not say so
+                // through `inputs`
+                if let Some(pb) = self.sketch_plane_body(id) {
+                    note(pb, &mut after);
+                }
+            }
+            // the dynamic inputs: a mirrored part and a pattern instance follow the ACTIVE body of their
+            // source, which is not in `inputs` either
+            if let Some(src_comp) = nd.kind.copy_source() {
+                if let Some(b) = self.active_body_before(src_comp, i) {
+                    note(b, &mut after);
+                }
+            }
+            if waves.len() <= after {
+                waves.resize(after + 1, Vec::new());
+            }
+            waves[after].push(nd.id);
+            for out in nd.kind.declares() {
+                ready_after.insert(out, after);
+            }
+        }
+        waves
+    }
+
     /// What a rebuild will actually touch, without a single kernel call.
     ///
     /// The progress counter used to show the position in the timeline rather than the work, so cutting one hole
@@ -628,12 +708,7 @@ impl Project {
             // The same reasons as `needs` inside the rebuild itself: the node's own dirty flag, an
             // unrecoverable error from last time, a dirty input, a moved sketch base face, and the dynamic
             // inputs of a mirrored part and a pattern instance.
-            let self_dirty = nd.dirty || self.regen_errors.get(&nd.id).is_some_and(|e| !e.retryable());
-            let needs = self_dirty
-                || kind.inputs().iter().any(|id| dirty.contains(id))
-                || kind.inputs().iter().any(|&inp| self.sketch_plane_body(inp).is_some_and(|pb| dirty.contains(&pb)))
-                || matches!(kind, FeatureKind::MirrorPart { src_comp, .. } if self.active_body_before(*src_comp, i).is_some_and(|b| dirty.contains(&b)))
-                || matches!(kind, FeatureKind::PartInstance { src_comp, .. } if self.active_body_before(*src_comp, i).is_some_and(|b| dirty.contains(&b)));
+            let needs = self.node_needs(i, &dirty);
             if !needs || nd.suppressed {
                 continue;
             }
@@ -694,6 +769,11 @@ impl Project {
         // positions and the change only becomes visible on the second rebuild.
         self.resolve_comp_patterns();
         let mut unbuilt: std::collections::HashSet<Id> = std::collections::HashSet::new();
+        // the part of `unbuilt` that is so because a node above FAILED, not because it was suppressed: what stands
+        // on it is red with the reason, while what stands on a suppressed node is quietly left out with it
+        let mut broken: std::collections::HashSet<Id> = std::collections::HashSet::new();
+        // every body some node makes or an import brings: a source outside it was deleted with its node
+        let made: std::collections::HashSet<Id> = self.timeline.iter().flat_map(|n| n.kind.bodies()).chain(self.imported_bodies.iter().copied()).collect();
         let mut emap: EdgeRenames = EdgeRenames::new();
         // The counter counts work, not steps. Reporting "node i of the whole timeline" always ends at the full
         // count however many nodes were skipped, which reads as the whole project being rebuilt — reasonably so,
@@ -707,12 +787,51 @@ impl Project {
         // scope where it was written.
         macro_rules! pass {
             ($node:expr) => {
-                Pass { kernel, vars: &vars, dims: feat_dims.get(&$node), emap: &mut emap, dirty: &mut dirty, report: &mut report, node: $node }
+                pass!($node, kernel)
+            };
+            // a node computed by a worker is APPLIED with that worker's kernel: the names of its new faces live
+            // there, not in the shared one
+            ($node:expr, $k:expr) => {
+                Pass { kernel: $k, vars: &vars, dims: feat_dims.get(&$node), emap: &mut emap, dirty: &mut dirty, report: &mut report, node: $node }
             };
         }
         let plan_total = self.regen_plan().nodes.len();
+        // THE WAVES, AND WHAT HAS ALREADY BEEN COMPUTED FROM THEM.
+        //
+        // A wave is a set of nodes that do not depend on one another (see `rebuild_waves`), so their geometry
+        // can be built at the same time. The document itself stays on this thread: a worker is given the bodies
+        // its node needs and nothing else, and what it built comes home before anything is written down.
+        let hands = kernel.workers();
+        let mut computed: std::collections::HashMap<Id, (Id, Result<(crate::geom::Mesh, Vec<crate::geom::MeshFace>), crate::errors::CoreError>, Option<Box<dyn crate::feature::KernelWorker>>)> =
+            std::collections::HashMap::new();
         let mut work = 0usize;
-        for i in 0..self.timeline.len() {
+        // THE ORDER OF THE WALK: the timeline, except that a batch just computed is written down straight away.
+        //
+        // Held back until the walk reached each of them, the results of a batch kept every chain standing on them
+        // waiting: the first batch took the 27 heads of the scenario document, and from then on each step found
+        // one node ready - batches [27, 1, 4, 1, 1, 1], and the time inside the nodes overlapped by nothing.
+        // Written down at once, a head frees its chain for the next batch.
+        //
+        // Safe for the reason the batch itself is: a member depends on nothing standing between the node the walk
+        // is on and itself (`ready_from`), and nothing standing there may read what a member makes - that would
+        // be a reference to a node below it.
+        let mut next_up: Vec<usize> = Vec::new();
+        let mut walked: std::collections::HashSet<usize> = std::collections::HashSet::new();
+        let mut cursor = 0usize;
+        loop {
+            let i = match next_up.pop() {
+                Some(j) => j,
+                None => {
+                    while walked.contains(&cursor) {
+                        cursor += 1;
+                    }
+                    if cursor >= self.timeline.len() {
+                        break;
+                    }
+                    cursor
+                }
+            };
+            walked.insert(i);
             // Cancellation happens between nodes rather than inside a kernel operation: a boolean cannot be
             // interrupted half-way, and pretending otherwise would yield half a body. This is a boundary where
             // the document is still whole, and the incomplete result is simply discarded by the caller.
@@ -769,7 +888,24 @@ impl Project {
             }
             // Depends on a body that is not suppressed yet was not built (a cascading source, or a failure
             // above), so it is neither built nor shown.
+            // Stands on a body whose node was deleted: red with that reason, and what stands on it red in turn.
+            // A body read without being consumed - the source of a face copy, a patch, a trim - counts the same when its
+            // node was deleted: the live body it leaves behind is not a source, and building on it made the node
+            // green step by step and red rebuilt from the start.
+            let deleted_input = kind.inputs().iter().any(|s| *s != 0 && !made.contains(s) && self.dead_bodies.contains(s));
+            if deleted_input || kind.consumed().iter().any(|s| *s != 0 && !made.contains(s)) {
+                self.regen_errors.insert(node_id, crate::errors::CoreError::SourceBodyDeleted);
+                report.errors.push((node_id, crate::errors::CoreError::SourceBodyDeleted));
+                broken.extend(kind.bodies());
+                self.cascade_unbuilt(&kind, &mut unbuilt);
+                continue;
+            }
             if kind.inputs().iter().any(|id| unbuilt.contains(id)) {
+                if kind.inputs().iter().any(|id| broken.contains(id)) {
+                    self.regen_errors.insert(node_id, crate::errors::CoreError::SourceBodyNotBuilt);
+                    report.errors.push((node_id, crate::errors::CoreError::SourceBodyNotBuilt));
+                    broken.extend(kind.bodies());
+                }
                 self.cascade_unbuilt(&kind, &mut unbuilt);
                 continue;
             }
@@ -780,24 +916,29 @@ impl Project {
             // The bodies of the node are captured before the match, whose branches destructure `kind`.
             let out_bodies = kind.bodies();
 
-            let plane_dirty = kind.inputs().iter().any(|&inp| self.sketch_plane_body(inp).is_some_and(|pb| dirty.contains(&pb)));
             // A node that failed earlier is recomputed. Otherwise it is not rebuilt on the next pass, there is
             // no fresh error, and the "do not build on a failure" cascade does not see it, so everything above
             // it builds on a ghost again. Simply marking its bodies unbuilt is not an option either: the error
             // may no longer reproduce (the input was fixed), and that would freeze a working chain forever.
-            let self_dirty = self_dirty || self.regen_errors.get(&node_id).is_some_and(|e| !e.retryable());
-            let needs = self_dirty || kind.inputs().iter().any(|id| dirty.contains(id)) || plane_dirty
-                // A mirrored part depends on the active body of its source: a dynamic input.
-                || matches!(kind, FeatureKind::MirrorPart { src_comp, .. } if self.active_body_before(src_comp, i).is_some_and(|b| dirty.contains(&b)))
-                // A pattern instance has the same dynamic dependency: editing the source moves the copies.
-                || matches!(kind, FeatureKind::PartInstance { src_comp, .. } if self.active_body_before(src_comp, i).is_some_and(|b| dirty.contains(&b)));
+            let needs = self.node_needs(i, &dirty);
             if needs {
                 work += 1;
             }
+            let started = needs.then(std::time::Instant::now);
             // Isolation: only a part builds bodies, and references are confined to the owning component.
             if needs && kind.body().is_some() {
                 if let Some(err) = self.isolation_error(i, &kind) {
                     report.errors.push((node_id, err));
+                    continue;
+                }
+            }
+            // A VALUE WRITTEN AS AN EXPRESSION THAT NO LONGER COUNTS - a parameter it names was deleted - makes the node
+            // red with the expression's own words; the body stays at its last good state. Built from the number the
+            // expression last gave, the node stood green on a value nothing in the document holds any more.
+            if needs {
+                if let Some(e) = self.dim_expr_error(node_id, &vars) {
+                    self.regen_errors.insert(node_id, e.clone());
+                    report.errors.push((node_id, e));
                     continue;
                 }
             }
@@ -820,12 +961,151 @@ impl Project {
             }
             // Captured before the match, which moves `kind`, for the pass-through fallback when a modifier
             // fails.
-            let consumed_src = kind.consumed_body();
+            // A UNION OR AN INTERSECTION OF TWO BODIES HAS NO SINGLE SOURCE TO PASS THROUGH: a copy of the first took the
+            // second out of the part - an empty intersection of two touching pieces lost half the material - so it
+            // shows nothing of its own and its two inputs stay in sight (see `consumed_bodies`). A cut does pass
+            // through: the base without the tool, when the tool takes nothing, is the base.
+            let consumed_src = kind.consumed_body().filter(|_| !matches!(kind, FeatureKind::BodyBoolean { op: 1 | 2, .. }));
             let out_body = kind.body();
+            // an addition to the body and a shell of it never make pieces of a whole body; a cut or an intersection
+            // may leave islands on purpose, a pattern or a mirror lays copies, and splitting a body is what makes pieces
+            let keeps_one_piece = matches!(kind, FeatureKind::Combine { op: 1, .. } | FeatureKind::Revolve { op: 1, .. } | FeatureKind::Sweep { op: 1, .. } | FeatureKind::Loft { op: 1, .. } | FeatureKind::Shell { .. });
             let mut clear = true;
+            // EVERYTHING THAT IS READY RIGHT NOW, COMPUTED TOGETHER.
+            //
+            // A wave says which nodes do not depend on one another (`rebuild_waves`), but a wave is not what
+            // can be computed at THIS moment: a node of the same wave standing further down the timeline may
+            // take its source from a node standing between here and there, and that source has not been
+            // written into the document yet. Preparing it then resolves its references against geometry that
+            // is not there - measured on the scenario document as 13 refusals and half the bodies missing.
+            //
+            // So the rule is readiness rather than the wave: from here on, a node joins the batch while
+            // nothing it needs is made by a node in between. Preparing a parcel changes the document (it mints
+            // the names of the faces to come), so preparation stays here, in timeline order, exactly as a
+            // sequential pass would do it.
+            if needs && hands > 1 && !suppressed && !computed.contains_key(&node_id) {
+                let held: std::collections::HashSet<Id> = computed.keys().copied().collect();
+                let ready = self.ready_from(i, &dirty, &held, &walked, limit);
+                if ready.len() > 1 {
+                    let mut parcels: Vec<(Id, Id, crate::feature::KernelJob)> = Vec::new();
+                    for &j in &ready {
+                        let nid = self.timeline[j].id;
+                        let kind_here = self.timeline[j].kind.clone();
+                        let mut p = pass!(nid);
+                        if let Some((out, job)) = self.prep_node(&mut p, &kind_here) {
+                            parcels.push((nid, out, job));
+                        }
+                    }
+                    // A body wanted by two parcels keeps both of them here: the shape cannot be in two threads
+                    // at once, and copying it would cost what the work costs.
+                    let mut wanted: std::collections::HashMap<Id, usize> = std::collections::HashMap::new();
+                    for (_, _, job) in &parcels {
+                        for b in job.inputs() {
+                            *wanted.entry(*b).or_insert(0) += 1;
+                        }
+                    }
+                    let (mut alone, mut here): (Vec<_>, Vec<_>) = (Vec::new(), Vec::new());
+                    for parcel in parcels {
+                        if parcel.2.inputs().iter().all(|b| wanted.get(b).copied().unwrap_or(0) <= 1) {
+                            alone.push(parcel);
+                        } else {
+                            here.push(parcel);
+                        }
+                    }
+                    // the parcels that travel: each with the bodies it needs, taken out of the shared kernel
+                    let mut sent: Vec<(Id, Id, crate::feature::KernelJob, Box<dyn crate::feature::KernelWorker>)> = Vec::new();
+                    for (nid, out, job) in alone {
+                        match kernel.split_off(job.inputs()) {
+                            Some(worker) => sent.push((nid, out, job, worker)),
+                            None => here.push((nid, out, job)),
+                        }
+                    }
+                    if !sent.is_empty() {
+                        report.waves.push(sent.len());
+                        // as many threads as the kernel allows, each taking its share of the parcels in turn
+                        let mut lanes: Vec<Vec<(Id, Id, crate::feature::KernelJob, Box<dyn crate::feature::KernelWorker>)>> =
+                            (0..hands.min(sent.len())).map(|_| Vec::new()).collect();
+                        for (n, parcel) in sent.into_iter().enumerate() {
+                            let lane = n % lanes.len();
+                            lanes[lane].push(parcel);
+                        }
+                        let mut back: Vec<(Id, Id, Result<(crate::geom::Mesh, Vec<crate::geom::MeshFace>), crate::errors::CoreError>, Box<dyn crate::feature::KernelWorker>)> = Vec::new();
+                        std::thread::scope(|scope| {
+                            let mut running = Vec::new();
+                            for lane in lanes {
+                                running.push(scope.spawn(move || {
+                                    lane.into_iter()
+                                        .map(|(nid, out, job, worker)| {
+                                            let res = job.run(worker.kernel());
+                                            (nid, out, res, worker)
+                                        })
+                                        .collect::<Vec<_>>()
+                                }));
+                            }
+                            for h in running {
+                                if let Ok(done) = h.join() {
+                                    back.extend(done);
+                                }
+                            }
+                        });
+                        // THE BODIES COME HOME AT ONCE, before anything else runs: the five node kinds still
+                        // computed in place take their source from the shared kernel, and a source that had
+                        // travelled would not be there. What a worker built carries its own face names inside
+                        // the shape, so applying it later from the shared kernel answers the same.
+                        for (nid, out, res, worker) in back {
+                            kernel.absorb(worker);
+                            computed.insert(nid, (out, res, None));
+                        }
+                    }
+                    // and the ones that stayed: computed here, on the shared kernel
+                    for (nid, out, job) in here {
+                        let res = job.run(kernel);
+                        computed.insert(nid, (out, res, None));
+                    }
+                    // written down next, in timeline order, before the walk moves on (see the order of the walk)
+                    for &j in ready.iter().rev() {
+                        if j != i && computed.contains_key(&self.timeline[j].id) {
+                            next_up.push(j);
+                        }
+                    }
+                }
+            }
+
+            // ONE DOOR FOR EVERY NODE THAT HAS A PARCEL. Before, each kind had its own arm here calling its own
+            // rebuilder; now the kind names the parcel and the three steps are the same for all of them -
+            // prepare, compute, apply. That is what lets a wave be computed at once (see `prep_node`): the same
+            // parcels, several at a time.
+            let mut done = false;
+            if let Some((out, res, _)) = computed.remove(&node_id) {
+                // already built, by this thread or another: what is left is to write it into the document
+                let mut p = pass!(node_id);
+                clear = self.apply_regen(p.landing(), out, res);
+                done = true;
+            } else if needs {
+                let mut p = pass!(node_id);
+                if let Some((out, job)) = self.prep_node(&mut p, &kind) {
+                    let res = job.run(p.kernel);
+                    clear = self.apply_regen(p.landing(), out, res);
+                    done = true;
+                }
+            }
             match kind {
+                _ if done => {}
                 // Datums are resolved unconditionally (they are cheap) and in timeline order: a parametric plane
                 // or axis is computed from its definition before the consumers below it.
+                // A DATUM STANDING ON A BODY THAT IS GONE is red with that reason, as every node standing on a deleted
+                // body is: resolved against the fingerprint the face left, it stood green on nothing. Reported
+                // behaviour: the extrusion a plane from a face stood on was deleted, and the plane stayed green.
+                FeatureKind::Plane { plane } if self.datum_base_body(plane).is_some_and(|b| !made.contains(&b)) => {
+                    self.regen_errors.insert(node_id, crate::errors::CoreError::SourceBodyDeleted);
+                    report.errors.push((node_id, crate::errors::CoreError::SourceBodyDeleted));
+                    clear = false;
+                }
+                FeatureKind::DatumAxis { axis } if self.datum_base_body(axis).is_some_and(|b| !made.contains(&b)) => {
+                    self.regen_errors.insert(node_id, crate::errors::CoreError::SourceBodyDeleted);
+                    report.errors.push((node_id, crate::errors::CoreError::SourceBodyDeleted));
+                    clear = false;
+                }
                 FeatureKind::Plane { plane } => {
                     self.resolve_plane_into(plane, &vars, feat_dims.get(&node_id));
                     if needs {
@@ -840,6 +1120,26 @@ impl Project {
                     self.resolve_axis_into(axis, kernel);
                 }
                 FeatureKind::Sketch { sketch } => {
+                    // A SKETCH WHOSE FACE IS GONE stands on the snapshot of where the face stood (the deletion froze it
+                    // there, so it does not move), and goes red with the reason rather than standing clean. Put on
+                    // another face or plane, or the deletion undone, it is clean again.
+                    use crate::errors::CoreError::{SketchFaceGone, SketchPlaneGone};
+                    use crate::model::PlaneDef;
+                    let gone = match self.sketch_index(sketch).map(|si| self.sketches[si].plane) {
+                        Some(crate::feature::SketchPlane::Datum(pid)) => self.planes.iter().find(|p| p.id == pid).and_then(|p| match p.def {
+                            PlaneDef::FaceGone => Some(SketchFaceGone),
+                            PlaneDef::PlaneGone => Some(SketchPlaneGone),
+                            _ => None,
+                        }),
+                        Some(crate::feature::SketchPlane::Face(b, _)) => (!self.timeline.iter().any(|n| n.kind.bodies().contains(&b))).then_some(SketchFaceGone),
+                        _ => None,
+                    };
+                    if let Some(e) = gone {
+                        self.regen_errors.insert(node_id, e.clone());
+                        report.errors.push((node_id, e));
+                    } else if matches!(self.regen_errors.get(&node_id), Some(SketchFaceGone | SketchPlaneGone)) {
+                        self.regen_errors.remove(&node_id);
+                    }
                     // Projections of body geometry are recomputed here, in timeline order: the source bodies
                     // above are already built and the consumers of the sketch (an extrude over the projected
                     // contour) come below. They are recomputed unconditionally rather than only under `needs`,
@@ -859,159 +1159,28 @@ impl Project {
                         dirty.insert(sketch); // The sketch changed, so its consumers rebuild.
                     }
                 }
-                FeatureKind::Extrude { sketch, ref profiles, height, reach, down, ref fill, body } if needs => {
+                FeatureKind::SplitBody { src, plane, datum, offset, ref bodies, face } if needs => {
                     let mut p = pass!(node_id);
-                    clear = self.regen_extrude(&mut p, Profile { sketch, profiles }, ExtrudeSpan { height, down, reach, fill }, body);
-                }
-                FeatureKind::Revolve { sketch, ref profiles, axis, angle, axis_datum, axis_line, reach, src, op, body } if needs => {
-                    let mut p = pass!(node_id);
-                    let prof = Profile { sketch, profiles };
-                    let ax = RevolveAxis { axis, datum: axis_datum, line: axis_line };
-                    clear = self.regen_revolve(&mut p, prof, ax, angle, reach, BodyOp { src, op, body });
-                }
-                FeatureKind::Sweep { sketch, ref profiles, path_sketch, path, src, op, body } if needs => {
-                    let mut p = pass!(node_id);
-                    clear = self.regen_sweep(&mut p, Profile { sketch, profiles }, path_sketch, path, BodyOp { src, op, body });
-                }
-                FeatureKind::Loft { sketches, contours, ruled, src, op, surface, body } if needs => {
-                    let mut p = pass!(node_id);
-                    clear = self.regen_loft(&mut p, sketches, contours, ruled, surface, BodyOp { src, op, body });
-                }
-                FeatureKind::Box3 { dx, dy, dz, body } if needs => {
-                    let mut p = pass!(node_id);
-                    clear = self.regen_box3(&mut p, dx, dy, dz, body);
-                }
-                FeatureKind::Cylinder { r, h, body } if needs => {
-                    let mut p = pass!(node_id);
-                    clear = self.regen_cylinder(&mut p, r, h, body);
-                }
-                FeatureKind::Sphere { r, body } if needs => {
-                    let mut p = pass!(node_id);
-                    clear = self.regen_sphere(&mut p, r, body);
-                }
-                FeatureKind::Cone { r1, r2, h, body } if needs => {
-                    let mut p = pass!(node_id);
-                    clear = self.regen_cone(&mut p, r1, r2, h, body);
-                }
-                FeatureKind::Torus { major, minor, body } if needs => {
-                    let mut p = pass!(node_id);
-                    clear = self.regen_torus(&mut p, major, minor, body);
-                }
-                FeatureKind::Prism { r, n, h, body } if needs => {
-                    let mut p = pass!(node_id);
-                    clear = self.regen_prism(&mut p, r, n, h, body);
-                }
-                FeatureKind::Combine { src, sketch, ref profiles, height, op, extent, down, ref fill, body } if needs => {
-                    let mut p = pass!(node_id);
-                    let prof = Profile { sketch, profiles };
-                    clear = self.regen_combine(&mut p, prof, CombineSpan { height, down, extent, fill }, BodyOp { src, op, body });
-                }
-                FeatureKind::Fillet { src, radius, ref edges, ref at_vertices, body } if needs => {
-                    let mut p = pass!(node_id);
-                    clear = self.regen_fillet(&mut p, src, radius, edges, at_vertices, body);
-                }
-                FeatureKind::Chamfer { src, dist, ref edges, mode, d2, flip, ref_face, body } if needs => {
-                    let mut p = pass!(node_id);
-                    clear = self.regen_chamfer(&mut p, src, dist, edges, ChamferShape { mode, d2, flip, ref_face }, body);
-                }
-                FeatureKind::Shell { src, thickness, ref faces, side, body } if needs => {
-                    let mut p = pass!(node_id);
-                    clear = self.regen_shell(&mut p, src, thickness, faces, side, body);
-                }
-                FeatureKind::RemoveFace { src, ref faces, body } if needs => {
-                    let mut p = pass!(node_id);
-                    clear = self.regen_removeface(&mut p, src, faces, body);
-                }
-                FeatureKind::PushFace { src, ref face, dist, body } if needs => {
-                    let mut p = pass!(node_id);
-                    clear = self.regen_pushface(&mut p, src, face, dist, body);
-                }
-                FeatureKind::Patch { src, ref edges, tangent, body } if needs => {
-                    let mut p = pass!(node_id);
-                    clear = self.regen_patch(&mut p, src, edges, tangent, body);
-                }
-                FeatureKind::SurfaceReplace { src, ref faces, surface, body } if needs => {
-                    let mut p = pass!(node_id);
-                    clear = self.regen_surfacereplace(&mut p, src, faces, surface, body);
-                }
-                FeatureKind::FaceCopy { src, ref faces, body } if needs => {
-                    let mut p = pass!(node_id);
-                    clear = self.regen_facecopy(&mut p, src, faces, body);
-                }
-                FeatureKind::Trim { src, tool, keep, body } if needs => {
-                    let mut p = pass!(node_id);
-                    clear = self.regen_trim(&mut p, src, tool, keep, body);
-                }
-                FeatureKind::Stitch { ref parts, tol, body } if needs => {
-                    let mut p = pass!(node_id);
-                    clear = self.regen_stitch(&mut p, parts, tol, body);
-                }
-                FeatureKind::Thicken { src, face, thickness, join, body } if needs => {
-                    let mut p = pass!(node_id);
-                    clear = self.regen_thicken(&mut p, src, face, thickness, join, body);
-                }
-                FeatureKind::SplitFace { src, plane, datum, offset, body } if needs => {
-                    let mut p = pass!(node_id);
-                    clear = self.regen_splitface(&mut p, src, plane, datum, offset, body);
-                }
-                FeatureKind::SplitBody { src, plane, datum, offset, ref bodies } if needs => {
-                    let mut p = pass!(node_id);
-                    clear = self.regen_splitbody(&mut p, src, plane, datum, offset, bodies);
-                }
-                FeatureKind::Draft { src, ref faces, neutral, angle, flip, body } if needs => {
-                    let mut p = pass!(node_id);
-                    clear = self.regen_draft(&mut p, src, faces, DraftShape { neutral, angle, flip }, body);
-                }
-                FeatureKind::LinearArray { src, dx, dy, dz, count, dx2, dy2, dz2, count2, dx3, dy3, dz3, count3, body } if needs => {
-                    let mut p = pass!(node_id);
-                    // THE THREE AXES GATHERED AT THE DOOR. The document still holds twelve loose fields (its
-                    // format is not being changed here), but nothing below has to carry them twelve at a time.
-                    let axes = [
-                        ArrayAxis { d: [dx, dy, dz], count },
-                        ArrayAxis { d: [dx2, dy2, dz2], count: count2 },
-                        ArrayAxis { d: [dx3, dy3, dz3], count: count3 },
-                    ];
-                    clear = self.regen_lineararray(&mut p, src, axes, body);
-                }
-                FeatureKind::CircularArray { src, count, angle, axis, body } if needs => {
-                    let mut p = pass!(node_id);
-                    clear = self.regen_circulararray(&mut p, src, count, angle, axis, body);
-                }
-                FeatureKind::Mirror { src, plane, keep, datum, body } if needs => {
-                    let mut p = pass!(node_id);
-                    clear = self.regen_mirror(&mut p, src, plane, keep, datum, body);
-                }
-                FeatureKind::Move { src, mat, body } if needs => {
-                    let mut p = pass!(node_id);
-                    clear = self.regen_move(&mut p, src, mat, body);
-                }
-                FeatureKind::BodyBoolean { a, b, op, body } if needs => {
-                    let mut p = pass!(node_id);
-                    clear = self.regen_bodyboolean(&mut p, a, b, op, body);
+                    clear = self.regen_splitbody(&mut p, src, self.op_plane(plane, datum, face), offset, bodies);
                 }
                 FeatureKind::Import { body, .. } if needs => {
                     let mut p = pass!(node_id);
                     clear = self.regen_import(&mut p, body);
                 }
-                FeatureKind::Hole { src, face, point, normal, diameter, depth, kind, dia2, depth2, sketch, flip, body } if needs => {
-                    let mut p = pass!(node_id);
-                    // WHERE it is drilled and WHAT drills it, told apart. The two halves never mix: the
-                    // site comes from the document's references, the tool from its numbers.
-                    let at = HoleSite { face, point, normal, sketch, flip };
-                    let tool = HoleTool { kind, diameter, depth, dia2, depth2 };
-                    clear = self.regen_hole(&mut p, src, at, tool, body);
-                }
                 FeatureKind::PartInstance { src_comp, body } if needs => {
                     let mut p = pass!(node_id);
                     clear = self.regen_partinstance(&mut p, i, src_comp, body);
                 }
+                FeatureKind::ComponentPattern { src, ref bodies, .. } if needs => {
+                    // every copy's body is the source's as it is; the pattern moves the copies, not the shapes
+                    let mut p = pass!(node_id);
+                    for b in bodies.clone() {
+                        clear &= self.regen_partinstance(&mut p, i, src, b);
+                    }
+                }
                 FeatureKind::MirrorPart { src_comp, ln, body } if needs => {
                     let mut p = pass!(node_id);
                     clear = self.regen_mirrorpart(&mut p, i, src_comp, ln, body);
-                }
-                FeatureKind::Thread { src, edge, spec, length, lead_in, lead_out, body } if needs => {
-                    let mut p = pass!(node_id);
-                    clear = self.regen_thread(&mut p, HelixRun { src, edge, length, lead_in, lead_out, body }, spec);
                 }
                 FeatureKind::Auger { src, edge, spec, length, lead_in, lead_out, body } if needs => {
                     let mut p = pass!(node_id);
@@ -1025,10 +1194,39 @@ impl Project {
             // source. That keeps the chain from holding stale geometry and makes the effect of the change
             // visible, instead of the model looking unchanged after a suppression. The error is already in the
             // report.
-            if !clear {
+            // A PART IS ONE BODY OF ONE PIECE: an operation that left more pieces than its source had is refused in
+            // words and passes through. Reported behaviour: an addition that touched nothing stood green with the body
+            // in two pieces (12565 mm^3), a shell around a blind hole left a cup hanging in the cavity.
+            if clear && keeps_one_piece {
+                if let (Some(src), Some(b)) = (consumed_src, out_body) {
+                    if kernel.body_pieces(b) > kernel.body_pieces(src) {
+                        self.regen_errors.insert(node_id, crate::errors::CoreError::BodyInPieces);
+                        report.errors.push((node_id, crate::errors::CoreError::BodyInPieces));
+                        clear = false;
+                    }
+                }
+            }
+
+            // A CUT THAT PARTS THE BODY MAKES A BODY OF EVERY PIECE (see `CutPiece`) - when it was built in this pass: a node
+            // left as it was holds its own piece alone already, and read again it lost the others
+            if clear && needs && self.timeline[i].kind.cut_pieces_mut().is_some() {
+                if let Some(b) = out_body {
+                    clear = self.part_the_pieces(i, b, kernel, &mut dirty, &mut report, &mut emap);
+                }
+            }
+            // A NODE OF SEVERAL BODIES KEEPS ITS LAST GOOD PIECES: the source copied into its first piece stood the whole
+            // body beside the other pieces. Reported behaviour: a split moved to where it cuts nothing held 18000 mm^3 -
+            // the block of 12000 in the first piece and the piece of 6000 beside it.
+            let several = out_bodies.len() > 1;
+            if !clear && !several {
                 if let (Some(src), Some(b)) = (consumed_src.filter(|s| !unbuilt.contains(s)), out_body) {
                     if let Ok((mesh, faces)) = kernel.transform_body(b, src, crate::feature::PLACE_IDENTITY) {
                         self.set_body_mesh(b, mesh);
+                        // the copy is what the source was, a sheet or a solid: a sheet passed through a red trim
+                        // counted as a solid of one face, a second body of the part
+                        if let Some(i) = self.mesh_index(b) {
+                            self.bodies[i].sheet = kernel.body_is_sheet(b);
+                        }
                         self.regen_faces.insert(b, faces.clone());
                         dirty.insert(b); // Consumers rebuild on the pass-through body.
                         report.built.push((b, faces));
@@ -1046,6 +1244,9 @@ impl Project {
             if clear {
                 self.timeline[i].dirty = false;
             }
+            if let Some(t) = started {
+                report.spent.push((node_id, self.timeline[i].name.clone(), t.elapsed().as_micros()));
+            }
             // When a node fails, everything resting on it is not built either.
             //
             // The cascade existed but errors never reached it: the next operation took the body of the failed
@@ -1058,6 +1259,7 @@ impl Project {
             if report.errors.iter().any(|(id, e)| *id == node_id && !e.retryable()) {
                 for b in out_bodies {
                     unbuilt.insert(b);
+                    broken.insert(b);
                 }
             }
         }
@@ -1088,6 +1290,8 @@ impl Project {
                 }
             }
         }
+        // the copies of a pattern turned about a datum axis follow the axis this pass resolved
+        self.resolve_comp_patterns();
         // Placement pass: the bodies are built in local space, so the mates are solved and the components are
         // placed in the assembly. Run unconditionally, because editing a mate or a parameter does not dirty any
         // body while the placement still has to be recomputed.
@@ -1098,13 +1302,18 @@ impl Project {
             self.regen_errors.retain(|id, _| live.contains(id));
             self.edge_refs.retain(|id, _| live.contains(id)); // Edge snapshots of deleted features.
         }
+        // A STOP ASKED WHILE A NODE WAS BEING BUILT cancels the rebuild as a stop between nodes does: the kernel breaks
+        // a long operation off (the recognition of a mesh listens for it) and hands back a refusal that is no failure
+        // of the node. Taken for one, it left the node red; with one node in the plan, the stop between nodes was
+        // never even asked, and Cancel cancelled nothing.
+        report.cancelled |= watch.stopped();
         report
     }
 
     /// A FILLET: round the picked edges of body `src` by `radius`, with a variable radius at named vertices.
     ///
     /// Returns whether the node's error record may be cleared (see `apply_regen`).
-    fn regen_fillet(&mut self, p: &mut Pass, src: Id, radius: f64, edges: &crate::refs::Ref, at_vertices: &[(crate::refs::Ref, f64)], body: Id) -> bool {
+    fn prep_fillet(&mut self, p: &mut Pass, src: Id, radius: f64, edges: &crate::refs::Ref, at_vertices: &[(crate::refs::Ref, f64)], body: Id) -> crate::feature::KernelJob {
                 let radius = p.dim("radius", radius);
         // Two paths, and the difference between them is fundamental.
         //
@@ -1127,8 +1336,16 @@ impl Project {
         // named and no live edges were found, the reference is lost and that is reported.
         let asked_count = edges.query.picked_descs().len();
         let asked_edges = asked_count > 0;
+        // A PART OF THE PICKED EDGES GONE - a cut above took one away - the rest are done and the node says, in yellow,
+        // how many were left: it is neither a failure of the whole nor to be kept quiet. Reported behaviour: a rounding
+        // of four edges stood green with three after a cut above took the fourth.
+        self.regen_warnings.remove(&p.node);
+        let partly_lost = if edges.query.is_pick_list() && asked_edges { self.edge_refs_lost(p.node, src, &edges.query.picked_descs(), p.emap, p.kernel) } else { 0 };
         let edges = &self.live_fillet_edges(p.node, src, edges, p.emap, p.kernel);
         let lost_edges = asked_edges && edges.is_empty();
+        if partly_lost > 0 && !edges.is_empty() {
+            self.regen_warnings.insert(p.node, crate::errors::CoreError::EdgesDropped { asked: asked_count, dropped: partly_lost });
+        }
         // A variable radius is specified at vertices. Each table entry is resolved as a reference:
         // a vertex name is derived from its edges, so editing the neighbours does not disturb it.
         // The value is parametric like the radius itself, under the dimension key
@@ -1144,8 +1361,13 @@ impl Project {
         // A solid tool does not operate on a surface. Otherwise it appears to work: the node goes
         // red while a degenerate two-triangle body is left next to the part (found by the fuzzer).
         let on_sheet = p.kernel.body_is_sheet(src);
-        let res = if !verts.is_empty() && !edges.is_empty() {
-            p.kernel.fillet_at_vertices(body, src, radius, edges, &verts)
+        let edges: Vec<u32> = edges.to_vec();
+        let job = if on_sheet {
+            crate::feature::KernelJob::refused(crate::errors::CoreError::NeedsSolidNotSheet)
+        } else if lost_edges {
+            crate::feature::KernelJob::refused(crate::errors::CoreError::EdgesNotFound { asked: asked_count })
+        } else if !verts.is_empty() && !edges.is_empty() {
+            crate::feature::KernelJob::new(vec![src], move |k| k.fillet_at_vertices(body, src, radius, &edges, &verts))
         } else {
             // The name of a fillet surface comes from the edge that produced it, there being no
             // other source in the recipe. The edges are already named, so the name is
@@ -1154,11 +1376,12 @@ impl Project {
             // Corner patch: a face produced by the vertex where fillets meet (see
             // `Role::Corner`).
             let corners: Vec<u32> = edges.iter().map(|e| self.intern_name(p.node, crate::names::Role::Corner, *e as Id)).collect();
-            p.kernel.fillet(body, src, radius, edges, crate::feature::BlendNames { surfaces: &names, corners: &corners, all: &self.blend_names_all(p.node, src, p.kernel) })
+            let all = self.blend_names_all(p.node, src, p.kernel);
+            crate::feature::KernelJob::new(vec![src], move |k| {
+                k.fillet(body, src, radius, &edges, crate::feature::BlendNames { surfaces: &names, corners: &corners, all: &all })
+            })
         };
-        let res = if on_sheet { Err(crate::errors::CoreError::NeedsSolidNotSheet) } else { res };
-        let res = if lost_edges { Err(crate::errors::CoreError::EdgesNotFound { asked: asked_count }) } else { res };
-        self.apply_regen(p.landing(), body, res)
+        job
     }
 
 
@@ -1166,7 +1389,7 @@ impl Project {
 
     /// Chamfer: one branch of the timeline rebuild. Returns whether the node's error record may
     /// be cleared (see `apply_regen`).
-    fn regen_chamfer(&mut self, p: &mut Pass, src: Id, dist: f64, edges: &crate::refs::Ref, shape: ChamferShape, body: Id) -> bool {
+    fn prep_chamfer(&mut self, p: &mut Pass, src: Id, dist: f64, edges: &crate::refs::Ref, shape: ChamferShape, body: Id) -> crate::feature::KernelJob {
         let ChamferShape { mode, d2, flip, ref_face } = shape;
         let dist = p.dim("dist", dist);
         let d2 = p.dim("d2", d2);
@@ -1174,26 +1397,39 @@ impl Project {
         // masquerade as that.
         let asked_count = edges.query.picked_descs().len();
         let asked_edges = asked_count > 0;
+        // A PART OF THE PICKED EDGES GONE - a cut above took one away - the rest are done and the node says, in yellow,
+        // how many were left: it is neither a failure of the whole nor to be kept quiet. Reported behaviour: a rounding
+        // of four edges stood green with three after a cut above took the fourth.
+        self.regen_warnings.remove(&p.node);
+        let partly_lost = if edges.query.is_pick_list() && asked_edges { self.edge_refs_lost(p.node, src, &edges.query.picked_descs(), p.emap, p.kernel) } else { 0 };
         let edges = &self.live_fillet_edges(p.node, src, edges, p.emap, p.kernel);
         let lost_edges = asked_edges && edges.is_empty();
+        if partly_lost > 0 && !edges.is_empty() {
+            self.regen_warnings.insert(p.node, crate::errors::CoreError::EdgesDropped { asked: asked_count, dropped: partly_lost });
+        }
         // Asymmetry (two setbacks, or setback plus angle) applies only to an explicit edge
         // selection; otherwise the chamfer is symmetric.
-        let res = if mode != crate::feature::ChamferMode::Symmetric && !edges.is_empty() {
-            p.kernel.chamfer_ex(body, src, dist, ChamferShape { mode, d2, flip, ref_face }, edges)
+        let edges: Vec<u32> = edges.to_vec();
+        let job = if lost_edges {
+            crate::feature::KernelJob::refused(crate::errors::CoreError::EdgesNotFound { asked: asked_count })
+        } else if mode != crate::feature::ChamferMode::Symmetric && !edges.is_empty() {
+            crate::feature::KernelJob::new(vec![src], move |k| k.chamfer_ex(body, src, dist, ChamferShape { mode, d2, flip, ref_face }, &edges))
         } else {
             // The name of a chamfer surface comes from the edge that produced it and the patch name
             // from the vertex: the same recipe as for a fillet.
             let names: Vec<u32> = edges.iter().map(|e| self.intern_name(p.node, crate::names::Role::Blend, *e as Id)).collect();
             let corners: Vec<u32> = edges.iter().map(|e| self.intern_name(p.node, crate::names::Role::Corner, *e as Id)).collect();
-            p.kernel.chamfer(body, src, dist, edges, crate::feature::BlendNames { surfaces: &names, corners: &corners, all: &self.blend_names_all(p.node, src, p.kernel) })
+            let all = self.blend_names_all(p.node, src, p.kernel);
+            crate::feature::KernelJob::new(vec![src], move |k| {
+                k.chamfer(body, src, dist, &edges, crate::feature::BlendNames { surfaces: &names, corners: &corners, all: &all })
+            })
         };
-        let res = if lost_edges { Err(crate::errors::CoreError::EdgesNotFound { asked: asked_count }) } else { res };
-        self.apply_regen(p.landing(), body, res)
+        job
     }
 
     /// Shell: one branch of the timeline rebuild. Returns whether the node's error record may
     /// be cleared (see `apply_regen`).
-    fn regen_shell(&mut self, p: &mut Pass, src: Id, thickness: f64, faces: &crate::refs::Ref, side: crate::feature::ShellSide, body: Id) -> bool {
+    fn prep_shell(&mut self, p: &mut Pass, src: Id, thickness: f64, faces: &crate::refs::Ref, side: crate::feature::ShellSide, body: Id) -> crate::feature::KernelJob {
         let thickness = p.dim("thickness", thickness);
         // Names of the inner walls come from the recipe: a wall is produced by offsetting a face
         // and, without a name of its own, takes the name of the outer face, so a reference to an
@@ -1209,125 +1445,117 @@ impl Project {
         // hand-picked set is checked this way: for a descriptive query the number of descriptors
         // says nothing about the result.
         let asked_faces = if faces.query.is_pick_list() { faces.query.picked_descs().len() } else { 0 };
-        let res = match self.faces_by_ref(p.node, src, faces, "ref-what-shell-faces") {
-            Err(_) => Err(crate::errors::CoreError::FacesNotFound),
-            Ok(ids) if asked_faces > 0 && ids.len() < asked_faces => Err(crate::errors::CoreError::FacesNotFound),
+        let job = match self.faces_by_ref(p.node, src, faces, "ref-what-shell-faces") {
+            Err(_) => crate::feature::KernelJob::refused(crate::errors::CoreError::FacesNotFound),
+            Ok(ids) if asked_faces > 0 && ids.len() < asked_faces => crate::feature::KernelJob::refused(crate::errors::CoreError::FacesNotFound),
             Ok(ids) => match side {
-                crate::feature::ShellSide::Centred => p.kernel.shell_center(body, src, thickness, &ids),
-                side => p.kernel.shell_named(body, src, thickness, side == crate::feature::ShellSide::Outward, &ids, &walls),
+                crate::feature::ShellSide::Centred => crate::feature::KernelJob::new(vec![src], move |k| k.shell_center(body, src, thickness, &ids)),
+                side => crate::feature::KernelJob::new(vec![src], move |k| k.shell_named(body, src, thickness, side == crate::feature::ShellSide::Outward, &ids, &walls)),
             },
         };
-        self.apply_regen(p.landing(), body, res)
+        job
     }
 
-    /// RemoveFace: one branch of the timeline rebuild. Returns whether the node's error record may
-    /// be cleared (see `apply_regen`).
-    fn regen_removeface(&mut self, p: &mut Pass, src: Id, faces: &crate::refs::Ref, body: Id) -> bool {
-        // Face references resolve by recipe through the query. Nothing found means a refusal rather
-        // than removing something similar: the kernel would otherwise silently remove the wrong face,
-        // or nothing at all, which is worse — the step exists in the timeline and the bodies are
-        // unchanged.
-        let res = match self.faces_by_ref(p.node, src, faces, "ref-what-removed-faces") {
-            Ok(ids) if !ids.is_empty() => p.kernel.remove_faces(body, src, &ids),
-            _ => Err(crate::errors::CoreError::FacesNotFound),
-        };
-        self.apply_regen(p.landing(), body, res)
+    fn prep_removeface(&mut self, p: &Pass, src: Id, faces: &crate::refs::Ref, body: Id) -> crate::feature::KernelJob {
+        match self.faces_by_ref(p.node, src, faces, "ref-what-removed-faces") {
+            Ok(ids) if !ids.is_empty() => crate::feature::KernelJob::new(vec![src], move |k| k.remove_faces(body, src, &ids)),
+            _ => crate::feature::KernelJob::refused(crate::errors::CoreError::FacesNotFound),
+        }
     }
 
-    /// Patch: one branch of the timeline rebuild. Returns whether the node's error record may
-    /// be cleared (see `apply_regen`).
-    fn regen_patch(&mut self, p: &mut Pass, src: Id, edges: &crate::refs::Ref, tangent: bool, body: Id) -> bool {
-        // The edges come from a query, so a patch follows its base: trimming the shape changes the
-        // boundary while the description stays correct. A hand-picked set is translated through the
-        // rename map of the source body, the same way a fillet is.
+    fn prep_patch(&mut self, p: &Pass, src: Id, edges: &crate::refs::Ref, tangent: bool, body: Id) -> crate::feature::KernelJob {
         let edges = edges.clone();
         let live = self.live_fillet_edges(p.node, src, &edges, p.emap, p.kernel);
-        let res = if live.is_empty() { Err(crate::errors::CoreError::EdgesNotFound { asked: edges.query.picked_descs().len() }) } else { p.kernel.patch(body, src, &live, tangent, self.intern_name(p.node, crate::names::Role::Patch, 0)) };
-        self.apply_regen(p.landing(), body, res)
+        if live.is_empty() {
+            return crate::feature::KernelJob::refused(crate::errors::CoreError::EdgesNotFound { asked: edges.query.picked_descs().len() });
+        }
+        let name = self.intern_name(p.node, crate::names::Role::Patch, 0);
+        crate::feature::KernelJob::new(vec![src], move |k| k.patch(body, src, &live, tangent, name))
     }
 
-    /// Trim: one branch of the timeline rebuild. Returns whether the node's error record may
-    /// be cleared (see `apply_regen`).
-    fn regen_trim(&mut self, p: &mut Pass, src: Id, tool: Id, keep: [f64; 3], body: Id) -> bool {
-        // The sheet is cut by another body and the piece at the clicked point is kept. The tool is
-        // not consumed: it usually trims several surfaces in turn.
-        let res = p.kernel.trim(body, src, tool, keep);
-        self.apply_regen(p.landing(), body, res)
+    fn prep_trim(&mut self, src: Id, tool: Id, keep: [f64; 3], body: Id) -> crate::feature::KernelJob {
+        crate::feature::KernelJob::new(vec![src, tool], move |k| k.trim(body, src, tool, keep))
     }
 
-    /// Stitch: one branch of the timeline rebuild. Returns whether the node's error record may
-    /// be cleared (see `apply_regen`).
-    fn regen_stitch(&mut self, p: &mut Pass, parts: &[Id], tol: f64, body: Id) -> bool {
-        // The pieces of a surface become one. The tolerance is parametric like any feature number;
-        // the inputs are bodies, so there are no name references here and nothing to translate.
+    fn prep_stitch(&mut self, p: &Pass, parts: &[Id], tol: f64, body: Id) -> crate::feature::KernelJob {
         let t = p.dim("tol", tol);
-        let res = if parts.len() < 2 { Err(crate::errors::CoreError::OpFailed(crate::errors::Op::Stitch)) } else { p.kernel.stitch(body, parts, t) };
-        self.apply_regen(p.landing(), body, res)
+        let parts = parts.to_vec();
+        if parts.len() < 2 {
+            return crate::feature::KernelJob::refused(crate::errors::CoreError::OpFailed(crate::errors::Op::Stitch));
+        }
+        crate::feature::KernelJob::new(parts.clone(), move |k| k.stitch(body, &parts, t))
     }
 
-    /// PushFace: one branch of the timeline rebuild. Returns whether the node's error record may
-    /// be cleared (see `apply_regen`).
-    fn regen_pushface(&mut self, p: &mut Pass, src: Id, face: &crate::refs::Ref, dist: f64, body: Id) -> bool {
-        // Offsetting a face: the distance is parametric (the `dist` feature dimension) and the face
-        // reference resolves by name (a persistent id), so it survives edits higher up the timeline.
-        // Resolution yields the current face id in the rebuilt source; a positional number would not
-        // do, since it moves with any operation placed before this one.
+    /// The mesh is the node's recipe: it travels with the work, and no live shape is read.
+    // the mesh is made lighter inside the job, off the frame: a mesh of 178 032 triangles takes seconds
+    fn prep_mesh_solid(&mut self, src: Id, body: Id, simplify: f64) -> crate::feature::KernelJob {
+        let Some(mesh) = self.mesh_index(src).map(|i| self.bodies[i].mesh.clone()) else {
+            return crate::feature::KernelJob::refused(crate::errors::CoreError::SourceBodyNotBuilt);
+        };
+        crate::feature::KernelJob::new(Vec::new(), move |k| k.mesh_solid(body, &lighter(mesh, simplify)))
+    }
+
+    fn prep_mesh_recognised(&mut self, src: Id, body: Id, tol: f64, sharp: f64, simplify: f64) -> crate::feature::KernelJob {
+        let Some(mesh) = self.mesh_index(src).map(|i| self.bodies[i].mesh.clone()) else {
+            return crate::feature::KernelJob::refused(crate::errors::CoreError::SourceBodyNotBuilt);
+        };
+        crate::feature::KernelJob::new(Vec::new(), move |k| {
+            let mesh = lighter(mesh, simplify);
+            let tol = within_simplification(&mesh, tol, simplify);
+            k.mesh_recognised(body, &mesh, tol, sharp)
+        })
+    }
+
+    fn prep_pushface(&mut self, p: &Pass, src: Id, face: &crate::refs::Ref, dist: f64, body: Id) -> crate::feature::KernelJob {
         let dist = eval_dim(p.dims, "dist", dist, p.vars);
-        // The face is found by recipe through the query; there is no separate repair pass any more,
-        // so nothing found means a refusal with a reason rather than offsetting a similar face.
-        //
-        // A sheet has no face to offset. This is an operation for solids: it moves a face and builds
-        // the walls behind it, while a surface has neither volume nor neighbours to follow. A silent
-        // refusal explains neither what is wrong nor that thickness is given to a sheet by the
-        // thicken feature.
-        let sheet = p.kernel.body_is_sheet(src);
-        let res = if sheet {
-            Err(crate::errors::CoreError::PushFaceOnSheet)
-        } else {
-            match self.face_by_ref(p.node, src, face, "ref-what-pushed-face") {
-                Err(_) => Err(crate::errors::CoreError::FaceNotFound),
-                Ok(_) if dist.abs() < 1e-9 => Err(crate::errors::CoreError::ZeroPushDistance),
-                Ok(c) => p.kernel.push_face(body, src, c.desc, dist),
+        if p.kernel.body_is_sheet(src) {
+            return crate::feature::KernelJob::refused(crate::errors::CoreError::PushFaceOnSheet);
+        }
+        match self.face_by_ref(p.node, src, face, "ref-what-pushed-face") {
+            Err(_) => crate::feature::KernelJob::refused(crate::errors::CoreError::FaceNotFound),
+            Ok(_) if dist.abs() < 1e-9 => crate::feature::KernelJob::refused(crate::errors::CoreError::ZeroPushDistance),
+            Ok(c) => {
+                let desc = c.desc;
+                crate::feature::KernelJob::new(vec![src], move |k| k.push_face(body, src, desc, dist))
             }
-        };
-        self.apply_regen(p.landing(), body, res)
+        }
     }
 
-    /// SurfaceReplace: one branch of the timeline rebuild. Returns whether the node's error record may
-    /// be cleared (see `apply_regen`).
-    fn regen_surfacereplace(&mut self, p: &mut Pass, src: Id, faces: &crate::refs::Ref, surface: Id, body: Id) -> bool {
-        // The node that stitches the surface layer back into the timeline. The faces come from a
-        // query, and a query that finds nothing produces a named refusal rather than a silent
-        // substitution: surface work is expensive manual effort, and the program has no right to
-        // change where it lands.
+    fn prep_surfacereplace(&mut self, p: &Pass, src: Id, faces: &crate::refs::Ref, surface: Id, body: Id) -> crate::feature::KernelJob {
         let faces = faces.clone();
-        let res = match self.faces_by_ref(p.node, src, &faces, "ref-what-surface-replace") {
-            Ok(ids) if !ids.is_empty() => p.kernel.replace_faces(body, src, &ids, surface),
-            _ => Err(crate::errors::CoreError::FacesNotFound),
-        };
-        self.apply_regen(p.landing(), body, res)
+        match self.faces_by_ref(p.node, src, &faces, "ref-what-surface-replace") {
+            Ok(ids) if !ids.is_empty() => crate::feature::KernelJob::new(vec![src, surface], move |k| k.replace_faces(body, src, &ids, surface)),
+            _ => crate::feature::KernelJob::refused(crate::errors::CoreError::FacesNotFound),
+        }
     }
 
-    /// FaceCopy: one branch of the timeline rebuild. Returns whether the node's error record may
-    /// be cleared (see `apply_regen`).
-    fn regen_facecopy(&mut self, p: &mut Pass, src: Id, faces: &crate::refs::Ref, body: Id) -> bool {
-        // The faces come from a query and are copied into a separate sheet. The name of a copy is
-        // structural — "the image of face N in the copy" (`Role::Instance`) — so it can be referenced
-        // further like any other geometry.
+    fn prep_facecopy(&mut self, p: &Pass, src: Id, faces: &crate::refs::Ref, body: Id) -> crate::feature::KernelJob {
         let faces = faces.clone();
-        let res = match self.faces_by_ref(p.node, src, &faces, "ref-what-face-copy") {
+        match self.faces_by_ref(p.node, src, &faces, "ref-what-face-copy") {
             Ok(ids) if !ids.is_empty() => {
                 let names: Vec<u32> = ids.iter().map(|f| self.intern_name(p.node, crate::names::Role::Instance, *f as Id)).collect();
-                p.kernel.copy_faces(body, src, &ids, &names)
+                crate::feature::KernelJob::new(vec![src], move |k| k.copy_faces(body, src, &ids, &names))
             }
-            _ => Err(crate::errors::CoreError::FacesNotFound),
-        };
-        self.apply_regen(p.landing(), body, res)
+            _ => crate::feature::KernelJob::refused(crate::errors::CoreError::FacesNotFound),
+        }
+    }
+
+    /// OffsetSurface: the faces, resolved as a face copy resolves them, and the distance, a dimension of its own (`dist`)
+    /// a formula or a global parameter drives.
+    fn prep_offset_surface(&mut self, p: &Pass, src: Id, faces: &crate::refs::Ref, dist: f64, body: Id) -> crate::feature::KernelJob {
+        let d = eval_dim(p.dims, "dist", dist, p.vars);
+        match self.faces_by_ref(p.node, src, faces, "ref-what-offset-surface") {
+            Ok(ids) if !ids.is_empty() => {
+                let names: Vec<u32> = ids.iter().map(|f| self.intern_name(p.node, crate::names::Role::Instance, *f as Id)).collect();
+                crate::feature::KernelJob::new(vec![src], move |k| k.offset_faces(body, src, &ids, &names, d))
+            }
+            _ => crate::feature::KernelJob::refused(crate::errors::CoreError::FacesNotFound),
+        }
     }
 
     /// Thicken: one branch of the timeline rebuild. Returns whether the node's error record may
     /// be cleared (see `apply_regen`).
-    fn regen_thicken(&mut self, p: &mut Pass, src: Id, face: u32, thickness: f64, join: Id, body: Id) -> bool {
+    fn prep_thicken(&mut self, p: &mut Pass, src: Id, face: u32, thickness: f64, join: Id, body: Id) -> crate::feature::KernelJob {
         // The thickness is parametric (the `thickness` feature dimension) and the face reference
         // resolves by name.
         let t = eval_dim(p.dims, "thickness", thickness, p.vars);
@@ -1340,49 +1568,47 @@ impl Project {
         // then a recorded merge, then the single face of a sheet, then a place snapshot.
         let face = self.resolve_face_id(p.node, src, face).unwrap_or(face);
         let alive = self.regen_faces.get(&src).is_some_and(|fs| fs.iter().any(|f| f.id == face));
-        let res = if face == 0 || !alive {
-            Err(crate::errors::CoreError::FaceNotFound)
+        let job = if face == 0 || !alive {
+            crate::feature::KernelJob::refused(crate::errors::CoreError::FaceNotFound)
         } else if t.abs() < 1e-9 {
-            Err(crate::errors::CoreError::ZeroThickness)
+            crate::feature::KernelJob::refused(crate::errors::CoreError::ZeroThickness)
         } else {
             // Plate names come from the recipe: the offset side is produced by its face and each
             // side wall by its boundary edge, which is their entire recipe and does not depend on
             // numbering. The pairs are prepared in advance, since interning mutates the name table
             // while the kernel only needs the finished substitution.
             let (face_names, edge_names) = self.thicken_names(p.node, src, p.kernel);
-            p.kernel.thicken_face(body, src, face, t, join, crate::feature::NameMaps { faces: &face_names, edges: &edge_names })
+            let inputs = if join != 0 { vec![src, join] } else { vec![src] };
+            crate::feature::KernelJob::new(inputs, move |k| {
+                k.thicken_face(body, src, face, t, join, crate::feature::NameMaps { faces: &face_names, edges: &edge_names })
+            })
         };
-        self.apply_regen(p.landing(), body, res)
+        job
     }
 
     /// SplitFace: one branch of the timeline rebuild. Returns whether the node's error record may
     /// be cleared (see `apply_regen`).
-    fn regen_splitface(&mut self, p: &mut Pass, src: Id, plane: u8, datum: Id, offset: f64, body: Id) -> bool {
-        // The plane is a reference, as for a body split: a datum (including a face snapshot) or a
-        // world plane.
-        let dpl = (datum != 0).then(|| self.planes.iter().find(|p| p.id == datum)).flatten().map(|p| (p.origin, p.normal));
-        let lost = datum != 0 && dpl.is_none();
-        let (o0, n) = dpl.unwrap_or(match plane {
-            1 => ([0.0; 3], [0.0, 1.0, 0.0]),
-            2 => ([0.0; 3], [1.0, 0.0, 0.0]),
-            _ => ([0.0; 3], [0.0, 0.0, 1.0]),
-        });
+    fn prep_splitface(&mut self, p: &mut Pass, src: Id, at: Option<([f64; 3], [f64; 3])>, offset: f64, body: Id) -> crate::feature::KernelJob {
+        // The plane is a reference, as for a body split: a world plane, a datum or a face (see `op_plane`).
+        let lost = at.is_none();
+        let (o0, n) = at.unwrap_or(([0.0; 3], [0.0, 0.0, 1.0]));
         let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
-        let res = if lost {
-            Err(crate::errors::CoreError::SplitPlaneDeleted)
+        let job = if lost {
+            crate::feature::KernelJob::refused(crate::errors::CoreError::SplitPlaneDeleted)
         } else if len < 1e-9 {
-            Err(crate::errors::CoreError::ZeroNormal)
+            crate::feature::KernelJob::refused(crate::errors::CoreError::ZeroNormal)
         } else {
             let d = p.dim("offset", offset);
             let u = [n[0] / len, n[1] / len, n[2] / len];
-            p.kernel.split_faces(body, src, [o0[0] + u[0] * d, o0[1] + u[1] * d, o0[2] + u[2] * d], u)
+            let at = [o0[0] + u[0] * d, o0[1] + u[1] * d, o0[2] + u[2] * d];
+            crate::feature::KernelJob::new(vec![src], move |k| k.split_faces(body, src, at, u))
         };
-        self.apply_regen(p.landing(), body, res)
+        job
     }
 
     /// Draft: one branch of the timeline rebuild. Returns whether the node's error record may
     /// be cleared (see `apply_regen`).
-    fn regen_draft(&mut self, p: &mut Pass, src: Id, faces: &crate::refs::Ref, shape: DraftShape, body: Id) -> bool {
+    fn prep_draft(&mut self, p: &mut Pass, src: Id, faces: &crate::refs::Ref, shape: DraftShape, body: Id) -> crate::feature::KernelJob {
         let DraftShape { neutral, angle, flip } = shape;
         // The angle is parametric (the `angle` feature dimension); the neutral face resolves into an
         // origin and a normal from the rebuilt source, and the pull direction is that normal,
@@ -1397,8 +1623,12 @@ impl Project {
         // checked this way: for a descriptive query the number of descriptors says nothing about the
         // result.
         let asked_faces = if faces.query.is_pick_list() { faces.query.picked_descs().len() } else { 0 };
-        let res = match (self.faces_by_ref(p.node, src, faces, "ref-what-draft-faces"), self.face_by_ref(p.node, src, &neutral, "ref-what-draft-neutral")) {
-            (Ok(ids), _) if asked_faces > 0 && ids.len() < asked_faces => Err(crate::errors::CoreError::DraftNeedsFaces),
+        // a draft of 0 tilts nothing: it stood green with the body as it was
+        if angle.abs() < 1e-9 {
+            return crate::feature::KernelJob::refused(crate::errors::CoreError::DraftAngleZero);
+        }
+        let job = match (self.faces_by_ref(p.node, src, faces, "ref-what-draft-faces"), self.face_by_ref(p.node, src, &neutral, "ref-what-draft-neutral")) {
+            (Ok(ids), _) if asked_faces > 0 && ids.len() < asked_faces => crate::feature::KernelJob::refused(crate::errors::CoreError::DraftNeedsFaces),
             (Ok(ids), Ok(np)) if !ids.is_empty() => {
                 let np_o = np.centroid;
                 let np_n = if flip { [-np.normal[0], -np.normal[1], -np.normal[2]] } else { np.normal };
@@ -1411,120 +1641,163 @@ impl Project {
                         .filter(|f| crate::names::NameTable::is_named(**f))
                         .flat_map(|f| [*f, self.intern_name(p.node, crate::names::Role::DraftSide, *f as Id)])
                         .collect();
-                    p.kernel.draft(body, src, &ids, crate::feature::DraftPull { angle, dir: np_n }, crate::feature::PlaneAt { origin: np_o, normal: np_n }, &sides)
+                    crate::feature::KernelJob::new(vec![src], move |k| {
+                        k.draft(body, src, &ids, crate::feature::DraftPull { angle, dir: np_n }, crate::feature::PlaneAt { origin: np_o, normal: np_n }, &sides)
+                    })
                 }
             }
-            _ => Err(crate::errors::CoreError::DraftNeedsFaces),
+            _ => crate::feature::KernelJob::refused(crate::errors::CoreError::DraftNeedsFaces),
         };
-        self.apply_regen(p.landing(), body, res)
+        job
     }
 
     /// Mirror: one branch of the timeline rebuild. Returns whether the node's error record may
     /// be cleared (see `apply_regen`).
-    fn regen_mirror(&mut self, p: &mut Pass, src: Id, plane: u8, keep: bool, datum: Id, body: Id) -> bool {
-        // A datum plane supplies its origin and normal (resolved earlier in this pass) and the
-        // mirror is taken about it; otherwise a world plane 0, 1 or 2 is used.
+    fn prep_mirror(&mut self, p: &mut Pass, src: Id, world: Option<u8>, keep: bool, at: Option<([f64; 3], [f64; 3])>, body: Id) -> crate::feature::KernelJob {
+        // A datum plane or a face supplies its origin and normal (see `op_plane`) and the mirror is taken about it;
+        // otherwise a world plane 0, 1 or 2 is used.
         // An image is not the original face: with `keep` the body holds both halves, and without
         // names of their own they are indistinguishable — the same collision a pattern had.
         let seed = self.instance_name_seeds(p.node, src, 2).pop().unwrap_or_default();
-        let dpl = (datum != 0).then(|| self.planes.iter().find(|p| p.id == datum)).flatten().map(|p| (p.origin, p.normal));
         // A deleted plane means no mirror. Falling back to a world plane sounds defensible — a
         // mirror about another plane is still a mirror — but the measurement refutes it: the part
         // moves. A mirror about a datum at x = 50 gave face centres from x = 10 to x = 90, and
         // deleting the datum moved them to -30..30 with no red node. A split already refuses in the
         // same situation, for exactly the same reason.
-        let res = match dpl {
-            Some((o, n)) => p.kernel.mirror_plane_named(body, src, o, n, keep, &seed),
-            None if datum != 0 => Err(crate::errors::CoreError::MirrorPlaneDeleted),
-            None => p.kernel.mirror_named(body, src, plane, keep, &seed),
-        };
-        self.apply_regen(p.landing(), body, res)
+        match (world, at) {
+            (Some(plane), _) => crate::feature::KernelJob::new(vec![src], move |k| k.mirror_named(body, src, plane, keep, &seed)),
+            (None, Some((o, n))) => crate::feature::KernelJob::new(vec![src], move |k| k.mirror_plane_named(body, src, o, n, keep, &seed)),
+            (None, None) => crate::feature::KernelJob::refused(crate::errors::CoreError::MirrorPlaneDeleted),
+        }
+    }
+
+    /// The body a datum plane or axis stands on - its face or its edge - by the datum's id; `None` for a datum on a
+    /// world plane, another datum or coordinates.
+    pub(crate) fn datum_base_body(&self, id: Id) -> Option<Id> {
+        use crate::model::{AxisDef, PlaneDef};
+        if let Some(p) = self.planes.iter().find(|p| p.id == id) {
+            return match p.def {
+                PlaneDef::OffsetFace { body, .. } => Some(body),
+                _ => None,
+            };
+        }
+        self.datum_axes.iter().find(|a| a.id == id).and_then(|a| match a.def {
+            AxisDef::FromEdge { body, .. } | AxisDef::FromFace { body, .. } => Some(body),
+            _ => None,
+        })
+    }
+
+    /// THE PLANE A MIRROR OR A SPLIT STANDS ON, as origin and normal: a face of a body (read off it at this rebuild, so
+    /// it follows the face), a datum plane (resolved earlier in the pass), or a world plane 0 XY, 1 XZ, 2 YZ. `None`
+    /// when the face's body or the datum is gone: the operation refuses rather than cut along another plane.
+    fn op_plane(&self, plane: u8, datum: Id, face: Option<(Id, crate::feature::FaceKey)>) -> Option<([f64; 3], [f64; 3])> {
+        if let Some((body, key)) = face {
+            return self.regen_faces.contains_key(&body).then(|| self.resolve_face(body, &key));
+        }
+        if datum != 0 {
+            return self.planes.iter().find(|p| p.id == datum).map(|p| (p.origin, p.normal));
+        }
+        Some(match plane {
+            1 => ([0.0; 3], [0.0, 1.0, 0.0]),
+            2 => ([0.0; 3], [1.0, 0.0, 0.0]),
+            _ => ([0.0; 3], [0.0, 0.0, 1.0]),
+        })
     }
 
     /// Move: one branch of the timeline rebuild. Returns whether the node's error record may
     /// be cleared (see `apply_regen`).
-    fn regen_move(&mut self, p: &mut Pass, src: Id, mat: [f64; 12], body: Id) -> bool {
-        let res = p.kernel.transform_body(body, src, mat);
-        self.apply_regen(p.landing(), body, res)
+    fn prep_move(&mut self, src: Id, mat: [f64; 12], body: Id) -> crate::feature::KernelJob {
+        crate::feature::KernelJob::new(vec![src], move |k| k.transform_body(body, src, mat))
     }
 
     /// BodyBoolean: one branch of the timeline rebuild. Returns whether the node's error record may
     /// be cleared (see `apply_regen`).
-    fn regen_bodyboolean(&mut self, p: &mut Pass, a: Id, b: Id, op: u8, body: Id) -> bool {
+    fn prep_bodyboolean(&mut self, a: Id, b: Id, op: u8, body: Id) -> crate::feature::KernelJob {
         // Parametric body-to-body boolean: `op` applied to the B-reps of `a` and `b`, producing
         // `body`; both operands are consumed.
-        let res = p.kernel.body_boolean(body, a, b, op);
-        self.apply_regen(p.landing(), body, res)
+        crate::feature::KernelJob::new(vec![a, b], move |k| k.body_boolean(body, a, b, op))
     }
 
     /// Box3: one branch of the timeline rebuild. Returns whether the node's error record may
     /// be cleared (see `apply_regen`).
-    fn regen_box3(&mut self, p: &mut Pass, dx: f64, dy: f64, dz: f64, body: Id) -> bool {
+    fn prep_box3(&mut self, p: &Pass, dx: f64, dy: f64, dz: f64, body: Id) -> crate::feature::KernelJob {
         let (dx, dy, dz) = (p.dim("dx", dx), p.dim("dy", dy), p.dim("dz", dz));
-        let res = p.kernel.extrude(body, &rect_profile(dx, dy), dz, crate::feature::PLACE_IDENTITY);
-        self.apply_regen(p.landing(), body, res)
+        let profile = rect_profile(dx, dy);
+        crate::feature::KernelJob::new(Vec::new(), move |k| k.extrude(body, &profile, dz, crate::feature::PLACE_IDENTITY))
     }
 
     /// Cylinder: one branch of the timeline rebuild. Returns whether the node's error record may
     /// be cleared (see `apply_regen`).
-    fn regen_cylinder(&mut self, p: &mut Pass, r: f64, h: f64, body: Id) -> bool {
+    /// THE PARCEL OF A CYLINDER, and of every primitive below it: numbers and names, nothing borrowed from
+    /// the document.
+    ///
+    /// Preparing one takes `&mut self` and always will: minting the names of the faces to come is a change to
+    /// the document, and it has to happen before the geometry is built. That is why the split is where it is -
+    /// the preparation stays on the thread that owns the document, and only the parcel travels.
+    fn prep_cylinder(&mut self, p: &Pass, r: f64, h: f64, body: Id) -> crate::feature::KernelJob {
         let (r, h) = (p.dim("r", r), p.dim("h", h));
         let nm = self.primitive_names(p.node);
-        let res = p.kernel.cylinder(body, r, h, nm); // Exact B-rep cylinder, three faces.
-        self.apply_regen(p.landing(), body, res)
+        crate::feature::KernelJob::new(Vec::new(), move |k| k.cylinder(body, r, h, nm)) // Exact B-rep cylinder, three faces.
     }
 
     /// Sphere: one branch of the timeline rebuild. Returns whether the node's error record may
     /// be cleared (see `apply_regen`).
-    fn regen_sphere(&mut self, p: &mut Pass, r: f64, body: Id) -> bool {
+    fn prep_sphere(&mut self, p: &Pass, r: f64, body: Id) -> crate::feature::KernelJob {
         let r = eval_dim(p.dims, "r", r, p.vars);
         let nm = self.primitive_names(p.node);
-        let res = p.kernel.sphere(body, r, nm); // Exact sphere, one face.
-        self.apply_regen(p.landing(), body, res)
+        crate::feature::KernelJob::new(Vec::new(), move |k| k.sphere(body, r, nm)) // Exact sphere, one face.
     }
 
     /// Cone: one branch of the timeline rebuild. Returns whether the node's error record may
     /// be cleared (see `apply_regen`).
-    fn regen_cone(&mut self, p: &mut Pass, r1: f64, r2: f64, h: f64, body: Id) -> bool {
+    fn prep_cone(&mut self, p: &Pass, r1: f64, r2: f64, h: f64, body: Id) -> crate::feature::KernelJob {
         let (r1, r2, h) = (p.dim("r1", r1), p.dim("r2", r2), p.dim("h", h));
         let nm = self.primitive_names(p.node);
-        let res = p.kernel.cone(body, r1, r2, h, nm); // Exact cone.
-        self.apply_regen(p.landing(), body, res)
+        crate::feature::KernelJob::new(Vec::new(), move |k| k.cone(body, r1, r2, h, nm)) // Exact cone.
     }
 
     /// Torus: one branch of the timeline rebuild. Returns whether the node's error record may
     /// be cleared (see `apply_regen`).
-    fn regen_torus(&mut self, p: &mut Pass, major: f64, minor: f64, body: Id) -> bool {
+    fn prep_torus(&mut self, p: &Pass, major: f64, minor: f64, body: Id) -> crate::feature::KernelJob {
         let (major, minor) = (p.dim("major", major), p.dim("minor", minor));
+        // a tube as thick as the ring or thicker passes through itself: a ring of 5 and a tube of 5 stood green as a
+        // spindle of 2467 mm^3
+        if minor >= major {
+            return crate::feature::KernelJob::refused(crate::errors::CoreError::TorusThroughItself);
+        }
         let nm = self.primitive_names(p.node);
-        let res = p.kernel.torus(body, major, minor, nm); // Exact torus, one face.
-        self.apply_regen(p.landing(), body, res)
+        crate::feature::KernelJob::new(Vec::new(), move |k| k.torus(body, major, minor, nm)) // Exact torus, one face.
     }
 
     /// Prism: one branch of the timeline rebuild. Returns whether the node's error record may
     /// be cleared (see `apply_regen`).
-    fn regen_prism(&mut self, p: &mut Pass, r: f64, n: u32, h: f64, body: Id) -> bool {
+    fn prep_prism(&mut self, p: &Pass, r: f64, n: u32, h: f64, body: Id) -> crate::feature::KernelJob {
         let (r, h) = (p.dim("r", r), p.dim("h", h));
-        let res = p.kernel.extrude(body, &polygon_profile(r, n), h, crate::feature::PLACE_IDENTITY);
-        self.apply_regen(p.landing(), body, res)
+        let profile = polygon_profile(r, n);
+        crate::feature::KernelJob::new(Vec::new(), move |k| k.extrude(body, &profile, h, crate::feature::PLACE_IDENTITY))
     }
 
     /// Loft: one branch of the timeline rebuild. Returns whether the node's error record may
     /// be cleared (see `apply_regen`).
-    fn regen_loft(&mut self, p: &mut Pass, sketches: Vec<Id>, contours: Vec<Id>, ruled: bool, surface: bool, bo: BodyOp) -> bool {
+    fn prep_loft(&mut self, p: &mut Pass, sketches: Vec<Id>, contours: Vec<Id>, ruled: bool, surface: bool, bo: BodyOp) -> crate::feature::KernelJob {
         let BodyOp { src, op, body } = bo;
         // Each section sits on its own plane (the placement is encoded in `places`), and two or more
         // sections produce a body. A zero `src` makes a separate body; otherwise the lofted solid is
         // combined with body `src` as a lofted cut or boss.
         let caps = self.cap_names(p.node);
-        let res = match self.loft_encoded_named(p.node, &sketches, &contours) {
+        let job = match self.loft_encoded_named(p.node, &sketches, &contours) {
             // A surface is the same loft, not closed into a solid. It admits no boolean: there is
             // nothing to combine a surface with a body by until it has been given a thickness.
-            Some((data, offsets, places)) if src == 0 => p.kernel.loft(body, crate::feature::LoftSections { data: &data, offsets: &offsets, places: &places }, walls(ruled), if surface { crate::feature::LoftBody::Sheet } else { crate::feature::LoftBody::Solid }, caps),
-            Some((data, offsets, places)) => p.kernel.loft_combine(BodyOp { src, op, body }, &data, &offsets, &places, walls(ruled), caps),
-            None => Err(crate::errors::CoreError::LoftNeedsTwoSections),
+            Some((data, offsets, places)) if src == 0 => crate::feature::KernelJob::new(Vec::new(), move |k| {
+                let body_kind = if surface { crate::feature::LoftBody::Sheet } else { crate::feature::LoftBody::Solid };
+                k.loft(body, crate::feature::LoftSections { data: &data, offsets: &offsets, places: &places }, walls(ruled), body_kind, caps)
+            }),
+            Some((data, offsets, places)) => {
+                crate::feature::KernelJob::new(vec![src], move |k| k.loft_combine(BodyOp { src, op, body }, &data, &offsets, &places, walls(ruled), caps))
+            }
+            None => crate::feature::KernelJob::refused(crate::errors::CoreError::LoftNeedsTwoSections),
         };
-        self.apply_regen(p.landing(), body, res)
+        job
     }
 
     /// Import: one branch of the timeline rebuild. Returns whether the node's error record may
@@ -1584,9 +1857,84 @@ impl Project {
         self.apply_regen(p.landing(), body, res)
     }
 
+    /// WHAT REFUSES A THREAD BEFORE THE KERNEL IS ASKED, on the cylinder of radius `r` whose rim centre and axis
+    /// along the face are `rim`: the side of the material, then the size, the depth, the pitch, the turns, and the
+    /// length against the face. The thread's geometry and the radius it is cut at when nothing refuses.
+    fn thread_verdict(&self, src: Id, rim: ([f64; 3], [f64; 3], f64), spec: &mut crate::thread::ThreadSpec, length: f64) -> Result<(crate::thread::ThreadGeom, f64), crate::errors::CoreError> {
+        let (c, ax, r) = rim;
+        // The material side comes from the geometry rather than from the checkbox. A groove
+        // pointing the wrong way cuts empty space: on a shaft marked "internal" it removed
+        // 1.8 cm^3 instead of 13 and left flat discs instead of turns. There is no case
+        // where a thread into empty space is wanted, so the geometry wins.
+        if let Some(side) = self.cyl_side_of_body(src, c, ax, r, length) {
+            spec.internal = side;
+        }
+        // an ISO nut's groove starts at the wall of the hole as drilled, the standard's profile cut off there;
+        // a hole under D1 is cut from D1. Set in the void short of the wall, at D1 of a hole of 8.5, the
+        // sweep cut nothing at all past a length of 4.
+        let g = spec.geometry_in(Some(2.0 * r));
+        let self_r = r; // the radius of the face itself
+        let r = if spec.internal && spec.standard == crate::thread::ThreadStandard::MetricIso { r.max(g.minor_d * 0.5) } else { r };
+        // Validation before the kernel: bad parameters otherwise produce a silent no-op or
+        // crash the sweep.
+        let turns = length / g.lead.max(1e-9);
+        // A THREAD OF ITS OWN SIZE: the face is the size the thread is - a shaft within 5 % (or half a pitch) of
+        // the nominal, a hole drilled from the basic minor diameter less half a pitch up to 5 % over the nominal.
+        // Reported behaviour: M10 on a cylinder of 20 stood green, 519 mm^3 cut off it in 76 faces.
+        let face_d = 2.0 * self_r;
+        let off_size = if spec.internal {
+            face_d < g.minor_d - 0.5 * g.pitch || face_d > g.major_d * 1.05
+        } else {
+            (face_d - g.major_d).abs() > (0.05 * g.major_d).max(0.5 * g.pitch)
+        };
+        let bad = if off_size {
+            Some(crate::errors::CoreError::ThreadNotItsSize { face: face_d, nominal: spec.nominal_d })
+        } else if !spec.internal && g.depth >= r * 0.95 {
+            Some(crate::errors::CoreError::ThreadDepthTooDeep { depth: g.depth, radius: r, dia: spec.nominal_d, pitch: g.pitch })
+        } else if g.pitch < 0.05 {
+            Some(crate::errors::CoreError::ThreadPitchTooSmall { pitch: g.pitch })
+        } else if turns > 400.0 {
+            Some(crate::errors::CoreError::ThreadTooManyTurns { turns })
+        } else if length <= 1e-6 {
+            Some(crate::errors::CoreError::ThreadLengthUnset)
+        } else {
+            None
+        };
+        if let Some(e) = bad {
+            return Err(e);
+        }
+        // A THREAD NO LONGER THAN ITS FACE: past the end of the cylinder the sweep runs in the air or into a
+        // shoulder. Reported behaviour: a thread of 101 on a cylinder 10 long was taken and went red after the
+        // rebuild. The face's length is read off the mesh; a mesh that does not show it refuses nothing here.
+        if let Some(face) = self.mesh_index(src).and_then(|mi| crate::geom::cyl_span_from_mesh(&self.bodies[mi].mesh, c, ax, self_r)) {
+            if length > face + 1e-3 {
+                return Err(crate::errors::CoreError::ThreadLongerThanFace { length, face });
+            }
+        }
+        Ok((g, r))
+    }
+
+    /// HOW LONG THE CYLINDER A THREAD IS PUT ON RUNS from its rim, read off the mesh, the axis turned along the face
+    /// as the rebuild turns it; `None` when the mesh does not show it.
+    pub fn thread_face_span(&self, src: Id, rim: ([f64; 3], [f64; 3], f64)) -> Option<f64> {
+        let (c, axis, r) = rim;
+        let mi = self.mesh_index(src)?;
+        let ax = crate::geom::axis_along_cylinder(&self.bodies[mi].mesh, c, axis, r).unwrap_or(axis);
+        crate::geom::cyl_span_from_mesh(&self.bodies[mi].mesh, c, ax, r)
+    }
+
+    /// WHAT REFUSES THE THREAD a command would make, for the command to say it beside its field before Enter: the
+    /// rim as the command picked it, its axis turned along the face as the rebuild turns it.
+    pub fn thread_refusal(&self, src: Id, rim: ([f64; 3], [f64; 3], f64), spec: crate::thread::ThreadSpec, length: f64) -> Option<crate::errors::CoreError> {
+        let (c, axis, r) = rim;
+        let ax = self.mesh_index(src).and_then(|mi| crate::geom::axis_along_cylinder(&self.bodies[mi].mesh, c, axis, r)).unwrap_or(axis);
+        let mut spec = spec;
+        self.thread_verdict(src, (c, ax, r), &mut spec, length).err()
+    }
+
     /// Thread: one branch of the timeline rebuild. Returns whether the node's error record may
     /// be cleared (see `apply_regen`).
-    fn regen_thread(&mut self, p: &mut Pass, run: HelixRun, spec: crate::thread::ThreadSpec) -> bool {
+    fn prep_thread(&mut self, p: &mut Pass, run: HelixRun, spec: crate::thread::ThreadSpec) -> crate::feature::KernelJob {
         let HelixRun { src, edge, length, lead_in, lead_out, body } = run;
         let mut spec = spec;
         // Parametric like every feature: the size, pitch and clearance may be expressions.
@@ -1599,54 +1947,38 @@ impl Project {
         let length = p.dim("length", length);
         let lead_in = p.dim("lead_in", lead_in);
         let lead_out = p.dim("lead_out", lead_out);
-        let res = match self.helical_axis(p.kernel, src, edge) {
+        let job = match self.helical_axis(p.kernel, src, edge) {
             Some((c, ax, r)) => {
-                // The material side comes from the geometry rather than from the checkbox. A groove
-                // pointing the wrong way cuts empty space: on a shaft marked "internal" it removed
-                // 1.8 cm^3 instead of 13 and left flat discs instead of turns. There is no case
-                // where a thread into empty space is wanted, so the geometry wins.
-                if let Some(side) = self.cyl_side_of_body(src, c, ax, r, length) {
-                    spec.internal = side;
-                }
-                let g = spec.geometry();
-                // The turn faces are named before the kernel call: the recipe supplies the names
-                // (a profile edge plus the lead).
-                let gnames = self.groove_names(p.node, g.groove.len(), spec.starts.max(1));
-                let rnames = self.relief_names(p.node);
-                // Validation before the kernel: bad parameters otherwise produce a silent no-op or
-                // crash the sweep.
-                let turns = length / g.lead.max(1e-9);
-                let bad = if !spec.internal && g.depth >= r * 0.95 {
-                    Some(crate::errors::CoreError::ThreadDepthTooDeep { depth: g.depth, radius: r, dia: spec.nominal_d, pitch: g.pitch })
-                } else if g.pitch < 0.05 {
-                    Some(crate::errors::CoreError::ThreadPitchTooSmall { pitch: g.pitch })
-                } else if turns > 400.0 {
-                    Some(crate::errors::CoreError::ThreadTooManyTurns { turns })
-                } else if length <= 1e-6 {
-                    Some(crate::errors::CoreError::ThreadLengthUnset)
-                } else {
-                    None
-                };
-                match bad {
-                    Some(e) => Err(e),
-                    None => p.kernel
-                        .helical(crate::feature::Helical {
+                match self.thread_verdict(src, (c, ax, r), &mut spec, length) {
+                    Err(e) => crate::feature::KernelJob::refused(e),
+                    Ok((g, r)) => {
+                        // The turn faces are named before the kernel call: the recipe supplies the names
+                        // (a profile edge plus the lead).
+                        let gnames = self.groove_names(p.node, g.groove.len(), spec.starts.max(1));
+                        let rnames = self.relief_names(p.node);
+                        // the volume of the source is read BEFORE the parcel leaves: the check below compares
+                        // against it, and the document does not travel with the worker
+                        let src_v = self.mesh_index(src).map(|i| self.bodies[i].mesh.volume()).unwrap_or(0.0);
+                        let profile = crate::thread::encode_edges(&g.groove);
+                        let (lead, starts, left, relief) = (g.lead, spec.starts.max(1), spec.left, spec.radial_relief());
+                        crate::feature::KernelJob::new(vec![src], move |k| {
+                            k.helical(crate::feature::Helical {
                             body,
                             src,
                             origin: c,
                             dir: ax,
                             radius: r,
-                            profile: &crate::thread::encode_edges(&g.groove),
+                            profile: &profile,
                             length,
-                            lead: g.lead,
-                            starts: spec.starts.max(1),
-                            left: spec.left,
+                            lead,
+                            starts,
+                            left,
                             fuse: false, // a thread is subtracted
                             lead_in,
                             lead_out,
                             gnames: &gnames,
                             rnames: &rnames,
-                            crest_relief: spec.radial_relief(),
+                            crest_relief: relief,
                         })
                         .and_then(|(m, f)| {
                             // The result is checked, not only the input: a thread that removed
@@ -1654,19 +1986,20 @@ impl Project {
                             // reported as done. The groove side already came from the geometry, so
                             // what is caught here is the rest: too fine a pitch, a degenerate
                             // profile, a miss against the face.
-                            let src_v = self.mesh_index(src).map(|i| self.bodies[i].mesh.volume()).unwrap_or(0.0);
                             let got = src_v - m.volume();
                             if src_v > 0.0 && got < 1e-6 * src_v {
                                 Err(crate::errors::CoreError::ThreadRemovedNothing { before: src_v, after: m.volume() })
                             } else {
                                 Ok((m, f))
                             }
-                        }),
+                        })
+                        })
+                    }
                 }
             }
-            None => Err(crate::errors::CoreError::ThreadRimNotFound),
+            None => crate::feature::KernelJob::refused(crate::errors::CoreError::ThreadRimNotFound),
         };
-        self.apply_regen(p.landing(), body, res)
+        job
     }
 
     /// Auger: one branch of the timeline rebuild. Returns whether the node's error record may
@@ -1732,7 +2065,7 @@ impl Project {
 
     /// Hole: one branch of the timeline rebuild. Returns whether the node's error record may
     /// be cleared (see `apply_regen`).
-    fn regen_hole(&mut self, p: &mut Pass, src: Id, at: HoleSite, tool: HoleTool, body: Id) -> bool {
+    fn prep_hole(&mut self, p: &mut Pass, src: Id, at: HoleSite, tool: HoleTool, body: Id) -> crate::feature::KernelJob {
         let HoleSite { face, point, normal, sketch, flip } = at;
         // THE PARAMETRIC OVERRIDES ARE APPLIED HERE, and the tool is rebuilt from them. Handing the
         // stored `tool` to the kernel would drop every expression driving a hole's diameter or depth -
@@ -1744,18 +2077,19 @@ impl Project {
             dia2: p.dim("dia2", tool.dia2),
             depth2: p.dim("depth2", tool.depth2),
         };
-        let res = if sketch != 0 {
+        let job = if sketch != 0 {
             // At the isolated points of a sketch: one frame per point, with every cut applied by a
             // single boolean.
             let pls = self.sketch_hole_points(sketch, flip);
             if pls.is_empty() {
-                Err(crate::errors::CoreError::NoIsolatedPointsForHoles)
+                crate::feature::KernelJob::refused(crate::errors::CoreError::NoIsolatedPointsForHoles)
             } else {
                 // The wall of each hole is named after the sketch point that placed it, so adding a
                 // point does not rename the neighbouring holes.
                 let pts = self.sketch_hole_point_ids(sketch);
                 let bores: Vec<u32> = (0..pls.len()).map(|i| self.intern_name(p.node, crate::names::Role::Hole, pts.get(i).copied().unwrap_or(i as Id + 1))).collect();
-                p.kernel.holes(body, src, tool, &pls, &bores, &self.hole_tool_names(p.node))
+                let names = self.hole_tool_names(p.node);
+                crate::feature::KernelJob::new(vec![src], move |k| k.holes(body, src, tool, &pls, &bores, &names))
             }
         } else {
             // The face is found by recipe through the query, and the hole travels with it.
@@ -1767,40 +2101,88 @@ impl Project {
             let picked = !matches!(face.query, crate::refs::Query::Id(0)); // The sketch-driven form
                                                                             // picks no face.
             match self.face_by_ref(p.node, src, &face, "ref-what-hole-face") {
-                Err(_) if picked => Err(crate::errors::CoreError::FaceNotFound),
+                Err(_) if picked => crate::feature::KernelJob::refused(crate::errors::CoreError::FaceNotFound),
                 resolved => {
+                    // THE HOLE STANDS WHERE IT WAS PLACED: the stored point brought onto the face as it stands now
+                    // (along its normal), not the face's centre - two holes in one face stood in each other, the
+                    // second green and drilling nothing. A hole placed before holds the centre it was given then.
                     let (point, normal) = match resolved {
-                        Ok(c) => (c.centroid, c.normal),
+                        Ok(c) => {
+                            let off = (0..3).map(|i| (point[i] - c.centroid[i]) * c.normal[i]).sum::<f64>();
+                            ([point[0] - off * c.normal[0], point[1] - off * c.normal[1], point[2] - off * c.normal[2]], c.normal)
+                        }
                         Err(_) => (point, normal),
                     };
                     // The tool (a cylinder plus a counterbore or countersink) is placed at the face
                     // point along its normal and cuts inwards.
                     let pl = crate::feature::PlaneFrame::from_origin_normal(point, normal, 0.0).matrix12();
                     let bore = self.intern_name(p.node, crate::names::Role::Hole, 0);
-                    p.kernel.hole(body, src, tool, pl, bore, &self.hole_tool_names(p.node))
+                    let names = self.hole_tool_names(p.node);
+                    crate::feature::KernelJob::new(vec![src], move |k| k.hole(body, src, tool, pl, bore, &names))
                 }
             }
         };
-        self.apply_regen(p.landing(), body, res)
+        job
+    }
+
+    /// A CUT OR AN INTERSECTION THAT PARTED BODY `body` IN SEVERAL SOLIDS makes each solid a body of the node's part, as
+    /// splitting a body does. Every piece the node had keeps its body: it takes the free solid nearest the point it was
+    /// at, the node's own body first. A piece with no solid left loses its body (what stood on it turns red); a solid
+    /// with no piece gets a new body, the biggest first. Returns whether every piece landed.
+    fn part_the_pieces(&mut self, ti: usize, body: Id, kernel: &dyn crate::feature::Kernel, dirty: &mut std::collections::HashSet<Id>, report: &mut crate::feature::RegenReport, emap: &mut EdgeRenames) -> bool {
+        let node = self.timeline[ti].id;
+        // only a body that was one piece is parted: the copies of a pattern are pieces of one body before any cut, and
+        // a rod through the row leaves them so; a body that is to stay whole counts as one solid, and the bodies of the
+        // pieces it had go
+        let parts = self.timeline[ti].kind.consumed_body().is_none_or(|s| kernel.body_pieces(s) <= 1);
+        let solids = if parts { kernel.body_solids(body) } else { Vec::new() };
+        let had: Vec<crate::feature::CutPiece> = self.timeline[ti].kind.cut_pieces().to_vec();
+        let dist = |a: [f64; 3], b: [f64; 3]| (0..3).map(|k| (a[k] - b[k]).powi(2)).sum::<f64>();
+        let mut free: Vec<usize> = (0..solids.len()).collect();
+        let mut plan: Vec<(Id, usize)> = Vec::new();
+        if solids.len() >= 2 {
+            let biggest = free.iter().copied().max_by(|&x, &y| solids[x].1.total_cmp(&solids[y].1)).unwrap_or(0);
+            let asked: Vec<(Id, [f64; 3])> = if had.is_empty() { vec![(body, solids[biggest].0)] } else { had.iter().map(|p| (p.body, p.at)).collect() };
+            for (id, at) in asked {
+                let Some(pos) = (0..free.len()).min_by(|&x, &y| dist(solids[free[x]].0, at).total_cmp(&dist(solids[free[y]].0, at))) else { break };
+                plan.push((id, free.remove(pos)));
+            }
+            free.sort_by(|&x, &y| solids[y].1.total_cmp(&solids[x].1));
+            for k in free {
+                plan.push((self.alloc_id(), k));
+            }
+        }
+        // the bodies of pieces that have no solid any more go, and with them their faces
+        for p in had.iter().filter(|p| p.body != body && !plan.iter().any(|(id, _)| *id == p.body)) {
+            if let Some(mi) = self.mesh_index(p.body) {
+                self.remove_mesh(mi);
+            }
+            self.regen_faces.remove(&p.body);
+            dirty.insert(p.body);
+        }
+        let mut clear = true;
+        // the other pieces are taken out of the whole first, and the node's own body keeps its piece last
+        for &(id, k) in plan.iter().skip(1).chain(plan.first()) {
+            let res = kernel.take_solid(id, body, k);
+            clear &= self.apply_regen(Landing { node, dirty: &mut *dirty, report: &mut *report, kernel, emap: &mut *emap }, id, res);
+        }
+        if let Some(v) = self.timeline[ti].kind.cut_pieces_mut() {
+            *v = plan.iter().map(|&(id, k)| crate::feature::CutPiece { body: id, at: solids[k].0 }).collect();
+        }
+        clear
     }
 
     /// SplitBody: one branch of the timeline rebuild. Returns whether the node's error record may
     /// be cleared (see `apply_regen`).
-    fn regen_splitbody(&mut self, p: &mut Pass, src: Id, plane: u8, datum: Id, offset: f64, bodies: &[Id]) -> bool {
-        // The cutting plane is a reference (as for a mirror): a datum (including a face snapshot) or
-        // a world plane.
-        // The datum is resolved here, in timeline order, so a face that moved carries the split with
-        // it; otherwise a split would be a one-off cut against forgotten coordinates.
-        let dpl = (datum != 0).then(|| self.planes.iter().find(|p| p.id == datum)).flatten().map(|p| (p.origin, p.normal));
+    fn regen_splitbody(&mut self, p: &mut Pass, src: Id, at: Option<([f64; 3], [f64; 3])>, offset: f64, bodies: &[Id]) -> bool {
+        // The cutting plane is a reference (as for a mirror): a world plane, a datum or a face (see `op_plane`), resolved
+        // here, in timeline order, so a face that moved carries the split with it; otherwise a split would be a one-off
+        // cut against forgotten coordinates.
         // A deleted plane means no cut. Falling back to a world plane is not acceptable here: a
         // mirror about another plane is still a mirror, while a split along another plane breaks the
         // body in a different place, silently. A red node beats a quietly different part.
-        let lost = datum != 0 && dpl.is_none();
-        let (o0, n) = dpl.unwrap_or(match plane {
-            1 => ([0.0; 3], [0.0, 1.0, 0.0]),
-            2 => ([0.0; 3], [1.0, 0.0, 0.0]),
-            _ => ([0.0; 3], [0.0, 0.0, 1.0]),
-        });
+        let lost = at.is_none();
+        let (o0, n) = at.unwrap_or(([0.0; 3], [0.0, 0.0, 1.0]));
         let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
         let res = if lost {
             Err(crate::errors::CoreError::CutPlaneDeleted)
@@ -1845,7 +2227,16 @@ impl Project {
 
     /// LinearArray: one branch of the timeline rebuild. Returns whether the node's error record may
     /// be cleared (see `apply_regen`).
-    fn regen_lineararray(&mut self, p: &mut Pass, src: Id, axes: [ArrayAxis; 3], body: Id) -> bool {
+    fn prep_lineararray(&mut self, p: &mut Pass, src: Id, axes: [ArrayAxis; 3], body: Id) -> crate::feature::KernelJob {
+        // the counts are dimensions of the node as the steps are: a count typed as `k` follows `k`
+        let mut axes = axes;
+        for (a, key) in axes.iter_mut().zip(["count", "count2", "count3"]) {
+            a.count = p.dim(key, a.count as f64).round().max(1.0) as u32;
+        }
+        // a pattern of one copy is the body alone: it stood green and changed nothing
+        if axes.iter().map(|a| a.count.max(1)).product::<u32>() < 2 {
+            return crate::feature::KernelJob::refused(crate::errors::CoreError::ArrayOfOne);
+        }
         // Parametric: the step lives as an expression per vector component, so global parameters move
         // the pattern. An empty expression keeps the stored number. The keys are the field names in the
         // document ("dx", "dx2", "dx3"), so the suffix is the axis number - the first carries none.
@@ -1871,16 +2262,20 @@ impl Project {
             }
         }
         let seeds = self.instance_name_seeds(p.node, src, ts.len());
-        let res = p.kernel.pattern_named(body, src, &ts, &seeds);
-        self.apply_regen(p.landing(), body, res)
+        crate::feature::KernelJob::new(vec![src], move |k| k.pattern_named(body, src, &ts, &seeds))
     }
 
     /// CircularArray: one branch of the timeline rebuild. Returns whether the node's error record may
     /// be cleared (see `apply_regen`).
-    fn regen_circulararray(&mut self, p: &mut Pass, src: Id, count: u32, angle: f64, axis: Id, body: Id) -> bool {
+    fn prep_circulararray(&mut self, p: &mut Pass, src: Id, count: u32, angle: f64, axis: Id, body: Id) -> crate::feature::KernelJob {
         // Parametric: the angle is an expression over global parameters. An empty expression keeps
         // the stored number.
         let angle = p.dim("angle", angle);
+        // the count is a dimension of the node as the angle is: a count typed as `k` follows `k`
+        let count = p.dim("count", count as f64).round().max(1.0) as u32;
+        if count < 2 {
+            return crate::feature::KernelJob::refused(crate::errors::CoreError::ArrayOfOne);
+        }
         let c = count.max(1);
         let step = if angle.abs() >= 359.9 { 360.0 / c as f64 } else { angle / c as f64 };
         // Rotation axis: world Z when `axis` is zero, otherwise a datum axis (origin and direction,
@@ -1892,8 +2287,152 @@ impl Project {
         };
         let ts: Vec<[f64; 12]> = (0..c).map(|i| rot_about_axis(org, dir, i as f64 * step)).collect();
         let seeds = self.instance_name_seeds(p.node, src, ts.len());
-        let res = p.kernel.pattern_named(body, src, &ts, &seeds);
-        self.apply_regen(p.landing(), body, res)
+        crate::feature::KernelJob::new(vec![src], move |k| k.pattern_named(body, src, &ts, &seeds))
+    }
+
+    /// WHAT CAN BE COMPUTED RIGHT NOW, starting from node `from`.
+    ///
+    /// A node joins the list while nothing it needs is made by a node standing between here and it. That is a
+    /// stricter question than "which nodes are in one wave": a wave says they do not depend on ONE ANOTHER,
+    /// while this says they do not depend on anything not yet written into the document. Preparing a node
+    /// whose source is computed but not yet applied resolves its references against geometry that is not
+    /// there - measured on the scenario document as 13 refusals and half the bodies missing.
+    ///
+    /// `held` are the nodes already computed and waiting to be written down: they must not be prepared a
+    /// second time (a preparation mints the names of the faces to come), and what they make is not current
+    /// until the rebuild reaches them.
+    ///
+    /// `walked` are the places this pass has already been through. A batch is written down as soon as it is
+    /// computed, ahead of the walk, so the next batch starts ABOVE nodes that are finished - and each of them
+    /// still looks as if it needed rebuilding, its input being dirty. Offered again, they were rebuilt once per
+    /// batch: 74 times each on the scenario document. What they made is current, so they hold nothing back.
+    ///
+    /// Except `from` itself: that is the place the walk is standing on, not one it has been through. Skipping it
+    /// left its body out of what is still to be built, the node standing on it was prepared on the body from
+    /// before the edit, and a thread on the scenario document could no longer find its rim.
+    pub(crate) fn ready_from(&self, from: usize, dirty: &std::collections::HashSet<Id>, held: &std::collections::HashSet<Id>, walked: &std::collections::HashSet<usize>, limit: usize) -> Vec<usize> {
+        let mut ahead: std::collections::HashSet<Id> = std::collections::HashSet::new();
+        let mut ready: Vec<usize> = Vec::new();
+        for j in from..self.timeline.len().min(limit) {
+            if j != from && walked.contains(&j) {
+                continue;
+            }
+            let mine = &self.timeline[j];
+            let behind = self.node_reads_any(j, &ahead);
+            if mine.suppressed || !self.node_needs(j, dirty) {
+                // CLEAN FOR NOW IS NOT CLEAN. Its source is still to be rebuilt, so it will be rebuilt too when the
+                // walk reaches it (a suppressed modifier passes the new source through), and what it makes is not
+                // current either. Skipping it silently offered the node standing on it a body from before the edit.
+                if behind {
+                    ahead.extend(mine.kind.declares());
+                }
+                continue;
+            }
+            let waiting = held.contains(&mine.id) || behind;
+            if !waiting {
+                ready.push(j);
+            }
+            // whatever this node makes is not current until it has been rebuilt
+            for d in mine.kind.declares() {
+                ahead.insert(d);
+            }
+        }
+        ready
+    }
+
+    /// WHAT WOULD BE COMPUTED SIDE BY SIDE from node `from`, with the document fully dirty: the rule above,
+    /// asked from outside. A check of the rule is worth more than a check of the timing it buys.
+    pub fn ready_batch_from(&self, from: usize) -> Vec<Id> {
+        let dirty = std::collections::HashSet::new();
+        let held = std::collections::HashSet::new();
+        let walked = std::collections::HashSet::new();
+        self.ready_from(from, &dirty, &held, &walked, self.rollback.unwrap_or(usize::MAX)).into_iter().filter_map(|j| self.timeline.get(j).map(|n| n.id)).collect()
+    }
+
+    /// THE ONE DOOR TO A NODE'S PARCEL: what has to be built for this node, and what it needs to build it.
+    ///
+    /// `None` means the node is one of the five that are computed in place: an import re-tessellates a ready
+    /// shape, a body split returns several bodies at once, a part instance and a part mirror follow the active
+    /// body of their source at this point of the timeline, and an auger checks the volume it removed against the
+    /// document.
+    ///
+    /// Preparing a parcel CHANGES THE DOCUMENT (it mints the names of the faces to come), so this is called
+    /// from the thread that owns it - once per node, in timeline order, exactly as before.
+    fn prep_node(&mut self, p: &mut Pass, kind: &FeatureKind) -> Option<(Id, crate::feature::KernelJob)> {
+        let job = match kind {
+            FeatureKind::Extrude { sketch, profiles, height, reach, down, fill, body } => {
+                (*body, self.prep_extrude(p, Profile { sketch: *sketch, profiles }, ExtrudeSpan { height: *height, down: *down, reach: *reach, fill }, *body))
+            }
+            FeatureKind::Revolve { sketch, profiles, axis, angle, axis_datum, axis_line, reach, src, op, body, .. } => {
+                let prof = Profile { sketch: *sketch, profiles };
+                let ax = RevolveAxis { axis: *axis, datum: *axis_datum, line: *axis_line };
+                (*body, self.prep_revolve(p, prof, ax, *angle, *reach, BodyOp { src: *src, op: *op, body: *body }))
+            }
+            FeatureKind::Sweep { sketch, profiles, path_sketch, path, src, op, body, .. } => {
+                (*body, self.prep_sweep(p, Profile { sketch: *sketch, profiles }, *path_sketch, *path, BodyOp { src: *src, op: *op, body: *body }))
+            }
+            FeatureKind::Loft { sketches, contours, ruled, src, op, surface, body, .. } => {
+                (*body, self.prep_loft(p, sketches.clone(), contours.clone(), *ruled, *surface, BodyOp { src: *src, op: *op, body: *body }))
+            }
+            FeatureKind::Box3 { dx, dy, dz, body } => (*body, self.prep_box3(p, *dx, *dy, *dz, *body)),
+            FeatureKind::Cylinder { r, h, body } => (*body, self.prep_cylinder(p, *r, *h, *body)),
+            FeatureKind::Sphere { r, body } => (*body, self.prep_sphere(p, *r, *body)),
+            FeatureKind::Cone { r1, r2, h, body } => (*body, self.prep_cone(p, *r1, *r2, *h, *body)),
+            FeatureKind::Torus { major, minor, body } => (*body, self.prep_torus(p, *major, *minor, *body)),
+            FeatureKind::Prism { r, n, h, body } => (*body, self.prep_prism(p, *r, *n, *h, *body)),
+            FeatureKind::Combine { src, sketch, profiles, height, op, extent, down, fill, body, .. } => {
+                let prof = Profile { sketch: *sketch, profiles };
+                let span = CombineSpan { height: *height, down: *down, extent: *extent, fill };
+                (*body, self.prep_combine(p, prof, span, BodyOp { src: *src, op: *op, body: *body }))
+            }
+            FeatureKind::Fillet { src, radius, edges, at_vertices, body } => (*body, self.prep_fillet(p, *src, *radius, edges, at_vertices, *body)),
+            FeatureKind::Chamfer { src, dist, edges, mode, d2, flip, ref_face, body } => {
+                (*body, self.prep_chamfer(p, *src, *dist, edges, ChamferShape { mode: *mode, d2: *d2, flip: *flip, ref_face: *ref_face }, *body))
+            }
+            FeatureKind::Shell { src, thickness, faces, side, body } => (*body, self.prep_shell(p, *src, *thickness, faces, *side, *body)),
+            FeatureKind::RemoveFace { src, faces, body } => (*body, self.prep_removeface(p, *src, faces, *body)),
+            FeatureKind::PushFace { src, face, dist, body } => (*body, self.prep_pushface(p, *src, face, *dist, *body)),
+            FeatureKind::Patch { src, edges, tangent, body } => (*body, self.prep_patch(p, *src, edges, *tangent, *body)),
+            FeatureKind::SurfaceReplace { src, faces, surface, body } => (*body, self.prep_surfacereplace(p, *src, faces, *surface, *body)),
+            FeatureKind::FaceCopy { src, faces, body } => (*body, self.prep_facecopy(p, *src, faces, *body)),
+            FeatureKind::OffsetSurface { src, faces, dist, body } => (*body, self.prep_offset_surface(p, *src, faces, *dist, *body)),
+            FeatureKind::Trim { src, tool, keep, body } => (*body, self.prep_trim(*src, *tool, *keep, *body)),
+            FeatureKind::Stitch { parts, tol, body } => (*body, self.prep_stitch(p, parts, *tol, *body)),
+            FeatureKind::MeshSolid { src, body, simplify } => (*body, self.prep_mesh_solid(*src, *body, *simplify)),
+            FeatureKind::MeshRecognised { src, body, tol, sharp, simplify } => (*body, self.prep_mesh_recognised(*src, *body, *tol, *sharp, *simplify)),
+            FeatureKind::Thicken { src, face, thickness, join, body } => (*body, self.prep_thicken(p, *src, *face, *thickness, *join, *body)),
+            FeatureKind::SplitFace { src, plane, datum, offset, body, face } => (*body, self.prep_splitface(p, *src, self.op_plane(*plane, *datum, *face), *offset, *body)),
+            FeatureKind::Draft { src, faces, neutral, angle, flip, body } => {
+                (*body, self.prep_draft(p, *src, faces, DraftShape { neutral: neutral.clone(), angle: *angle, flip: *flip }, *body))
+            }
+            FeatureKind::LinearArray { src, dx, dy, dz, count, dx2, dy2, dz2, count2, dx3, dy3, dz3, count3, body } => {
+                let axes = [
+                    ArrayAxis { d: [*dx, *dy, *dz], count: *count },
+                    ArrayAxis { d: [*dx2, *dy2, *dz2], count: *count2 },
+                    ArrayAxis { d: [*dx3, *dy3, *dz3], count: *count3 },
+                ];
+                (*body, self.prep_lineararray(p, *src, axes, *body))
+            }
+            FeatureKind::CircularArray { src, count, angle, axis, body } => (*body, self.prep_circulararray(p, *src, *count, *angle, *axis, *body)),
+            FeatureKind::Mirror { src, plane, keep, datum, body, face } => (*body, self.prep_mirror(p, *src, (*datum == 0 && face.is_none()).then_some(*plane), *keep, self.op_plane(*plane, *datum, *face), *body)),
+            FeatureKind::Move { src, mat, body } => (*body, self.prep_move(*src, *mat, *body)),
+            FeatureKind::Piece { src, body } => {
+                let (src, body) = (*src, *body);
+                (body, crate::feature::KernelJob::new(vec![src], move |k| k.transform_body(body, src, crate::feature::PLACE_IDENTITY)))
+            }
+            FeatureKind::BodyBoolean { a, b, op, body, .. } => (*body, self.prep_bodyboolean(*a, *b, *op, *body)),
+            FeatureKind::Hole { src, face, point, normal, diameter, depth, kind, dia2, depth2, sketch, flip, body, .. } => {
+                let at = HoleSite { face: face.clone(), point: *point, normal: *normal, sketch: *sketch, flip: *flip };
+                let tool = HoleTool { kind: *kind, diameter: *diameter, depth: *depth, dia2: *dia2, depth2: *depth2 };
+                (*body, self.prep_hole(p, *src, at, tool, *body))
+            }
+            FeatureKind::Thread { src, edge, spec, length, lead_in, lead_out, body } => {
+                let run = HelixRun { src: *src, edge: *edge, length: *length, lead_in: *lead_in, lead_out: *lead_out, body: *body };
+                (*body, self.prep_thread(p, run, spec.clone()))
+            }
+            _ => return None,
+        };
+        Some(job)
     }
 
     /// Live edges of a query reference: recorded names are translated, a description is asked again.
@@ -1916,9 +2455,26 @@ impl Project {
         self.sketch_frame_by_id(sketch).map(|f| f.matrix12()).unwrap_or(crate::feature::PLACE_IDENTITY)
     }
 
+    /// THE AXIS A REVOLUTION TURNS ABOUT, in the sketch's own frame, with whether it was named (a line or a datum) rather
+    /// than the sketch's X or Y. Priority: a sketch centreline (already local), then a datum axis (world, including one
+    /// bound to an edge or a face, brought in through the inverse placement), then the sketch X or Y axis. One
+    /// computation for the rebuild, its check of a profile crossing the axis and the preview before Enter: copies
+    /// would drift, and the preview would turn about an axis the body is not built about.
+    pub fn revolve_axis_local(&self, sketch: Id, ax: RevolveAxis) -> ([f64; 3], [f64; 3], bool) {
+        let axis_od = (ax.datum != 0).then(|| self.datum_axes.iter().find(|d| d.id == ax.datum).map(|d| (d.origin(), d.dir()))).flatten();
+        match (self.revolve_axis_from_line(sketch, ax.line), axis_od) {
+            (Some((lo, ld)), _) => (lo, ld, true),
+            (None, Some((wo, wd))) => {
+                let inv = crate::feature::mat_inv12(&self.sketch_place(sketch));
+                (crate::feature::apply12(&inv, wo), crate::feature::apply12_dir(&inv, wd), true)
+            }
+            _ => ([0.0, 0.0, 0.0], if ax.axis == 0 { [1.0, 0.0, 0.0] } else { [0.0, 1.0, 0.0] }, false),
+        }
+    }
+
     /// Extrude: one branch of the timeline rebuild. Returns whether the node's error record may
     /// be cleared (see `apply_regen`).
-    fn regen_extrude(&mut self, p: &mut Pass, prof: Profile, span: ExtrudeSpan, body: Id) -> bool {
+    fn prep_extrude(&mut self, p: &mut Pass, prof: Profile, span: ExtrudeSpan, body: Id) -> crate::feature::KernelJob {
         let (Profile { sketch, profiles }, ExtrudeSpan { height, down, reach, fill }) = (prof, span);
         let mut pl = self.sketch_place(sketch);
         // Parametric dimension expressions, where present, override the stored numbers.
@@ -1934,29 +2490,25 @@ impl Project {
         }
         // Encode every contour and extrude them in one node (`combine_region_multi`; a zero `src`
         // makes a new body).
-        let res = self
-            .encode_profiles_fill(p.node, sketch, profiles, fill)
-            .ok_or(crate::errors::CoreError::ProfileNotFound)
-            .and_then(|profs| {
+        let job = match self.encode_profiles_fill(p.node, sketch, profiles, fill) {
+            None => crate::feature::KernelJob::refused(crate::errors::CoreError::ProfileNotFound),
+            Some(profs) => {
                 let caps = self.region_cap_names(p.node, &profs);
-                p.kernel.combine_region_multi(BodyOp { src: 0, op: 1, body }, &profs, total, pl, &caps)
-            });
-        self.apply_regen(p.landing(), body, res)
+                crate::feature::KernelJob::new(Vec::new(), move |k| k.combine_region_multi(BodyOp { src: 0, op: 1, body }, &profs, total, pl, &caps))
+            }
+        };
+        job
     }
 
     /// Revolve: one branch of the timeline rebuild. Returns whether the node's error record may
     /// be cleared (see `apply_regen`).
-    fn regen_revolve(&mut self, p: &mut Pass, prof: Profile, ax: RevolveAxis, angle: f64, reach: crate::feature::Reach, t: BodyOp) -> bool {
+    fn prep_revolve(&mut self, p: &mut Pass, prof: Profile, ax: RevolveAxis, angle: f64, reach: crate::feature::Reach, t: BodyOp) -> crate::feature::KernelJob {
         let (sketch, profiles) = (prof.sketch, prof.profiles);
-        let (axis, axis_datum, axis_line) = (ax.axis, ax.datum, ax.line);
+        let axis = ax.axis;
         let (src, op, body) = (t.src, t.op, t.body);
         let pl = self.sketch_place(sketch);
         let angle = eval_dim(p.dims, "angle", angle, p.vars);
-        // Axis priority: a sketch centreline (already in local space, so no inverse placement is
-        // needed), then a datum axis (in world space, including one bound to an edge or a face,
-        // converted to local space through the inverse placement), then the sketch X or Y axis.
-        let axis_ln = self.revolve_axis_from_line(sketch, axis_line);
-        let axis_od = (axis_datum != 0).then(|| self.datum_axes.iter().find(|d| d.id == axis_datum).map(|d| (d.origin(), d.dir()))).flatten();
+        let (ax_o, ax_d, named) = self.revolve_axis_local(sketch, ax);
         // Symmetric means a start angle of -angle/2, and a flip means -angle, sweeping the other
         // way. Implemented by pre-rotating the result about the local axis: pl' = pl * Rot(axis, t0).
         // The kernel is untouched — it builds [0, angle] and the rotation carries that to
@@ -1973,7 +2525,9 @@ impl Project {
                 crate::feature::compose12(&pl, &crate::feature::rot12_axis(o, d, theta0))
             }
         };
-        let res = self.encode_profiles_role(p.node, sketch, profiles, &[], crate::names::Role::Revolved).ok_or(crate::errors::CoreError::ProfileNotFound).and_then(|profs| {
+        let job = match self.encode_profiles_role(p.node, sketch, profiles, &[], crate::names::Role::Revolved) {
+            None => crate::feature::KernelJob::refused(crate::errors::CoreError::ProfileNotFound),
+            Some(profs) => (|| {
             let caps = self.region_cap_names(p.node, &profs);
             // Honest diagnostics before the kernel: a profile crossing the axis produces readable
             // text with a hint rather than a faceless "revolve failed".
@@ -1983,14 +2537,6 @@ impl Project {
             // placement, then the X or Y fallback) twice — once for diagnostics and once for the
             // call — lets the copies drift, and the "profile crosses the axis" check would then
             // validate an axis other than the one the body is built about, lying silently.
-            let (ax_o, ax_d) = match (axis_ln, axis_od) {
-                (Some((lo, ld)), _) => (lo, ld),
-                (None, Some((wo, wd))) => {
-                    let inv = crate::feature::mat_inv12(&pl);
-                    (crate::feature::apply12(&inv, wo), crate::feature::apply12_dir(&inv, wd))
-                }
-                _ => ([0.0, 0.0, 0.0], if axis == 0 { [1.0, 0.0, 0.0] } else { [0.0, 1.0, 0.0] }),
-            };
             // The axis check runs over every contour rather than one: the command takes them all,
             // and a second contour crossing the axis fails the operation just as the first would.
             let chk: Vec<Id> = if profiles.is_empty() {
@@ -2001,40 +2547,44 @@ impl Project {
             for cid in chk {
                 if let Some(xy) = self.contour_profile_xy(cid) {
                     if let Some(msg) = self.revolve_profile_crosses_axis(&xy, ax_o, ax_d) {
-                        return Err(msg);
+                        return crate::feature::KernelJob::refused(msg);
                     }
                 }
             }
-            let line = (axis_ln.is_some() || axis_od.is_some()).then_some(crate::feature::AxisLine { origin: ax_o, dir: ax_d });
+            let line = named.then_some(crate::feature::AxisLine { origin: ax_o, dir: ax_d });
             let about = crate::feature::RevolveAbout { axis, line };
-            p.kernel.revolve_region_multi(BodyOp { src, op, body }, &profs, about, angle, with_start(ax_o, ax_d, pl), &caps)
-        });
-        self.apply_regen(p.landing(), body, res)
+            let place = with_start(ax_o, ax_d, pl);
+            let inputs = if src != 0 { vec![src] } else { Vec::new() };
+            crate::feature::KernelJob::new(inputs, move |k| k.revolve_region_multi(BodyOp { src, op, body }, &profs, about, angle, place, &caps))
+            })(),
+        };
+        job
     }
 
     /// Sweep: one branch of the timeline rebuild. Returns whether the node's error record may
     /// be cleared (see `apply_regen`).
-    fn regen_sweep(&mut self, p: &mut Pass, prof: Profile, path_sketch: Id, path: Id, bo: BodyOp) -> bool {
+    fn prep_sweep(&mut self, p: &mut Pass, prof: Profile, path_sketch: Id, path: Id, bo: BodyOp) -> crate::feature::KernelJob {
         let (Profile { sketch, profiles }, BodyOp { src, op, body }) = (prof, bo);
         // The profile and the path are different sketches, each with its own placement (the frame
         // of its plane).
         let prof_pl = self.sketch_place(sketch);
         let path_pl = self.sketch_place(path_sketch);
         let pth = self.sweep_path_encoded(path_sketch, path);
-        let res = match (self.encode_profiles_role(p.node, sketch, profiles, &[], crate::names::Role::Swept), pth) {
+        let job = match (self.encode_profiles_role(p.node, sketch, profiles, &[], crate::names::Role::Swept), pth) {
             (Some(profs), Some(pth)) => {
                 let caps = self.region_cap_names(p.node, &profs);
-                p.kernel.sweep_multi(BodyOp { src, op, body }, &profs, prof_pl, &pth, path_pl, &caps)
+                let inputs = if src != 0 { vec![src] } else { Vec::new() };
+                crate::feature::KernelJob::new(inputs, move |k| k.sweep_multi(BodyOp { src, op, body }, &profs, prof_pl, &pth, path_pl, &caps))
             }
-            (None, _) => Err(crate::errors::CoreError::SweepProfileMissing),
-            (_, None) => Err(crate::errors::CoreError::SweepPathMissing),
+            (None, _) => crate::feature::KernelJob::refused(crate::errors::CoreError::SweepProfileMissing),
+            (_, None) => crate::feature::KernelJob::refused(crate::errors::CoreError::SweepPathMissing),
         };
-        self.apply_regen(p.landing(), body, res)
+        job
     }
 
     /// Combine: one branch of the timeline rebuild. Returns whether the node's error record may
     /// be cleared (see `apply_regen`).
-    fn regen_combine(&mut self, p: &mut Pass, prof: Profile, span: CombineSpan, t: BodyOp) -> bool {
+    fn prep_combine(&mut self, p: &mut Pass, prof: Profile, span: CombineSpan, t: BodyOp) -> crate::feature::KernelJob {
         let CombineSpan { height, down, extent, fill } = span;
         let (sketch, profiles) = (prof.sketch, prof.profiles);
         let (src, op, body) = (t.src, t.op, t.body);
@@ -2050,14 +2600,15 @@ impl Project {
         }
         // Encode every tool contour and apply them with a single boolean
         // (`combine_region_multi`).
-        let res = self
-            .encode_profiles_fill(p.node, sketch, profiles, fill)
-            .ok_or(crate::errors::CoreError::ProfileNotFound)
-            .and_then(|profs| {
+        let job = match self.encode_profiles_fill(p.node, sketch, profiles, fill) {
+            None => crate::feature::KernelJob::refused(crate::errors::CoreError::ProfileNotFound),
+            Some(profs) => {
                 let caps = self.region_cap_names(p.node, &profs);
-                p.kernel.combine_region_multi(BodyOp { src, op, body }, &profs, h, pl, &caps)
-            });
-        self.apply_regen(p.landing(), body, res)
+                let inputs = if src != 0 { vec![src] } else { Vec::new() };
+                crate::feature::KernelJob::new(inputs, move |k| k.combine_region_multi(BodyOp { src, op, body }, &profs, h, pl, &caps))
+            }
+        };
+        job
     }
 
     fn live_fillet_edges(&mut self, node_id: Id, src: Id, r: &crate::refs::Ref, emap: &EdgeRenames, kernel: &dyn crate::feature::Kernel) -> Vec<u32> {
@@ -2078,6 +2629,17 @@ impl Project {
             return live;
         }
         live.into_iter().filter(|e| known.contains(e)).collect()
+    }
+
+    /// HOW MANY OF THE PICKED EDGES FIND NOTHING, each asked on its own: an edge merged with its neighbour finds the
+    /// merged one and is not lost; one that is gone finds nothing. The references are only read, not rewritten.
+    fn edge_refs_lost(&mut self, node_id: Id, src: Id, edges: &[u32], emap: &EdgeRenames, kernel: &dyn crate::feature::Kernel) -> usize {
+        let cur = kernel.edges(src);
+        let translated = self.translate_edge_refs(node_id, src, edges, emap, &cur);
+        let keep = self.snap_rebinds.load(std::sync::atomic::Ordering::Relaxed);
+        let lost = translated.iter().filter(|&&d| if cur.is_empty() { self.resolve_edge_ids(node_id, src, &[d]).is_empty() } else { self.resolve_edge_ids_in(&cur, node_id, &[d]).is_empty() }).count();
+        self.snap_rebinds.store(keep, std::sync::atomic::Ordering::Relaxed);
+        lost
     }
 
     fn live_edge_refs(&mut self, node_id: Id, src: Id, edges: &[u32], emap: &EdgeRenames, kernel: &dyn crate::feature::Kernel) -> Vec<u32> {
@@ -2359,7 +2921,10 @@ impl Project {
         if !self.component_is_part(owner) {
             return Some(crate::errors::CoreError::BodyOnlyInPart);
         }
-        if let Some(bad) = kind.inputs().into_iter().find(|&inp| self.ref_owner(inp).is_some_and(|ro| ro != owner)) {
+        // the named exception: the piece a person made a part of its own reads the body of the part it came from,
+        // which is what keeps the two parts one cut
+        let piece_out = matches!(kind, crate::feature::FeatureKind::Piece { .. });
+        if let Some(bad) = kind.inputs().into_iter().find(|&inp| !piece_out && self.ref_owner(inp).is_some_and(|ro| ro != owner)) {
             return Some(crate::errors::CoreError::CrossComponentInput { input: bad });
         }
         // An input sketch on a face of another component's body is forbidden, except with an explicit external
@@ -2478,6 +3043,15 @@ impl Project {
                 let named = self.regen_faces.get(&body).cloned().unwrap_or_default();
                 report.built.push((body, named));
                 self.regen_errors.remove(&node_id); // The feature built, so its error mark is cleared.
+                // and what it left out is said, or the old word taken away
+                // what the kernel left out adds to what the references lost before it
+                if let Some((asked, dropped)) = kernel.take_dropped_edges(body) {
+                    let (asked0, lost0) = match self.regen_warnings.get(&node_id) {
+                        Some(crate::errors::CoreError::EdgesDropped { asked, dropped }) => (*asked, *dropped),
+                        _ => (0, 0),
+                    };
+                    self.regen_warnings.insert(node_id, crate::errors::CoreError::EdgesDropped { asked: asked.max(asked0), dropped: dropped + lost0 });
+                }
                 true
             }
             Err(e) => {
@@ -2497,4 +3071,27 @@ impl Project {
             }
         }
     }
+}
+
+impl Project {
+    /// The error of the first value of node `node` written as an expression that does not count with `vars`.
+    fn dim_expr_error(&self, node: Id, vars: &std::collections::HashMap<String, f64>) -> Option<crate::errors::CoreError> {
+        self.feat_dims.get(&node)?.values().map(|e| e.trim()).filter(|e| !e.is_empty()).find_map(|e| crate::expr::eval(e, vars).err()).map(crate::errors::CoreError::Expr)
+    }
+}
+
+/// `mesh` made lighter within `simplify` mm, or as it is where that is zero.
+fn lighter(mesh: crate::geom::Mesh, simplify: f64) -> crate::geom::Mesh {
+    if simplify > 0.0 { crate::mesh_simplify::simplify(&mesh, simplify) } else { mesh }
+}
+
+/// The recognition's tolerance factor, raised so that a surface is held within `simplify` mm at least: a mesh made
+/// lighter stands off the surface it was made from by up to that, and held to the recognition's own hundred-thousandth
+/// of its size no plane or cylinder lay on it - measured on a smooth handle simplified by 0.01 mm, 8 544 regions came
+/// out of 21 234 triangles and 1 164 of them stayed mesh; within the simplification, 159 regions and none.
+fn within_simplification(mesh: &crate::geom::Mesh, tol: f64, simplify: f64) -> f64 {
+    let Some(b) = mesh.bounds().filter(|_| simplify > 0.0) else { return tol };
+    let size = ((b.max.x - b.min.x).powi(2) + (b.max.y - b.min.y).powi(2) + (b.max.z - b.min.z).powi(2)).sqrt();
+    // the recognition holds a corner within a hundred-thousandth of the mesh's size times this factor
+    tol.max(simplify / (size * 1e-5).max(1e-12))
 }

@@ -19,12 +19,11 @@ would take each piece on its own and give a stack of plates instead of a lid.
 ## Worth knowing
 
 - **Closed means a solid.** If the stitched surfaces surround a volume on all sides, the result is an
-  ordinary solid rather than a shell: asking for another step would mean asking you to confirm what
-  the program already sees.
+  ordinary solid rather than a shell.
 - **Stitching joins surfaces, not solids.** Clicking a part selects nothing and says so right away,
   not after Enter.
 - **The pieces are absorbed.** One surface is left on screen, not the surface plus its parts.
-- **Nothing joined is an honest refusal.** Sheets that do not touch would give the same two islands
-  under one name; further down the timeline such a surface behaves like garbage.
+- **Nothing joined — the node turns red with the reason.** Sheets that do not touch are not stitched: move them
+  edge to edge or raise the tolerance.
 - **Tolerance** is how far apart edges may lie and still count as shared. Start from the default and
   raise it only when you know the seam is imprecise.

@@ -75,7 +75,7 @@ mod tests {
         assert!(ids.len() >= 3, "setup: three body features were expected, and it came out {}", ids.len());
 
         let victim = ids[1];
-        app.execute_delete(Sel::Feature(app.project.timeline_index(victim).expect("the node is there")));
+        app.execute_delete(Sel::Feature(app.project.timeline_index(victim).expect("the node is there")), false);
 
         assert!(app.project.timeline_index(victim).is_none(), "a deleted feature must disappear from the timeline");
         for id in ids.iter().copied().filter(|&i| i != victim) {
@@ -101,7 +101,7 @@ mod tests {
         };
         draw(&mut app);
         if let Some(ti) = app.project.timeline_index(ids[1]) {
-            app.execute_delete(Sel::Feature(ti));
+            app.execute_delete(Sel::Feature(ti), false);
         }
         draw(&mut app);
     }

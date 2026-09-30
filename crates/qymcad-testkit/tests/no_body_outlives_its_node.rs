@@ -63,7 +63,7 @@ fn deleting_a_sketch_leaves_no_ghost() {
     qymcad_testkit::regenerate(&mut p);
     assert!(p.regen_faces.contains_key(&body), "the body was built");
     assert_eq!(ghosts(&p), Vec::<Id>::new(), "no ghosts before the deletion");
-    p.delete_sketch(sid);
+    p.delete_sketch_with_dependents(sid);
     assert_eq!(ghosts(&p), Vec::<Id>::new(), "no ghosts after deleting the sketch");
 }
 
@@ -212,7 +212,7 @@ fn a_connector_does_not_outlive_its_body_after_a_sketch_delete() {
     p.add_connector(comp, AnchorRef::FaceCenter(body, k));
     assert_eq!(p.connectors.len(), 1, "the connector was placed");
 
-    p.delete_sketch(sid);
+    p.delete_sketch_with_dependents(sid); // the body goes with its sketch only when asked; without it the body stays at its last good state
     // Same new contract: the connector stays, but a frame on the deleted body does not resolve —
     // there is nowhere for a garbage frame to come from, and the person's work is intact.
     assert_eq!(p.connectors.len(), 1, "the connector was removed — a joint on it would have nothing left to repair");

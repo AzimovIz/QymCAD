@@ -1,3 +1,6 @@
+#include <algorithm>
+#include <Geom_Line.hxx>
+#include <Geom_BSplineCurve.hxx>
 // The bridge to OCCT: primitives, booleans, names, healing.
 //
 // Split out of one 5 077-line file with 69 entry points, where finding a function meant scrolling.
@@ -115,18 +118,69 @@ static QymBody body_from_shape(const TopoDS_Shape& s, const TopTools_DataMapOfSh
     return b;
 }
 
+// Does the face mesh the same at any deflection - flat, every edge a straight line - and has it triangles already?
+static bool keeps_its_triangles(const TopoDS_Face& f) {
+    TopLoc_Location loc;
+    if (BRep_Tool::Triangulation(f, loc).IsNull()) return false;
+    if (BRepAdaptor_Surface(f, Standard_False).GetType() != GeomAbs_Plane) return false;
+    for (TopExp_Explorer ex(f, TopAbs_EDGE); ex.More(); ex.Next()) {
+        if (BRep_Tool::Degenerated(TopoDS::Edge(ex.Current()))) continue;
+        if (BRepAdaptor_Curve(TopoDS::Edge(ex.Current())).GetType() != GeomAbs_Line) return false;
+    }
+    return true;
+}
+
 QymDoc* doc_from_shape(const TopoDS_Shape& shape, double defl, const TopTools_DataMapOfShapeInteger& fids) {
     // Drop the previous triangulation: IncrementalMesh does NOT coarsen a mesh that is already finer. So
     // that the STL quality can be chosen exactly (an export may re-tessellate the same body more coarsely),
     // the count starts from nothing.
-    BRepTools::Clean(shape);
+    //
+    // EXCEPT A FLAT FACE BOUNDED BY STRAIGHT EDGES: its triangles are the same at any deflection, so the ones it has
+    // are kept - a body made of a mesh comes with its own, and a face an operation did not touch keeps them after it.
+    for (TopExp_Explorer ex(shape, TopAbs_FACE); ex.More(); ex.Next()) {
+        if (!keeps_its_triangles(TopoDS::Face(ex.Current()))) BRepTools::Clean(ex.Current());
+    }
     // An ANGULAR deflection of 0.3 rad (about 17 deg, at least 21 segments per full turn) instead of the
     // default 0.5 rad (13 segments): otherwise small circles come out faceted EVEN with a tiny linear
     // deflection — on a small radius the linear criterion never fires and the angular one decides
     // everything. Parallel tessellation costs nothing.
+    QymDoc* doc = new QymDoc();
+    for (TopExp_Explorer ex(shape, TopAbs_FACE); ex.More(); ex.Next()) {
+        TopLoc_Location loc;
+        if (BRep_Tool::Triangulation(TopoDS::Face(ex.Current()), loc).IsNull()) doc->faces_meshed += 1;
+    }
     BRepMesh_IncrementalMesh mesher(shape, defl, Standard_False, 0.3, Standard_True);
     mesher.Perform();
-    QymDoc* doc = new QymDoc();
+    // A FACE THAT DID NOT MESH IS A HOLE IN THE BODY - counted here, and tried once more on its own.
+    //
+    // The global pass gives up on a face whose wires it cannot walk (an imported STEP sews faces with a
+    // tolerance of its own, and OCCT then refuses the face), and `add_face` skips it silently. On the reported
+    // engine that showed as a missing band of a cylinder - the background through the part.
+    for (TopExp_Explorer ex(shape, TopAbs_FACE); ex.More(); ex.Next()) {
+        doc->faces_total += 1;
+        TopLoc_Location loc;
+        if (!BRep_Tool::Triangulation(TopoDS::Face(ex.Current()), loc).IsNull()) continue;
+        // ON ITS OWN, AND ALLOWED TO COME OUT WORSE: the whole point is a surface that exists at all. And AT A FINER
+        // STEP when the drawing's one fails: the band of a boss's side left under an R2 rounding of its top (an
+        // imported frame) meshed at 0.01 mm and not at 0.05 or 0.2 - the same step again gave the same hole.
+        for (double finer : {1.0, 0.25, 0.0625, 0.015625}) {
+            try {
+                IMeshTools_Parameters prm;
+                prm.Deflection = defl * finer;
+                prm.Angle = 0.3;
+                prm.Relative = Standard_False;
+                prm.InParallel = Standard_False;
+                prm.AllowQualityDecrease = Standard_True;
+                prm.ControlSurfaceDeflection = Standard_False;
+                BRepMesh_IncrementalMesh one(ex.Current(), prm);
+                one.Perform();
+            } catch (...) {
+                // this step failed; a finer one is tried, and a face none of them meshes is counted below
+            }
+            if (!BRep_Tool::Triangulation(TopoDS::Face(ex.Current()), loc).IsNull()) break;
+        }
+        if (BRep_Tool::Triangulation(TopoDS::Face(ex.Current()), loc).IsNull()) doc->faces_unmeshed += 1;
+    }
     // every solid becomes a body of its own, so it can be selected and hidden in the tree
     for (TopExp_Explorer ex(shape, TopAbs_SOLID); ex.More(); ex.Next()) {
         QymBody b = body_from_shape(ex.Current(), fids);
@@ -307,6 +361,49 @@ void propagate_ids(BRepBuilderAPI_MakeShape& algo, const TopoDS_Shape& a, TopAbs
 //
 // Looking at the CONTOURS ("a hole has touched the edge") is not enough: after the first repair there is
 // one contour, and the pinch is still there — now inside it.
+// The corners of `e` where its curve is straight between them - a line, or a B-spline of degree 1 - in order.
+static bool straight_pieces(const TopoDS_Shape& e, std::vector<gp_Pnt>& at) {
+    double t0 = 0.0, t1 = 0.0;
+    Handle(Geom_Curve) c = BRep_Tool::Curve(TopoDS::Edge(e), t0, t1);
+    if (c.IsNull()) return false;
+    at.clear();
+    if (c->DynamicType() == STANDARD_TYPE(Geom_Line)) {
+        at = {c->Value(t0), c->Value(t1)};
+        return true;
+    }
+    Handle(Geom_BSplineCurve) bs = Handle(Geom_BSplineCurve)::DownCast(c);
+    if (bs.IsNull() || bs->Degree() != 1) return false;
+    at.push_back(c->Value(t0));
+    for (int k = 1; k <= bs->NbKnots(); ++k)
+        if (bs->Knot(k) > t0 && bs->Knot(k) < t1) at.push_back(c->Value(bs->Knot(k)));
+    at.push_back(c->Value(t1));
+    return true;
+}
+
+// The least distance between the pieces p0-p1 and q0-q1.
+static double piece_distance(const gp_Pnt& p0, const gp_Pnt& p1, const gp_Pnt& q0, const gp_Pnt& q1) {
+    const gp_Vec d1(p0, p1), d2(q0, q1), r(q0, p0);
+    const double a = d1.Dot(d1), e = d2.Dot(d2), f = d2.Dot(r);
+    double s = 0.0, t = 0.0;
+    if (a <= 1e-300 && e <= 1e-300) return p0.Distance(q0);
+    if (a <= 1e-300) {
+        t = std::clamp(f / e, 0.0, 1.0);
+    } else {
+        const double c = d1.Dot(r);
+        if (e <= 1e-300) {
+            s = std::clamp(-c / a, 0.0, 1.0);
+        } else {
+            const double b = d1.Dot(d2), den = a * e - b * b;
+            s = den > 1e-300 ? std::clamp((b * f - c * e) / den, 0.0, 1.0) : 0.0;
+            t = (b * s + f) / e;
+            if (t < 0.0) { t = 0.0; s = std::clamp(-c / a, 0.0, 1.0); }
+            else if (t > 1.0) { t = 1.0; s = std::clamp((b - c) / a, 0.0, 1.0); }
+        }
+    }
+    const gp_Pnt x = p0.Translated(d1 * s), y = q0.Translated(d2 * t);
+    return x.Distance(y);
+}
+
 static bool face_is_pinched(const TopoDS_Face& f, double tol) {
     std::vector<TopoDS_Shape> es;
     std::vector<Bnd_Box> bx;
@@ -329,6 +426,25 @@ static bool face_is_pinched(const TopoDS_Face& f, double tol) {
                 for (TopExp_Explorer b(es[j], TopAbs_VERTEX); b.More(); b.Next())
                     if (a.Current().IsSame(b.Current())) { kin = true; break; }
             if (kin) continue;
+            // EDGES STRAIGHT BETWEEN THEIR CORNERS ARE MEASURED PIECE BY PIECE, by the formula: the general distance
+            // search took 3.5 s of a 14.7 s node on the walls of a simplified handle, bounded by the sides of its mesh
+            std::vector<gp_Pnt> pa, pb;
+            if (straight_pieces(es[i], pa) && straight_pieces(es[j], pb)) {
+                for (size_t x = 0; x + 1 < pa.size(); ++x) {
+                    Bnd_Box sa;
+                    sa.Add(pa[x]);
+                    sa.Add(pa[x + 1]);
+                    sa.Enlarge(tol);
+                    if (sa.IsOut(bx[j])) continue;
+                    for (size_t y = 0; y + 1 < pb.size(); ++y) {
+                        Bnd_Box sb;
+                        sb.Add(pb[y]);
+                        sb.Add(pb[y + 1]);
+                        if (!sa.IsOut(sb) && piece_distance(pa[x], pa[x + 1], pb[y], pb[y + 1]) <= tol) return true;
+                    }
+                }
+                continue;
+            }
             BRepExtrema_DistShapeShape d(es[i], es[j]);
             if (d.IsDone() && d.NbSolution() > 0 && d.Value() <= tol) return true;
         }
@@ -443,6 +559,7 @@ int heal_pinched_faces(TopoDS_Shape& shape,
         // chamfer in the wrong place or a fillet of the wrong depth.
         Handle(NCollection_IncAllocator) heap = new NCollection_IncAllocator();
         BOPAlgo_Builder gf(heap);
+        qym_configure(gf);
         for (TopTools_ListIteratorOfListOfShape it(raw); it.More(); it.Next()) gf.AddArgument(it.Value());
         gf.Perform();
         if (gf.HasErrors()) continue;
@@ -458,6 +575,7 @@ int heal_pinched_faces(TopoDS_Shape& shape,
                 if (!uniq.Contains(it.Value())) { intact = false; break; }
 
         BOPAlgo_BuilderFace bf(heap);
+        qym_configure(bf);
         bf.SetFace(TopoDS::Face(f.Oriented(TopAbs_FORWARD)));
         bf.SetShapes(parts);
         bf.Perform();
@@ -657,10 +775,12 @@ static void bind_winner(TopTools_DataMapOfShapeInteger& out, const TopoDS_Shape&
 TopoDS_Shape unify_monolithic(const TopoDS_Shape& in,
                                      TopTools_DataMapOfShapeInteger& fids,
                                      TopTools_DataMapOfShapeInteger& eids,
-                                     std::vector<std::pair<unsigned, unsigned>>* absorbed) {
+                                     std::vector<std::pair<unsigned, unsigned>>* absorbed,
+                                     const TopTools_MapOfShape* keep) {
     if (in.IsNull()) return in;
     try {
         ShapeUpgrade_UnifySameDomain uni(in, Standard_True, Standard_True, Standard_False);
+        if (keep) uni.KeepShapes(*keep); // what the caller needs to stay: the vertices a body had before its seam was moved
         // THE MERGING TOLERANCE: real models carry about 1e-5 of noise (snapping to the tessellation,
         // dragged heights) — "nearly coplanar" walls would not merge, the body was fractured by seams and
         // fillets died. 1e-4 mm is an order of magnitude below any design intent, so only noise merges.
@@ -717,6 +837,7 @@ TopoDS_Shape unify_monolithic(const TopoDS_Shape& in,
 
 extern "C" QymDoc* qym_occt_step_read(const char* path, double defl) {
     try {
+        std::lock_guard<std::mutex> one_at_a_time(xstep_lock());
         STEPControl_Reader reader;
         if (reader.ReadFile(path) != IFSelect_RetDone) return nullptr;
         reader.TransferRoots();
@@ -726,6 +847,1220 @@ extern "C" QymDoc* qym_occt_step_read(const char* path, double defl) {
     } catch (...) {
         return nullptr; // a broken or truncated STEP, or running out of memory: an honest refusal rather than a crash
     }
+}
+
+// AN IGES FILE, READ AS SOLIDS WHERE IT CAN BE.
+//
+// IGES mostly carries trimmed surfaces rather than solids (entity 144; the solid entity 186 is an optional
+// part of the standard), so the reader hands over a bag of faces that meet only within the writer's
+// tolerance. They are sewn into shells, and a shell that closes becomes a solid; one that stays open comes
+// back as the sewn shell, so an open surface model is still shown rather than refused. The result is in
+// millimetres whatever unit the file was written in: `xstep.cascade.unit` is what the reader converts to.
+// ONE IGES AT A TIME, reading or writing. The IGES side of OCCT keeps its state in process-wide statics - the
+// unit it converts to, the controller the writer registers - and two files at once crash the process
+// (measured: four checks reading and writing in parallel died with SIGSEGV; one at a time they passed). An
+// import runs on a worker thread, so two can meet; they queue here instead.
+std::mutex& xstep_lock() {
+    static std::mutex m;
+    return m;
+}
+
+static TopoDS_Shape iges_shape(const char* path) {
+    std::lock_guard<std::mutex> one_at_a_time(xstep_lock());
+    Interface_Static::SetCVal("xstep.cascade.unit", "MM");
+    IGESControl_Reader reader;
+    if (reader.ReadFile(path) != IFSelect_RetDone) return TopoDS_Shape();
+    // WHAT STANDS ON ITS OWN IS TAKEN DIRECTLY, when the file has solids or shells of that kind.
+    //
+    // The reader's roots are what the file groups at the top, and a group is only a list. Measured on a 145 MB
+    // assembly from another CAD: its roots were four groups (entity 402, form 7), and reading through them ran
+    // past thirty minutes on one core without finishing; its 217 independent solids (entity 186) read directly in
+    // 55 s - 217 solids, 30 745 faces, each already in its place (none carries a transform of its own). So when
+    // there are independent solids or shells, every independent visible entity that is geometry is transferred
+    // by itself; what only describes others - a group, a property, a transform, a colour - draws nothing on its
+    // own and is left to the entities that use it. With no such solids or shells the roots are read as before.
+    Handle(IGESData_IGESModel) model = Handle(IGESData_IGESModel)::DownCast(reader.Model());
+    bool has_bodies = false;
+    if (!model.IsNull()) {
+        for (Standard_Integer i = 1; i <= model->NbEntities() && !has_bodies; ++i) {
+            Handle(IGESData_IGESEntity) e = model->Entity(i);
+            has_bodies = (e->TypeNumber() == 186 || e->TypeNumber() == 514) && e->SubordinateStatus() == 0 && e->BlankStatus() == 0;
+        }
+    }
+    if (has_bodies) {
+        for (Standard_Integer i = 1; i <= model->NbEntities(); ++i) {
+            Handle(IGESData_IGESEntity) e = model->Entity(i);
+            const Standard_Integer t = e->TypeNumber();
+            const bool describes_others = t == 402 || t == 406 || t == 124 || t == 314 || t == 312;
+            if (e->SubordinateStatus() == 0 && e->BlankStatus() == 0 && !describes_others) reader.TransferEntity(e);
+        }
+    } else {
+        reader.TransferRoots();
+    }
+    TopoDS_Shape shape = reader.OneShape();
+    if (shape.IsNull() || TopExp_Explorer(shape, TopAbs_SOLID).More()) return shape;
+    // 0.01 mm: the gap a writer's own tolerance leaves between neighbouring surfaces, and far below any feature
+    BRepBuilderAPI_Sewing sew(1.0e-2, Standard_True, Standard_True, Standard_True);
+    for (TopExp_Explorer ex(shape, TopAbs_FACE); ex.More(); ex.Next()) sew.Add(ex.Current());
+    sew.Perform();
+    TopoDS_Shape sewn = sew.SewedShape();
+    if (sewn.IsNull()) return shape;
+    TopoDS_Compound out;
+    BRep_Builder b;
+    b.MakeCompound(out);
+    bool any = false;
+    for (TopExp_Explorer ex(sewn, TopAbs_SHELL); ex.More(); ex.Next()) {
+        const TopoDS_Shell& sh = TopoDS::Shell(ex.Current());
+        TopoDS_Shape piece = sh;
+        if (BRep_Tool::IsClosed(sh)) {
+            ShapeFix_Solid fix;
+            TopoDS_Solid solid = fix.SolidFromShell(sh);
+            if (!solid.IsNull()) piece = solid;
+        }
+        b.Add(out, piece);
+        any = true;
+    }
+    return any ? TopoDS_Shape(out) : sewn;
+}
+
+extern "C" QymDoc* qym_occt_iges_read(const char* path, double defl) {
+    try {
+        TopoDS_Shape shape = iges_shape(path);
+        if (shape.IsNull()) return nullptr;
+        return doc_from_shape(shape, defl);
+    } catch (...) {
+        return nullptr; // a broken file must come back as a refusal, not take the program down
+    }
+}
+
+// A shape per solid, in the order `qym_occt_iges_read` gives its bodies - the same rule as for STEP.
+
+// A NAME AS AN IGES FILE WRITES IT, IN UTF-8. The bytes are UTF-8 when they are valid as that; otherwise they are
+// Windows-1251, the code page the print head of the report is written in - a letter a byte, and the Hollerith
+// counts agree (a seven-letter Cyrillic name written twice, "Name:1 Name:1", is 19H). The occurrence number the writer appends ("Belt:4 Belt:1") is
+// dropped: the name is the text before the first ":<digits>" that ends a word.
+static std::string iges_name(const Handle(TCollection_HAsciiString)& h) {
+    if (h.IsNull()) return std::string();
+    std::string raw = h->ToCString();
+    for (size_t i = 0; i < raw.size(); ++i) {
+        if (raw[i] != ':') continue;
+        size_t j = i + 1;
+        while (j < raw.size() && raw[j] >= '0' && raw[j] <= '9') ++j;
+        if (j > i + 1 && (j == raw.size() || raw[j] == ' ')) {
+            raw.resize(i);
+            break;
+        }
+    }
+    while (!raw.empty() && raw.back() == ' ') raw.pop_back();
+    bool utf8 = true;
+    for (size_t i = 0; i < raw.size() && utf8;) {
+        const unsigned char c = (unsigned char)raw[i];
+        const size_t n = c < 0x80 ? 1 : (c >> 5) == 6 ? 2 : (c >> 4) == 14 ? 3 : (c >> 3) == 30 ? 4 : 0;
+        if (n == 0 || i + n > raw.size()) utf8 = false;
+        for (size_t k = 1; utf8 && k < n; ++k) utf8 = ((unsigned char)raw[i + k] & 0xC0) == 0x80;
+        i += n ? n : 1;
+    }
+    if (utf8) return raw;
+    std::string out;
+    for (const unsigned char c : raw) {
+        // the Cyrillic block of Windows-1251; anything else outside ASCII keeps a stand-in rather than a wrong letter
+        const unsigned cp = c < 0x80 ? c : c >= 0xC0 ? 0x410 + (c - 0xC0) : c == 0xA8 ? 0x401 : c == 0xB8 ? 0x451 : 0xFFFD;
+        if (cp < 0x80) out.push_back((char)cp);
+        else if (cp < 0x800) {
+            out.push_back((char)(0xC0 | (cp >> 6)));
+            out.push_back((char)(0x80 | (cp & 0x3F)));
+        } else {
+            out.push_back((char)(0xE0 | (cp >> 12)));
+            out.push_back((char)(0x80 | ((cp >> 6) & 0x3F)));
+            out.push_back((char)(0x80 | (cp & 0x3F)));
+        }
+    }
+    return out;
+}
+
+// The colour an IGES entity is drawn in, sRGB 0..1: a colour entity (314, its components in percent) or one of the
+// eight numbered colours of the standard.
+static bool iges_colour(const Handle(IGESData_IGESEntity)& e, float rgb[3]) {
+    if (e.IsNull()) return false;
+    if (e->DefColor() == IGESData_DefReference) {
+        Handle(IGESGraph_Color) c = Handle(IGESGraph_Color)::DownCast(e->Color());
+        if (c.IsNull()) return false;
+        Standard_Real r, g, b;
+        c->RGBIntensity(r, g, b);
+        rgb[0] = (float)(r / 100.0);
+        rgb[1] = (float)(g / 100.0);
+        rgb[2] = (float)(b / 100.0);
+        return true;
+    }
+    static const float numbered[8][3] = {{0, 0, 0}, {1, 0, 0}, {0, 1, 0}, {0, 0, 1}, {1, 1, 0}, {1, 0, 1}, {0, 1, 1}, {1, 1, 1}};
+    const Standard_Integer n = e->DefColor() == IGESData_DefValue ? e->RankColor() : 0;
+    if (n < 1 || n > 8) return false;
+    std::copy(numbered[n - 1], numbered[n - 1] + 3, rgb);
+    return true;
+}
+
+// The colour of a solid: its own, or the one most of its faces have. The files of the report colour faces only, and
+// a face of another colour - a thread, a label - is a face of a colour of its own (`iges_face_colours`), not a reason
+// to leave the whole part without one.
+static bool solid_colour(const Handle(IGESData_IGESEntity)& e, float rgb[3]) {
+    if (iges_colour(e, rgb)) return true;
+    Handle(IGESSolid_ManifoldSolid) m = Handle(IGESSolid_ManifoldSolid)::DownCast(e);
+    if (m.IsNull() || m->Shell().IsNull() || m->Shell()->NbFaces() == 0) return false;
+    std::vector<std::pair<std::array<float, 3>, int>> seen;
+    for (Standard_Integer i = 1; i <= m->Shell()->NbFaces(); ++i) {
+        std::array<float, 3> c;
+        if (!iges_colour(m->Shell()->Face(i), c.data())) continue;
+        auto same = std::find_if(seen.begin(), seen.end(), [&](const auto& s) { return std::fabs(s.first[0] - c[0]) + std::fabs(s.first[1] - c[1]) + std::fabs(s.first[2] - c[2]) <= 1e-3f; });
+        if (same == seen.end()) seen.push_back({c, 1});
+        else ++same->second;
+    }
+    if (seen.empty()) return false;
+    const auto most = std::max_element(seen.begin(), seen.end(), [](const auto& a, const auto& b) { return a.second < b.second; });
+    std::copy(most->first.begin(), most->first.end(), rgb);
+    return true;
+}
+
+// The faces of `solid` whose colour in the file differs from the body's `rgb` (every coloured face when the body has
+// none), by the face's persistent id: the number `seeded` gives it - 1..n in the order the explorer meets the faces, a
+// face met twice counted once. A face of the file is found in the body through what the reading made of it.
+static void iges_face_colours(IGESControl_Reader& reader, const Handle(IGESData_IGESEntity)& e, const TopoDS_Shape& solid, const float rgb[3], bool has_rgb, std::vector<std::pair<int, std::array<float, 3>>>& out) {
+    Handle(IGESSolid_ManifoldSolid) m = Handle(IGESSolid_ManifoldSolid)::DownCast(e);
+    if (m.IsNull() || m->Shell().IsNull()) return;
+    TopTools_DataMapOfShapeInteger ids;
+    int next = 1;
+    for (TopExp_Explorer ex(solid, TopAbs_FACE); ex.More(); ex.Next())
+        if (!ids.IsBound(ex.Current())) ids.Bind(ex.Current(), next++);
+    const Handle(Transfer_TransientProcess)& tp = reader.WS()->TransferReader()->TransientProcess();
+    for (Standard_Integer i = 1; i <= m->Shell()->NbFaces(); ++i) {
+        std::array<float, 3> c;
+        if (!iges_colour(m->Shell()->Face(i), c.data())) continue;
+        if (has_rgb && std::fabs(c[0] - rgb[0]) + std::fabs(c[1] - rgb[1]) + std::fabs(c[2] - rgb[2]) <= 1e-3f) continue;
+        const TopoDS_Shape f = TransferBRep::ShapeResult(tp, m->Shell()->Face(i));
+        if (!f.IsNull() && ids.IsBound(f)) out.push_back({ids.Find(f), c});
+    }
+}
+
+// SURFACES SEWN INTO THE BODIES THEY CLOSE, each face in the colour of the surface it came from: sewing gives a face
+// anew, and its history (`Modified`) says which surface it was. A closed shell becomes a solid, an open one stays a
+// shell; each is a node under `parent`, named `name` (numbered when the set sews into several), its colour the one
+// most of its faces have, and the faces of another colour faces of a colour of their own - by the id `seeded` gives
+// them, as `iges_face_colours` counts. 0.01 mm: the gap a writer's own tolerance leaves between surfaces, as in
+// `iges_shape`.
+static void iges_sewn(IGESControl_Reader& reader, const std::vector<Handle(IGESData_IGESEntity)>& members, int64_t parent, const std::string& name, QymTree& tree, std::vector<TopoDS_Shape>& solids) {
+    BRepBuilderAPI_Sewing sew(1.0e-2, Standard_True, Standard_True, Standard_True);
+    std::vector<std::pair<TopoDS_Shape, std::array<float, 3>>> painted;
+    for (const auto& e : members) {
+        std::array<float, 3> c;
+        const bool has = iges_colour(e, c.data());
+        const Standard_Integer before = reader.NbShapes();
+        reader.TransferEntity(e);
+        for (Standard_Integer k = before + 1; k <= reader.NbShapes(); ++k)
+            for (TopExp_Explorer ex(reader.Shape(k), TopAbs_FACE); ex.More(); ex.Next()) {
+                sew.Add(ex.Current());
+                if (has) painted.push_back({ex.Current(), c});
+            }
+    }
+    sew.Perform();
+    const TopoDS_Shape sewn = sew.SewedShape();
+    if (sewn.IsNull()) return;
+    std::vector<std::array<float, 3>> palette;
+    TopTools_DataMapOfShapeInteger colour_of;
+    for (const auto& [f, c] : painted) {
+        const TopoDS_Shape now = sew.IsModified(f) ? sew.Modified(f) : f;
+        palette.push_back(c);
+        colour_of.UnBind(now);
+        colour_of.Bind(now, (int)palette.size() - 1);
+    }
+    std::vector<TopoDS_Shape> pieces;
+    for (TopExp_Explorer ex(sewn, TopAbs_SHELL); ex.More(); ex.Next()) {
+        const TopoDS_Shell& sh = TopoDS::Shell(ex.Current());
+        TopoDS_Shape piece = sh;
+        if (BRep_Tool::IsClosed(sh)) {
+            ShapeFix_Solid fix;
+            TopoDS_Solid solid = fix.SolidFromShell(sh);
+            if (!solid.IsNull()) piece = solid;
+        }
+        pieces.push_back(piece);
+    }
+    if (pieces.empty()) pieces.push_back(sewn); // a lone face sews into no shell
+    const auto same = [](const std::array<float, 3>& a, const std::array<float, 3>& b) { return std::fabs(a[0] - b[0]) + std::fabs(a[1] - b[1]) + std::fabs(a[2] - b[2]) <= 1e-3f; };
+    for (size_t k = 0; k < pieces.size(); ++k) {
+        QymTree::Node node;
+        node.parent = parent;
+        node.name = pieces.size() == 1 || name.empty() ? name : name + " " + std::to_string(k + 1);
+        TopTools_DataMapOfShapeInteger ids;
+        int next = 1;
+        std::vector<std::pair<int, std::array<float, 3>>> coloured;
+        for (TopExp_Explorer ex(pieces[k], TopAbs_FACE); ex.More(); ex.Next()) {
+            if (ids.IsBound(ex.Current())) continue;
+            ids.Bind(ex.Current(), next);
+            if (colour_of.IsBound(ex.Current())) coloured.push_back({next, palette[colour_of.Find(ex.Current())]});
+            ++next;
+        }
+        std::vector<std::pair<std::array<float, 3>, int>> seen;
+        for (const auto& ic : coloured) {
+            const std::array<float, 3>& c = ic.second; // a plain reference: a lambda may not take a structured binding before C++20
+            auto s = std::find_if(seen.begin(), seen.end(), [&](const auto& p) { return same(p.first, c); });
+            if (s == seen.end()) seen.push_back({c, 1});
+            else ++s->second;
+        }
+        if (!seen.empty()) {
+            const auto most = std::max_element(seen.begin(), seen.end(), [](const auto& a, const auto& b) { return a.second < b.second; });
+            std::copy(most->first.begin(), most->first.end(), node.rgb);
+            node.has_color = true;
+            for (const auto& [id, c] : coloured)
+                if (!same(c, most->first)) node.faces.push_back({id, c});
+        }
+        solids.push_back(pieces[k]);
+        node.solid = (int64_t)solids.size() - 1;
+        tree.nodes.push_back(node);
+    }
+}
+
+// One instance of a subfigure (408) and what its definition (308) holds. A definition met before is not read again
+// when it holds bodies: its instance repeats the first one's, as a repeated STEP product does; one that holds
+// instances is walked again, so the parts under it come as repeats themselves.
+static void iges_walk(IGESControl_Reader& reader, const Handle(IGESBasic_SingularSubfigure)& inst, int64_t parent, QymTree& tree, std::vector<TopoDS_Shape>& solids, std::map<const Standard_Transient*, int64_t>& first) {
+    const Handle(IGESBasic_SubfigureDef) def = inst->Subfigure();
+    QymTree::Node node;
+    node.parent = parent;
+    // THE PRODUCT'S NAME IS ON ITS DEFINITION. The name property of an instance (406) names the assembly the
+    // instance stands in, not its own product: in the print head of the report all eight instances at the top carry
+    // "Condor Condor v108" and their definitions the names of the eight subassemblies. Taken first, it named every part after its
+    // assembly. It stands in only when the definition has no name.
+    node.name = def.IsNull() ? std::string() : iges_name(def->Name());
+    if (node.name.empty() && inst->HasName()) node.name = iges_name(inst->NameValue());
+    // the placement: the instance's translation and scale, then its own transformation matrix, composed as 3x4
+    // numbers. Not through a rigid transform: a matrix written with rounding is not exactly orthogonal, and OCCT
+    // refuses such a one as a rigid transform with an exception that ended the whole reading.
+    const double k = inst->HasScaleFactor() ? inst->ScaleFactor() : 1.0;
+    const gp_XYZ tr = inst->Translation();
+    const double local[12] = {k, 0, 0, tr.X(), 0, k, 0, tr.Y(), 0, 0, k, tr.Z()};
+    std::copy(local, local + 12, node.place);
+    if (inst->HasTransf()) {
+        const gp_GTrsf g = inst->CompoundLocation();
+        for (int r = 0; r < 3; ++r)
+            for (int c = 0; c < 4; ++c) {
+                double v = c == 3 ? g.Value(r + 1, 4) : 0.0;
+                for (int j = 0; j < 3; ++j) v += g.Value(r + 1, j + 1) * local[j * 4 + c];
+                node.place[r * 4 + c] = v;
+            }
+    }
+    node.has_color = iges_colour(inst, node.rgb);
+    const int64_t at = (int64_t)tree.nodes.size();
+    tree.nodes.push_back(node);
+    if (def.IsNull()) return;
+    std::vector<Handle(IGESData_IGESEntity)> bodies;
+    std::vector<Handle(IGESBasic_SingularSubfigure)> inner;
+    for (Standard_Integer i = 1; i <= def->NbEntities(); ++i) {
+        const Handle(IGESData_IGESEntity) e = def->AssociatedEntity(i);
+        if (e.IsNull()) continue;
+        const Handle(IGESBasic_SingularSubfigure) sub = Handle(IGESBasic_SingularSubfigure)::DownCast(e);
+        if (!sub.IsNull()) inner.push_back(sub);
+        else if (e->TypeNumber() == 186 || e->TypeNumber() == 514) bodies.push_back(e);
+    }
+    for (const auto& sub : inner) iges_walk(reader, sub, at, tree, solids, first);
+    if (bodies.empty()) return;
+    const auto seen = first.find(def.get());
+    if (seen != first.end()) {
+        // a repeat: every body of the first instance, in order, as a repeat of its own
+        const int64_t was = seen->second;
+        if (tree.nodes[was].solid >= 0 && inner.empty()) {
+            tree.nodes[at].repeat_of = tree.nodes[was].solid;
+            if (!tree.nodes[at].has_color && tree.nodes[was].has_color) {
+                tree.nodes[at].has_color = true;
+                std::copy(tree.nodes[was].rgb, tree.nodes[was].rgb + 3, tree.nodes[at].rgb);
+            }
+            return;
+        }
+        const size_t count = tree.nodes.size();
+        for (size_t j = 0; j < count; ++j) {
+            if (tree.nodes[j].parent != was || tree.nodes[j].solid < 0) continue;
+            QymTree::Node piece = tree.nodes[j];
+            piece.parent = at;
+            piece.repeat_of = piece.solid;
+            piece.solid = -1;
+            tree.nodes.push_back(piece);
+        }
+        return;
+    }
+    first[def.get()] = at;
+    // every body in the definition's own coordinates: an entity transferred by itself carries only its own
+    // transformation, not the instance's
+    std::vector<std::pair<TopoDS_Shape, Handle(IGESData_IGESEntity)>> own;
+    for (const auto& e : bodies) {
+        const Standard_Integer before = reader.NbShapes();
+        reader.TransferEntity(e);
+        for (Standard_Integer k = before + 1; k <= reader.NbShapes(); ++k)
+            for (TopExp_Explorer ex(reader.Shape(k), TopAbs_SOLID); ex.More(); ex.Next()) own.emplace_back(ex.Current(), e);
+    }
+    if (own.size() == 1 && inner.empty()) {
+        solids.push_back(own[0].first);
+        tree.nodes[at].solid = (int64_t)solids.size() - 1;
+        if (!tree.nodes[at].has_color) tree.nodes[at].has_color = solid_colour(own[0].second, tree.nodes[at].rgb);
+        iges_face_colours(reader, own[0].second, own[0].first, tree.nodes[at].rgb, tree.nodes[at].has_color, tree.nodes[at].faces);
+        return;
+    }
+    for (size_t k = 0; k < own.size(); ++k) {
+        QymTree::Node piece;
+        piece.parent = at;
+        piece.name = node.name + " " + std::to_string(k + 1);
+        solids.push_back(own[k].first);
+        piece.solid = (int64_t)solids.size() - 1;
+        piece.has_color = solid_colour(own[k].second, piece.rgb);
+        iges_face_colours(reader, own[k].second, own[k].first, piece.rgb, piece.has_color, piece.faces);
+        tree.nodes.push_back(piece);
+    }
+}
+
+// A NAME AN ENTITY CARRIES AS A NAME PROPERTY (406, form 15), decoded as `iges_name` decodes it. The short label of
+// the directory entry is not taken: writers put the entity's type there ("MSBO"), and a part called so says less
+// than the file's name with a number.
+static std::string iges_own_name(const Handle(IGESData_IGESEntity)& e) {
+    Interface_EntityIterator props = e->Properties();
+    for (props.Start(); props.More(); props.Next()) {
+        const Handle(IGESBasic_Name) n = Handle(IGESBasic_Name)::DownCast(props.Value());
+        if (!n.IsNull()) return iges_name(n->Value());
+    }
+    return std::string();
+}
+
+// A FLAT IGES FILE: no subfigure instances, but solids (186) standing on their own - an assembly as a CAD that writes
+// no subfigures lays it out. Every solid is a node of its own, under its name property, in its colour and its faces'
+// colours, where the file puts it; a group (402) the author made is a subassembly holding what it lists, and a group
+// listed in another stands under it. A member of a group is logically dependent on it (status 2) and still a body of
+// its own; only a physically dependent entity (1, 3) is a part of another. Surfaces and open shells (514) standing on
+// their own are sewn by the group that lists them (`iges_sewn`): the bodies they close come under the group's name,
+// each face in the colour of its surface.
+static bool iges_flat(IGESControl_Reader& reader, const Handle(IGESData_IGESModel)& model, QymTree& tree, std::vector<TopoDS_Shape>& solids) {
+    static const Standard_Integer loose_types[] = {514, 144, 143, 128, 108, 114, 118, 120, 122, 140, 190, 192, 194, 196, 198};
+    const auto is_loose = [&](const Handle(IGESData_IGESEntity)& e) { return !e.IsNull() && std::find(std::begin(loose_types), std::end(loose_types), e->TypeNumber()) != std::end(loose_types); };
+    std::vector<Handle(IGESData_IGESEntity)> bodies, loose;
+    std::vector<Handle(IGESBasic_Group)> groups;
+    for (Standard_Integer i = 1; i <= model->NbEntities(); ++i) {
+        const Handle(IGESData_IGESEntity) e = model->Entity(i);
+        const Standard_Integer dep = e->SubordinateStatus();
+        if (dep == 1 || dep == 3 || e->BlankStatus() != 0) continue;
+        if (is_loose(e)) {
+            loose.push_back(e);
+            continue;
+        }
+        if (e->TypeNumber() == 186) bodies.push_back(e);
+        const Handle(IGESBasic_Group) g = Handle(IGESBasic_Group)::DownCast(e);
+        if (!g.IsNull()) groups.push_back(g);
+    }
+    if (bodies.empty() && loose.empty()) return false;
+    // the group each body and each group stands in: the first that lists it
+    std::map<const Standard_Transient*, Handle(IGESBasic_Group)> within;
+    for (const auto& g : groups)
+        for (Standard_Integer k = 1; k <= g->NbEntities(); ++k) {
+            const Handle(IGESData_IGESEntity) m = g->Entity(k);
+            if (!m.IsNull() && !within.count(m.get())) within[m.get()] = g;
+        }
+    // a group's node, made when the first body under it is met; -2 while it is being made, so a group that lists
+    // itself, directly or not, stands at the top instead of going round
+    std::map<const Standard_Transient*, int64_t> made;
+    std::function<int64_t(const Handle(IGESBasic_Group)&)> node_of = [&](const Handle(IGESBasic_Group)& g) -> int64_t {
+        const auto was = made.find(g.get());
+        if (was != made.end()) return was->second < 0 ? -1 : was->second;
+        made[g.get()] = -2;
+        const auto up = within.find(g.get());
+        QymTree::Node node;
+        node.parent = up == within.end() ? -1 : node_of(up->second);
+        node.name = iges_own_name(g);
+        node.has_color = iges_colour(g, node.rgb);
+        tree.nodes.push_back(node);
+        return made[g.get()] = (int64_t)tree.nodes.size() - 1;
+    };
+    for (const auto& e : bodies) {
+        const auto up = within.find(e.get());
+        const int64_t parent = up == within.end() ? -1 : node_of(up->second);
+        const std::string name = iges_own_name(e);
+        const Standard_Integer before = reader.NbShapes();
+        reader.TransferEntity(e);
+        std::vector<TopoDS_Shape> own;
+        for (Standard_Integer k = before + 1; k <= reader.NbShapes(); ++k)
+            for (TopExp_Explorer ex(reader.Shape(k), TopAbs_SOLID); ex.More(); ex.Next()) own.push_back(ex.Current());
+        for (size_t k = 0; k < own.size(); ++k) {
+            QymTree::Node node;
+            node.parent = parent;
+            node.name = own.size() == 1 || name.empty() ? name : name + " " + std::to_string(k + 1);
+            solids.push_back(own[k]);
+            node.solid = (int64_t)solids.size() - 1;
+            node.has_color = solid_colour(e, node.rgb);
+            iges_face_colours(reader, e, own[k], node.rgb, node.has_color, node.faces);
+            tree.nodes.push_back(node);
+        }
+    }
+    // THE SURFACES, BY THE GROUP THAT LISTS THEM. A group of surfaces alone is a part: its bodies take its name and
+    // stand where it stands. A group that lists other things too is a subassembly, and its surfaces' bodies stand in
+    // it under its name. Surfaces no group lists are sewn together, as the whole file was before.
+    std::vector<std::pair<Handle(IGESBasic_Group), std::vector<Handle(IGESData_IGESEntity)>>> sets;
+    for (const auto& e : loose) {
+        const auto up = within.find(e.get());
+        const Handle(IGESBasic_Group) g = up == within.end() ? Handle(IGESBasic_Group)() : up->second;
+        auto s = std::find_if(sets.begin(), sets.end(), [&](const auto& p) { return p.first == g; });
+        if (s == sets.end()) {
+            sets.push_back({g, {}});
+            s = sets.end() - 1;
+        }
+        s->second.push_back(e);
+    }
+    for (const auto& [g, members] : sets) {
+        int64_t parent = -1;
+        std::string name;
+        if (!g.IsNull()) {
+            name = iges_own_name(g);
+            bool surfaces_alone = true;
+            for (Standard_Integer k = 1; k <= g->NbEntities() && surfaces_alone; ++k) surfaces_alone = is_loose(g->Entity(k));
+            const auto up = within.find(g.get());
+            parent = !surfaces_alone ? node_of(g) : up == within.end() ? -1 : node_of(up->second);
+        }
+        iges_sewn(reader, members, parent, name, tree, solids);
+    }
+    return !solids.empty();
+}
+
+// THE TREE OF AN IGES FILE THAT HOLDS ONE: subfigure definitions (308) are the products, their singular instances
+// (408) the occurrences. Measured on the print head of the report: 79 definitions, 110 instances, 70 solids - the
+// tree its STEP holds. A file with no instance standing on its own is read flat (`iges_flat`), or as before.
+bool iges_tree(const char* path, QymTree& tree, std::vector<TopoDS_Shape>& solids) {
+    std::lock_guard<std::mutex> one_at_a_time(xstep_lock());
+    Interface_Static::SetCVal("xstep.cascade.unit", "MM");
+    IGESControl_Reader reader;
+    if (reader.ReadFile(path) != IFSelect_RetDone) return false;
+    const Handle(IGESData_IGESModel) model = Handle(IGESData_IGESModel)::DownCast(reader.Model());
+    if (model.IsNull()) return false;
+    std::vector<Handle(IGESBasic_SingularSubfigure)> tops;
+    for (Standard_Integer i = 1; i <= model->NbEntities(); ++i) {
+        const Handle(IGESData_IGESEntity) e = model->Entity(i);
+        if (e->TypeNumber() == 408 && e->SubordinateStatus() == 0 && e->BlankStatus() == 0) tops.push_back(Handle(IGESBasic_SingularSubfigure)::DownCast(e));
+    }
+    if (tops.empty()) return iges_flat(reader, model, tree, solids);
+    std::map<const Standard_Transient*, int64_t> first;
+    for (const auto& t : tops)
+        if (!t.IsNull()) iges_walk(reader, t, -1, tree, solids, first);
+    return !solids.empty();
+}
+
+extern "C" QymShapeList* qym_iges_solids(const char* path) {
+    try {
+        // the same reading the import makes, so solid k is the body the document knows as k
+        {
+            QymTree tree;
+            QymShapeList* lst = new QymShapeList();
+            if (iges_tree(path, tree, lst->shapes)) return lst;
+            delete lst;
+        }
+        TopoDS_Shape shape = iges_shape(path);
+        if (shape.IsNull()) return nullptr;
+        QymShapeList* lst = new QymShapeList();
+        for (TopExp_Explorer ex(shape, TopAbs_SOLID); ex.More(); ex.Next()) lst->shapes.push_back(ex.Current());
+        if (lst->shapes.empty()) lst->shapes.push_back(shape);
+        return lst;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+// Write `n` shapes, each with its own 3x4 world transform (row-major, or nullptr for identity), into ONE IGES
+// file in `unit` ("MM" or "IN"; the coordinates are converted, the model itself is in millimetres). Faces mode:
+// trimmed surfaces, the writer's default and the kind every IGES reader handles. 0 means success.
+extern "C" int qym_iges_write(const QymShape** shapes, const double* mats, size_t n, const char* path, const char* unit) {
+    try {
+        std::lock_guard<std::mutex> one_at_a_time(xstep_lock());
+        IGESControl_Controller::Init();
+        IGESControl_Writer writer(unit, 0);
+        for (size_t i = 0; i < n; ++i) {
+            if (!shapes[i] || shapes[i]->shape.IsNull()) continue;
+            TopoDS_Shape s = shapes[i]->shape;
+            if (mats) {
+                const double* m = mats + i * 12;
+                gp_Trsf t;
+                t.SetValues(m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], m[9], m[10], m[11]);
+                s = BRepBuilderAPI_Transform(s, t, true).Shape();
+            }
+            if (!writer.AddShape(s)) return 2;
+        }
+        writer.ComputeModel();
+        return writer.Write(path) ? 0 : 1;
+    } catch (...) {
+        return 3;
+    }
+}
+
+// AN EXACT FILE READ ONCE: the bodies to show and the live solids come from the same reading.
+//
+// The door used to read the file twice - once for the meshes, once for the live solids - and on a big file that
+// is the whole wait twice over (measured on a 145 MB IGES assembly: the first reading alone ran past six minutes
+// on one core). `format` is 0 for STEP, 1 for IGES. The solids are listed in the order the bodies are, both
+// taken from the same shape: a shape per solid, or the whole shape when there is none.
+// A STEP FILE READ WITH ITS STRUCTURE, through the document machinery (XCAF) rather than as one shape.
+//
+// Reported behaviour: a print head from STEP came in as a flat list "Condor 1 ... 47" - no subassemblies, no names,
+// no colours - where another CAD laid it out as its author built it. The plain reader flattened the file into one
+// shape and dropped the product names, the tree and the styles on the way in; everything was in the file (80
+// products, 110 occurrences, 16 colours on that head).
+//
+// The tree is walked from the free shapes: an occurrence gives a node with the name of the product it refers to,
+// its placement in the parent and its colour (on the occurrence, on the product, or on the solid); an assembly goes
+// on down; a part puts its solids into the list, moved to where the file places them. The solids therefore come in
+// the order the tree meets them, and the reopening of a document reads them the same way (`qym_step_solids`), so a
+// body's number in its source stays right. The document machinery keeps state of its own, so one file at a time.
+// (one file at a time under `xstep_lock`, the lock IGES holds too)
+
+// What the kernel's own writer calls a product it was given no name for: "... STEP translator 7.9 1". That is no
+// name of the author's, so it reads as none and the part is named after its file, as a part of an unnamed file is.
+static const char* const WRITER_STAND_IN = "Open CASCADE STEP translator";
+
+static std::string name_of(const TDF_Label& l) {
+    Handle(TDataStd_Name) n;
+    if (l.IsNull() || !l.FindAttribute(TDataStd_Name::GetID(), n)) return std::string();
+    std::string s = TCollection_AsciiString(n->Get()).ToCString(); // an extended string goes to UTF-8 when no stand-in is given
+    return s.rfind(WRITER_STAND_IN, 0) == 0 ? std::string() : s;
+}
+
+static bool sRGB(const Quantity_Color& c, float rgb[3]) {
+    Standard_Real r, g, b;
+    c.Values(r, g, b, Quantity_TOC_sRGB);
+    rgb[0] = (float)r;
+    rgb[1] = (float)g;
+    rgb[2] = (float)b;
+    return true;
+}
+
+static bool colour_of(const Handle(XCAFDoc_ColorTool)& ct, const TDF_Label& l, float rgb[3]) {
+    Quantity_Color c;
+    if (l.IsNull()) return false;
+    if (ct->GetColor(l, XCAFDoc_ColorSurf, c) || ct->GetColor(l, XCAFDoc_ColorGen, c)) return sRGB(c, rgb);
+    return false;
+}
+
+static bool colour_of(const Handle(XCAFDoc_ColorTool)& ct, const TopoDS_Shape& s, float rgb[3]) {
+    Quantity_Color c;
+    if (ct->GetColor(s, XCAFDoc_ColorSurf, c) || ct->GetColor(s, XCAFDoc_ColorGen, c)) return sRGB(c, rgb);
+    return false;
+}
+
+// The colours the file gives single faces of `solid`, by the face's persistent id: the number `seeded` gives the face
+// when the body is wrapped - 1..n in the order the explorer meets the faces, a face met twice counted once.
+static void face_colours(const Handle(XCAFDoc_ColorTool)& ct, const TopoDS_Shape& solid, std::vector<std::pair<int, std::array<float, 3>>>& out) {
+    TopTools_MapOfShape seen;
+    int id = 0;
+    for (TopExp_Explorer ex(solid, TopAbs_FACE); ex.More(); ex.Next()) {
+        if (!seen.Add(ex.Current())) continue;
+        ++id;
+        std::array<float, 3> rgb;
+        if (colour_of(ct, ex.Current(), rgb.data())) out.push_back({id, rgb});
+    }
+}
+
+// A body stays in the coordinates of its own product and the tree places it: a body baked into the world where it
+// stands could not be moved or mated as a part.
+static void walk(const Handle(XCAFDoc_ColorTool)& ct, const TDF_Label& label, int64_t parent, QymTree& tree, std::vector<TopoDS_Shape>& solids, std::map<std::string, int64_t>& first) {
+    TDF_Label product = label;
+    TopLoc_Location loc;
+    if (XCAFDoc_ShapeTool::IsReference(label)) {
+        XCAFDoc_ShapeTool::GetReferredShape(label, product);
+        loc = XCAFDoc_ShapeTool::GetLocation(label);
+    }
+    QymTree::Node node;
+    node.parent = parent;
+    node.name = name_of(product);
+    if (node.name.empty()) node.name = name_of(label);
+    const gp_Trsf t = loc.Transformation();
+    for (int r = 0; r < 3; ++r)
+        for (int c = 0; c < 4; ++c) node.place[r * 4 + c] = t.Value(r + 1, c + 1);
+    node.has_color = colour_of(ct, label, node.rgb) || colour_of(ct, product, node.rgb);
+    const int64_t at = (int64_t)tree.nodes.size();
+    tree.nodes.push_back(node);
+    if (XCAFDoc_ShapeTool::IsAssembly(product)) {
+        TDF_LabelSequence parts;
+        XCAFDoc_ShapeTool::GetComponents(product, parts);
+        for (Standard_Integer i = 1; i <= parts.Length(); ++i) walk(ct, parts.Value(i), at, tree, solids, first);
+        return;
+    }
+    // A PRODUCT MET BEFORE IS NOT READ AGAIN. The file holds it once and places it several times; its occurrence
+    // repeats the body of the first one - a part with several bodies, each of its pieces in turn - so the document
+    // can bring it in as a clone of the same part rather than as a copy.
+    TCollection_AsciiString entry;
+    TDF_Tool::Entry(product, entry);
+    const auto seen = first.find(entry.ToCString());
+    if (seen != first.end()) {
+        const int64_t was = seen->second;
+        if (tree.nodes[was].solid >= 0) {
+            tree.nodes[at].repeat_of = tree.nodes[was].solid;
+            if (!tree.nodes[at].has_color && tree.nodes[was].has_color) {
+                tree.nodes[at].has_color = true;
+                std::copy(tree.nodes[was].rgb, tree.nodes[was].rgb + 3, tree.nodes[at].rgb);
+            }
+            return;
+        }
+        const size_t count = tree.nodes.size();
+        for (size_t j = 0; j < count; ++j) {
+            if (tree.nodes[j].parent != was || tree.nodes[j].solid < 0) continue;
+            QymTree::Node piece = tree.nodes[j];
+            piece.parent = at;
+            piece.repeat_of = piece.solid;
+            piece.solid = -1;
+            tree.nodes.push_back(piece);
+        }
+        return;
+    }
+    first[entry.ToCString()] = at;
+    const TopoDS_Shape shape = XCAFDoc_ShapeTool::GetShape(product);
+    std::vector<TopoDS_Shape> own;
+    for (TopExp_Explorer ex(shape, TopAbs_SOLID); ex.More(); ex.Next()) own.push_back(ex.Current());
+    if (own.empty() && !shape.IsNull()) own.push_back(shape);
+    if (own.size() == 1) {
+        solids.push_back(own[0]);
+        tree.nodes[at].solid = (int64_t)solids.size() - 1;
+        if (!tree.nodes[at].has_color) tree.nodes[at].has_color = colour_of(ct, own[0], tree.nodes[at].rgb);
+        face_colours(ct, own[0], tree.nodes[at].faces);
+        return;
+    }
+    // a part of several bodies: each its own node under the part, numbered
+    for (size_t k = 0; k < own.size(); ++k) {
+        QymTree::Node piece;
+        piece.parent = at;
+        piece.name = node.name + " " + std::to_string(k + 1);
+        solids.push_back(own[k]);
+        piece.solid = (int64_t)solids.size() - 1;
+        piece.has_color = colour_of(ct, own[k], piece.rgb);
+        face_colours(ct, own[k], piece.faces);
+        if (!piece.has_color && node.has_color) {
+            piece.has_color = true;
+            std::copy(node.rgb, node.rgb + 3, piece.rgb);
+        }
+        tree.nodes.push_back(piece);
+    }
+}
+
+bool step_tree(const char* path, QymTree& tree, std::vector<TopoDS_Shape>& solids) {
+    std::lock_guard<std::mutex> one_at_a_time(xstep_lock());
+    Interface_Static::SetCVal("xstep.cascade.unit", "MM");
+    Handle(XCAFApp_Application) app = XCAFApp_Application::GetApplication();
+    Handle(TDocStd_Document) doc;
+    app->NewDocument("MDTV-XCAF", doc);
+    STEPCAFControl_Reader reader;
+    reader.SetNameMode(true);
+    reader.SetColorMode(true);
+    reader.SetLayerMode(false);
+    if (reader.ReadFile(path) == IFSelect_RetDone && reader.Transfer(doc)) {
+        Handle(XCAFDoc_ColorTool) ct = XCAFDoc_DocumentTool::ColorTool(doc->Main());
+        TDF_LabelSequence roots;
+        XCAFDoc_DocumentTool::ShapeTool(doc->Main())->GetFreeShapes(roots);
+        std::map<std::string, int64_t> first; // the node of each product's first occurrence, by its label
+        for (Standard_Integer i = 1; i <= roots.Length(); ++i) walk(ct, roots.Value(i), -1, tree, solids, first);
+    }
+    app->Close(doc);
+    return !solids.empty();
+}
+
+// A TREE WRITTEN AS A STEP ASSEMBLY: every node a product - a part with its solid, its name and its colour, a
+// subassembly with its name - and every node under a parent an occurrence of its product in its place. A node that
+// repeats an earlier one (`same_as`) places that one's product again, so the file holds a clone's product once.
+// The nodes come parents first; the arrays are parallel, one entry per node.
+extern "C" int qym_step_write_tree(size_t n, const int64_t* parents, const char* const* names, const double* places, const QymShape* const* shapes, const int64_t* same_as, const float* rgb, const int* has_rgb, const size_t* face_starts, const uint32_t* face_ids, const float* face_rgb, const char* path) {
+    if (n == 0 || !parents || !names || !places || !shapes || !same_as || !rgb || !has_rgb || !face_starts || !path) return 4;
+    std::lock_guard<std::mutex> one_at_a_time(xstep_lock());
+    Handle(XCAFApp_Application) app = XCAFApp_Application::GetApplication();
+    Handle(TDocStd_Document) doc;
+    try {
+        Interface_Static::SetCVal("write.step.unit", "MM");
+        app->NewDocument("MDTV-XCAF", doc);
+        Handle(XCAFDoc_ShapeTool) st = XCAFDoc_DocumentTool::ShapeTool(doc->Main());
+        Handle(XCAFDoc_ColorTool) ct = XCAFDoc_DocumentTool::ColorTool(doc->Main());
+        std::vector<TDF_Label> product(n);
+        for (size_t i = 0; i < n; ++i) {
+            if (same_as[i] >= 0 && (size_t)same_as[i] < i) {
+                product[i] = product[same_as[i]];
+                continue;
+            }
+            if (shapes[i] && !shapes[i]->shape.IsNull()) {
+                product[i] = st->AddShape(shapes[i]->shape, Standard_False);
+                if (has_rgb[i]) ct->SetColor(product[i], Quantity_Color(rgb[3 * i], rgb[3 * i + 1], rgb[3 * i + 2], Quantity_TOC_sRGB), XCAFDoc_ColorSurf);
+                // FACES OF A COLOUR OF THEIR OWN: found by their persistent id in the live body, coloured as its sub-shapes
+                if (face_starts[i + 1] > face_starts[i]) {
+                    std::map<int, TopoDS_Shape> by_id;
+                    for (TopTools_DataMapIteratorOfDataMapOfShapeInteger it(shapes[i]->fids); it.More(); it.Next()) by_id[it.Value()] = it.Key();
+                    for (size_t k = face_starts[i]; k < face_starts[i + 1]; ++k) {
+                        const auto f = by_id.find((int)face_ids[k]);
+                        if (f == by_id.end()) continue;
+                        const TDF_Label sub = st->AddSubShape(product[i], f->second);
+                        if (!sub.IsNull()) ct->SetColor(sub, Quantity_Color(face_rgb[3 * k], face_rgb[3 * k + 1], face_rgb[3 * k + 2], Quantity_TOC_sRGB), XCAFDoc_ColorSurf);
+                    }
+                }
+            } else {
+                product[i] = st->NewShape();
+            }
+            TDataStd_Name::Set(product[i], TCollection_ExtendedString(names[i], Standard_True));
+        }
+        for (size_t i = 0; i < n; ++i) {
+            if (parents[i] < 0 || (size_t)parents[i] >= i) continue;
+            const double* m = places + 12 * i;
+            gp_Trsf t;
+            t.SetValues(m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], m[9], m[10], m[11]);
+            const TDF_Label occurrence = st->AddComponent(product[parents[i]], product[i], TopLoc_Location(t));
+            TDataStd_Name::Set(occurrence, TCollection_ExtendedString(names[i], Standard_True));
+        }
+        st->UpdateAssemblies();
+        STEPCAFControl_Writer writer;
+        writer.SetNameMode(Standard_True);
+        writer.SetColorMode(Standard_True);
+        int rc = 2;
+        if (writer.Transfer(doc, STEPControl_AsIs)) rc = writer.Write(path) == IFSelect_RetDone ? 0 : 1;
+        app->Close(doc);
+        return rc;
+    } catch (...) {
+        if (!doc.IsNull()) app->Close(doc);
+        return 3;
+    }
+}
+
+// An exact file read into bodies and solids, and - for STEP - the tree they stand in (`tree_out` may be null).
+extern "C" int qym_exact_read_tree(int format, const char* path, double defl, QymDoc** doc_out, QymShapeList** solids_out, QymTree** tree_out) {
+    if (!doc_out || !solids_out) return 4;
+    *doc_out = nullptr;
+    *solids_out = nullptr;
+    if (tree_out) *tree_out = nullptr;
+    try {
+        QymShapeList* lst = new QymShapeList();
+        TopoDS_Shape shape;
+        QymTree* iges = format == 1 ? new QymTree() : nullptr;
+        if (iges && iges_tree(path, *iges, lst->shapes)) {
+            TopoDS_Compound all;
+            BRep_Builder b;
+            b.MakeCompound(all);
+            for (const TopoDS_Shape& s : lst->shapes) b.Add(all, s);
+            shape = all;
+            if (tree_out) *tree_out = iges;
+            else delete iges;
+        } else if (format == 1) {
+            delete iges;
+            shape = iges_shape(path);
+            if (shape.IsNull()) {
+                delete lst;
+                return 2;
+            }
+            for (TopExp_Explorer ex(shape, TopAbs_SOLID); ex.More(); ex.Next()) lst->shapes.push_back(ex.Current());
+            if (lst->shapes.empty()) lst->shapes.push_back(shape);
+        } else {
+            QymTree* tree = new QymTree();
+            if (!step_tree(path, *tree, lst->shapes)) {
+                delete tree;
+                delete lst;
+                return 1;
+            }
+            // the document is tessellated from the solids in the list's own order, so body k is solid k
+            TopoDS_Compound all;
+            BRep_Builder b;
+            b.MakeCompound(all);
+            for (const TopoDS_Shape& s : lst->shapes) b.Add(all, s);
+            shape = all;
+            if (tree_out) *tree_out = tree;
+            else delete tree;
+        }
+        *doc_out = doc_from_shape(shape, defl);
+        *solids_out = lst;
+        return *doc_out ? 0 : 3;
+    } catch (...) {
+        return 3; // a broken file comes back as a refusal, not a crash
+    }
+}
+
+extern "C" int qym_exact_read(int format, const char* path, double defl, QymDoc** doc_out, QymShapeList** solids_out) {
+    return qym_exact_read_tree(format, path, defl, doc_out, solids_out, nullptr);
+}
+
+extern "C" size_t qym_tree_count(const QymTree* t) { return t ? t->nodes.size() : 0; }
+extern "C" int64_t qym_tree_parent(const QymTree* t, size_t i) { return t && i < t->nodes.size() ? t->nodes[i].parent : -1; }
+extern "C" const char* qym_tree_name(const QymTree* t, size_t i) { return t && i < t->nodes.size() ? t->nodes[i].name.c_str() : ""; }
+extern "C" void qym_tree_place(const QymTree* t, size_t i, double* out) {
+    if (t && out && i < t->nodes.size()) std::copy(t->nodes[i].place, t->nodes[i].place + 12, out);
+}
+extern "C" int64_t qym_tree_solid(const QymTree* t, size_t i) { return t && i < t->nodes.size() ? t->nodes[i].solid : -1; }
+extern "C" int64_t qym_tree_repeat_of(const QymTree* t, size_t i) { return t && i < t->nodes.size() ? t->nodes[i].repeat_of : -1; }
+extern "C" int qym_tree_color(const QymTree* t, size_t i, float* out) {
+    if (!t || !out || i >= t->nodes.size() || !t->nodes[i].has_color) return 0;
+    std::copy(t->nodes[i].rgb, t->nodes[i].rgb + 3, out);
+    return 1;
+}
+// The colours the file gives single faces of node `i`'s body: up to `cap` of them, the face's persistent id into `ids`
+// and its sRGB into `rgb`, three to a face. The count is returned whatever `cap` is.
+extern "C" size_t qym_tree_face_colours(const QymTree* t, size_t i, uint32_t* ids, float* rgb, size_t cap) {
+    if (!t || i >= t->nodes.size()) return 0;
+    const auto& f = t->nodes[i].faces;
+    for (size_t k = 0; ids && rgb && k < f.size() && k < cap; ++k) {
+        ids[k] = (uint32_t)f[k].first;
+        std::copy(f[k].second.begin(), f[k].second.end(), rgb + 3 * k);
+    }
+    return f.size();
+}
+extern "C" void qym_tree_free(QymTree* t) { delete t; }
+
+// A TRIANGLE MESH TURNED INTO A BODY: a flat face per triangle, sewn, closed into a solid where the shell closes,
+// and neighbours lying in one plane merged into one face.
+//
+// This is the quick way to a body a person can cut, drill and sketch on; it gives a polyhedron, not the
+// cylinders and fillets the mesh approximates (those come from recognition, `occt_faces.cpp`). Measured on a
+// closed sphere mesh: 1 848 triangles in 0.65 s, 19 320 in 7.1 s, 99 224 in 47 s - sewing is most of it - with
+// the volume of the mesh kept. `verts` holds x, y, z per vertex, `tris` three indices per triangle. A shell that
+// does not close comes back as a shell (a surface body), not refused.
+static QymShape* shape_from_mesh_sewn(const double* verts, size_t nv, const uint32_t* tris, size_t nt) {
+    if (!verts || !tris || nv < 3 || nt < 1) return nullptr;
+    try {
+        std::vector<gp_Pnt> p(nv);
+        Bnd_Box box;
+        for (size_t i = 0; i < nv; ++i) {
+            p[i] = gp_Pnt(verts[3 * i], verts[3 * i + 1], verts[3 * i + 2]);
+            box.Add(p[i]);
+        }
+        const double diag = box.IsVoid() ? 1.0 : std::sqrt(box.SquareExtent());
+        BRepBuilderAPI_Sewing sew(1.0e-6 * std::max(diag, 1.0));
+        size_t faces = 0;
+        for (size_t t = 0; t < nt; ++t) {
+            const uint32_t a = tris[3 * t], b = tris[3 * t + 1], c = tris[3 * t + 2];
+            if (a >= nv || b >= nv || c >= nv) continue;
+            // a triangle with no area makes no face: two of its corners meet, or all three lie on a line
+            const gp_Vec n = gp_Vec(p[a], p[b]).Crossed(gp_Vec(p[a], p[c]));
+            if (n.Magnitude() <= 1.0e-12 * diag * diag) continue;
+            BRepBuilderAPI_MakePolygon w(p[a], p[b], p[c], Standard_True);
+            if (!w.IsDone()) continue;
+            BRepBuilderAPI_MakeFace f(w.Wire(), Standard_True);
+            if (!f.IsDone()) continue;
+            sew.Add(f.Face());
+            ++faces;
+        }
+        if (faces == 0) return nullptr;
+        sew.Perform();
+        TopoDS_Shape sewn = sew.SewedShape();
+        if (sewn.IsNull()) return nullptr;
+        TopoDS_Compound out;
+        BRep_Builder bld;
+        bld.MakeCompound(out);
+        for (TopExp_Explorer ex(sewn, TopAbs_SHELL); ex.More(); ex.Next()) {
+            const TopoDS_Shell& sh = TopoDS::Shell(ex.Current());
+            TopoDS_Shape piece = sh;
+            if (BRep_Tool::IsClosed(sh)) {
+                ShapeFix_Solid fix;
+                TopoDS_Solid solid = fix.SolidFromShell(sh);
+                if (!solid.IsNull()) piece = solid;
+            }
+            bld.Add(out, piece);
+        }
+        ShapeUpgrade_UnifySameDomain unify(out, Standard_True, Standard_True, Standard_False);
+        unify.Build();
+        TopoDS_Shape res = unify.Shape();
+        // a single solid is handed back as itself, not wrapped in a compound of one
+        TopoDS_Shape only;
+        int n = 0;
+        for (TopoDS_Iterator it(res); it.More(); it.Next()) {
+            only = it.Value();
+            ++n;
+        }
+        return seeded(n == 1 ? only : res);
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+// THE FACES ARE BUILT FROM THE MESH ITSELF, WITH THEIR EDGES SHARED FROM THE START, and nothing is sewn. Sewing found
+// which sides of separate triangles meet, and that was most of the time: a sphere of our kernel of 4 002 triangles took
+// 1.47 s, 40 220 took 16.9 s and 201 198 took 104 s. Here the corners closer than the sewing's tolerance are welded on a
+// grid of that size; neighbours on one plane are one face - its border the sides the face does not share with itself,
+// sides of one line along the border between the same two faces one edge; each connected piece whose every side two
+// triangles share is a solid, the rest a shell. Merging the faces of one plane afterwards by the kernel's own means took
+// 10.8 s of the 201 198. Where this way does not come through, the sewing does it as before.
+TopoDS_Shape mesh_shells(const double* verts, size_t nv, const uint32_t* tris, size_t nt, bool solids, bool border_runs, size_t* dropped) {
+    if (!verts || !tris || nv < 3 || nt < 1) return TopoDS_Shape();
+    try {
+        Bnd_Box box;
+        for (size_t i = 0; i < nv; ++i) box.Add(gp_Pnt(verts[3 * i], verts[3 * i + 1], verts[3 * i + 2]));
+        const double diag = box.IsVoid() ? 1.0 : std::sqrt(box.SquareExtent());
+        const double tol = 1.0e-6 * std::max(diag, 1.0);
+        // WELDED CORNERS: one node for the corners in one cell of the grid
+        struct Key {
+            long long x, y, z;
+            bool operator==(const Key& o) const { return x == o.x && y == o.y && z == o.z; }
+        };
+        struct KeyHash {
+            size_t operator()(const Key& k) const { return std::hash<long long>()(k.x * 73856093LL ^ k.y * 19349663LL ^ k.z * 83492791LL); }
+        };
+        std::unordered_map<Key, int, KeyHash> cell;
+        cell.reserve(nv);
+        std::vector<int> node(nv, 0);
+        std::vector<gp_XYZ> at;
+        for (size_t i = 0; i < nv; ++i) {
+            const gp_XYZ q(verts[3 * i], verts[3 * i + 1], verts[3 * i + 2]);
+            Key k{ std::llround(q.X() / tol), std::llround(q.Y() / tol), std::llround(q.Z() / tol) };
+            auto it = cell.find(k);
+            if (it == cell.end()) {
+                at.push_back(q);
+                it = cell.emplace(k, (int)at.size() - 1).first;
+            }
+            node[i] = it->second;
+        }
+        std::vector<std::array<int, 3>> tri;
+        std::vector<gp_XYZ> normal;
+        tri.reserve(nt);
+        normal.reserve(nt);
+        for (size_t t = 0; t < nt; ++t) {
+            const uint32_t a = tris[3 * t], b = tris[3 * t + 1], c = tris[3 * t + 2];
+            if (a >= nv || b >= nv || c >= nv) continue;
+            const int na = node[a], nb = node[b], nc = node[c];
+            if (na == nb || nb == nc || na == nc) {
+                if (dropped) ++*dropped;
+                continue;
+            }
+            gp_XYZ n = (at[nb] - at[na]).Crossed(at[nc] - at[na]);
+            // a triangle with no area makes no face: two of its corners meet, or all three lie on a line
+            if (n.Modulus() <= 1.0e-12 * diag * diag) {
+                if (dropped) ++*dropped;
+                continue;
+            }
+            tri.push_back({ na, nb, nc });
+            normal.push_back(n / n.Modulus());
+        }
+        if (tri.empty()) return TopoDS_Shape();
+        const size_t T = tri.size();
+        const long long span = (long long)at.size() + 1;
+        auto side_key = [&](int a, int b) { return (long long)std::min(a, b) * span + std::max(a, b); };
+        // the triangles on each side, at most the first two (a third makes the side not shared by exactly two)
+        struct Side {
+            int t0 = -1, t1 = -1, uses = 0;
+        };
+        std::unordered_map<long long, Side> sides;
+        sides.reserve(T * 2);
+        for (size_t t = 0; t < T; ++t) {
+            for (int k = 0; k < 3; ++k) {
+                Side& s = sides[side_key(tri[t][k], tri[t][(k + 1) % 3])];
+                if (s.uses == 0) s.t0 = (int)t;
+                else if (s.uses == 1) s.t1 = (int)t;
+                ++s.uses;
+            }
+        }
+        struct Joins {
+            std::vector<int> up;
+            explicit Joins(size_t n) : up(n) { for (size_t i = 0; i < n; ++i) up[i] = (int)i; }
+            int root(int x) {
+                while (up[x] != x) {
+                    up[x] = up[up[x]];
+                    x = up[x];
+                }
+                return x;
+            }
+            void join(int a, int b) { up[root(a)] = root(b); }
+        };
+        Joins piece(T), face(T);
+        for (auto& e : sides) {
+            const Side& s = e.second;
+            if (s.t1 < 0) continue;
+            piece.join(s.t0, s.t1);
+            if (s.uses != 2) continue;
+            // one plane: the normals agree, and each triangle's corners lie on the other's plane
+            if (normal[s.t0].Dot(normal[s.t1]) < 1.0 - 1.0e-9) continue;
+            bool flat = true;
+            for (int k = 0; k < 3 && flat; ++k) flat = std::abs((at[tri[s.t1][k]] - at[tri[s.t0][0]]).Dot(normal[s.t0])) <= 1.0e-9 * std::max(diag, 1.0);
+            if (flat) face.join(s.t0, s.t1);
+        }
+        std::unordered_map<int, bool> closed;
+        std::unordered_map<int, double> volume;
+        for (auto& e : sides) {
+            auto it = closed.emplace(piece.root(e.second.t0), true).first;
+            if (e.second.uses != 2) it->second = false;
+        }
+        for (size_t t = 0; t < T; ++t) volume[piece.root((int)t)] += at[tri[t][0]].Dot(at[tri[t][1]].Crossed(at[tri[t][2]])) / 6.0;
+        // THE BORDER SIDES of every face, as they run round it; the face on the other side of each, or -1 where none
+        auto other_face = [&](int a, int b, int f) {
+            const Side& s = sides[side_key(a, b)];
+            if (s.uses != 2) return -2; // free, or shared by three: an edge of its own either way
+            const int g0 = face.root(s.t0), g1 = face.root(s.t1);
+            return g0 == f ? g1 : g0;
+        };
+        std::unordered_map<int, std::vector<std::pair<int, int>>> border; // face -> its border sides, in the triangles' winding
+        for (size_t t = 0; t < T; ++t) {
+            const int f = face.root((int)t);
+            for (int k = 0; k < 3; ++k) {
+                const int a = tri[t][k], b = tri[t][(k + 1) % 3];
+                if (other_face(a, b, f) != f) border[f].push_back({ a, b });
+            }
+        }
+        // A NODE WHERE AN EDGE MAY GO STRAIGHT ON: exactly two border sides meet there, of the same two faces, on one line
+        std::unordered_map<int, std::vector<long long>> at_node; // node -> the undirected border sides touching it
+        for (auto& fb : border) {
+            for (auto& ab : fb.second) {
+                const long long key = side_key(ab.first, ab.second);
+                for (int n : { ab.first, ab.second }) {
+                    auto& v = at_node[n];
+                    if (std::find(v.begin(), v.end(), key) == v.end()) v.push_back(key);
+                }
+            }
+        }
+        auto faces_of = [&](long long key) {
+            const Side& s = sides[key];
+            if (s.uses != 2) return std::make_pair(face.root(s.t0), -2);
+            const int g0 = face.root(s.t0), g1 = face.root(s.t1);
+            return std::make_pair(std::min(g0, g1), std::max(g0, g1));
+        };
+        auto passes = [&](int n) {
+            auto it = at_node.find(n);
+            if (it == at_node.end() || it->second.size() != 2) return false;
+            if (faces_of(it->second[0]) != faces_of(it->second[1])) return false;
+            // along the border of a patch the sides stay one an edge: they are to meet the sides of the faces beside it
+            if (!border_runs && faces_of(it->second[0]).second == -2) return false;
+            const long long k0 = it->second[0], k1 = it->second[1];
+            const int a0 = (int)(k0 / span), b0 = (int)(k0 % span), a1 = (int)(k1 / span), b1 = (int)(k1 % span);
+            const int p = a0 == n ? b0 : a0, q = a1 == n ? b1 : a1;
+            gp_XYZ u = at[n] - at[p], w = at[q] - at[n];
+            if (u.Modulus() <= 0.0 || w.Modulus() <= 0.0) return false;
+            return u.Crossed(w).Modulus() <= 1.0e-9 * u.Modulus() * w.Modulus() && u.Dot(w) > 0.0;
+        };
+        // EDGES: one a run of border sides between two nodes an edge may not pass through, from its `from` node on
+        BRep_Builder bld;
+        std::unordered_map<int, TopoDS_Vertex> vertex;
+        auto vertex_at = [&](int n) {
+            auto it = vertex.find(n);
+            if (it != vertex.end()) return it->second;
+            TopoDS_Vertex v;
+            bld.MakeVertex(v, gp_Pnt(at[n]), tol);
+            return vertex.emplace(n, v).first->second;
+        };
+        auto far_end = [&](long long key, int n) { const int a = (int)(key / span), b = (int)(key % span); return a == n ? b : a; };
+        std::vector<std::pair<TopoDS_Edge, int>> runs; // the edge, and the node it starts at
+        std::unordered_map<long long, int> run_of;     // an undirected border side -> its run
+        for (auto& ns : at_node) {
+            for (long long key : ns.second) {
+                if (run_of.count(key)) continue;
+                std::vector<long long> members{ key };
+                int ends[2] = { (int)(key / span), (int)(key % span) };
+                for (int d = 0; d < 2; ++d) {
+                    long long came = key;
+                    while (passes(ends[d]) && members.size() <= sides.size()) {
+                        const auto& two = at_node[ends[d]];
+                        const long long next = two[0] == came ? two[1] : two[0];
+                        if (run_of.count(next) || std::find(members.begin(), members.end(), next) != members.end()) break;
+                        members.push_back(next);
+                        ends[d] = far_end(next, ends[d]);
+                        came = next;
+                    }
+                }
+                if (ends[0] == ends[1]) return TopoDS_Shape();
+                BRepBuilderAPI_MakeEdge mk(vertex_at(ends[0]), vertex_at(ends[1]));
+                if (!mk.IsDone()) return TopoDS_Shape();
+                // THE EDGE TAKES THE TOLERANCE ITS VERTICES AND FACES HAVE. Triangles join into one flat face while
+                // their corners lie on its plane to 1e-9 of the size of the part - on a part of 100 mm that is 1.1e-7,
+                // more than the 1e-7 an edge is made with - and the check refused every edge standing off its face's
+                // plane by more (798 edges and 398 faces of a 178 032-triangle mesh), to be repaired in 94 s.
+                TopoDS_Edge edge = mk.Edge();
+                bld.UpdateEdge(edge, tol);
+                runs.push_back({ edge, ends[0] });
+                for (long long m : members) run_of[m] = (int)runs.size() - 1;
+            }
+        }
+        // FACES: each border walked round into wires, starting where an edge starts, each run taken once
+        std::unordered_map<int, TopoDS_Shell> shells;
+        // the triangles of every face: they are its tessellation as they stand - a flat face bounded by straight
+        // edges meshes the same at any deflection, and meshing 144 381 of them anew took 10 s of every operation
+        std::unordered_map<int, std::vector<int>> tris_of;
+        for (size_t t = 0; t < T; ++t) tris_of[face.root((int)t)].push_back((int)t);
+        for (auto& fb : border) {
+            const int f = fb.first;
+            const auto& sidesf = fb.second;
+            std::unordered_map<int, std::vector<int>> leaving; // node -> this face's border sides leaving it
+            for (size_t i = 0; i < sidesf.size(); ++i) leaving[sidesf[i].first].push_back((int)i);
+            std::vector<char> used(sidesf.size(), 0);
+            TopoDS_Face fc;
+            bld.MakeFace(fc, new Geom_Plane(gp_Pnt(at[tri[f][0]]), gp_Dir(normal[f])), tol);
+            for (int round = 0; round < 2; ++round) {
+                for (size_t s0 = 0; s0 < sidesf.size(); ++s0) {
+                    // the first round starts only where an edge starts; the second takes whatever is left
+                    if (used[s0] || (round == 0 && passes(sidesf[s0].first))) continue;
+                    TopoDS_Wire wire;
+                    bld.MakeWire(wire);
+                    int s = (int)s0, last = -1;
+                    for (size_t guard = 0; guard <= sidesf.size() && !used[s]; ++guard) {
+                        used[s] = 1;
+                        const auto& ab = sidesf[s];
+                        const int r = run_of[side_key(ab.first, ab.second)];
+                        if (r != last) {
+                            const TopoDS_Edge& e = runs[r].first;
+                            bld.Add(wire, runs[r].second == ab.first ? e : TopoDS::Edge(e.Reversed()));
+                            last = r;
+                        }
+                        auto it = leaving.find(ab.second);
+                        if (it == leaving.end()) break;
+                        int next = -1;
+                        for (int cand : it->second) {
+                            if (!used[cand]) {
+                                next = cand;
+                                break;
+                            }
+                        }
+                        if (next < 0) break;
+                        s = next;
+                    }
+                    wire.Closed(Standard_True);
+                    bld.Add(fc, wire);
+                }
+            }
+            {
+                const auto& own = tris_of[f];
+                std::unordered_map<int, int> local;
+                std::vector<int> nodes;
+                for (int t : own) {
+                    for (int k = 0; k < 3; ++k) {
+                        if (local.emplace(tri[t][k], (int)nodes.size() + 1).second) nodes.push_back(tri[t][k]);
+                    }
+                }
+                Handle(Poly_Triangulation) mesh = new Poly_Triangulation((int)nodes.size(), (int)own.size(), Standard_False);
+                for (size_t i = 0; i < nodes.size(); ++i) mesh->SetNode((int)i + 1, gp_Pnt(at[nodes[i]]));
+                for (size_t i = 0; i < own.size(); ++i) {
+                    const auto& q = tri[own[i]];
+                    mesh->SetTriangle((int)i + 1, Poly_Triangle(local[q[0]], local[q[1]], local[q[2]]));
+                }
+                bld.UpdateFace(fc, mesh);
+            }
+            const int pc = piece.root(f);
+            auto it = shells.find(pc);
+            if (it == shells.end()) {
+                TopoDS_Shell sh;
+                bld.MakeShell(sh);
+                it = shells.emplace(pc, sh).first;
+            }
+            bld.Add(it->second, fc);
+        }
+        TopoDS_Compound out;
+        bld.MakeCompound(out);
+        for (auto& ps : shells) {
+            TopoDS_Shape made = ps.second;
+            if (solids && closed[ps.first]) {
+                ps.second.Closed(Standard_True);
+                TopoDS_Solid solid;
+                bld.MakeSolid(solid);
+                bld.Add(solid, ps.second);
+                if (volume[ps.first] < 0.0) solid.Reverse(); // wound inwards: turned, so the solid is the inside
+                made = solid;
+            }
+            bld.Add(out, made);
+        }
+        // a single solid is handed back as itself, not wrapped in a compound of one
+        TopoDS_Shape only;
+        int n = 0;
+        for (TopoDS_Iterator it(out); it.More(); it.Next()) {
+            only = it.Value();
+            ++n;
+        }
+        return solids && n == 1 ? only : TopoDS_Shape(out);
+    } catch (...) {
+        return TopoDS_Shape();
+    }
+}
+
+extern "C" QymShape* qym_shape_from_mesh(const double* verts, size_t nv, const uint32_t* tris, size_t nt) {
+    if (!verts || !tris || nv < 3 || nt < 1) return nullptr;
+    TopoDS_Shape made = mesh_shells(verts, nv, tris, nt, true, true, nullptr);
+    return made.IsNull() ? shape_from_mesh_sewn(verts, nv, tris, nt) : seeded(made);
 }
 
 extern "C" QymDoc* qym_occt_box_doc(double dx, double dy, double dz, double defl) {
@@ -924,9 +2259,16 @@ extern "C" QymDoc* qym_occt_extrude_bool(const double* base_xy, size_t nb, doubl
         TopoDS_Shape tool = extrude_shape(tool_xy, nt, tool_h);
         if (base.IsNull() || tool.IsNull()) return nullptr;
         TopoDS_Shape res;
-        if (op == 0) res = BRepAlgoAPI_Cut(base, tool).Shape();
-        else if (op == 1) res = BRepAlgoAPI_Fuse(base, tool).Shape();
-        else res = BRepAlgoAPI_Common(base, tool).Shape();
+        if (op == 0) {
+            BRepAlgoAPI_Cut algo;
+            if (qym_boolean(algo, base, tool)) res = algo.Shape();
+        } else if (op == 1) {
+            BRepAlgoAPI_Fuse algo;
+            if (qym_boolean(algo, base, tool)) res = algo.Shape();
+        } else {
+            BRepAlgoAPI_Common algo;
+            if (qym_boolean(algo, base, tool)) res = algo.Shape();
+        }
         if (res.IsNull()) return nullptr;
         return doc_from_shape(res, defl);
     } catch (...) {
@@ -934,7 +2276,78 @@ extern "C" QymDoc* qym_occt_extrude_bool(const double* base_xy, size_t nb, doubl
     }
 }
 
+// THE ONE PLACE THAT HOLDS THE ANSWER (declared in the shared header): on by default, because that is what a
+// person expects from a machine with eight cores.
+std::atomic<bool> g_parallel{true};
+
+/// Whether the booleans run on several cores at all.
+extern "C" void qym_set_parallel(int on) { g_parallel.store(on != 0); }
+
+/// HOW MANY CORES THE KERNEL MAY TAKE. Zero or less means "all but one", which is what leaves a machine usable
+/// while a heavy rebuild runs. The pool is shared: OCCT's own parallel passes (the tessellation, the booleans)
+/// all draw from it, so this is the ceiling for the lot, not for one of them.
+extern "C" void qym_set_threads(int n) {
+    try {
+        int want = n > 0 ? n : std::max(1, static_cast<int>(std::thread::hardware_concurrency()) - 1);
+        OSD_ThreadPool::DefaultPool()->Init(want);
+    } catch (...) {
+        // a pool that refuses to be resized is not a reason to fail an operation
+    }
+}
+
 extern "C" size_t qym_doc_body_count(const QymDoc* d) { return d ? d->bodies.size() : 0; }
+// How many faces the shape has, and how many of them are still without a triangulation after the retry.
+extern "C" size_t qym_doc_face_count(const QymDoc* d) { return d ? d->faces_total : 0; }
+
+// THE FACES SEWN INTO A SHELL with a tolerance of their own, then closed into a solid where they close.
+//
+// An imported file may hand over faces that do not meet within the kernel's tolerance: the shell is then not a
+// shell, and the body has gaps in it. Sewing pulls the edges together where they are within `tol`.
+extern "C" QymShape* qym_shape_sew(const QymShape* s, double tol) {
+    if (!s) return nullptr;
+    try {
+        BRepBuilderAPI_Sewing sew(tol, Standard_True, Standard_True, Standard_True);
+        for (TopExp_Explorer ex(s->shape, TopAbs_FACE); ex.More(); ex.Next()) sew.Add(ex.Current());
+        sew.Perform();
+        TopoDS_Shape res = sew.SewedShape();
+        if (res.IsNull()) return nullptr;
+        ShapeFix_Solid fix;
+        TopoDS_Shape solid = res;
+        for (TopExp_Explorer ex(res, TopAbs_SHELL); ex.More(); ex.Next()) {
+            solid = fix.SolidFromShell(TopoDS::Shell(ex.Current()));
+            break;
+        }
+        QymShape* out = new QymShape();
+        out->shape = solid.IsNull() ? res : solid;
+        out->fids = s->fids;
+        out->eids = s->eids;
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+// THE SHELL PUT RIGHT: orientation of the faces, then of the shell itself. The ids of the faces are carried
+// over where the fix left the face alone; a face the fix replaced loses its name, which is why this is not run
+// over a body that already builds correctly.
+extern "C" QymShape* qym_shape_fix_shell(const QymShape* s) {
+    if (!s) return nullptr;
+    try {
+        ShapeFix_Shape fix(s->shape);
+        fix.Perform();
+        TopoDS_Shape res = fix.Shape();
+        if (res.IsNull()) return nullptr;
+        QymShape* out = new QymShape();
+        out->shape = res;
+        out->fids = s->fids;
+        out->eids = s->eids;
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+extern "C" size_t qym_doc_unmeshed_faces(const QymDoc* d) { return d ? d->faces_unmeshed : 0; }
+extern "C" size_t qym_doc_meshed_faces(const QymDoc* d) { return d ? d->faces_meshed : 0; }
 
 extern "C" size_t qym_body_vert_count(const QymDoc* d, size_t i) { return (d && i < d->bodies.size()) ? d->bodies[i].verts.size() / 3 : 0; }
 extern "C" size_t qym_body_tri_count(const QymDoc* d, size_t i) { return (d && i < d->bodies.size()) ? d->bodies[i].tris.size() / 3 : 0; }
@@ -1206,13 +2619,26 @@ extern "C" QymShape* qym_shape_extrude_profiles_fused(const double* data, const 
         if (nprof == 0) return nullptr;
         TopoDS_Shape merged;
         TopTools_DataMapOfShapeInteger esrc; // the origin of a profile edge gives the side face's name
-        for (size_t i = 0; i < nprof; ++i) {
-            TopoDS_Face f = build_exact_face_src(data + offsets[i], offsets[i + 1] - offsets[i], &esrc);
-            if (f.IsNull()) return nullptr;
-            if (merged.IsNull()) merged = f;
-            else {
-                merged = BRepAlgoAPI_Fuse(merged, f).Shape();
-                if (merged.IsNull()) return nullptr;
+        // ALL THE PROFILES IN ONE OPERATION, not one after another.
+        //
+        // Fusing them pairwise means N-1 booleans, each over a result that keeps growing: on a plate with two
+        // hundred holes cut in one node that was 199 booleans and 2.0 seconds of the 2.1 the whole rebuild
+        // took. One operation over a list does the same work once - and it is the form that has something for
+        // the parallel flag to divide.
+        {
+            TopTools_ListOfShape args, tools;
+            for (size_t i = 0; i < nprof; ++i) {
+                TopoDS_Face f = build_exact_face_src(data + offsets[i], offsets[i + 1] - offsets[i], &esrc);
+                if (f.IsNull()) return nullptr;
+                if (args.IsEmpty()) args.Append(f);
+                else tools.Append(f);
+            }
+            if (tools.IsEmpty()) {
+                merged = args.First();
+            } else {
+                BRepAlgoAPI_Fuse fuse;
+                if (!qym_boolean_many(fuse, args, tools)) return nullptr;
+                merged = fuse.Shape();
             }
         }
         // Merge the coplanar faces and collinear edges of the plane, so the contact disappears from the topology (the monolith).
@@ -1719,12 +3145,8 @@ extern "C" QymShape* qym_shape_fuse_many(const QymShape* const* parts, int n) {
             tools.Append(parts[i]->shape);
         }
         BRepAlgoAPI_Fuse algo;
-        algo.SetArguments(args);
-        algo.SetTools(tools);
-        algo.Build();
-        if (!algo.IsDone()) return nullptr;
+        if (!qym_boolean_many(algo, args, tools)) return nullptr;
         const TopoDS_Shape res = algo.Shape();
-        if (res.IsNull()) return nullptr;
         QymShape* q = new QymShape{res, {}, {}, {}, {}};
         // The counter is kept by THE FIRST argument, exactly as in a pairwise boolean.
         int nf = next_local(parts[0]->fids);
@@ -1776,13 +3198,16 @@ extern "C" QymShape* qym_shape_boolean(const QymShape* a, const QymShape* b, int
             return q;
         };
         if (op == 0) {
-            BRepAlgoAPI_Cut algo(a->shape, b->shape);
+            BRepAlgoAPI_Cut algo;
+            qym_boolean(algo, a->shape, b->shape);
             return finish_bool(algo, algo.Shape(), "the cut left nothing of the base body");
         } else if (op == 1) {
-            BRepAlgoAPI_Fuse algo(a->shape, b->shape);
+            BRepAlgoAPI_Fuse algo;
+            qym_boolean(algo, a->shape, b->shape);
             return finish_bool(algo, algo.Shape(), "the union of the two bodies came out empty");
         } else {
-            BRepAlgoAPI_Common algo(a->shape, b->shape);
+            BRepAlgoAPI_Common algo;
+            qym_boolean(algo, a->shape, b->shape);
             return finish_bool(algo, algo.Shape(), "the two bodies have nothing in common");
         }
     } QYM_WHY_CATCH("boolean")

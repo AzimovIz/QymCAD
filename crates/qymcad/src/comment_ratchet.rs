@@ -230,4 +230,71 @@ pub(crate) mod tests {
         assert_eq!(cyr, CYRILLIC_CEILING, "cyrillic ceiling is stale: {cyr} lines left, set CYRILLIC_CEILING to that");
         assert_eq!(lit, LITERAL_CEILING, "literal ceiling is stale: {lit} literals left, set LITERAL_CEILING to that");
     }
+
+    /// DOES A LINE NAME A DOCUMENT OF WORK: a path into the archive, a capitalised document under `docs/`, or a
+    /// file name of the shape `SOME_PLAN.md`. The help (`docs/help/...`) and `README.md` are not documents of work.
+    fn names_a_plan(line: &str) -> bool {
+        // the path is put together here: written whole, it is a reference the publishing search refuses in this file
+        if line.contains(concat!("docs/", "archive")) {
+            return true;
+        }
+        line.match_indices(".md").any(|(i, _)| {
+            let path: String = line[..i].chars().rev().take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '/' | '-')).collect::<Vec<_>>().into_iter().rev().collect();
+            let name = path.rsplit('/').next().unwrap_or("");
+            let shouted = name.contains('_') && name.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_');
+            let under_docs = path.starts_with("docs/") && name.chars().next().is_some_and(|c| c.is_ascii_uppercase());
+            shouted || under_docs
+        })
+    }
+
+    /// NO SOURCE NAMES A DOCUMENT OF WORK - in a comment, in a check's message, in the build files.
+    ///
+    /// A comment says what the code does and why, with the numbers measured. Where the work was planned is the
+    /// history of the work, and the documents of work are not published with the code, so a reader of the code
+    /// meets an address that leads nowhere. Measured when this was written: 27 such lines in 21 files.
+    #[test]
+    fn no_source_names_a_document_of_work() {
+        if !in_the_working_tree() {
+            return; // a published copy of the tree: nothing here to measure
+        }
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(|p| p.parent()).expect("repository root").to_path_buf();
+        let mut found = Vec::new();
+        let mut stack = vec![root.clone()];
+        while let Some(dir) = stack.pop() {
+            for e in std::fs::read_dir(&dir).expect("sources are readable").flatten() {
+                let p = e.path();
+                let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if p.is_dir() {
+                    // the documents themselves and the tooling that keeps them private are what may name them
+                    if !matches!(name, "target" | ".git" | "docs" | "tools") {
+                        stack.push(p);
+                    }
+                    continue;
+                }
+                let ext = p.extension().and_then(|x| x.to_str()).unwrap_or("");
+                let text_kind = is_source(&p) || matches!(ext, "toml" | "yml" | "yaml" | "sh" | "ps1");
+                if !text_kind || name == "comment_ratchet.rs" {
+                    continue;
+                }
+                let Ok(text) = std::fs::read_to_string(&p) else { continue };
+                for (n, line) in text.lines().enumerate() {
+                    if names_a_plan(line) {
+                        found.push(format!("  {}:{}: {}", p.strip_prefix(&root).unwrap_or(&p).display(), n + 1, line.trim()));
+                    }
+                }
+            }
+        }
+        assert!(found.is_empty(), "sources name documents of work - say what the code does and why instead:\n{}", found.join("\n"));
+    }
+
+    /// THE SIGNAL CATCHES THE SHAPES IT IS FOR, and lets the help and the readme pass.
+    #[test]
+    fn the_signal_catches_a_document_of_work() {
+        for line in ["// see docs/PARALLEL_REBUILD_PLAN.md, step three", concat!("/// written down in docs/", "archive/UI_SWEEP.md"), "//! (C4 of `IMPORT_STRUCTURE_PLAN.md`)", "# See docs/MSVC_MIGRATION.md."] {
+            assert!(names_a_plan(line), "not caught: {line}");
+        }
+        for line in ["let page = \"docs/help/en/sketch/01-line.md\";", "// the build is described in README.md", "// a rebuild plan of 0 nodes"] {
+            assert!(!names_a_plan(line), "caught wrongly: {line}");
+        }
+    }
 }

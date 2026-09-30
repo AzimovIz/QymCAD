@@ -1,31 +1,38 @@
 # Fillet
 
-Key **F**. Click **edges** — or a whole face, then all of its edges are taken. The radius is set at
-the geometry, Enter applies.
+Key **F**.
 
-![As the radius grows the fillet eats material while the overall size stays put.](img/part-fillet/)
+![The radius grows: the fillet eats material while the overall size of the part stays the same.](img/part-fillet/)
 
-## A fillet holds on to the edge, not to a number
+## How to do it
 
-Change the extrusion height or move a wall — the fillet stays on the same edge. A change higher up the
-history does not knock it off.
+1. Select edges — a click on an edge; a click on a face takes all its edges. Edges selected before the command are
+   taken at once; you can also press **Fillet** first and click the edges.
+2. Type the **Radius** into the field at the geometry. The preview shows the surface of the fillet on the part before
+   it is applied.
+3. **Enter** applies, **Esc** cancels.
 
-## If it fails
+**A different radius at the ends**: with the tool in hand, click a corner (a vertex) on a picked edge — a radius field
+of its own appears at the corner. The radius varies along the edge from corner to corner.
 
-The usual reason is **a radius larger than the geometry allows**: the neighbouring face is shorter
-than the radius, or two fillets met and ate each other. In that case the program does not say “it
-failed” — it breaks the answer down per edge: which one takes no radius at all, which one takes no
-more than a given value.
+A fillet holds on to the edge, not to its number: change the extrusion height or move a wall — the fillet stays on
+the same edge.
 
-Read that breakdown — it is the instruction on what to fix: reduce the radius, drop one of the edges,
-or move the fillet earlier in the timeline.
+## If it did not work
+
+- **The radius is refused before Enter** — the program tries the fillet in advance and writes at the field why it
+  fails: the radius is more than the geometry allows. The analysis goes edge by edge: which one takes a radius no
+  larger than so much, which one takes none. Make the radius smaller or drop that edge.
+- **The node is yellow, some edges stayed sharp** — those edges could not be taken, the rest are rounded; the warning
+  says how many. Open the node with a double-click and pick other edges or another radius.
+- Two neighbouring fillets cross — such edges are taken one at a time only. Round them in separate operations.
 
 ## Order matters
 
-A fillet placed before a cut and the same fillet after it are different shapes. Usually fillets go
-last, once the main shape is there.
+A fillet before a cut and the same fillet after it are different shapes. Fillets usually go last, once the main shape
+is ready; draft goes before fillets.
 
 ## See also
 
-- [Chamfer](part/06-chamfer) — the same edge, cut flat.
-- [The history timeline and rollback](general/03-timeline) — why fillets come last.
+- [Chamfer](part/06-chamfer) — the same edge, but a flat cut.
+- [The timeline and rollback](general/03-timeline) — why fillets go at the end.

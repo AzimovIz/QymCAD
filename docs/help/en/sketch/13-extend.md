@@ -1,16 +1,18 @@
 # Extend
 
-Click the end of a line and it reaches the nearest intersection with another entity.
+![Before and after: the line is stretched to its neighbour, not fitted by eye.](img/sketch-extend/)
 
-![Before and after: the line is extended to its neighbour, not dragged by hand.](img/sketch-extend/)
+## How to do it
 
-## The pair to trim
+Press **Extend** and click the end of a line: it stretches to the nearest intersection with another line, arc or
+circle. The tool stays in hand — click the next ends. **Esc** puts it down.
 
-Trim and extend are one technique from two sides: draw roughly, cut away the extra, stretch out what
-is missing. Both rely on intersections, so it is easier to work when the lines deliberately overlap.
+Trim and extend are one technique from two sides: draw roughly first, then remove what is extra and stretch what is
+short.
 
-## If nothing happens
+## If it did not work
 
-There is nowhere to extend to when there is no intersection: the line is parallel to its neighbour
-or the neighbour is too short. Extend the one you are reaching for first, or use the **point on
-line** constraint — unlike a plain extend, it holds the connection through later changes.
+- There is nowhere to extend to — nothing lies ahead of the line: it is parallel to its neighbour or the neighbour is
+  too short. Extend the one you are reaching for first.
+- The joint came apart after editing dimensions — extend stretches once and does not hold the joint. To hold it, add
+  the **Point on a line** or **Coincident** constraint.

@@ -37,11 +37,8 @@ impl App {
             self.status = crate::i18n::tr("m3-miss");
             return;
         };
-        if self.side.m3.picks.len() >= 2 {
-            self.side.m3.picks.clear(); // a third click means a new measurement
-        }
-        self.side.m3.picks.push(p);
-        self.status = self.measure_text();
+        self.side.m3.take(p);
+        self.status = if self.side.m3.picks.is_empty() { crate::i18n::tr("m3-hint") } else { self.measure_text() };
     }
 
 
@@ -56,17 +53,14 @@ impl App {
         // exactly onto the middle of its own top face: without a depth check a click on a visible face
         // returned THE EDGE ON THE FAR SIDE, and instead of the thickness of the part a diagonal came
         // out. A small element beats a face only if it is IN FRONT of it (or on it — the silhouette).
-        let basis = self.viewing.cam.basis();
-        let face = self.pick_face_ray(rect, pos);
-        let face_depth = face.map(|(_, _, hit)| qymcad_ui_state::Screen { cam: &self.viewing.cam, set: &self.set, rect: rect, basis: &basis }.at(hit).1);
-        let in_front = |d: f64| face_depth.is_none_or(|fd| d <= fd + 0.5); // 0.5 mm of tolerance for the silhouette
+        let in_front = |me: &Self, w: [f64; 3]| crate::gui::pick::point_not_hidden(&me.painting(), rect, w);
         if let Some(w) = crate::gui::pick::pick_vertex_pos(&self.painting(), rect, pos) {
-            if in_front(qymcad_ui_state::Screen { cam: &self.viewing.cam, set: &self.set, rect: rect, basis: &basis }.at(w).1) {
+            if in_front(self, w) {
                 return Some(MeasurePick { item: MeasureItem::Point(w), what: crate::i18n::tr("m3-vertex"), at: w });
             }
         }
         if let Some(p) = self.measure_edge_at(rect, pos) {
-            if in_front(qymcad_ui_state::Screen { cam: &self.viewing.cam, set: &self.set, rect: rect, basis: &basis }.at(p.at).1) {
+            if in_front(self, p.at) {
                 return Some(p);
             }
         }
@@ -131,7 +125,7 @@ impl App {
     /// The face under the cursor -> a plane or a cylinder in the WORLD coordinates of the active
     /// context.
     fn measure_face_at(&mut self, rect: Rect, pos: Pos2) -> Option<MeasurePick> {
-        let (body, fid, hit) = self.pick_face_ray(rect, pos)?;
+        let (body, fid, hit) = crate::gui::pick::pick_face_ray(&self.painting(), rect, pos)?;
         let ctx = qymcad_ui_state::current_ctx_id(&self.active_path, &self.project);
         let wt = self.project.body_display_transform(body, ctx);
         // A CYLINDER is a kind of its own: on the wall of a hole one measures the diameter and the

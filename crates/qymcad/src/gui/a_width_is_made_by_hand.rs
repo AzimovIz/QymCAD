@@ -52,6 +52,34 @@ mod tests {
         texts
     }
 
+    /// THE WIDTH MOVES THE TAB AT ONCE. Reported behaviour: "Width applied" was said and the part stood where it
+    /// stood - the mate went into the document and nothing solved the assembly. Walls: the +X faces of two grounded
+    /// parts 60 apart; the tab: the +X face of the third, 120 from the first, which has to come halfway, to 30.
+    #[test]
+    fn the_width_moves_the_tab_halfway_at_once() {
+        let mut app = App::default();
+        let bodies = three_parts(&mut app);
+        let comps: Vec<Id> = bodies.iter().map(|b| app.project.body_owner(*b).expect("the owner")).collect();
+        app.project.set_grounded(comps[0], true);
+        app.project.set_grounded(comps[1], true);
+        let plus_x = |app: &App, body: Id| {
+            let f = app.project.regen_faces.get(&body).and_then(|fs| fs.iter().find(|f| f.normal[0] > 0.99).cloned()).expect("a face looking along +X");
+            FaceKey { index: 0, centroid: [f.centroid.x, f.centroid.y, f.centroid.z], normal: f.normal, id: f.id }
+        };
+        app.start_width_pick();
+        for &b in &bodies {
+            let face = plus_x(&app, b);
+            qymcad_assembly::width_pick_click(&app.active_path, &mut app.side.joint, &mut app.project, &mut app.status, b, face);
+        }
+        let was = app.project.component_transform(comps[2])[3];
+        qymcad_assembly::width_pick_confirm(&mut app.joint_ctx());
+        let at = |app: &App, c: Id| qymcad_core::feature::apply12(&app.project.world_transform(c), [0.0; 3])[0];
+        // the bodies are built 60 apart inside parts standing at zero: the tab's face goes from 120 to 30 past the first
+        // wall's, so its part goes by -90
+        let tab = at(&app, comps[2]);
+        assert!((tab - was + 90.0).abs() < 1e-3, "the tab's part stood at {was} and after the width stands at {tab}: -90 was expected; the program says {:?}", app.status);
+    }
+
     /// TWO WALLS AND A TAB — THE WIDTH EXISTS AND IT IS VISIBLE.
     #[test]
     fn a_person_can_point_at_two_walls_and_a_tab() {

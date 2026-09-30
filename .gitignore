@@ -46,3 +46,7 @@ reports/
 # before a submission. Not kept here - it goes stale at every change of the lock file, and a stale list of
 # sources is worse than none: the build stops halfway with a message about being offline.
 packaging/flatpak/cargo-sources.json
+
+# autosaves the program writes beside an open project (a probe opening a sample writes them too)
+*.autosave.qcad
+*.autosave.qcad.bak

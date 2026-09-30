@@ -27,6 +27,18 @@ pub fn error_text(e: &qymcad_core::errors::CoreError) -> String {
         E::EdgesNotFound { asked } => args.set("asked", *asked as i64),
         E::ThreadPitchTooSmall { pitch } => args.set("pitch", fmt2(*pitch)),
         E::ThreadTooManyTurns { turns } => args.set("turns", fmt0(*turns)),
+        E::ThreadLongerThanFace { length, face } => {
+            args.set("length", fmt1(*length));
+            args.set("face", fmt1(*face));
+        }
+        E::EdgesDropped { asked, dropped } => {
+            args.set("asked", *asked as i64);
+            args.set("dropped", *dropped as i64);
+        }
+        E::ThreadNotItsSize { face, nominal } => {
+            args.set("face", fmt1(*face));
+            args.set("nominal", fmt1(*nominal));
+        }
         E::ThreadDepthTooDeep { depth, radius, dia, pitch } => {
             args.set("depth", fmt2(*depth));
             args.set("radius", fmt2(*radius));
@@ -80,7 +92,8 @@ pub fn error_text(e: &qymcad_core::errors::CoreError) -> String {
             args.set("sketch", *sketch as i64);
             args.set("body", *body as i64);
         }
-        E::RemoveFacesFailed { why } => args.set("why", why.clone()),
+        // the kernel says why in a code of the catalogue, as the bridge does below: translated, not shown as a key
+        E::RemoveFacesFailed { why } => args.set("why", crate::name(why)),
         // A MESSAGE FROM THE BRIDGE TO OCCT IS A CODE: the bridge has no language and hands back a
         // catalogue key. Foreign text (the error number of OCCT itself) passes through as it stands —
         // `name` translates known keys only.

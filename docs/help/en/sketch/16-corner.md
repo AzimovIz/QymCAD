@@ -1,22 +1,27 @@
 # Corner fillet and chamfer
 
-Click the corner of two lines. The size is set in the top bar.
+![A sharp corner and the same one rounded: the radius becomes a dimension, the tangencies become constraints.](img/sketch-corner/)
 
-![A sharp corner and the same corner rounded: the radius becomes a dimension and the tangencies become constraints.](img/sketch-corner/)
+## How to do it
 
-## What happens
+- **Fillet** (key **F**): click the corner of two lines or of a line and an arc, type the radius into the field at
+  the corner, **Enter**.
+- **Chamfer**: click the corner of two lines, type the size into the field at the corner, **Enter**.
+- **Fillet every corner of the contour**: select the contour, press the button, type the **R of every corner**,
+  **Enter**.
 
-A fillet inserts an arc between the lines and adds **two tangencies**, one to each side. A chamfer
-inserts a segment at the required angle. Both stay constrained: move a side and the corner rebuilds
-itself.
+One step of undo per operation: **Ctrl+Z** brings the sharp corner back.
 
-## Why not draw the arc by hand
+## What you get
 
-You can, but then both tangencies are yours to place, and either is easy to forget. A forgotten
-tangency is invisible in the picture — it shows up later, when the outline comes apart at the joint
-on the first change of a dimension.
+A fillet inserts an arc and adds **two tangencies** and a **radius dimension**; a chamfer adds a segment with a
+dimension. All of these are constraints: move a side — the corner rebuilds itself; change the dimension — the fillet
+changes.
 
-## A hint
+Fillets usually go **last**, once the contour is defined: before that they get in the way of picking corners.
 
-Corners are usually rounded **last**, once the outline is defined: before that they get in the way
-of snapping to corners and confuse the count of degrees of freedom.
+## If it did not work
+
+- The size is not taken — it is more than the corner holds (longer than a side); the reason is written at the field.
+- The click did not take the corner — not exactly two lines meet at that point. Click right on the vertex of the
+  corner.

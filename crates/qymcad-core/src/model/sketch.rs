@@ -18,6 +18,8 @@ pub struct TextSpec {
     pub angle: f64,
     pub text: String,
     pub glyphs: Vec<Vec<Point2>>,
+    /// The font the glyphs were baked from; it travels with them, see `crate::model::FontRef`.
+    pub font: crate::model::FontRef,
 }
 
 impl Project {
@@ -419,12 +421,12 @@ impl Project {
     /// Add parametric text geometry. `glyphs` are the glyph polylines baked by the application (in world
     /// coordinates, since the font lives there). Returns the id of the text; the contours are updated.
     pub fn add_sketch_text(&mut self, si: usize, t: TextSpec, purpose: crate::feature::Purpose) -> Id {
-        let TextSpec { at, height, angle, text, glyphs } = t;
+        let TextSpec { at, height, angle, text, glyphs, font } = t;
         let (x, y) = (at.x, at.y);
         let construction = purpose == crate::feature::Purpose::Construction;
         let id = self.alloc_id();
         if let Some(s) = self.sketches.get_mut(si) {
-            s.texts.push(SketchText { id, x, y, height, angle, text, construction, glyphs });
+            s.texts.push(SketchText { id, x, y, height, angle, text, construction, glyphs, font });
         }
         self.regen_sketch(si);
         id
@@ -432,7 +434,7 @@ impl Project {
     /// Update the parameters of a text and its baked glyphs, after the application re-baked them for a new
     /// font or string.
     pub fn set_sketch_text(&mut self, si: usize, ti: usize, t: TextSpec) {
-        let TextSpec { at, height, angle, text, glyphs } = t;
+        let TextSpec { at, height, angle, text, glyphs, font } = t;
         let (x, y) = (at.x, at.y);
         if let Some(t) = self.sketches.get_mut(si).and_then(|s| s.texts.get_mut(ti)) {
             t.x = x;
@@ -441,6 +443,7 @@ impl Project {
             t.angle = angle;
             t.text = text;
             t.glyphs = glyphs;
+            t.font = font;
         }
         self.regen_sketch(si);
     }
@@ -602,7 +605,7 @@ impl Project {
     }
     /// Centroid of the selected entities (the mean of their points).
     pub fn entities_centroid(&self, si: usize, eids: &[Id]) -> (f64, f64) {
-        let pts = self.entity_point_ids(si, eids);
+        let pts = self.movable_of(si, eids);
         let Some(s) = self.sketches.get(si) else { return (0.0, 0.0) };
         let (mut sx, mut sy, mut n) = (0.0, 0.0, 0.0);
         for p in &s.points {
@@ -773,9 +776,25 @@ impl Project {
         self.solve_sketch(si);
         true
     }
+    /// The points of `eids` an editing tool is allowed to shift: everything except what the sketch holds
+    /// (the frame, the driven projections, the pinned points). See `Sketch::held_points`.
+    fn movable_of(&self, si: usize, eids: &[Id]) -> Vec<Id> {
+        let held = self.sketches.get(si).map(|s| s.held_points()).unwrap_or_default();
+        self.entity_point_ids(si, eids).into_iter().filter(|id| !held.contains(id)).collect()
+    }
+
+    /// THE EDIT ENDS AT THE SOLVER, not at a rebuild. `regen_sketch` recomputes the contours from whatever
+    /// the coordinates now are; it does not check that the constraints still hold. An edit that stops there
+    /// leaves a drawing standing where nothing allows it to stand, and the lie holds until the next edit
+    /// puts it back.
+    ///
+    /// Reported behaviour: "I moved the circle far away with the move tool and the coincidence with the
+    /// origin stayed - and stayed GREEN. Reopen the project and the circle is back at the centre." That was
+    /// repaired at the call site in the interface, which left the method itself lying to the next caller;
+    /// the rule lives here now.
     /// Move the selected entities by a vector.
     pub fn move_entities(&mut self, si: usize, eids: &[Id], dx: f64, dy: f64) {
-        let pts = self.entity_point_ids(si, eids);
+        let pts = self.movable_of(si, eids);
         if let Some(s) = self.sketches.get_mut(si) {
             for p in s.points.iter_mut() {
                 if pts.contains(&p.id) {
@@ -784,12 +803,21 @@ impl Project {
                 }
             }
         }
-        self.regen_sketch(si);
+        self.solve_sketch(si); // regenerates as well, on the positions the constraints allow
     }
+    /// THE EDIT ENDS AT THE SOLVER, not at a rebuild. `regen_sketch` recomputes the contours from whatever
+    /// the coordinates now are; it does not check that the constraints still hold. An edit that stops there
+    /// leaves a drawing standing where nothing allows it to stand, and the lie holds until the next edit
+    /// puts it back.
+    ///
+    /// Reported behaviour: "I moved the circle far away with the move tool and the coincidence with the
+    /// origin stayed - and stayed GREEN. Reopen the project and the circle is back at the centre." That was
+    /// repaired at the call site in the interface, which left the method itself lying to the next caller;
+    /// the rule lives here now.
     /// Rotate the selected entities about (cx, cy) by an angle in degrees.
     pub fn rotate_entities(&mut self, si: usize, eids: &[Id], cx: f64, cy: f64, deg: f64) {
         let (sn, cs) = (deg.to_radians().sin(), deg.to_radians().cos());
-        let pts = self.entity_point_ids(si, eids);
+        let pts = self.movable_of(si, eids);
         if let Some(s) = self.sketches.get_mut(si) {
             for p in s.points.iter_mut() {
                 if pts.contains(&p.id) {
@@ -799,12 +827,21 @@ impl Project {
                 }
             }
         }
-        self.regen_sketch(si);
+        self.solve_sketch(si); // regenerates as well, on the positions the constraints allow
     }
+    /// THE EDIT ENDS AT THE SOLVER, not at a rebuild. `regen_sketch` recomputes the contours from whatever
+    /// the coordinates now are; it does not check that the constraints still hold. An edit that stops there
+    /// leaves a drawing standing where nothing allows it to stand, and the lie holds until the next edit
+    /// puts it back.
+    ///
+    /// Reported behaviour: "I moved the circle far away with the move tool and the coincidence with the
+    /// origin stayed - and stayed GREEN. Reopen the project and the circle is back at the centre." That was
+    /// repaired at the call site in the interface, which left the method itself lying to the next caller;
+    /// the rule lives here now.
     /// Scale the selected entities about (cx, cy).
     pub fn scale_entities(&mut self, si: usize, eids: &[Id], cx: f64, cy: f64, f: f64) {
         let f = if f.abs() < 1e-6 { 1.0 } else { f };
-        let pts = self.entity_point_ids(si, eids);
+        let pts = self.movable_of(si, eids);
         if let Some(s) = self.sketches.get_mut(si) {
             for p in s.points.iter_mut() {
                 if pts.contains(&p.id) {
@@ -820,7 +857,7 @@ impl Project {
                 }
             }
         }
-        self.regen_sketch(si);
+        self.solve_sketch(si); // regenerates as well, on the positions the constraints allow
     }
     /// Constraints internal to the point set `inside`: every reference that stays within the set, except
     /// `Fixed` — an absolute-position anchor is not copied, since the copy is placed elsewhere. References to
@@ -1161,7 +1198,7 @@ impl Project {
         }
         self.merge_close_points(si, 1e-3); // Stitch coincident cut points so the pieces stay connected.
         self.prune_orphan_sketch_points(si); // Leave no dangling points behind a trim.
-        self.regen_sketch(si);
+        self.solve_sketch(si); // the edit ends at the solver, not at a rebuild: `regen_sketch` recomputes the contours and checks no constraint
         true
     }
     /// Extend: the segment endpoint nearer to the click is stretched to the nearest intersection with another
@@ -1228,7 +1265,7 @@ impl Project {
             p.x = nx;
             p.y = ny;
         }
-        self.regen_sketch(si);
+        self.solve_sketch(si); // the edit ends at the solver, not at a rebuild: `regen_sketch` recomputes the contours and checks no constraint
         true
     }
     /// Extend an arc: the endpoint nearer to the click is stretched along its own circle to the nearest
@@ -1273,7 +1310,7 @@ impl Project {
             p.x = nx;
             p.y = ny;
         }
-        self.regen_sketch(si);
+        self.solve_sketch(si); // the edit ends at the solver, not at a rebuild: `regen_sketch` recomputes the contours and checks no constraint
         true
     }
     /// Break: split a segment into two at the clicked point.
@@ -1286,14 +1323,32 @@ impl Project {
         }
         let tc = (((clickx - pax) * (pbx - pax) + (clicky - pay) * (pby - pay)) / dlen2).clamp(0.05, 0.95);
         let mid = self.sketch_point_at(si, pax + (pbx - pax) * tc, pay + (pby - pay) * tc, 1e-9);
+        let con = self.sketches[si].entities.iter().find(|e| e.id == eid).is_some_and(|e| e.construction);
         self.sketches[si].entities.retain(|e| e.id != eid);
         for (p, q) in [(a, mid), (mid, b)] {
             let id = self.alloc_id();
-            self.sketches[si].entities.push(SketchEntity { id, kind: EntityKind::Line { a: p, b: q }, construction: false });
+            self.sketches[si].entities.push(SketchEntity { id, kind: EntityKind::Line { a: p, b: q }, construction: con });
+        }
+        // THE HALVES KEEP WHAT THE LINE WAS HELD BY: a horizontal or a vertical of its ends becomes one of each half. Left
+        // as it stood, it held the far ends only, and the break point was free to leave the line - two constraints and
+        // seven freedoms where there are three and six.
+        let halves = |c: &Constraint| -> Option<[Constraint; 2]> {
+            match *c {
+                Constraint::Horizontal { a: x, b: y } if (x == a && y == b) || (x == b && y == a) => Some([Constraint::Horizontal { a, b: mid }, Constraint::Horizontal { a: mid, b }]),
+                Constraint::Vertical { a: x, b: y } if (x == a && y == b) || (x == b && y == a) => Some([Constraint::Vertical { a, b: mid }, Constraint::Vertical { a: mid, b }]),
+                _ => None,
+            }
+        };
+        let old = std::mem::take(&mut self.sketches[si].constraints);
+        for c in old {
+            match halves(&c) {
+                Some(two) => self.sketches[si].constraints.extend(two),
+                None => self.sketches[si].constraints.push(c),
+            }
         }
         self.merge_close_points(si, 1e-3); // Stitch coincident cut points so the pieces stay connected.
         self.prune_orphan_sketch_points(si); // Leave no dangling points behind a trim.
-        self.regen_sketch(si);
+        self.solve_sketch(si); // the edit ends at the solver, not at a rebuild: `regen_sketch` recomputes the contours and checks no constraint
         true
     }
     pub(super) fn line_ends(&self, si: usize, eid: Id) -> Option<(Id, Id)> {
@@ -1513,7 +1568,7 @@ impl Project {
         }
         self.merge_close_points(si, 1e-3); // Stitch coincident cut points so the pieces stay connected.
         self.prune_orphan_sketch_points(si); // Leave no dangling points behind a trim.
-        self.regen_sketch(si);
+        self.solve_sketch(si); // the edit ends at the solver, not at a rebuild: `regen_sketch` recomputes the contours and checks no constraint
         true
     }
     /// Break a circle or an arc at the clicked point: an arc becomes two arcs, a circle becomes two half arcs
@@ -1547,7 +1602,7 @@ impl Project {
         }
         self.merge_close_points(si, 1e-3); // Stitch coincident cut points so the pieces stay connected.
         self.prune_orphan_sketch_points(si); // Leave no dangling points behind a trim.
-        self.regen_sketch(si);
+        self.solve_sketch(si); // the edit ends at the solver, not at a rebuild: `regen_sketch` recomputes the contours and checks no constraint
         true
     }
     pub(super) fn point_xy(&self, si: usize, id: Id) -> Option<(f64, f64)> {
@@ -1555,6 +1610,25 @@ impl Project {
         s.points.iter().find(|p| p.id == id).map(|p| (p.x, p.y))
     }
     /// Set the radius of an arc entity, moving its endpoints to radius `rr` while preserving their angles.
+    /// PUT A RADIUS DIMENSION ON A PLAIN ARC: the radius set, then held by a driving dimension, as the radius of a
+    /// circle is - one constraint more and one freedom less. Reported behaviour: the radius tool wrote 15 into the arc
+    /// and left no dimension, the arc free to be dragged to any radius.
+    pub fn put_arc_radius_dim(&mut self, si: usize, eid: Id, rr: f64) {
+        let Some(center) = self.sketches.get(si).and_then(|s| s.entities.iter().find(|e| e.id == eid)).and_then(|e| match e.kind {
+            EntityKind::Arc { center, .. } => Some(center),
+            _ => None,
+        }) else {
+            return;
+        };
+        let rr = rr.max(0.01);
+        self.set_arc_radius(si, eid, rr);
+        if let Some(s) = self.sketches.get_mut(si) {
+            if !s.constraints.iter().any(|c| matches!(c, Constraint::Diameter { c: cc, .. } if *cc == center)) {
+                s.constraints.push(Constraint::Diameter { c: center, d: rr, off: 0.0, expr: String::new(), driven: false, diam: false, at: None });
+            }
+        }
+        self.solve_sketch(si);
+    }
     pub fn set_arc_radius(&mut self, si: usize, eid: Id, rr: f64) {
         let (center, a, b) = {
             let Some(s) = self.sketches.get(si) else { return };
@@ -1575,7 +1649,7 @@ impl Project {
                 }
             }
         }
-        self.regen_sketch(si);
+        self.solve_sketch(si); // the edit ends at the solver, not at a rebuild: `regen_sketch` recomputes the contours and checks no constraint
     }
     /// The other endpoint of a segment (other than `exclude`) that uses point `pid`.
     pub(super) fn line_other_end(&self, si: usize, pid: Id, exclude: Id) -> Option<Id> {
@@ -1747,7 +1821,7 @@ impl Project {
             s.constraints.push(Constraint::Tangent { a: o1, b: t1, c: cen, r });
             s.constraints.push(Constraint::Tangent { a: o2, b: t2, c: cen, r });
             let off = fillet_label_angle(&s.points, cen, t1, t2);
-            s.constraints.push(Constraint::Diameter { c: cen, d: r, off, expr: String::new(), driven: false, diam: false });
+            s.constraints.push(Constraint::Diameter { c: cen, d: r, off, expr: String::new(), driven: false, diam: false, at: None });
         }
         // Virtual corner (described in detail in `fillet_curves`): vertex `pc` is kept and the dimensions on it
         // are left alone. It becomes the sharp corner on the extensions of both shortened lines, held by
@@ -1756,6 +1830,37 @@ impl Project {
         self.keep_virtual_corner_lines(si, pc, o1, t1, o2, t2);
         self.regen_sketch(si);
         true
+    }
+    /// WHAT HOLDS A LINE GOES WITH THE LINE when a fillet or a chamfer shortens it: a horizontal, vertical, parallel,
+    /// perpendicular, collinear or equal of an edge's ends (o-pc) is the edge's own, and after the fillet the edge runs
+    /// o-t. Left on the vanished vertex, the automatic constraints a person's defaults put on every corner kept that
+    /// vertex alive as a point of its own - six points where the filleted corner has five - and a typed radius seemed
+    /// to do nothing. A side that is not a line (`None`) keeps what it had.
+    pub(super) fn carry_edge_constraints(&mut self, si: usize, pc: Id, side1: Option<(Id, Id)>, side2: Option<(Id, Id)>) {
+        let pair = |x: Id, y: Id| -> (Id, Id) {
+            for (o, t) in [side1, side2].into_iter().flatten() {
+                // a side the corner ate whole (radius equal to it) has no second point to carry onto
+                if o != t && ((x == o && y == pc) || (x == pc && y == o)) {
+                    return (o, t);
+                }
+            }
+            (x, y)
+        };
+        if let Some(s) = self.sketches.get_mut(si) {
+            for c in s.constraints.iter_mut() {
+                match c {
+                    // a tangency or a point held on a line names the line by two points too: rounding the next corner of
+                    // a rectangle shortened a side whose tangency still ran to the old vertex, and that vertex was kept
+                    // as a point nothing drew (14 or 15 points on a rectangle rounded all round, not 12)
+                    Constraint::Horizontal { a, b } | Constraint::Vertical { a, b } | Constraint::Tangent { a, b, .. } | Constraint::PointOnLine { a, b, .. } => (*a, *b) = pair(*a, *b),
+                    Constraint::Equal { a, b, c: cc, d } | Constraint::Parallel { a, b, c: cc, d } | Constraint::Perpendicular { a, b, c: cc, d } | Constraint::Collinear { a, b, c: cc, d } => {
+                        (*a, *b) = pair(*a, *b);
+                        (*cc, *d) = pair(*cc, *d);
+                    }
+                    _ => {}
+                }
+            }
+        }
     }
     /// Virtual corner for a fillet or a chamfer between two lines: the vanished vertex `pc` is held on the
     /// extensions of both shortened edges (o1 to t1, o2 to t2) by `PointOnLine`, provided `pc` no longer belongs
@@ -1772,10 +1877,19 @@ impl Project {
                 EntityKind::Ellipse { c, ma, mi } => c == pc || ma == pc || mi == pc,
             })
         });
-        if !pc_still_used {
-            if let Some(s) = self.sketches.get_mut(si) {
+        if pc_still_used {
+            return;
+        }
+        self.carry_edge_constraints(si, pc, Some((o1, t1)), Some((o2, t2)));
+        // the vertex stays, as the virtual sharp on both extensions, only while a dimension or another constraint still
+        // stands on it
+        let referenced = self.sketches.get(si).is_some_and(|s| s.constraints.iter().any(|c| c.points().contains(&pc)));
+        if let Some(s) = self.sketches.get_mut(si) {
+            if referenced {
                 s.constraints.push(Constraint::PointOnLine { p: pc, a: o1, b: t1 });
                 s.constraints.push(Constraint::PointOnLine { p: pc, a: o2, b: t2 });
+            } else {
+                s.points.retain(|p| p.id != pc); // nothing stands on the vanished vertex any more
             }
         }
     }
@@ -1797,7 +1911,11 @@ impl Project {
         if la < 1e-9 || lb < 1e-9 {
             return false;
         }
-        let d = d.min(la * 0.95).min(lb * 0.95);
+        // A LEG AS LONG AS ITS LINE, OR LONGER, IS REFUSED: pressed silently to 0.95 of the shorter line it was taken - a leg
+        // of 300 on lines of 30 made a chamfer of 28.5 with no word, and so did one of 29.9
+        if d >= la - 1e-9 || d >= lb - 1e-9 {
+            return false;
+        }
         let (t1x, t1y) = (px + (ax - px) / la * d, py + (ay - py) / la * d);
         let (t2x, t2y) = (px + (bx - px) / lb * d, py + (by - py) / lb * d);
         let t1 = self.sketch_point_at(si, t1x, t1y, 1e-9);
@@ -2050,7 +2168,7 @@ impl Project {
                 }
             }
             let off = fillet_label_angle(&s.points, cen, t1, t2);
-            s.constraints.push(Constraint::Diameter { c: cen, d: r, off, expr: String::new(), driven: false, diam: false });
+            s.constraints.push(Constraint::Diameter { c: cen, d: r, off, expr: String::new(), driven: false, diam: false, at: None });
         }
         // Virtual corner: vertex `pc` is kept and the constraints and dimensions on it are left alone, so it
         // stays the sharp corner on the extensions of both shortened edges.
@@ -2073,6 +2191,18 @@ impl Project {
             })
         });
         if !pc_still_used {
+            let side = |sup: &Sup, o: Id, t: Id| matches!(sup, Sup::Line { .. }).then_some((o, t));
+            self.carry_edge_constraints(si, pc, side(&s1c, o1, t1), side(&s2c, o2, t2));
+        }
+        // the vertex stays, as the virtual sharp on both supports, only while a dimension or another constraint stands on it
+        let referenced = self.sketches.get(si).is_some_and(|s| s.constraints.iter().any(|c| c.points().contains(&pc)));
+        if !pc_still_used && !referenced {
+            // nothing stands on the vanished vertex any more: it goes, rather than stay a point of its own
+            if let Some(s) = self.sketches.get_mut(si) {
+                s.points.retain(|p| p.id != pc);
+            }
+        }
+        if !pc_still_used && referenced {
             if let Some(s) = self.sketches.get_mut(si) {
                 match s1c {
                     Sup::Line { .. } => s.constraints.push(Constraint::PointOnLine { p: pc, a: o1, b: t1 }),
@@ -2197,20 +2327,51 @@ impl Project {
             (s.points.clone(), ents)
         };
         let mut count = 0;
-        // A circle entity gives a concentric circle (r plus or minus dist) rather than a polygon.
+        // A circle entity gives a concentric circle (r plus or minus dist) rather than a polygon, HELD TO ITS SOURCE: the
+        // centres concentric and the radii apart by the distance, a dimension of the offset. Laid free, the copy was a
+        // circle of its own - five freedoms where the pair has two, and moving or resizing the source left it behind.
         for e in &ents {
             if let EntityKind::Circle { center, r } = e.kind {
                 if let Some(c) = pts.iter().find(|p| p.id == center) {
                     let nr = r + dist;
                     if nr > 0.05 {
-                        self.add_circle_entity(si, c.x, c.y, nr, crate::feature::Purpose::of(e.construction));
+                        let copy = self.add_circle_entity(si, c.x, c.y, nr, crate::feature::Purpose::of(e.construction));
+                        let copy_centre = self.sketches[si].entities.iter().find(|x| x.id == copy).and_then(|x| match x.kind {
+                            EntityKind::Circle { center, .. } => Some(center),
+                            _ => None,
+                        });
+                        if let Some(cc) = copy_centre.filter(|cc| *cc != center) {
+                            let (m1, m2) = if dist > 0.0 { (-1, 1) } else { (1, -1) }; // r(copy) - r(source) = dist
+                            self.sketches[si].constraints.push(Constraint::Concentric { c1: center, c2: cc });
+                            self.sketches[si].constraints.push(Constraint::EdgeDistance { c1: center, c2: cc, d: dist.abs(), m1, m2, off: 0.0, expr: String::new(), driven: false, at: None });
+                        }
                         count += 1;
                     }
                 }
             }
         }
         // Lines and arcs are collected into bulge loops, offset with the arcs preserved, and reassembled into
-        // lines and arcs.
+        // lines and arcs - HELD TO THEIR SOURCE, as the circle is. Laid free, a rectangle's copy had eight freedoms of
+        // its own, and resizing the rectangle left the copy where it was. See `hold_offset_loop` for how.
+        let src_lines: Vec<(Id, Id, (f64, f64), (f64, f64))> = ents
+            .iter()
+            .filter(|e| !e.construction)
+            .filter_map(|e| match e.kind {
+                EntityKind::Line { a, b } => Some((a, b, at_of(&pts, a)?, at_of(&pts, b)?)),
+                _ => None,
+            })
+            .collect();
+        let src_arcs: Vec<(Id, Id, Id, (f64, f64), f64)> = ents
+            .iter()
+            .filter(|e| !e.construction)
+            .filter_map(|e| match e.kind {
+                EntityKind::Arc { center, a, b, .. } => {
+                    let (c, p) = (at_of(&pts, center)?, at_of(&pts, a)?);
+                    Some((center, a, b, c, (p.0 - c.0).hypot(p.1 - c.1)))
+                }
+                _ => None,
+            })
+            .collect();
         for loop_v in entity_bulge_loops(&pts, &ents) {
             for oloop in crate::offset::offset_bulge(&loop_v, dist) {
                 let n = oloop.len();
@@ -2218,19 +2379,27 @@ impl Project {
                     continue;
                 }
                 let ids: Vec<Id> = oloop.iter().map(|v| self.sketch_point_at(si, v.x, v.y, 1e-6)).collect();
+                let mut kinds: Vec<(EntityKind, OffsetSource)> = Vec::new();
                 for k in 0..n {
-                    let v = oloop[k];
+                    let (v, w) = (oloop[k], oloop[(k + 1) % n]);
                     let (a, b) = (ids[k], ids[(k + 1) % n]);
-                    let id = self.alloc_id();
-                    let kind = if v.bulge.abs() < 1e-9 {
-                        EntityKind::Line { a, b }
+                    if v.bulge.abs() < 1e-9 {
+                        kinds.push((EntityKind::Line { a, b }, offset_line_source(&src_lines, (v.x, v.y), (w.x, w.y), dist)));
                     } else {
-                        let (cx, cy, ccw) = arc_center_from_bulge(oloop[k].x, oloop[k].y, oloop[(k + 1) % n].x, oloop[(k + 1) % n].y, v.bulge);
-                        let center = self.sketch_point_at(si, cx, cy, 1e-6);
-                        EntityKind::Arc { center, a, b, ccw }
-                    };
+                        let (cx, cy, ccw) = arc_center_from_bulge(v.x, v.y, w.x, w.y, v.bulge);
+                        // a centre of its own even where the source's stands: the radius of an arc is kept by its centre
+                        let center = self.alloc_id();
+                        self.sketches[si].points.push(SketchPoint { id: center, x: cx, y: cy });
+                        let rc = (v.x - cx).hypot(v.y - cy);
+                        kinds.push((EntityKind::Arc { center, a, b, ccw }, offset_arc_source(&src_arcs, &src_lines, (cx, cy), rc, dist)));
+                    }
+                }
+                let held = hold_offset_loop(&ids, &kinds, dist);
+                for (kind, _) in kinds {
+                    let id = self.alloc_id();
                     self.sketches[si].entities.push(SketchEntity { id, kind, construction: false });
                 }
+                self.sketches[si].constraints.extend(held);
                 count += 1;
             }
         }
@@ -2343,7 +2512,22 @@ impl Project {
         // the arc intrinsics (endpoints on the circle of radius R) are always active.
         let mut active: Vec<Constraint> = s.constraints.iter().filter(|c| !c.is_driven()).cloned().collect();
         active.extend(intrinsics);
+        let (was, radii_was): (Vec<(f64, f64)>, Vec<f64>) = (s.points.iter().map(|p| (p.x, p.y)).collect(), radii.iter().map(|r| r.value).collect());
         let resid = crate::solver::solve_full_iter(&mut s.points, &mut radii, &active, drag, max_iter);
+        // A SOLVED SKETCH SOLVED AGAIN STAYS AS IT WAS: a move below rounding is not written. Each solve of a solved
+        // polygon shifted its points by about 2e-18 mm, the document key read every frame as an edit, and a rebuild
+        // in the background always came back stale and was started again - the program never came to rest.
+        let same = |new: f64, old: f64| (new - old).abs() <= 1e-12 * old.abs().max(1.0);
+        for (p, &(x, y)) in s.points.iter_mut().zip(&was) {
+            if same(p.x, x) && same(p.y, y) {
+                (p.x, p.y) = (x, y);
+            }
+        }
+        for (r, &old) in radii.iter_mut().zip(&radii_was) {
+            if same(r.value, old) {
+                r.value = old;
+            }
+        }
         // The solved radii go back into the circles; an arc derives its radius from its points and stores
         // none.
         for rv in &radii {
@@ -2399,6 +2583,20 @@ impl Project {
                 _ => {}
             }
         }
+        // Projected geometry is driven by the body: its points and circle radii are given, not unknowns.
+        // Without this a projected edge counted 4 degrees of freedom and a box face outline 8, and a solve
+        // was free to drag the projection off the part.
+        // A shared corner occupies several slots of `points`; it is pinned once, or the duplicates would
+        // count as redundant constraints (8 on a box face).
+        let mut pinned = std::collections::HashSet::new();
+        for pr in &s.projections {
+            out.extend(pr.points.iter().filter(|&&p| pinned.insert(p)).map(|&p| Constraint::Fixed { p }));
+            for e in s.entities.iter().filter(|e| pr.entities.contains(&e.id)) {
+                if let EntityKind::Circle { center, r } = e.kind {
+                    out.push(Constraint::Diameter { c: center, d: r, off: 0.0, expr: String::new(), driven: false, diam: false, at: None });
+                }
+            }
+        }
         out
     }
     /// Find or create a diameter or radius dimension for the circle entity with centre `c`. Returns the
@@ -2415,7 +2613,7 @@ impl Project {
         })?;
         let d = if diam { 2.0 * r } else { r };
         let s = self.sketches.get_mut(si)?;
-        s.constraints.push(Constraint::Diameter { c, d, off: 0.0, expr: String::new(), driven: false, diam });
+        s.constraints.push(Constraint::Diameter { c, d, off: 0.0, expr: String::new(), driven: false, diam, at: None });
         Some(s.constraints.len() - 1)
     }
     /// Find or create a driving arc-length dimension for arc entity `arc_eid`. Returns its index.
@@ -2543,8 +2741,14 @@ impl Project {
                 continue;
             }
             for loop_ in &t.glyphs {
-                if loop_.len() >= 3 {
-                    pairs.push((Contour::closed(loop_.clone()), Vec::new()));
+                // THE SEAM IS CLEANED HERE TOO, not only where the glyphs are baked. A glyf outline (TTF)
+                // closes by returning to its starting point, so the loop carries two coincident points in a
+                // row - a segment of zero length, which OCCT will not make a wire from. Documents whose text
+                // was baked before this was fixed already exist and keep their glyphs as they were baked:
+                // without this they would go on failing to extrude however often they are rebuilt.
+                let clean = seam_cleaned(loop_);
+                if clean.len() >= 3 {
+                    pairs.push((Contour::closed(clean), Vec::new()));
                 }
             }
         }
@@ -2697,8 +2901,14 @@ impl Project {
     /// How it got there: `merge_close_points` glues whatever lands at zero INTO the origin, keeping the
     /// origin's id, so the origin becomes somebody's geometry and travels with it.
     ///
-    /// The repair keeps the drawing exactly where it is - the entity gets a fresh point at the position
-    /// the origin had wandered to - and sends the origin home. Returns whether anything was separated.
+    /// The repair keeps the drawing exactly where it is - the entity gets a fresh point at the position the
+    /// origin stands at - and leaves the origin to the frame. Returns whether anything was separated.
+    ///
+    /// IT RUNS WHETHER OR NOT THE ORIGIN HAS WANDERED. It used to give up when the origin sat at zero,
+    /// on the reading that a point at zero is home and nothing is wrong. But welded geometry at zero is the
+    /// worse half of the same defect: the origin is a system point, `immovable_points` holds those, so the
+    /// corner cannot be dragged and moving the shape tears it off - and since `pin_frame` now keeps the
+    /// origin at zero, that reading meant the repair could never fire at all.
     pub fn detach_geometry_from_origin(&mut self, si: usize) -> bool {
         let Some(s) = self.sketches.get(si) else { return false };
         let origin = s.origin;
@@ -2706,9 +2916,9 @@ impl Project {
             return false;
         }
         let Some((ox, oy)) = s.points.iter().find(|p| p.id == origin).map(|p| (p.x, p.y)) else { return false };
-        let used = s.entities.iter().any(|e| entity_points(e).contains(&origin));
-        if !used || (ox == 0.0 && oy == 0.0) {
-            return false; // nobody's geometry, or already home - nothing to separate
+        let used = s.entities.iter().any(|e| entity_points(e).contains(&origin)) || s.splines.iter().any(|sp| sp.points.contains(&origin));
+        if !used {
+            return false; // nobody's geometry - nothing to separate
         }
         let fresh = self.alloc_id();
         let s = &mut self.sketches[si];
@@ -2716,6 +2926,13 @@ impl Project {
         let (guides, frame) = (s.axis_pts, s.frame);
         for e in &mut s.entities {
             remap_entity_point(e, origin, fresh);
+        }
+        for sp in &mut s.splines {
+            for id in &mut sp.points {
+                if *id == origin {
+                    *id = fresh;
+                }
+            }
         }
         for c in &mut s.constraints {
             // `Fixed` on the origin stays on the origin; so does anything naming the frame or an axis
@@ -2785,27 +3002,17 @@ impl Project {
         // dimensions measured to them.
         let sys: Vec<Id> = s.system_ids();
         let mut merged = 0usize;
-        // First, non-system points coinciding with the origin are glued onto it, keeping its id so the
-        // reference frame stays intact. The ordinary stitching below leaves system points alone, so a profile
-        // corner at the origin falls apart into two nodes in one position, the contour does not close and the
-        // shape cannot be extruded. Only the origin is glued to; the axis endpoints are arbitrary.
-        if let Some((oid, ox, oy)) = sys.iter().filter_map(|&sid| s.points.iter().find(|p| p.id == sid).map(|p| (sid, p.x, p.y))).find(|&(_, x, y)| x.abs() < 1e-9 && y.abs() < 1e-9) {
-            let mut j = 0;
-            while j < s.points.len() {
-                let (jid, jx, jy) = (s.points[j].id, s.points[j].x, s.points[j].y);
-                if sys.contains(&jid) || is_center(&s.entities, jid) {
-                    j += 1; // System points and radius-curve centres are not glued.
-                    continue;
-                }
-                if (ox - jx).powi(2) + (oy - jy).powi(2) < tol * tol {
-                    remap_point_id(s, jid, oid); // A non-system point moves onto the origin.
-                    s.points.remove(j);
-                    merged += 1;
-                } else {
-                    j += 1;
-                }
-            }
-        }
+        // NOTHING IS EVER GLUED ONTO THE ORIGIN. Geometry landing at zero used to be given the origin's id,
+        // so that a profile corner drawn there would be one node and the contour would close. The cost was
+        // paid by the person: the corner then WAS a system point, and `immovable_points` holds those - the
+        // shape could not be dragged, and moving it tore the corner off at zero.
+        //
+        // Reported behaviour: "I cannot move a circle away from the origin with the move tool". A circle
+        // survived by accident (a radius centre is never glued); a line drawn from zero did not - measured,
+        // its end came back as the origin's own id.
+        //
+        // The contour still closes: the ordinary stitching below merges two GEOMETRY points standing in one
+        // place into one geometry point, which is what closing needs. The frame of reference stays out of it.
         let mut i = 0;
         while i < s.points.len() {
             let (ix, iy, keep) = (s.points[i].x, s.points[i].y, s.points[i].id);
@@ -2971,7 +3178,7 @@ impl Project {
         // usual way puts the "R20" label exactly on that vertex and the value becomes unreadable. Half a step
         // around the circle moves it into the gap and keeps it there for any number of sides and any rotation.
         // The sign is in screen space, where the canvas Y axis points down.
-        s.constraints.push(Constraint::Diameter { c: center, d: r, off: -a0 + std::f64::consts::PI / n as f64, expr: String::new(), driven: false, diam: false });
+        s.constraints.push(Constraint::Diameter { c: center, d: r, off: -a0 + std::f64::consts::PI / n as f64, expr: String::new(), driven: false, diam: false, at: None });
         self.regen_sketch(si);
         (center, eids)
     }
@@ -3637,7 +3844,7 @@ impl Project {
                     self.planes[pi].origin = [o[0] + nn[0] * dist, o[1] + nn[1] * dist, o[2] + nn[2] * dist];
                 }
             }
-            PlaneDef::Manual => {}
+            PlaneDef::Manual | PlaneDef::FaceGone | PlaneDef::PlaneGone => {}
         }
     }
     /// Deep clone of sketch `sid` into a new node under component `target_parent`.
@@ -3711,6 +3918,12 @@ impl Project {
     /// full solve on release, but catching every interface path is pointless: the invariant is cheaper to hold
     /// here. For an already solved sketch this is a single residual evaluation, the solver exiting on the first
     /// iteration, so there is no measurable cost.
+    /// A DOCUMENT READ FROM A FILE, brought to the form a rebuild brings it to: the frame of each sketch, its contours
+    /// in order. Done as it is read, so the document opened is the one that then stands untouched.
+    pub fn settle_loaded(&mut self) {
+        self.settle_sketches();
+    }
+
     pub(super) fn settle_sketches(&mut self) {
         // Contours loaded from a file may have been written by an older build with a clockwise traversal, or
         // with a polyline that drifted apart from the exact edges. Opening a document recomputes nothing, so
@@ -3779,6 +3992,26 @@ impl Project {
 /// Into the corner is the only direction that is empty by construction: that is the open part of the shape. The
 /// tangency points lie ninety degrees to the sides and the virtual corner lies behind. The screen Y axis points
 /// down, which is why the sign of the angle is inverted.
+/// A closed loop without repeated points: coincident neighbours are dropped, and so is a closing point equal
+/// to the first one.
+///
+/// Reported behaviour: "only the built-in font extrudes, four fonts of my own and none of them works".
+/// Measured on the reporter's file: every glyph loop carried exactly one such pair, and the rebuild said
+/// "Extrude failed (check the contour)". A loop is closed by being a loop; saying so twice is a segment of
+/// zero length, and OCCT refuses to build a wire out of one.
+fn seam_cleaned(loop_: &[Point2]) -> Vec<Point2> {
+    let mut out: Vec<Point2> = Vec::with_capacity(loop_.len());
+    for p in loop_ {
+        if out.last().is_none_or(|q: &Point2| q.x != p.x || q.y != p.y) {
+            out.push(*p);
+        }
+    }
+    while out.len() >= 2 && out[0].x == out[out.len() - 1].x && out[0].y == out[out.len() - 1].y {
+        out.pop();
+    }
+    out
+}
+
 fn fillet_label_angle(points: &[SketchPoint], cen: Id, t1: Id, t2: Id) -> f64 {
     let get = |id: Id| points.iter().find(|p| p.id == id).map(|p| (p.x, p.y));
     let (Some(c), Some(a), Some(b)) = (get(cen), get(t1), get(t2)) else { return 0.0 };
@@ -3820,4 +4053,120 @@ fn round_entity(s: &crate::model::Sketch, e: &crate::model::SketchEntity) -> Opt
         }
         _ => None,
     }
+}
+
+fn at_of(pts: &[SketchPoint], id: Id) -> Option<(f64, f64)> {
+    pts.iter().find(|p| p.id == id).map(|p| (p.x, p.y))
+}
+
+/// WHAT A SEGMENT OF AN OFFSET LOOP WAS OFFSET FROM: a source line (its two points), a source arc (its centre and
+/// ends), a sharp corner of the source the offset rounds (its point), or nothing found.
+#[derive(Clone, Copy)]
+enum OffsetSource {
+    Line(Id, Id),
+    Arc { center: Id, a: Id, b: Id },
+    Corner(Id),
+    None,
+}
+
+/// The source line a copy line from `v` to `w` runs along: parallel to it, and as far from it as the offset.
+fn offset_line_source(lines: &[(Id, Id, (f64, f64), (f64, f64))], v: (f64, f64), w: (f64, f64), dist: f64) -> OffsetSource {
+    let tol = 1e-6 * (1.0 + dist.abs());
+    lines
+        .iter()
+        .find(|(_, _, p, q)| {
+            let (dx, dy) = (q.0 - p.0, q.1 - p.1);
+            let len = dx.hypot(dy).max(1e-12);
+            let cross = (dx * (w.1 - v.1) - dy * (w.0 - v.0)).abs() / (len * (w.0 - v.0).hypot(w.1 - v.1)).max(1e-12);
+            let off = ((v.0 - p.0) * dy - (v.1 - p.1) * dx).abs() / len;
+            cross < 1e-6 && (off - dist.abs()).abs() < tol
+        })
+        .map_or(OffsetSource::None, |l| OffsetSource::Line(l.0, l.1))
+}
+
+/// The source arc a copy arc centred at `c` of radius `r` was offset from - the same centre, the radius apart by the
+/// offset - or the sharp source corner it rounds: centred on it, of the offset for a radius.
+fn offset_arc_source(arcs: &[(Id, Id, Id, (f64, f64), f64)], lines: &[(Id, Id, (f64, f64), (f64, f64))], c: (f64, f64), r: f64, dist: f64) -> OffsetSource {
+    let tol = 1e-6 * (1.0 + dist.abs());
+    if let Some(a) = arcs.iter().find(|a| (a.3 .0 - c.0).hypot(a.3 .1 - c.1) < tol && ((r - a.4).abs() - dist.abs()).abs() < tol) {
+        return OffsetSource::Arc { center: a.0, a: a.1, b: a.2 };
+    }
+    lines
+        .iter()
+        .flat_map(|l| [(l.0, l.2), (l.1, l.3)])
+        .find(|(_, p)| (p.0 - c.0).hypot(p.1 - c.1) < tol && (r - dist.abs()).abs() < tol)
+        .map_or(OffsetSource::None, |(id, _)| OffsetSource::Corner(id))
+}
+
+/// THE CONSTRAINTS HOLDING AN OFFSET LOOP TO ITS SOURCE, one for each freedom of the copy and no more - a constraint
+/// more is redundant, and one that also holds the source takes its freedoms away.
+///
+/// An arc: concentric with its source arc and its radius apart by the offset, or, rounding a sharp corner, centred on
+/// that corner with the offset for a radius. A corner of the copy where two lines meet: as far from each source line
+/// as the offset. A corner where a line or an arc meets an arc: on the ray from the source arc's centre through the
+/// source point they met at (the arc keeps the copy on its circle by itself); where a line meets the arc rounding a
+/// corner: square to the source line from the corner. A line between such corners runs parallel to its source by
+/// itself. Tangency is why the corners are held by rays and squares rather than by "on the line": a point on a line
+/// and on a circle the line touches is one condition, not two, and the second was taken from the source - measured,
+/// a rounded rectangle's copy took 2 of its source's 4 freedoms.
+///
+/// A loop with a segment whose source is not found - an offset that dropped or merged segments - is left free: nothing.
+fn hold_offset_loop(ids: &[Id], kinds: &[(EntityKind, OffsetSource)], dist: f64) -> Vec<Constraint> {
+    let n = kinds.len();
+    if kinds.iter().any(|(_, s)| matches!(s, OffsetSource::None)) {
+        return Vec::new();
+    }
+    let mut held = Vec::new();
+    for (kind, src) in kinds {
+        match (kind, src) {
+            (EntityKind::Arc { center, .. }, OffsetSource::Arc { center: sc, .. }) => held.push(Constraint::Concentric { c1: *sc, c2: *center }),
+            (EntityKind::Arc { center, .. }, OffsetSource::Corner(c)) => held.push(Constraint::Coincident { a: *c, b: *center }),
+            _ => {}
+        }
+    }
+    // THE RADIUS OF A COPY ARC by one of its ends: as far from the source point it was offset from as the offset. Not by
+    // the difference of the two radii about one centre - a distance between two points that coincide has no slope, and
+    // the rank read from it took two freedoms from the source.
+    let mut sized = vec![false; n];
+    let dim = |a: Id, b: Id| Constraint::Distance { a, b, d: dist.abs(), off: 0.0, expr: String::new(), driven: false, axis: 0, at: None };
+    for k in 0..n {
+        let v = ids[k];
+        let (pk, nk) = ((k + n - 1) % n, k);
+        let (prev, next) = (kinds[pk].1, kinds[nk].1);
+        match (prev, next) {
+            (OffsetSource::Line(a1, b1), OffsetSource::Line(a2, b2)) => {
+                held.push(Constraint::DistancePL { p: v, a: a1, b: b1, d: dist.abs(), off: 0.0, expr: String::new(), driven: false, at: None });
+                held.push(Constraint::DistancePL { p: v, a: a2, b: b2, d: dist.abs(), off: 0.0, expr: String::new(), driven: false, at: None });
+            }
+            (OffsetSource::Arc { center, a, b, .. }, other) | (other, OffsetSource::Arc { center, a, b, .. }) => {
+                let arc_at = if matches!(prev, OffsetSource::Arc { center: c, .. } if c == center) { pk } else { nk };
+                // the source point the two met at: the arc's end the other source shares
+                let shared = match other {
+                    OffsetSource::Line(la, lb) => [a, b].into_iter().find(|e| *e == la || *e == lb),
+                    OffsetSource::Arc { a: oa, b: ob, .. } => [a, b].into_iter().find(|e| *e == oa || *e == ob),
+                    OffsetSource::Corner(c) => Some(c),
+                    OffsetSource::None => None,
+                };
+                if let Some(s) = shared {
+                    held.push(Constraint::PointOnLine { p: v, a: center, b: s });
+                    if !sized[arc_at] {
+                        sized[arc_at] = true;
+                        held.push(dim(s, v));
+                    }
+                }
+            }
+            (OffsetSource::Corner(c), s) | (s, OffsetSource::Corner(c)) => {
+                let arc_at = if matches!(prev, OffsetSource::Corner(_)) { pk } else { nk };
+                if let OffsetSource::Line(la, lb) = s {
+                    held.push(Constraint::Perpendicular { a: c, b: v, c: la, d: lb });
+                    if !sized[arc_at] {
+                        sized[arc_at] = true;
+                        held.push(dim(c, v));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    held
 }

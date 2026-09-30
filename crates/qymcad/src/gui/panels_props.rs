@@ -289,6 +289,7 @@ pub(crate) fn joints_panel(pr: &mut qymcad_ui_state::PropsCtx, ui: &mut egui::Ui
     let ctx = qymcad_ui_state::current_ctx_id(pr.active_path, pr.project);
     let mut to_del: Option<(Id, MateItem)> = None;
     let mut changed = false;
+    let joint_before = pr.project.joints.clone();
     let at_limit = pr.project.joints_at_limit();
     let mut put_to_limit = false;
     for e in pr.project.mate_timeline(ctx) {
@@ -311,7 +312,11 @@ pub(crate) fn joints_panel(pr: &mut qymcad_ui_state::PropsCtx, ui: &mut egui::Ui
             let in_relation = pr.joint.relation_pick.as_ref().is_some_and(|p| p.picks.iter().any(|(id, _)| *id == e.id));
             let resp = ui.selectable_label(selected || in_relation, format!("{icon} {}", crate::i18n::name(&e.name)));
             ui.label(egui::RichText::new(format!("{}: {}", crate::i18n::tr(e.kind_label), parts.join(" <-> "))).weak().small());
-            if resp.clicked() && matches!(e.item, MateItem::Joint) {
+            // A DOUBLE CLICK ON A JOINT'S ROW OPENS IT FOR EDITING, as a double click on its glyph does: a row of the list
+            // reopens what it names, as every row of the tree does
+            if resp.double_clicked() && matches!(e.item, MateItem::Joint) {
+                pr.ask.push(qymcad_ui_state::PropsAsk::EditJoint(e.id));
+            } else if resp.clicked() && matches!(e.item, MateItem::Joint) {
                 // THE TOOL IN HAND OUTRANKS THE SELECTION: while a relation is being gathered, a click on a
                 // joint means "take this degree of freedom" rather than "show this joint". Otherwise there
                 // would be no way to point at mates at all - they are not geometry and cannot be picked in
@@ -415,22 +420,24 @@ pub(crate) fn joints_panel(pr: &mut qymcad_ui_state::PropsCtx, ui: &mut egui::Ui
         // a joint of a nested subassembly (whose home is not the root) can be lifted into the root for global control
         let nested = pr.project.joint_home(j).is_some_and(|h| h != pr.project.root);
         {
+            let vars = pr.project.param_map();
+            let mut exprs = Vec::new();
             if let Some(jj) = pr.project.joints.iter_mut().find(|x| x.id == j.id) {
                 ui.horizontal(|ui| {
                     // THE SAME slot widget as in the popup at the glyph (joints.rs): a readout while the
                     // degree is free, a driver once one is set. There used to be a second copy of this editor
                     // here, and the two drifted apart silently.
                     if matches!(jj.kind, JointKind::Revolute | JointKind::Cylindrical | JointKind::PinSlot | JointKind::Ball | JointKind::Planar) {
-                        changed |= super::joints::joint_slot_drag(ui, jj, 0, 1.0);
+                        changed |= super::joints::joint_slot_drag(ui, jj, 0, 1.0, &vars, &mut exprs);
                     }
                     // an offset exists on Rigid as well (the face-to-face gap), not only on the sliding kinds.
                     // On Ball, offset and offset2 are the ANGLES rx and ry.
                     if matches!(jj.kind, JointKind::Rigid | JointKind::Slider | JointKind::Cylindrical | JointKind::PinSlot | JointKind::Planar | JointKind::Ball) {
-                        changed |= super::joints::joint_slot_drag(ui, jj, 1, 0.5);
+                        changed |= super::joints::joint_slot_drag(ui, jj, 1, 0.5, &vars, &mut exprs);
                     }
                     // the second freedom of Planar (the Y offset) or of Ball (the Y angle, ry).
                     if matches!(jj.kind, JointKind::Planar | JointKind::Ball) {
-                        changed |= super::joints::joint_slot_drag(ui, jj, 2, 0.5);
+                        changed |= super::joints::joint_slot_drag(ui, jj, 2, 0.5, &vars, &mut exprs);
                     }
                     // THE SIDE toggle. A coincidence always goes down the constraint path (the flip works
                     // through the directed residual na+nb, see mate_solver). A rigid face-to-face joint has a
@@ -445,6 +452,7 @@ pub(crate) fn joints_panel(pr: &mut qymcad_ui_state::PropsCtx, ui: &mut egui::Ui
                     }
                 });
             }
+            super::joints::keep_slot_exprs(pr.project, j.id, exprs);
         }
         // the parametric angle and offset fields are expressions over the global variables (like sketch
         // dimensions): they are stored in feat_dims under the joint's id and evaluated in regenerate.
@@ -506,6 +514,7 @@ pub(crate) fn joints_panel(pr: &mut qymcad_ui_state::PropsCtx, ui: &mut egui::Ui
         }
         changed = true;
     }
+    super::joints::joint_values_step(&ui.ctx().clone(), pr.edits, pr.project, joint_before, changed);
     if changed {
         qymcad_ui_state::mark_dirty_for_rebuild(&mut pr.rebuild()); // the document is marked; the scheduler does the computing
     }
@@ -676,14 +685,15 @@ pub(crate) fn feature_props(pr: &mut qymcad_ui_state::PropsCtx, ui: &mut egui::U
 
     ui.separator();
     ui.horizontal(|ui| {
-        if ui.button(format!("{} {}", ph::PENCIL_SIMPLE, crate::i18n::tr("props-edit"))).on_hover_text(crate::i18n::tr("fp-edit-hint")).clicked() {
-            pr.ask.push(qymcad_ui_state::PropsAsk::EditFeature(fid));
+        let hint = if node.kind.is_import() { "fp-import-edit-hint" } else { "fp-edit-hint" };
+        if ui.button(format!("{} {}", ph::PENCIL_SIMPLE, crate::i18n::tr("props-edit"))).on_hover_text(crate::i18n::tr(hint)).clicked() {
+            // an import has no command of its own: editing it is asking again about its units and scale
+            pr.ask.push(if node.kind.is_import() { qymcad_ui_state::PropsAsk::RescaleImport(fid) } else { qymcad_ui_state::PropsAsk::EditFeature(fid) });
         }
         if ui.button(format!("{} {}", ph::TRASH, crate::i18n::tr("props-delete"))).clicked() {
             qymcad_ui_state::ask_delete(pr.deferred, Sel::Feature(ti)); // ask and delete, by the same path the tree uses
         }
     });
-
     // A FEATURE'S NUMBERS LIVE HERE, AND EVERY ONE OF THEM CAN BECOME A DRIVER.
     //
     // What was asked for: features should have all of this, not only sketches. Before that there were no
@@ -709,13 +719,15 @@ pub(crate) fn properties_panel(pr: &mut qymcad_ui_state::PropsCtx, ui: &mut egui
         // the CAM properties (the machine, the stock, the tool, the setup, the operation) belong to the CAM workbench only
         match *pr.sel {
             Sel::Mesh(i) if i < pr.project.bodies.len() => crate::gui::mesh_props(&mut *pr.deferred, &mut *pr.project, &mut *pr.regen, ui, i),
-            Sel::Face(mi, fi) if pr.project.bodies.get(mi).is_some_and(|b| fi < b.faces.len()) => crate::gui::face_props(&mut *pr.project, ui, mi, fi),
+            Sel::Face(mi, fi) if pr.project.bodies.get(mi).is_some_and(|b| fi < b.faces.len()) => crate::gui::face_props(&mut *pr.project, ui, mi, fi, !pr.gsel.faces.is_empty()),
             Sel::Contour(i) if i < pr.project.contours.len() => crate::gui::panels_props::contour_props(qymcad_ui_state::editing_in!(pr), &mut *pr.array, &mut *pr.boolean, &mut *pr.deferred, &mut *pr.set, ui, i),
             Sel::Sketch(i) if i < pr.project.sketches.len() => crate::gui::sketching::sketch_props(pr, ui, i),
             Sel::Plane(i) if i < pr.project.planes.len() => plane_props(pr, ui, i),
             Sel::DatumPoint(i) if i < pr.project.datum_points.len() => crate::gui::datum_point_props(&mut *pr.datum, &mut *pr.deferred, &mut *pr.project, ui, i),
             Sel::DatumAxis(i) if i < pr.project.datum_axes.len() => datum_axis_props(pr, ui, i),
             Sel::Component(i) if i < pr.project.components.len() => component_props(pr, ui, i),
+            Sel::Edge(body, id) => crate::gui::props_pick::edge_props(pr, ui, body, id),
+            Sel::Vertex(body, id, far) => crate::gui::props_pick::vertex_props(pr, ui, body, id, far),
             Sel::Feature(i) if i < pr.project.timeline.len() => feature_props(pr, ui, i),
                                     _ => {
                 ui.heading(crate::i18n::tr("props-title"));
@@ -764,7 +776,7 @@ pub(crate) fn component_props(pr: &mut qymcad_ui_state::PropsCtx, ui: &mut egui:
     } else {
         ui.label(egui::RichText::new(crate::i18n::tr("comp-not-active")).weak());
         if ui.button(format!("{} {}", ph::CUBE, crate::i18n::tr("props-enter-component"))).clicked() {
-            pr.ask.push(qymcad_ui_state::PropsAsk::SetContext(cid));
+            pr.ask.push(qymcad_ui_state::PropsAsk::SetContext(pr.project.instance_origin(cid))); // a clone opens its original
         }
     }
     // the contents
@@ -788,17 +800,26 @@ pub(crate) fn component_props(pr: &mut qymcad_ui_state::PropsCtx, ui: &mut egui:
         ui.separator();
         ui.label(egui::RichText::new(crate::i18n::tr("comp-placement")).strong());
         let mut t = pr.project.component_transform(cid);
-        let mut moved = false;
+        let (mut moved, mut dragging_on) = (false, false);
         ui.horizontal(|ui| {
-            ui.label("X");
-            moved |= ui.add(egui::DragValue::new(&mut t[3]).speed(0.5).suffix(crate::i18n::tr("unit-mm-suffix"))).changed();
-            ui.label("Y");
-            moved |= ui.add(egui::DragValue::new(&mut t[7]).speed(0.5).suffix(crate::i18n::tr("unit-mm-suffix"))).changed();
-            ui.label("Z");
-            moved |= ui.add(egui::DragValue::new(&mut t[11]).speed(0.5).suffix(crate::i18n::tr("unit-mm-suffix"))).changed();
+            for (k, axis) in [(3, "X"), (7, "Y"), (11, "Z")] {
+                ui.label(axis);
+                let r = ui.add(egui::DragValue::new(&mut t[k]).speed(0.5).suffix(crate::i18n::tr("unit-mm-suffix")));
+                moved |= r.changed();
+                dragging_on |= r.dragged() && !r.drag_started();
+            }
         });
+        // EACH PLACEMENT IS A STEP OF UNDO of its own; the frames of one drag fold into the step it began
         if moved {
-            pr.project.set_component_transform(cid, t);
+            let name = crate::i18n::tr("status-move-component");
+            if dragging_on && pr.edits.undo.last().is_some_and(|s| s.name == name) {
+                pr.project.set_component_transform(cid, t);
+                qymcad_ui_state::fold_into_last_step(pr.edits, pr.project);
+            } else {
+                qymcad_ui_state::begin_edit(pr.edits, pr.project, name);
+                pr.project.set_component_transform(cid, t);
+                qymcad_ui_state::close_edit(pr.edits, pr.project);
+            }
             qymcad_ui_state::after_placement_change(&mut pr.rebuild());
         }
         let mut rot = pr.opts.rot_deg;
@@ -818,7 +839,9 @@ pub(crate) fn component_props(pr: &mut qymcad_ui_state::PropsCtx, ui: &mut egui:
         });
         pr.opts.rot_deg = rot;
         if let Some(ax) = rot_axis {
+            qymcad_ui_state::begin_edit(pr.edits, pr.project, crate::i18n::tr("comp-rotation"));
             pr.project.rotate_component(cid, ax, rot);
+            qymcad_ui_state::close_edit(pr.edits, pr.project);
             qymcad_ui_state::after_placement_change(&mut pr.rebuild());
         }
         let mut grounded = pr.project.is_grounded(cid);
@@ -831,11 +854,15 @@ pub(crate) fn component_props(pr: &mut qymcad_ui_state::PropsCtx, ui: &mut egui:
             g_changed = ui.checkbox(&mut grounded, crate::i18n::tr("comp-grounded")).on_hover_text(crate::i18n::tr("comp-grounded-hint")).changed();
         });
         if reset {
+            qymcad_ui_state::begin_edit(pr.edits, pr.project, crate::i18n::tr("comp-reset-placement"));
             pr.project.set_component_transform(cid, qymcad_core::feature::PLACE_IDENTITY);
+            qymcad_ui_state::close_edit(pr.edits, pr.project);
             qymcad_ui_state::after_placement_change(&mut pr.rebuild());
         }
         if g_changed {
+            qymcad_ui_state::begin_edit(pr.edits, pr.project, crate::i18n::tr("jt-ground-btn"));
             pr.project.set_grounded(cid, grounded);
+            qymcad_ui_state::close_edit(pr.edits, pr.project);
         }
     }
 
@@ -857,9 +884,11 @@ pub(crate) fn component_props(pr: &mut qymcad_ui_state::PropsCtx, ui: &mut egui:
         if let Some(rid) = del {
             // not a raw deletion (which would leave a sketch on another part's face without authorisation, an
             // isolation error), but an honest break: the sketch planes are frozen into a copy in place
+            qymcad_ui_state::begin_edit(pr.edits, pr.project, crate::i18n::tr("cmdname-break-ref")); // THE BOUNDARY OF AN OPERATION
             let frozen = pr.project.break_external_ref(rid);
             qymcad_ui_state::mark_dirty_for_rebuild(&mut pr.rebuild()); // the document is marked; the scheduler does the computing
             *pr.status = crate::i18n::tr1("comp-ref-broken", "n", &frozen.to_string());
+            qymcad_ui_state::commit_edit(&mut pr.rebuild());
         }
     }
 

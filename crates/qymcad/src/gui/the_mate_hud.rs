@@ -166,6 +166,11 @@ mod tests {
             j.drive[1] = Some(7.0);
         }
         let (a_was, b_was) = app.project.joints.iter().find(|x| x.id == jid).map(|j| (j.a, j.b)).expect("the joint");
+        // the swap itself lets the side go: the previous answer was chosen for a different pair (the handle then solves
+        // the assembly at once, and the solve decides it afresh for the new one)
+        let mut bare = app.project.clone();
+        bare.swap_joint_roles(jid);
+        assert!(!bare.joints.iter().find(|x| x.id == jid).is_some_and(|j| j.flip_decided), "the mating side must be decided AFRESH: the previous answer was chosen for a different pair");
 
         qymcad_assembly::joint_hud_swap_roles_for_test(&mut app.joint_ctx(), jid);
 
@@ -174,6 +179,5 @@ mod tests {
         assert_eq!(j.name, "my-joint", "the name of the joint was lost in the role swap");
         assert_eq!((j.limit_min[1], j.limit_max[1]), (Some(-5.0), Some(25.0)), "the limits were lost in the role swap");
         assert_eq!(j.drive[1], Some(7.0), "the drive was lost in the role swap");
-        assert!(!j.flip_decided, "the mating side must be decided AFRESH: the previous answer was chosen for a different pair");
     }
 }

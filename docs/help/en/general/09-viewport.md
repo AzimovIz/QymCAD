@@ -5,41 +5,62 @@
 ![The viewport: the view cube in the corner, axes and grid, the part in isometric view.](img/viewport.png)
 
 The **view cube** in the top right corner: click a face for the front, top or side view; a corner for
-an isometric one; an edge for a 45° view. The “home” button returns the isometric view. The move is
-smooth — a jump is disorienting, especially in an assembly.
+an isometric one; an edge for a 45° view. The "home" button returns the isometric view. The view moves
+smoothly. The size of the cube is set in the settings.
 
-The size of the cube is set in the settings: a small one is unreadable on 4K, a large one gets in the
-way on a small screen.
+**Projection** — orthographic or perspective, switched in the settings. Engineering work usually goes on
+in orthographic: equal sizes look equal there.
 
 ## Moving the view with the mouse
 
-In the 3D viewport:
+The default layout is **QymCAD**:
 
-* **Drag** turns the model around what you are looking at.
+* **Dragging** with any button turns the model. The left button turns it only when begun on the model;
+  from empty space it draws a frame.
 * **Shift** and drag moves the view sideways and up or down.
-* Both of those are the factory layout, **QymCAD**. In the settings, under **Mouse navigation**, you can
-  pick the layout of the CAD you are used to instead - CAD, Blender, Gesture, Maya, OpenCascade,
-  OpenInventor, OpenSCAD, Revit, TinkerCAD or Touchpad. Each is the one that CAD uses, so the habit you
-  came with keeps working; the line under each name says what its buttons do.
-* **The wheel** zooms in and out, towards wherever the cursor is: the point under it stays put. In the
-  settings, under **Zooming with the wheel**, you can choose "from the middle of the view" instead - then
-  the middle of the viewport is what holds still, wherever you aim.
-* While a command is open the view zooms **from the middle of the part**: the command's fields stand at the
-  geometry, and zooming towards the cursor drags the part, and them with it, out from under your hand. The
-  line **While a command is open** in the settings turns that off.
-* **A click** selects a body, a face, an edge or an outline; a click on empty space clears the selection.
-* **The right button** on what is under the cursor offers "expand the selection" while a command that
-  takes such a description is open. A right-button DRAG is still a turn, so the menu does not get in the
-  way of looking around.
+* In an assembly a part is carried without its gizmo with **Shift and the left button**, begun on the
+  part. The middle and right buttons over a part move the view, as everywhere.
+* The **wheel** zooms in and out towards the cursor: the point under it stays in place. In the settings,
+  in the **Zooming with the wheel** row, you can choose "from the middle of the view".
+* While a command is open the view zooms **about the centre of the part**, so the command's fields do
+  not slide away from under the hand. Pick "as usual" in the **While a command is open** row of the settings to turn that off.
 
-In a sketch the view is flat and the buttons differ:
+## Layouts of other programs
 
-* **The middle button** and drag moves the sheet. The left button is busy there: it draws and it grabs.
-* **The wheel** zooms in and out, by the same rule as in the 3D view.
-* **Drag with the left button** on a point, a line or a dimension moves it.
-* **Drag with the left button** on empty space draws a selection box.
-* **Ctrl** and drag draws a selection box even when the drag begins on top of geometry, so you can box in
-  what lies among other things.
+In the settings, in the **Mouse navigation** row, you can pick the layout of the program you are used to:
+CAD, Blender, Gesture, Maya, OpenCascade, OpenInventor, OpenSCAD, Revit, TinkerCAD or Touchpad. Each
+works as it does in its own program — under the name it says what its buttons do. How they differ:
+
+* **A middle click** in CAD, Blender, Revit, OpenInventor, Maya and Gesture looks at the point under the
+  cursor: it comes to the middle of the view, and the view turns about it from then on.
+* **Den** is a layout for a pen: the left button turns the model, the middle one moves the view, the two together
+  zoom in with a movement right or up and out with one left or down. In a sketch the left button stays the sketch's.
+  Zoom and turn go about the point the view settings choose, as in the other layouts.
+* **The selection frame** is drawn with Shift and the left button in Gesture, Maya and Den, there is none in
+  OpenInventor and OpenSCAD, and the others draw it with the left button.
+* **Selecting** in OpenInventor is a click with Ctrl or Shift: a bare left click there turns the model.
+* **Tilting the view** exists only in Gesture — both buttons together. The view cube levels it again.
+* In CAD a left click while the middle button is held turns the middle button to zoom for as long as it
+  is held.
+
+## Selecting
+
+* **A click** takes a face, an edge, a vertex or an outline; **a double click** takes the whole body; a
+  click on empty space clears the selection. What will be taken is highlighted before the click.
+* **A frame** takes the bodies (in an assembly, the parts) that fall wholly inside it.
+* **The right button** on what is under the cursor offers "extend the selection" while a command that
+  takes such a description is open.
+
+## In a sketch
+
+A sketch is always flat: the view does not turn there under any layout.
+
+* **The middle button** dragged moves the sheet. Under another layout the sheet moves with that layout's
+  pan gesture. A two-button chord where one of them is the left one works too.
+* **The wheel** zooms in and out by the same rule as in the 3D view.
+* **The left button** belongs to the sketch under every layout: dragging a point, a line or a dimension
+  moves it, from empty space it draws a frame. **Ctrl** or **Shift** with the left one adds to the
+  selection.
 
 If the model has gone out of sight, the "home" button on the view cube brings the isometric view back.
 
@@ -56,5 +77,4 @@ from “precise” to “coarse”: a touch screen and a 4K display need differe
 ## Ghosts
 
 A part outside the current context is shown semi-transparent — so that you can refer to it without it
-getting in the way. The transparency is set in the settings: some find it distracting, others cannot
-see it at all.
+getting in the way. The transparency is set in the settings.

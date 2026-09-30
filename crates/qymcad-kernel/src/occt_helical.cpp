@@ -1,3 +1,5 @@
+#include <BRepCheck.hxx>
+#include <sstream>
 // A HELICAL RIB OR GROOVE FROM AN EXACT PROFILE: threads, augers, and the run-outs at their ends.
 //
 // The heaviest single subject in the bridge and the one most often edited, so it lives on its own.
@@ -531,7 +533,8 @@ extern "C" QymShape* qym_shape_helical_profile(const QymShape* base, const doubl
                     TopoDS_Shape big = BRepPrimAPI_MakeCylinder(rax, radius * 2.0 + 1.0, LL).Shape();
                     TopoDS_Shape core = BRepPrimAPI_MakeCylinder(rax, r_rel, LL).Shape();
                     if (big.IsNull() || core.IsNull()) continue;
-                    BRepAlgoAPI_Cut rr(big, core);   // the constructor already performs the operation:
+                    BRepAlgoAPI_Cut rr;
+                    qym_boolean(rr, big, core);
                     if (!rr.IsDone() || rr.Shape().IsNull()) continue;
                     ring = rr.Shape();
                 }
@@ -552,7 +555,8 @@ extern "C" QymShape* qym_shape_helical_profile(const QymShape* base, const doubl
                     double rbig = std::max(radius, r_root) * 2.0 + 1.0;
                     TopoDS_Shape cyl = BRepPrimAPI_MakeCylinder(ax2, rbig, L).Shape();
                     if (cyl.IsNull()) continue;
-                    BRepAlgoAPI_Cut ring(cyl, cone); // calling Build() again discards the result
+                    BRepAlgoAPI_Cut ring;
+                    qym_boolean(ring, cyl, cone);
                     if (ring.IsDone() && !ring.Shape().IsNull()) chamfers.emplace_back(ring.Shape(), name_relief(ring.Shape(), 1, end));
                 }
             }
@@ -560,8 +564,7 @@ extern "C" QymShape* qym_shape_helical_profile(const QymShape* base, const doubl
         QymShape* q = nullptr;
         if (mode == 1) {
             BRepAlgoAPI_Fuse algo;
-            algo.SetArguments(args); algo.SetTools(tools); algo.SetRunParallel(Standard_True);
-            algo.Build();
+            qym_boolean_many(algo, args, tools);
             if (!algo.IsDone() || algo.Shape().IsNull()) return why("helix/subtract", "the helical grooves did not cut out of the part"), nullptr;
             q = new QymShape{algo.Shape(), {}, {}, {}, {}};
             // NAMES FROM EVERY OPERAND COME BEFORE POSITIONAL NUMBERS ARE HANDED OUT.
@@ -583,8 +586,7 @@ extern "C" QymShape* qym_shape_helical_profile(const QymShape* base, const doubl
             fill_unnamed(q->shape, TopAbs_EDGE, q->eids, ne);
         } else {
             BRepAlgoAPI_Cut algo;
-            algo.SetArguments(args); algo.SetTools(tools); algo.SetRunParallel(Standard_True);
-            algo.Build();
+            qym_boolean_many(algo, args, tools);
             if (!algo.IsDone() || algo.Shape().IsNull()) return why("helix/unite", "the helical ribs did not unite with the part"), nullptr;
             q = new QymShape{algo.Shape(), {}, {}, {}, {}};
             // NAMES FROM EVERY OPERAND COME BEFORE POSITIONAL NUMBERS ARE HANDED OUT.
@@ -606,9 +608,8 @@ extern "C" QymShape* qym_shape_helical_profile(const QymShape* base, const doubl
             fill_unnamed(q->shape, TopAbs_EDGE, q->eids, ne);
         }
         for (const auto& [ch, ch_ids] : chamfers) {
-            // NOTE: the two-argument constructor already performs the operation. Calling Build() again wiped
-            // the result out — the relief "ate" the whole thread and the cut stopped removing anything.
-            BRepAlgoAPI_Cut cut(q->shape, ch);
+            BRepAlgoAPI_Cut cut;
+            qym_boolean(cut, q->shape, ch);
             if (!cut.IsDone() || cut.Shape().IsNull()) continue;     // the chamfer failed; the thread stays
             QymShape* n = new QymShape{cut.Shape(), {}, {}, {}, {}};
             int nf2 = next_local(q->fids), ne2 = next_local(q->eids);
@@ -711,7 +712,8 @@ extern "C" QymShape* qym_shape_thread(const QymShape* base, const double* origin
         // the grooves are cut out of the base ONE AT A TIME, running the persistent ids through every cut
         QymShape* q = new QymShape{base->shape, base->fids, base->eids};
         for (auto& g : grooves) {
-            BRepAlgoAPI_Cut cut(q->shape, g);
+            BRepAlgoAPI_Cut cut;
+            qym_boolean(cut, q->shape, g);
             if (!cut.IsDone() || cut.Shape().IsNull()) { delete q; return why("helix/cut", "the helical body could not be cut out of the part"), nullptr; }
             TopoDS_Shape r2 = cut.Shape();
             TopTools_DataMapOfShapeInteger f2, e2;
@@ -725,13 +727,19 @@ extern "C" QymShape* qym_shape_thread(const QymShape* base, const double* origin
     return nullptr;
 }
 
-// The solid's volume (mm^3), for tests and checks (GProp). 0 on failure.
+// The volume of the solids of the shape (mm^3), for tests and checks (GProp). 0 on failure.
+// ONLY SOLIDS HOLD VOLUME: VolumeProperties of an open shell takes it as if it were closed - two faces of a block
+// 40 x 30 x 10 stitched along their shared edge weighed 2000 mm^3. A sheet, or the sheet part of a compound, weighs 0.
 extern "C" double qym_shape_volume(const QymShape* s) {
     if (!s) return 0.0;
     try {
-        GProp_GProps g;
-        BRepGProp::VolumeProperties(s->shape, g);
-        return g.Mass();
+        double v = 0.0;
+        for (TopExp_Explorer ex(s->shape, TopAbs_SOLID); ex.More(); ex.Next()) {
+            GProp_GProps g;
+            BRepGProp::VolumeProperties(ex.Current(), g);
+            v += g.Mass();
+        }
+        return v;
     } catch (...) {
         return 0.0;
     }
@@ -781,6 +789,113 @@ extern "C" int qym_shape_heal_pinched_faces(QymShape* s) {
     } catch (...) { return 0; } // it did not work out; the solid stays as it was, no worse
 }
 
+// REPLACE ONE FACE WITH A SHEET THAT DOES NOT MEET ITS EDGES: the neighbours reach the sheet, as the professional systems
+// replace a face. The body is grown out of the face along its normal far past the sheet, cut by the sheet carried on
+// past its edges, and what lies on the body's side of it is kept: a top replaced by a sheet lifted 5 makes the block 5
+// taller, one sunk 3 into it makes it 3 lower. The base's faces keep their names through the growing and the cut, the
+// face on the sheet takes the sheet's. Null when it is not one face and one sheet face, or the cut leaves no solid.
+static QymShape* replace_by_reaching(const QymShape* base, const uint32_t* idx, size_t n, const QymShape* surf) {
+    if (n != 1) return nullptr;
+    TopoDS_Face face, sheet;
+    for (TopExp_Explorer ex(base->shape, TopAbs_FACE); ex.More(); ex.Next())
+        if (base->fids.IsBound(ex.Current()) && static_cast<uint32_t>(base->fids.Find(ex.Current())) == idx[0]) { face = TopoDS::Face(ex.Current()); break; }
+    int sheets = 0;
+    for (TopExp_Explorer ex(surf->shape, TopAbs_FACE); ex.More(); ex.Next()) { sheet = TopoDS::Face(ex.Current()); ++sheets; }
+    if (face.IsNull() || sheets != 1) return nullptr;
+    // the way out of the face, at its middle
+    double u0, u1, v0, v1;
+    BRepTools::UVBounds(face, u0, u1, v0, v1);
+    BRepAdaptor_Surface af(face);
+    gp_Pnt mid;
+    gp_Vec du, dv;
+    af.D1(0.5 * (u0 + u1), 0.5 * (v0 + v1), mid, du, dv);
+    gp_Vec out = du.Crossed(dv);
+    if (out.Magnitude() < 1e-12) return nullptr;
+    out.Normalize();
+    if (face.Orientation() == TopAbs_REVERSED) out.Reverse();
+    Bnd_Box box;
+    BRepBndLib::Add(base->shape, box);
+    BRepBndLib::Add(surf->shape, box);
+    const double far_off = 2.0 * std::sqrt(box.SquareExtent()) + 1.0; // not `far`: a macro of the Windows headers
+    // grown out of the face, then cut by the sheet carried on
+    BRepPrimAPI_MakePrism prism(face, out.Multiplied(far_off));
+    if (!prism.IsDone()) return nullptr;
+    BRepAlgoAPI_Fuse grow;
+    if (!qym_boolean(grow, base->shape, prism.Shape())) return nullptr;
+    TopoDS_Face reach;
+    BRepLib::ExtendFace(sheet, far_off, true, true, true, true, reach);
+    if (reach.IsNull()) return nullptr;
+    BRepAlgoAPI_Splitter cut;
+    TopTools_ListOfShape args, tools;
+    args.Append(grow.Shape());
+    tools.Append(reach);
+    if (!qym_boolean_many(cut, args, tools)) return nullptr;
+    // the pieces on the body's side of the sheet: their middle lies against the way out
+    GeomAPI_ProjectPointOnSurf on(mid, BRep_Tool::Surface(reach));
+    BRep_Builder bb;
+    TopoDS_Compound kept;
+    bb.MakeCompound(kept);
+    int n_kept = 0;
+    for (TopExp_Explorer ex(cut.Shape(), TopAbs_SOLID); ex.More(); ex.Next()) {
+        GProp_GProps g;
+        BRepGProp::VolumeProperties(ex.Current(), g);
+        const gp_Pnt c = g.CentreOfMass();
+        on.Perform(c);
+        if (on.NbPoints() == 0) continue;
+        if (gp_Vec(on.NearestPoint(), c).Dot(out) < 0.0) { bb.Add(kept, ex.Current()); ++n_kept; }
+    }
+    if (n_kept == 0) return nullptr;
+    TopoDS_Shape result = kept;
+    if (n_kept == 1) { TopExp_Explorer one(kept, TopAbs_SOLID); result = one.Current(); }
+    else {
+        // pieces the sheet parted on the kept side belong together
+        TopTools_ListOfShape all;
+        for (TopExp_Explorer ex(kept, TopAbs_SOLID); ex.More(); ex.Next()) all.Append(ex.Current());
+        TopoDS_Shape first = all.First();
+        all.RemoveFirst();
+        BRepAlgoAPI_Fuse join;
+        TopTools_ListOfShape a1;
+        a1.Append(first);
+        if (!qym_boolean_many(join, a1, all)) return nullptr;
+        result = join.Shape();
+    }
+    if (!BRepCheck_Analyzer(result).IsValid()) return nullptr;
+    QymShape* q = new QymShape{result, {}, {}, {}, {}};
+    // every face of the result that stands on a base face, through the growing and the cut, takes that face's name
+    auto images = [&](const TopoDS_Shape& f) {
+        TopTools_ListOfShape stage;
+        if (grow.IsDeleted(f)) return stage;
+        const TopTools_ListOfShape& m1 = grow.Modified(f);
+        TopTools_ListOfShape s1;
+        if (m1.IsEmpty()) s1.Append(f); else s1 = m1;
+        for (TopTools_ListIteratorOfListOfShape it(s1); it.More(); it.Next()) {
+            if (cut.IsDeleted(it.Value())) continue;
+            const TopTools_ListOfShape& m2 = cut.Modified(it.Value());
+            if (m2.IsEmpty()) stage.Append(it.Value()); else for (TopTools_ListIteratorOfListOfShape j(m2); j.More(); j.Next()) stage.Append(j.Value());
+        }
+        return stage;
+    };
+    for (TopExp_Explorer ex(base->shape, TopAbs_FACE); ex.More(); ex.Next()) {
+        if (!base->fids.IsBound(ex.Current()) || ex.Current().IsSame(face)) continue;
+        const int id = base->fids.Find(ex.Current());
+        TopTools_ListOfShape im = images(ex.Current());
+        for (TopTools_ListIteratorOfListOfShape it(im); it.More(); it.Next())
+            for (TopExp_Explorer r(result, TopAbs_FACE); r.More(); r.Next())
+                if (r.Current().IsSame(it.Value()) && !q->fids.IsBound(r.Current())) q->fids.Bind(r.Current(), id);
+    }
+    const int sheet_id = surf->fids.IsBound(sheet) ? surf->fids.Find(sheet) : 0;
+    if (sheet_id != 0) {
+        const TopTools_ListOfShape& m = cut.Modified(reach);
+        for (TopTools_ListIteratorOfListOfShape it(m); it.More(); it.Next())
+            for (TopExp_Explorer r(result, TopAbs_FACE); r.More(); r.Next())
+                if (r.Current().IsSame(it.Value()) && !q->fids.IsBound(r.Current())) q->fids.Bind(r.Current(), sheet_id);
+    }
+    int nf = next_local(base->fids), ne = next_local(base->eids);
+    fill_unnamed(result, TopAbs_FACE, q->fids, nf);
+    fill_unnamed(result, TopAbs_EDGE, q->eids, ne);
+    return q;
+}
+
 // REPLACE A SOLID'S FACES WITH A SURFACE. This is where the design layer joins the timeline: the whole point
 // of that layer is "take a face off, edit it apart, put it back on the solid", not "the design sits next to
 // the part".
@@ -820,6 +935,8 @@ extern "C" QymShape* qym_shape_replace_faces(const QymShape* base, const uint32_
         TopoDS_Shape shape = sew.SewedShape();
         if (shape.IsNull()) return nullptr;
         if (sew.NbFreeEdges() != 0) {
+            // ONE FACE AND A SHEET OFF ITS EDGES: the neighbours reach the sheet
+            if (QymShape* reached = replace_by_reaching(base, idx, n, surf)) return reached;
             // HOW MANY EDGES WERE LEFT WITHOUT A PARTNER is the answer a person needs. A silent "it did not
             // work" left them guessing: replacing an end face's ring with a cap over the whole opening leaves
             // boundaries that do not match, and the message gave no way to tell.
@@ -964,6 +1081,7 @@ extern "C" QymShape* qym_shape_patch(const QymShape* s, const uint32_t* idx, siz
     try {
         BRepOffsetAPI_MakeFilling mf;
         int added = 0;
+        TopoDS_Edge last;
         // TANGENCY IS SET BY A NEIGHBOURING FACE, not by a wish: for the surface to meet the edge smoothly
         // the kernel has to know WHAT it should be tangent to. Hence the map "edge -> its faces".
         TopTools_IndexedDataMapOfShapeListOfShape efmap;
@@ -1002,16 +1120,24 @@ extern "C" QymShape* qym_shape_patch(const QymShape* s, const uint32_t* idx, siz
                 mf.Add(TopoDS::Edge(ex.Current()), GeomAbs_C0);
             }
             ++added;
+            last = TopoDS::Edge(ex.Current());
         }
-        // one edge does not define a boundary
-        if (added < 2) {
+        // one edge does not define a boundary - unless it is closed: the rim of a hole is a whole circle
+        const bool ring = added == 1 && BRep_Tool::IsClosed(last);
+        if (added < 2 && !ring) {
             char msg[160];
             snprintf(msg, sizeof(msg), "only %d of the %zu named edges are in this body, and one edge does not bound a patch", added, n);
             return why("patch/boundary", msg), nullptr;
         }
+        TopoDS_Shape face;
         mf.Build();
-        if (!mf.IsDone()) return why("patch/build", "the kernel could not span a face across these edges"), nullptr;
-        TopoDS_Shape face = mf.Shape();
+        if (mf.IsDone()) face = mf.Shape();
+        // a closed flat edge the filling will not take is spanned by the plane it lies in: the disc over a circle
+        if (face.IsNull() && ring) {
+            BRepBuilderAPI_MakeFace mk(BRepBuilderAPI_MakeWire(last).Wire(), Standard_True);
+            if (mk.IsDone()) face = mk.Face();
+        }
+        if (face.IsNull() && !mf.IsDone()) return why("patch/build", "the kernel could not span a face across these edges"), nullptr;
         if (face.IsNull()) return why("patch/build", "the kernel reported success and returned nothing"), nullptr;
         QymShape* q = new QymShape{face, {}, {}, {}, {}};
         // A PATCH IS NAMED AFTER THE FEATURE ITSELF. There is one patch per feature and its surface has no
@@ -1057,6 +1183,110 @@ extern "C" QymShape* qym_shape_copy_faces(const QymShape* s, const uint32_t* idx
         q->shape = shell;
         int ne = 1;
         fill_unnamed(shell, TopAbs_EDGE, q->eids, ne); // the sheet's edges are positional: they have no recipe
+        return q;
+    } catch (...) { return nullptr; }
+}
+
+// DID THE FACE GO THE DISTANCE, AND DOES IT FACE THE SAME WAY: the middle of the face `f0`, moved `dist` along its normal,
+// lies on `f1`, and `f1` points where `f0` did there. A cylinder of radius 10 moved in by 12 comes back a cylinder of
+// radius 2 turned inside out - its normal reversed - and is refused, not handed on.
+static bool went_the_distance(const TopoDS_Face& f0, const TopoDS_Face& f1, double dist) {
+    double u0, u1, v0, v1;
+    BRepTools::UVBounds(f0, u0, u1, v0, v1);
+    BRepAdaptor_Surface a0(f0);
+    gp_Pnt p0;
+    gp_Vec du, dv;
+    a0.D1(0.5 * (u0 + u1), 0.5 * (v0 + v1), p0, du, dv);
+    gp_Vec nrm = du.Crossed(dv);
+    if (nrm.Magnitude() < 1e-12) return true; // a degenerate middle tells nothing
+    nrm.Normalize();
+    if (f0.Orientation() == TopAbs_REVERSED) nrm.Reverse();
+    const gp_Pnt want = p0.Translated(nrm.Multiplied(dist));
+    GeomAPI_ProjectPointOnSurf proj(want, BRep_Tool::Surface(f1));
+    if (proj.NbPoints() == 0) return false;
+    double pu, pv;
+    proj.LowerDistanceParameters(pu, pv);
+    BRepAdaptor_Surface a1(f1);
+    gp_Pnt p1;
+    gp_Vec du1, dv1;
+    a1.D1(pu, pv, p1, du1, dv1);
+    gp_Vec nrm1 = du1.Crossed(dv1);
+    if (f1.Orientation() == TopAbs_REVERSED) nrm1.Reverse();
+    return nrm1.Magnitude() > 1e-12 && nrm1.Dot(nrm) > 0.0 && p1.Distance(want) <= 1e-3 * std::max(1.0, std::abs(dist));
+}
+
+// THE FACES OF `out`, one for one with `taken` in the same order, each gone the distance: named after the face it came
+// from into `fids`. False when the count or a face does not match - the simple offset keeps the topology as it was and
+// keeps no history to ask, so the order is the match.
+static bool name_moved(const TopoDS_Shape& out, const std::vector<std::pair<TopoDS_Shape, uint32_t>>& taken, double dist, TopTools_DataMapOfShapeInteger& fids) {
+    std::vector<TopoDS_Face> moved;
+    for (TopExp_Explorer ex(out, TopAbs_FACE); ex.More(); ex.Next()) moved.push_back(TopoDS::Face(ex.Current()));
+    if (moved.size() != taken.size()) return false;
+    for (size_t k = 0; k < moved.size(); ++k)
+        if (!went_the_distance(TopoDS::Face(taken[k].first), moved[k], dist)) return false;
+    for (size_t k = 0; k < moved.size(); ++k) fids.Bind(moved[k], static_cast<int>(taken[k].second));
+    return true;
+}
+
+// AN OFFSET SHEET: the faces `idx` of the shape taken out and moved `dist` along their normals - outward for the faces of
+// a solid, a negative distance going in, zero a copy in place. Every face of the sheet is named `names[k]` after the one
+// it came from. Faces meeting smoothly move as one sheet; faces meeting at a sharp edge - the top and the front of a
+// block - move apart, each a sheet of its own in one surface body, as the professional systems offset them. Null when no
+// face is found, or a face turns inside out (a cylinder of radius 10 moved in by 12).
+extern "C" QymShape* qym_shape_offset_faces(const QymShape* s, const uint32_t* idx, const uint32_t* names, size_t n, double dist) {
+    if (!s || n == 0) return nullptr;
+    try {
+        BRep_Builder bb;
+        TopoDS_Shell shell;
+        bb.MakeShell(shell);
+        std::vector<std::pair<TopoDS_Shape, uint32_t>> taken;
+        for (TopExp_Explorer ex(s->shape, TopAbs_FACE); ex.More(); ex.Next()) {
+            if (!s->fids.IsBound(ex.Current())) continue;
+            uint32_t id = static_cast<uint32_t>(s->fids.Find(ex.Current()));
+            for (size_t k = 0; k < n; ++k) {
+                if (idx[k] != id) continue;
+                TopoDS_Shape cp = BRepBuilderAPI_Copy(ex.Current()).Shape();
+                if (cp.IsNull()) break;
+                bb.Add(shell, cp);
+                taken.emplace_back(cp, names[k]);
+                break;
+            }
+        }
+        if (taken.empty()) return nullptr;
+        QymShape* q = new QymShape{TopoDS_Shape(), {}, {}, {}, {}};
+        TopoDS_Shape out;
+        if (std::abs(dist) < 1e-9) {
+            out = shell;
+            for (const auto& t : taken) q->fids.Bind(t.first, static_cast<int>(t.second));
+        } else {
+            BRepOffsetAPI_MakeOffsetShape together;
+            together.PerformBySimple(shell, dist);
+            // the faces together hold only when the sheet they make is sound: at a sharp edge they part, the shell tears
+            if (together.IsDone() && !together.Shape().IsNull() && BRepCheck_Analyzer(together.Shape()).IsValid() && name_moved(together.Shape(), taken, dist, q->fids)) {
+                out = together.Shape();
+            } else {
+                TopoDS_Compound c;
+                bb.MakeCompound(c);
+                for (const auto& t : taken) {
+                    TopoDS_Shell alone; // the simple offset takes a shell, not a bare face
+                    bb.MakeShell(alone);
+                    bb.Add(alone, t.first);
+                    BRepOffsetAPI_MakeOffsetShape one;
+                    one.PerformBySimple(alone, dist);
+                    if (!one.IsDone() || one.Shape().IsNull()) { delete q; return nullptr; }
+                    std::vector<std::pair<TopoDS_Shape, uint32_t>> single{t};
+                    if (!name_moved(one.Shape(), single, dist, q->fids)) { delete q; return nullptr; }
+                    for (TopExp_Explorer ex(one.Shape(), TopAbs_FACE); ex.More(); ex.Next()) bb.Add(c, ex.Current());
+                }
+                out = c;
+            }
+        }
+        if (out.IsNull()) { delete q; return nullptr; }
+        BRepCheck_Analyzer check(out);
+        if (!check.IsValid()) { delete q; return nullptr; }
+        q->shape = out;
+        int ne = 1;
+        fill_unnamed(out, TopAbs_EDGE, q->eids, ne); // the sheet's edges are positional: they have no recipe
         return q;
     } catch (...) { return nullptr; }
 }
@@ -1117,6 +1347,31 @@ extern "C" int qym_shape_solid_count(const QymShape* s) {
     return n;
 }
 
+// THE FACES OF THE SHAPE BY THE KIND OF SURFACE THEY LIE ON, into `out[7]`: plane, cylinder, cone, sphere, torus,
+// free form (B-spline or Bezier), any other (extrusion, revolution, offset). A rounded straight edge between two
+// planes is one more cylinder, a cut one is one more plane: this is what tells a rounding that was made from one
+// that was dropped while the node stayed green.
+extern "C" int qym_shape_face_kinds(const QymShape* s, int* out) {
+    if (!s || s->shape.IsNull() || !out) return 0;
+    for (int i = 0; i < 7; ++i) out[i] = 0;
+    try {
+        for (TopExp_Explorer ex(s->shape, TopAbs_FACE); ex.More(); ex.Next()) {
+            BRepAdaptor_Surface surf(TopoDS::Face(ex.Current()), Standard_False);
+            switch (surf.GetType()) {
+                case GeomAbs_Plane: ++out[0]; break;
+                case GeomAbs_Cylinder: ++out[1]; break;
+                case GeomAbs_Cone: ++out[2]; break;
+                case GeomAbs_Sphere: ++out[3]; break;
+                case GeomAbs_Torus: ++out[4]; break;
+                case GeomAbs_BSplineSurface:
+                case GeomAbs_BezierSurface: ++out[5]; break;
+                default: ++out[6]; break;
+            }
+        }
+        return 1;
+    } catch (...) { return 0; }
+}
+
 
 // REPAIR A SHAPE THE CHECK CALLS INVALID. Kernel operations sometimes hand back a solid with a small defect:
 // the check rejects it and a person sees "broken solid" where the part is essentially right. ShapeFix
@@ -1151,6 +1406,15 @@ extern "C" QymShape* qym_shape_heal(const QymShape* s) {
     } catch (...) { return nullptr; }
 }
 
+// The name the kernel gives a status of its check (`InvalidCurveOnSurface`), for the words of a refusal.
+static std::string check_word(BRepCheck_Status st) {
+    std::ostringstream o;
+    BRepCheck::Print(st, o);
+    std::string w = o.str();
+    while (!w.empty() && (w.back() == '\n' || w.back() == ' ')) w.pop_back();
+    return w;
+}
+
 extern "C" int qym_shape_is_valid(const QymShape* s) {
     if (!s || s->shape.IsNull()) return 0;
     try {
@@ -1178,7 +1442,7 @@ extern "C" int qym_shape_is_valid(const QymShape* s) {
             {   // the shape's root: SOLID-level statuses (not closed, inside out) hang on it
                 Handle(BRepCheck_Result) r0 = an.Result(s->shape);
                 if (!r0.IsNull()) {
-                    for (BRepCheck_ListIteratorOfListOfStatus it(r0->StatusOnShape()); it.More(); it.Next()) {
+                    for (BRepCheck_ListIteratorOfListOfStatus it(r0->Status()); it.More(); it.Next()) {
                         if (it.Value() != BRepCheck_NoError) fprintf(stderr, "QYMWHY root (%d) status %d\n", (int)s->shape.ShapeType(), (int)it.Value());
                     }
                 }
@@ -1190,10 +1454,23 @@ extern "C" int qym_shape_is_valid(const QymShape* s) {
                 for (TopExp_Explorer ex(s->shape, tys[t]); ex.More(); ex.Next(), ++k) {
                     // NO FILTERING BY IsValid: a shell- or solid-level status (not closed, inside out) can
                     // sit on the subshape itself while IsValid on it stays silent.
-                    Handle(BRepCheck_Result) r = an.Result(ex.Current());
-                    if (r.IsNull()) continue;
-                    for (BRepCheck_ListIteratorOfListOfStatus it(r->StatusOnShape()); it.More(); it.Next()) {
-                        if (it.Value() != BRepCheck_NoError) fprintf(stderr, "QYMWHY %s #%d status %d\n", nm[t], k, (int)it.Value());
+                    // one sub-shape the analyzer holds no record of throws on `Result`; it is passed over, not the rest
+                    try {
+                        Handle(BRepCheck_Result) r = an.Result(ex.Current());
+                        if (r.IsNull()) continue;
+                        for (BRepCheck_ListIteratorOfListOfStatus it(r->Status()); it.More(); it.Next()) {
+                            if (it.Value() != BRepCheck_NoError) {
+                                const int kind = tys[t] == TopAbs_FACE ? (int)BRepAdaptor_Surface(TopoDS::Face(ex.Current()), Standard_False).GetType() : -1;
+                                fprintf(stderr, "QYMWHY %s #%d status %s (surface type %d)\n", nm[t], k, check_word(it.Value()).c_str(), kind);
+                            }
+                        }
+                        // AND IN EVERY CONTEXT: an edge's faults sit on it as seen from each of its faces
+                        for (r->InitContextIterator(); r->MoreShapeInContext(); r->NextShapeInContext()) {
+                            for (BRepCheck_ListIteratorOfListOfStatus it(r->StatusOnShape()); it.More(); it.Next()) {
+                                if (it.Value() != BRepCheck_NoError) fprintf(stderr, "QYMWHY %s #%d in %d status %s\n", nm[t], k, (int)r->ContextualShape().ShapeType(), check_word(it.Value()).c_str());
+                            }
+                        }
+                    } catch (...) {
                     }
                 }
             }
@@ -1232,7 +1509,8 @@ extern "C" int qym_shape_interference_volume(const QymShape* a, const QymShape* 
         BRepBndLib::Add(b->shape, bb);
         if (ba.IsVoid() || bb.IsVoid()) return 0; // no box means nothing can be said about the pair
         if (ba.IsOut(bb)) return 1;               // the boxes are apart, so there is no intersection: a measured nothing
-        BRepAlgoAPI_Common common(a->shape, b->shape);
+        BRepAlgoAPI_Common common;
+        qym_boolean(common, a->shape, b->shape);
         if (!common.IsDone()) return 0;
         TopoDS_Shape res = common.Shape();
         if (res.IsNull()) return 0;
@@ -1251,5 +1529,51 @@ extern "C" QymDoc* qym_shape_tessellate(const QymShape* s, double defl) {
         return doc_from_shape(s->shape, defl, s->fids);
     } catch (...) {
         return nullptr; // the tessellator throws on broken topology; report "no mesh" instead of crashing
+    }
+}
+
+// THE SOLIDS OF THE SHAPE, in the explorer's order: the centre of mass and the volume of each, into `centres[3 * i]` and
+// `volumes[i]`, at most `max` of them. Returns how many there are (possibly more than `max`), 0 on failure. The order
+// is the one `qym_shape_solid_at` counts in.
+extern "C" int qym_shape_solids_info(const QymShape* s, double* centres, double* volumes, int max) {
+    if (!s || s->shape.IsNull()) return 0;
+    try {
+        int n = 0;
+        for (TopExp_Explorer ex(s->shape, TopAbs_SOLID); ex.More(); ex.Next(), ++n) {
+            if (n >= max) continue;
+            GProp_GProps g;
+            BRepGProp::VolumeProperties(ex.Current(), g);
+            const gp_Pnt c = g.CentreOfMass();
+            centres[3 * n] = c.X();
+            centres[3 * n + 1] = c.Y();
+            centres[3 * n + 2] = c.Z();
+            volumes[n] = g.Mass();
+        }
+        return n;
+    } catch (...) {
+        return 0;
+    }
+}
+
+// THE SOLID NUMBER `index` OF THE SHAPE, in the order of `qym_shape_solids_info`. The solid is the body's own, not
+// rebuilt, so every face and edge keeps its name: a fillet on a piece that became a body of its own still finds its
+// edges.
+extern "C" QymShape* qym_shape_solid_at(const QymShape* s, int index) {
+    if (!s || s->shape.IsNull() || index < 0) return nullptr;
+    try {
+        int n = 0;
+        for (TopExp_Explorer ex(s->shape, TopAbs_SOLID); ex.More(); ex.Next(), ++n) {
+            if (n != index) continue;
+            const TopoDS_Shape out = ex.Current();
+            QymShape* q = new QymShape{out, {}, {}, {}, {}};
+            for (TopExp_Explorer f(out, TopAbs_FACE); f.More(); f.Next())
+                if (s->fids.IsBound(f.Current()) && !q->fids.IsBound(f.Current())) q->fids.Bind(f.Current(), s->fids.Find(f.Current()));
+            for (TopExp_Explorer e(out, TopAbs_EDGE); e.More(); e.Next())
+                if (s->eids.IsBound(e.Current()) && !q->eids.IsBound(e.Current())) q->eids.Bind(e.Current(), s->eids.Find(e.Current()));
+            return q;
+        }
+        return nullptr;
+    } catch (...) {
+        return nullptr;
     }
 }

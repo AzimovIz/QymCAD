@@ -108,3 +108,19 @@ fn wrong_side_flag_in_a_bore_is_corrected_by_geometry() {
     eprintln!("bore plus an \"external\" flag: {got:.0} mm^3 removed against about {want:.0} expected");
     assert!(got > 0.5 * want, "the groove went into thin air: only {got:.0} mm^3 removed against about {want:.0} expected");
 }
+
+/// A THREAD NO LONGER THAN ITS CYLINDER: on a shaft 30 long a thread of 40 is refused in words before the kernel, and
+/// one of 30 is not. Reported behaviour: a thread of 101 on a cylinder 10 long was taken and went red after the
+/// rebuild.
+#[test]
+fn a_thread_longer_than_its_cylinder_is_refused() {
+    let (mut p, body) = shaft(30.0, 30.0);
+    let e = rim(&mut p, body, 15.0);
+    let edge = p.regen_edges.get(&body).and_then(|es| es.iter().find(|x| x.id == e).cloned()).expect("the rim");
+    let rim_at = (edge.center, edge.axis, edge.radius);
+    let spec = ThreadSpec { standard: ThreadStandard::MetricIso, nominal_d: 30.0, ..Default::default() };
+    let long = p.thread_refusal(body, rim_at, spec.clone(), 40.0);
+    assert!(matches!(long, Some(qymcad_core::errors::CoreError::ThreadLongerThanFace { .. })), "a thread of 40 on a shaft 30 long is not refused: {long:?}");
+    let fits = p.thread_refusal(body, rim_at, spec, 30.0);
+    assert!(fits.is_none(), "a thread of 30 on a shaft 30 long is refused: {fits:?}");
+}

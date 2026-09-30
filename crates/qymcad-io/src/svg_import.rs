@@ -1,4 +1,5 @@
-//! Importing SVG into exact curves. `usvg` resolves the transforms and units and returns flat paths.
+//! Importing SVG into exact curves. `usvg` resolves the transforms and units and returns flat paths in CSS pixels,
+//! turned into millimetres here.
 //!
 //! SVG curves are Beziers — `usvg` does not keep arcs or circles as primitives but lowers them into cubic
 //! Beziers — so the curves are linearised into segments while straight segments stay as they are. Y is flipped,
@@ -9,6 +10,12 @@ use usvg::tiny_skia_path::PathSegment;
 
 use crate::ImportedSketch;
 
+/// Millimetres in a CSS pixel. `usvg` resolves the sheet's units and the viewBox into pixels of 1/96 inch, as the SVG
+/// specification defines them, so a sheet `width="42mm"` with a viewBox of 42 comes out 158.74 wide; read as
+/// millimetres, every length grew 96/25.4 = 3.78 times (a 40 x 30 rectangle came in as 151.18 x 113.39). A sheet
+/// with no unit is in pixels by the same specification.
+const MM_PER_PX: f64 = 25.4 / 96.0;
+
 pub fn import_svg(path: &str) -> Result<ImportedSketch, String> {
     let data = std::fs::read(path).map_err(|e| format!("SVG open: {e}"))?;
     let opt = usvg::Options::default();
@@ -16,7 +23,7 @@ pub fn import_svg(path: &str) -> Result<ImportedSketch, String> {
     let h = tree.size().height() as f64;
     let mut curves = Vec::new();
     collect(tree.root(), h, &mut curves);
-    Ok(ImportedSketch { curves })
+    Ok(ImportedSketch { curves, ..Default::default() })
 }
 
 fn collect(group: &usvg::Group, h: f64, out: &mut Vec<ProfEdge>) {
@@ -41,7 +48,7 @@ fn path_to_curves(p: &usvg::Path, h: f64, out: &mut Vec<ProfEdge>) {
     let map = |x: f32, y: f32| -> Point2 {
         let mut pt = usvg::tiny_skia_path::Point::from_xy(x, y);
         t.map_point(&mut pt);
-        Point2::new(pt.x as f64, h - pt.y as f64)
+        Point2::new(pt.x as f64 * MM_PER_PX, (h - pt.y as f64) * MM_PER_PX)
     };
 
     let mut start = Point2::new(0.0, 0.0); // the start of the current subpath, used by a close command

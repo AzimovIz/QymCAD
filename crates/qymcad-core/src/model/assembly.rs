@@ -26,12 +26,43 @@ impl Project {
             self.part_colors.insert(root, rgb);
         }
     }
+    /// The colour a file gave face `face` of `body` (by the face's persistent id), where it gave one: the face then
+    /// shows it instead of the part's colour.
+    pub fn face_color(&self, body: Id, face: u32) -> Option<[u8; 3]> {
+        let root = self.lineage_root(body);
+        self.face_colors.get(&root).and_then(|fs| fs.iter().find(|(id, _)| *id == face).map(|(_, c)| *c))
+    }
     /// Clear a manual part colour and fall back to the palette entry for its lineage root.
     pub fn reset_mesh_color(&mut self, index: usize) {
         if let Some(body) = self.mesh_id(index) {
             let root = self.lineage_root(body);
             self.part_colors.remove(&root);
         }
+    }
+    /// The factor an import - a solid or a piece of a mesh - stands at from the file's own numbers; `None` where `body`
+    /// came from no file.
+    pub fn import_scale(&self, body: Id) -> Option<f64> {
+        use crate::feature::FeatureKind;
+        self.timeline.iter().find_map(|n| match n.kind {
+            FeatureKind::Import { body: b, scale, .. } | FeatureKind::MeshPiece { body: b, scale, .. } if b == body => Some(scale),
+            _ => None,
+        })
+    }
+    /// Take an import at `factor` from the file's own numbers. The node keeps it: a solid is built at this size whenever
+    /// it is read back from its source, and is marked for it; a mesh piece's mesh is its geometry, scaled already by
+    /// the caller, so its factor is only remembered. Returns whether `body` is an import.
+    pub fn set_import_scale(&mut self, body: Id, factor: f64) -> bool {
+        use crate::feature::FeatureKind;
+        let Some(n) = self.timeline.iter_mut().find(|n| matches!(n.kind, FeatureKind::Import { body: b, .. } | FeatureKind::MeshPiece { body: b, .. } if b == body)) else { return false };
+        match &mut n.kind {
+            FeatureKind::Import { scale, .. } => {
+                *scale = factor;
+                n.dirty = true;
+            }
+            FeatureKind::MeshPiece { scale, .. } => *scale = factor,
+            _ => {}
+        }
+        true
     }
     /// Root assembly component of the document, created lazily. Returns its id.
     pub fn ensure_root(&mut self) -> Id {
@@ -81,44 +112,300 @@ impl Project {
         self.components.push(Component { id, name: name.into(), kind, parent, transform: PLACE_IDENTITY, visible: true, grounded: false });
         id
     }
-    /// Import STEP solids as parts. The body meshes have already been added by the application (`add_mesh`),
-    /// and what arrives here is `(body, name, source, solid index)`.
+
+    /// A NAME NO OTHER COMPONENT CARRIES: `name` itself, or `name (2)`, `name (3)`... - the way the professional systems
+    /// number the instances of one part. Two rows reading "Part 1" in the tree, with nothing to tell them apart, came of
+    /// bringing a part in from a file, pasting one and importing a format that names its parts. `except` is the
+    /// component being named itself, which does not count against its own name.
+    pub fn free_component_name(&self, name: &str, except: Id) -> String {
+        self.free_component_name_shown(name, except, &|n| n.to_string())
+    }
+
+    /// As [`Project::free_component_name`], two names being the same when they READ the same: a part of this document
+    /// is stored under a key of the catalogue (`name-part-n#1`) and one from a file under the words ("Part 1"), and it
+    /// is the words a person tells rows apart by. `shown` turns a stored name into what is read.
+    pub fn free_component_name_shown(&self, name: &str, except: Id, shown: &dyn Fn(&str) -> String) -> String {
+        let taken = |n: &str| {
+            let read = shown(n);
+            self.components.iter().any(|c| c.id != except && self.instance_origin(c.id) == c.id && shown(&c.name) == read)
+        };
+        if !taken(name) {
+            return name.to_string();
+        }
+        (2..).map(|k| format!("{name} ({k})")).find(|n| !taken(n)).unwrap_or_else(|| name.to_string())
+    }
+
+    /// NAME THE COMPONENTS `ids` APART from every other one that reads the same (see `free_component_name_shown`):
+    /// what came in from a file, a library or the clipboard.
     ///
-    /// One solid becomes one part in the active context; several become a subassembly named `group_name` with
-    /// one part per solid, each holding an `Import` node that sketches, chamfers and fillets can be built on.
-    /// Returns the id of the created root (a part or a subassembly). One method, because this is a topology
-    /// operation.
-    pub fn import_bodies_as_parts(&mut self, solids: Vec<(Id, String, Id, u32)>, group_name: &str) -> Option<Id> {
-        use crate::feature::{FeatureKind, FeatureNode};
-        if solids.is_empty() {
+    /// A CLONE KEEPS THE NAME OF ITS ORIGINAL - it is marked as one, and that is what tells it apart - so clones are
+    /// neither renamed nor counted against.
+    pub fn name_apart(&mut self, ids: &[Id], shown: &dyn Fn(&str) -> String) {
+        for &id in ids {
+            if self.instance_origin(id) != id {
+                continue;
+            }
+            if let Some(ci) = self.components.iter().position(|c| c.id == id) {
+                let free = self.free_component_name_shown(&self.components[ci].name.clone(), id, shown);
+                self.components[ci].name = free;
+            }
+        }
+    }
+    /// Import a file's tree as its author built it: every node with children becomes a subassembly under the
+    /// file's name for it, every node with a body a part holding an `Import` node of that body, and every one
+    /// stands where the file places it in its parent - the bodies stay in their own coordinates, so a part can be
+    /// moved and mated. A group with nothing in it does not come in. Several nodes at the top go into a
+    /// subassembly named `group_name`; a single one stands alone. Lands in the active context and returns the
+    /// created root. One method, because this is a topology operation.
+    pub fn import_tree_as_parts(&mut self, nodes: Vec<ImportNode>, source: Id, group_name: &str) -> Option<Id> {
+        let mut nodes: Vec<ImportNode> = nodes.into_iter().filter(ImportNode::carries_something).collect();
+        if nodes.is_empty() {
             return None;
         }
         self.ensure_root();
         let saved = self.active_component;
-        let import_node = |p: &mut Self, body: Id, source: Id, solid: u32, parent: Id| {
-            p.push_timeline(FeatureNode { id: body, name: "name-import".into(), kind: FeatureKind::Import { body, source, solid }, parent: Some(parent), dirty: true, suppressed: false });
-        };
-        let single = (solids.len() == 1).then(|| solids.first().cloned()).flatten();
-        let created = if let Some((body, name, source, solid)) = single {
-            let part = self.add_part(name);
-            import_node(self, body, source, solid, part);
-            part
+        let mut parts = std::collections::HashMap::new(); // the part each body of the file came in as
+        let created = if nodes.len() == 1 {
+            nodes.pop().and_then(|n| self.import_node(n, source, &mut parts))
         } else {
             let asm = self.add_assembly(group_name);
-            self.set_active_component(Some(asm)); // The parts are created inside the subassembly.
-            for (body, name, source, solid) in solids {
-                let part = self.add_part(name);
-                import_node(self, body, source, solid, part);
+            for n in nodes {
+                self.set_active_component(Some(asm));
+                self.import_node(n, source, &mut parts);
             }
-            asm
+            Some(asm)
         };
         self.set_active_component(saved);
+        created
+    }
+
+    /// One node of an imported tree into the active context (see `import_tree_as_parts`). `parts` holds the part each
+    /// body of the file came in as, so a repeat of it comes in as a clone of that part.
+    fn import_node(&mut self, node: ImportNode, source: Id, parts: &mut std::collections::HashMap<u32, Id>) -> Option<Id> {
+        use crate::feature::{FeatureKind, FeatureNode};
+        let here = self.active_component;
+        let created = match node.body {
+            None if node.children.is_empty() => {
+                // a repeat of a product met before: a clone of its part; the body it repeats came in earlier, the
+                // file being walked in its own order
+                let of = node.repeat_of.and_then(|k| parts.get(&k).copied())?;
+                let clone = self.clone_part(of, self.current_ctx())?;
+                self.rename_component(clone, node.name.clone());
+                let body = self.timeline.iter().find(|n| n.parent == Some(clone)).and_then(|n| n.kind.body());
+                if let (Some(rgb), Some(body)) = (node.color, body) {
+                    let root = self.lineage_root(body); // the clone's body has no mesh until it is built
+                    self.part_colors.insert(root, rgb);
+                }
+                // the faces of a colour of their own are the original's: the file holds the product once
+                let original = self.timeline.iter().find(|n| n.parent == Some(of)).and_then(|n| n.kind.body()).map(|b| self.lineage_root(b));
+                if let (Some(body), Some(original)) = (body, original) {
+                    let root = self.lineage_root(body);
+                    if let Some(faces) = self.face_colors.get(&original).filter(|_| original != root).cloned() {
+                        self.face_colors.insert(root, faces);
+                    }
+                }
+                clone
+            }
+            Some(body) if node.children.is_empty() => {
+                let part = self.add_part(node.name);
+                // a piece of a mesh is not an imported solid: it has no B-rep to raise again or to export as one
+                let (name, kind) = if node.mesh {
+                    ("name-mesh-piece", FeatureKind::MeshPiece { body, source, piece: node.solid, scale: 1.0 })
+                } else {
+                    ("name-import", FeatureKind::Import { body, source, solid: node.solid, scale: 1.0 })
+                };
+                // a mesh piece arrives built: its mesh and faces are already there, and it has no recipe to rebuild. A
+                // dirty one started a rebuild of nothing that ran past Esc and overwrote "import cancelled".
+                self.push_timeline(FeatureNode { id: body, name: name.into(), kind, parent: Some(part), dirty: !node.mesh, suppressed: false });
+                if let (Some(rgb), Some(i)) = (node.color, self.mesh_index(body)) {
+                    self.set_mesh_color(i, rgb); // the author's colour, kept by the part's lineage like one chosen by hand
+                }
+                if !node.face_colors.is_empty() {
+                    let root = self.lineage_root(body);
+                    self.face_colors.insert(root, node.face_colors.clone());
+                }
+                if !node.tri_colors.is_empty() {
+                    // a piece of a mesh coloured triangle by triangle: its palette, and each triangle's place in it
+                    let root = self.lineage_root(body);
+                    self.tri_colors.insert(root, crate::model::palette_of(&node.tri_colors));
+                }
+                parts.insert(node.solid, part);
+                part
+            }
+            _ => {
+                let asm = self.add_assembly(node.name.clone());
+                // a node that carries a body AND children: the body is a part of its own inside the group
+                let own = node.body.map(|body| ImportNode { name: node.name.clone(), body: Some(body), solid: node.solid, color: node.color, face_colors: node.face_colors.clone(), tri_colors: node.tri_colors.clone(), mesh: node.mesh, ..Default::default() });
+                for child in own.into_iter().chain(node.children.into_iter().filter(ImportNode::carries_something)) {
+                    self.set_active_component(Some(asm));
+                    self.import_node(child, source, parts);
+                }
+                asm
+            }
+        };
+        self.set_component_transform(created, node.place);
+        self.set_active_component(here);
         Some(created)
+    }
+    /// A CLONE OF PART `src` IN ASSEMBLY `target`: the same part once more, not a copy of it. Its one node repeats the
+    /// original's body (`PartInstance`), so an edit of the original rebuilds it, while it stands, moves and is mated
+    /// as a part of its own. A clone of a clone repeats the original. It comes in under the original's name and
+    /// stands where the original stands in its parent. Only a part is cloned, and only into an assembly. One method,
+    /// because this is a topology operation.
+    pub fn clone_part(&mut self, src: Id, target: Id) -> Option<Id> {
+        use crate::feature::{ComponentKind, FeatureKind, FeatureNode};
+        let origin = self.instance_origin(src);
+        if self.component_kind(origin) != Some(ComponentKind::Part) || self.component_kind(target) != Some(ComponentKind::Assembly) {
+            return None;
+        }
+        let name = self.components.iter().find(|c| c.id == src).map(|c| c.name.clone())?;
+        let place = self.free_place_beside(src, target);
+        let saved = self.active_component;
+        self.set_active_component(Some(target));
+        let comp = self.add_part(name);
+        self.set_active_component(saved);
+        self.set_component_transform(comp, place);
+        let body = self.alloc_id();
+        self.push_timeline(FeatureNode { id: body, name: "name-instance".into(), kind: FeatureKind::PartInstance { src_comp: origin, body }, parent: Some(comp), dirty: true, suppressed: false });
+        Some(comp)
+    }
+    /// WHERE A CLONE OF `src` STANDS IN `target`: beside the original along X, in the first place where its box meets
+    /// no body of the assembly, so it is seen and taken apart from the original and does not sink into a neighbour.
+    /// Reported behaviour: a clone stood exactly where its original stood, and a click on it took the original. The
+    /// gap is a fifth of the original's length along X, 5 mm at least; a part with no body yet keeps the original's
+    /// place, there being nothing to measure.
+    fn free_place_beside(&self, src: Id, target: Id) -> [f64; 12] {
+        use crate::feature::apply12;
+        let consumed = self.consumed_bodies();
+        // the box of a body in the frame of `target`, from the eight corners of its own box
+        let boxed = |b: &crate::model::Body| -> Option<([f64; 3], [f64; 3])> {
+            let bb = b.mesh.bounds()?;
+            let m = self.body_display_transform(b.id, target);
+            let (mut lo, mut hi) = ([f64::MAX; 3], [f64::MIN; 3]);
+            for k in 0..8 {
+                let c = [if k & 1 == 0 { bb.min.x } else { bb.max.x }, if k & 2 == 0 { bb.min.y } else { bb.max.y }, if k & 4 == 0 { bb.min.z } else { bb.max.z }];
+                let w = apply12(&m, c);
+                for i in 0..3 {
+                    lo[i] = lo[i].min(w[i]);
+                    hi[i] = hi[i].max(w[i]);
+                }
+            }
+            Some((lo, hi))
+        };
+        let live = |b: &&crate::model::Body| !consumed.contains(&b.id) && self.body_owner(b.id).is_some();
+        let own: Vec<([f64; 3], [f64; 3])> = self.bodies.iter().filter(live).filter(|b| self.body_owner(b.id) == Some(src)).filter_map(boxed).collect();
+        let mut place = self.relative_transform(src, target);
+        let Some((lo, hi)) = own.into_iter().reduce(|a, b| ([a.0[0].min(b.0[0]), a.0[1].min(b.0[1]), a.0[2].min(b.0[2])], [a.1[0].max(b.1[0]), a.1[1].max(b.1[1]), a.1[2].max(b.1[2])])) else {
+            return place;
+        };
+        let others: Vec<([f64; 3], [f64; 3])> = self.bodies.iter().filter(live).filter_map(boxed).collect();
+        let len = hi[0] - lo[0];
+        let step = len + (len / 5.0).max(5.0);
+        let meets = |dx: f64| others.iter().any(|(a, b)| (0..3).all(|i| {
+            let (l, h) = if i == 0 { (lo[0] + dx, hi[0] + dx) } else { (lo[i], hi[i]) };
+            l < b[i] - 1e-6 && a[i] < h - 1e-6
+        }));
+        let dx = (1..=64).map(|k| k as f64 * step).find(|dx| !meets(*dx)).unwrap_or(64.0 * step);
+        place[3] += dx;
+        place
+    }
+
+    /// WHOSE PART THIS IS: the original a clone - or a pattern's copy - repeats, or the part itself. A part repeats
+    /// another when its body is an instance of the other's.
+    pub fn instance_origin(&self, id: Id) -> Id {
+        use crate::feature::FeatureKind;
+        let mut cur = id;
+        // a guard against a loop of instances in a damaged document, not a depth anyone reaches
+        for _ in 0..64 {
+            match self.timeline.iter().find_map(|n| match &n.kind {
+                FeatureKind::PartInstance { src_comp, .. } if n.parent == Some(cur) => Some(*src_comp),
+                FeatureKind::ComponentPattern { src, copies, .. } if copies.contains(&cur) => Some(*src),
+                _ => None,
+            }) {
+                Some(src) if src != cur => cur = src,
+                _ => break,
+            }
+        }
+        cur
+    }
+    /// THE TREE UNDER `root` AS IT GOES OUT to an exact file: every subassembly and part, where it stands in its
+    /// parent, a part with its body and colour. A clone of a part already gone out repeats it (`same_as`), so the file
+    /// holds the product once and places it twice. A part whose body `has_shape` does not answer for - a mesh, a
+    /// failed rebuild - does not go out, nor a subassembly left empty by it. The root stands at the file's zero.
+    pub fn export_tree(&self, root: Id, has_shape: impl Fn(Id) -> bool) -> Vec<ExportNode> {
+        let mut out = Vec::new();
+        let mut written = std::collections::HashMap::new();
+        self.export_node(root, None, crate::feature::PLACE_IDENTITY, &has_shape, &mut out, &mut written);
+        out
+    }
+
+    /// One component of `export_tree` and what is under it; returns whether anything went out. `written` holds the
+    /// node every part went out as, so a clone of it repeats it.
+    fn export_node(&self, id: Id, parent: Option<usize>, place: [f64; 12], has_shape: &impl Fn(Id) -> bool, out: &mut Vec<ExportNode>, written: &mut std::collections::HashMap<Id, usize>) -> bool {
+        use crate::feature::ComponentKind;
+        let Some(c) = self.components.iter().find(|c| c.id == id) else { return false };
+        let at = out.len();
+        if c.kind == ComponentKind::Part {
+            let origin = self.instance_origin(id);
+            if let Some(&k) = written.get(&origin).filter(|_| origin != id) {
+                out.push(ExportNode { name: c.name.clone(), parent, place, body: None, same_as: Some(k), color: None, face_colors: Vec::new() });
+                return true;
+            }
+            let Some(body) = self.active_body(id).filter(|b| has_shape(*b)) else { return false };
+            let color = self.mesh_index(body).map(|i| self.mesh_color(i));
+            let face_colors = self.face_colors.get(&self.lineage_root(body)).cloned().unwrap_or_default();
+            out.push(ExportNode { name: c.name.clone(), parent, place, body: Some(body), same_as: None, color, face_colors });
+            if origin == id {
+                written.insert(id, at);
+            }
+            return true;
+        }
+        out.push(ExportNode { name: c.name.clone(), parent, place, body: None, same_as: None, color: None, face_colors: Vec::new() });
+        let mut any = false;
+        for child in self.component_children(id) {
+            let t = self.component_transform(child);
+            any |= self.export_node(child, Some(at), t, has_shape, out, written);
+        }
+        if !any {
+            out.truncate(at);
+        }
+        any
     }
     /// Component kind by id.
     pub fn component_kind(&self, id: Id) -> Option<crate::feature::ComponentKind> {
         self.components.iter().find(|c| c.id == id).map(|c| c.kind)
     }
+    /// CAN BODY `body` BE MADE A PART of its own: it is one of the bodies its part shows, and not the only one.
+    pub fn may_be_made_a_part(&self, body: Id) -> bool {
+        let Some(part) = self.body_owner(body).filter(|p| self.ctx_holds_bodies(*p)) else { return false };
+        let consumed = self.consumed_bodies();
+        !consumed.contains(&body) && self.component_bodies(part).into_iter().filter(|b| !consumed.contains(b)).count() >= 2
+    }
+
+    /// MAKE A PIECE A PART: body `body`, one of the several bodies of its part - a piece a cut or a split left - leaves
+    /// the part and becomes the body of a new part beside it, in the same assembly and in the same place. The new part
+    /// starts from a `Piece` node reading that body, so an edit of the cut that made the pieces rebuilds both. `None`
+    /// when the body is no body of a part, or the only one it shows: taking it would leave the part empty. `name` is
+    /// the new part's; the caller picks one free as it reads (see [`Project::free_component_name_shown`]).
+    pub fn piece_to_part(&mut self, body: Id, name: String) -> Option<(Id, Id)> {
+        use crate::feature::{FeatureKind, FeatureNode};
+        if !self.may_be_made_a_part(body) {
+            return None;
+        }
+        let part = self.body_owner(body)?;
+        let was = self.active_component;
+        let (home, place) = self.components.iter().find(|c| c.id == part).map(|c| (c.parent, c.transform))?;
+        self.set_active_component(home);
+        let new_part = self.add_part(name);
+        if let Some(c) = self.components.iter_mut().find(|c| c.id == new_part) {
+            c.transform = place;
+        }
+        let piece = self.alloc_id();
+        self.push_timeline(FeatureNode { id: piece, name: "feat-name-piece-in".into(), kind: FeatureKind::Piece { src: body, body: piece }, parent: Some(new_part), dirty: true, suppressed: false });
+        self.set_active_component(was);
+        Some((new_part, piece))
+    }
+
     /// Component index by id.
     pub fn component_index(&self, id: Id) -> Option<usize> {
         self.components.iter().position(|c| c.id == id)
@@ -743,6 +1030,70 @@ impl Project {
         None
     }
 
+    /// A PART NO MATE HOLDS, TAKEN BY THE HAND: the component standing directly in `ctx` that holds `part`, when it is
+    /// not grounded and no mate or constraint of the context acts on it - it is moved as it is, following the pointer.
+    /// A part that took part in no mate used to hand the drag to the camera, and it could be moved only by its gizmo.
+    pub fn free_pull_component(&self, part: Id, ctx: Id) -> Option<Id> {
+        if self.pull_target_component(part, ctx).is_some() || self.drive_joint_in_context(part, ctx).is_some() {
+            return None;
+        }
+        // held anywhere is held: a mate not in effect here (a subassembly's own, not made global) still holds the
+        // part in its assembly, and the hand leaves it alone
+        let mut held: std::collections::HashSet<Id> = self.joints.iter().flat_map(|j| [j.a, j.b]).filter_map(|cid| self.connector(cid).map(|c| c.owner)).collect();
+        for g in &self.mate_constraints {
+            held.extend(g.members.iter().copied());
+            held.extend(g.anchors.iter().filter_map(|&c| self.connector(c).map(|x| x.owner)));
+            held.extend(g.faces.iter().map(|(o, _)| *o));
+        }
+        let mut c = part;
+        for _ in 0..256 {
+            if held.contains(&c) {
+                return None;
+            }
+            let parent = self.components.iter().find(|x| x.id == c).and_then(|x| x.parent)?;
+            if parent == ctx {
+                return (!self.is_grounded(c)).then_some(c);
+            }
+            c = parent;
+        }
+        None
+    }
+
+    /// PUT A COMPONENT WHERE THE HAND LEFT IT (`to` - its placement in its parent), carrying every part grouped with
+    /// it (groups chained through shared members) by the same motion. A group reads where its members stand when the
+    /// problem is assembled, so moving one member alone would make the broken placement the one it holds. False, and
+    /// nothing moves, when the component or anything grouped with it is grounded.
+    pub fn move_component_by_hand(&mut self, comp: Id, to: [f64; 12]) -> bool {
+        use crate::feature::{mat_inv12, mat_mul12};
+        let mut carried = vec![comp];
+        let mut i = 0;
+        while i < carried.len() {
+            let c = carried[i];
+            for g in self.mate_constraints.iter().filter(|g| g.kind == crate::feature::ConstraintKind::Group && g.members.contains(&c)) {
+                for &m in &g.members {
+                    if !carried.contains(&m) {
+                        carried.push(m);
+                    }
+                }
+            }
+            i += 1;
+        }
+        if carried.iter().any(|&c| self.is_grounded(c)) {
+            return false;
+        }
+        // the motion in the world: new world of the component times the inverse of its old one
+        let (old, world) = (self.component_transform(comp), self.world_transform(comp));
+        let parent = mat_mul12(&world, &mat_inv12(&old));
+        let motion = mat_mul12(&mat_mul12(&parent, &to), &mat_inv12(&world));
+        for &m in &carried[1..] {
+            let (local, world_m) = (self.component_transform(m), self.world_transform(m));
+            let parent_m = mat_mul12(&world_m, &mat_inv12(&local));
+            self.set_component_transform(m, mat_mul12(&mat_inv12(&parent_m), &mat_mul12(&motion, &world_m)));
+        }
+        self.set_component_transform(comp, to);
+        true
+    }
+
     pub fn drive_joint_for(&self, comp: Id) -> Option<Id> {
         let owner = |cid: Id| self.connector(cid).map(|c| c.owner);
         let mut in_graph: std::collections::HashSet<Id> = std::collections::HashSet::new();
@@ -1227,7 +1578,8 @@ impl Project {
     /// Taking the number as "how many parts exist plus one" produces two identically named parts as soon as
     /// one of them was created by another path, and they are indistinguishable in the tree: one is selected
     /// while the other is edited.
-    pub(super) fn free_part_name(&self) -> String {
+    /// The first name of the "Part n" kind no component holds yet.
+    pub fn free_part_name(&self) -> String {
         let taken: std::collections::HashSet<String> = self.components.iter().map(|c| c.name.clone()).collect();
         (1..)
             .map(|n| format!("name-part-n#{n}"))
@@ -1898,9 +2250,51 @@ impl Project {
             kind,
             members: Vec::new(),
             anchors: Vec::new(),
-            faces: vec![(owner_a, a), (owner_b, b)],
+            faces: vec![(owner_a, a.clone()), (owner_b, b.clone())],
         });
+        self.lay_down_a_standing_cylinder(owner_a, &a, owner_b, &b);
         id
+    }
+
+    /// A CYLINDER STANDING ON ITS END IS TURNED TO LIE. With its axis along the plane's normal it touches the plane
+    /// nowhere, and the solver cannot leave that pose: the derivative of "axis parallel to the plane" is zero at a
+    /// right angle. So the part that is free (the cylinder's, else the plane's) is turned a quarter about a line
+    /// across the axis through the cylinder's own axis point, and the solve lays it on the face from there.
+    fn lay_down_a_standing_cylinder(&mut self, owner_a: Id, a: &crate::feature::AnchorRef, owner_b: Id, b: &crate::feature::AnchorRef) {
+        use crate::feature::{apply12, mat_inv12, mat_mul12, AnchorRef};
+        let cyl = |r: &AnchorRef| match r {
+            AnchorRef::FaceCenter(body, key) => self.face_cylinder(*body, key),
+            _ => None,
+        };
+        let plane = |r: &AnchorRef| match r {
+            AnchorRef::FaceCenter(body, key) if self.face_cylinder(*body, key).is_none() => Some(self.resolve_face(*body, key)),
+            _ => None,
+        };
+        let Some(((co, (o, ax, _)), (po, (_, n)))) = cyl(a).map(|c| (owner_a, c)).zip(plane(b).map(|p| (owner_b, p))).or_else(|| cyl(b).map(|c| (owner_b, c)).zip(plane(a).map(|p| (owner_a, p)))) else { return };
+        let turn_dir = |m: &[f64; 12], v: [f64; 3]| [m[0] * v[0] + m[1] * v[1] + m[2] * v[2], m[4] * v[0] + m[5] * v[1] + m[6] * v[2], m[8] * v[0] + m[9] * v[1] + m[10] * v[2]];
+        let (wc, wp) = (self.world_transform(co), self.world_transform(po));
+        let (wax, wn) = (turn_dir(&wc, ax), turn_dir(&wp, n));
+        if (wax[0] * wn[0] + wax[1] * wn[1] + wax[2] * wn[2]).abs() < 0.999 {
+            return; // not standing: the solve finds the way itself
+        }
+        let moving = if !self.is_grounded(co) { co } else if !self.is_grounded(po) { po } else { return };
+        // a line across the axis: the world axis least aligned with it, made square to it
+        let k = (0..3).min_by(|&i, &j| wax[i].abs().total_cmp(&wax[j].abs())).unwrap_or(0);
+        let mut e = [0.0; 3];
+        e[k] = 1.0;
+        let d = e[0] * wax[0] + e[1] * wax[1] + e[2] * wax[2];
+        let u = [e[0] - d * wax[0], e[1] - d * wax[1], e[2] - d * wax[2]];
+        let l = (u[0] * u[0] + u[1] * u[1] + u[2] * u[2]).sqrt();
+        let u = [u[0] / l, u[1] / l, u[2] / l];
+        // a quarter turn about `u` through the cylinder's axis point (Rodrigues, sin 1, cos 0)
+        let p = apply12(&wc, o);
+        let r = [u[0] * u[0], u[0] * u[1] - u[2], u[0] * u[2] + u[1], u[1] * u[0] + u[2], u[1] * u[1], u[1] * u[2] - u[0], u[2] * u[0] - u[1], u[2] * u[1] + u[0], u[2] * u[2]];
+        let t = [p[0] - (r[0] * p[0] + r[1] * p[1] + r[2] * p[2]), p[1] - (r[3] * p[0] + r[4] * p[1] + r[5] * p[2]), p[2] - (r[6] * p[0] + r[7] * p[1] + r[8] * p[2])];
+        let turn = [r[0], r[1], r[2], t[0], r[3], r[4], r[5], t[1], r[6], r[7], r[8], t[2]];
+        // the turn is made in the world; the part's own placement is in its parent
+        let (local, world) = (self.component_transform(moving), self.world_transform(moving));
+        let parent = mat_mul12(&world, &mat_inv12(&local));
+        self.set_component_transform(moving, mat_mul12(&mat_inv12(&parent), &mat_mul12(&turn, &world)));
     }
 
     /// A cylindrical face in full: a point on the axis, the axis, and the radius.
@@ -1949,6 +2343,12 @@ impl Project {
     // THE INDEX IS THE MEANING: Gauss-Jordan over a 4x5 matrix - rows and columns are what it is about.
     #[allow(clippy::needless_range_loop)]
     pub fn face_sphere(&self, body: Id, key: &crate::feature::FaceKey) -> Option<([f64; 3], f64)> {
+        // A face with an axis - every normal square to one line - is a cylinder, and no sphere has one. The normal
+        // check below cannot tell them apart on a squat cylinder: at radius 10 and length 20 its facets lean only
+        // 0.95 off the direction from the centre of the sphere through both rims (radius 14.14).
+        if self.face_axis(body, key).is_some() {
+            return None;
+        }
         let faces = self.regen_faces.get(&body)?;
         let f = faces.iter().find(|f| f.id == key.id)?;
         let mesh = self.mesh_index(body).map(|i| &self.bodies[i].mesh)?;
@@ -2318,3 +2718,55 @@ impl Project {
         out
     }
 }
+
+/// ONE NODE OF AN IMPORTED TREE, under the name the file gives it: a part made of one body, or a group of nodes
+/// (a subassembly in the document), or both. `place` is where it stands in its parent, a 3x4 row-major
+/// placement; `solid` is the body's place among the file's bodies, which is how an `Import` node finds it again
+/// in the embedded source; `color` is the colour of its part, where the file gives one. `repeat_of` marks an
+/// occurrence of a product met before: it carries no body of its own and comes in as a clone of the part holding
+/// that body.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ImportNode {
+    pub name: String,
+    pub place: [f64; 12],
+    pub body: Option<Id>,
+    pub solid: u32,
+    pub color: Option<[u8; 3]>,
+    /// Colours of single faces of the body, by the face's persistent id, as sRGB bytes.
+    pub face_colors: Vec<(u32, [u8; 3])>,
+    /// The colour of every triangle of a piece of a mesh, where the file colours its faces one by one; empty otherwise.
+    pub tri_colors: Vec<[u8; 3]>,
+    pub repeat_of: Option<u32>,
+    /// The body is a piece of a mesh, not a solid: it comes in as a `MeshPiece` rather than an `Import`.
+    pub mesh: bool,
+    pub children: Vec<ImportNode>,
+}
+
+impl Default for ImportNode {
+    fn default() -> Self {
+        Self { name: String::new(), place: crate::feature::PLACE_IDENTITY, body: None, solid: 0, color: None, face_colors: Vec::new(), tri_colors: Vec::new(), repeat_of: None, mesh: false, children: Vec::new() }
+    }
+}
+
+impl ImportNode {
+    /// A node with neither a body nor anything below it would come in as an empty subassembly.
+    pub fn carries_something(&self) -> bool {
+        self.body.is_some() || self.repeat_of.is_some() || self.children.iter().any(ImportNode::carries_something)
+    }
+}
+
+/// ONE NODE OF A TREE GOING OUT to an exact file: a subassembly (no body) or a part carrying its body, under its name,
+/// where it stands in its parent. `same_as` points at an earlier node whose product this one repeats - a clone goes
+/// out as a second occurrence of its original, not as a copy. `color` is the part's colour.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExportNode {
+    pub name: String,
+    pub parent: Option<usize>,
+    pub place: [f64; 12],
+    pub body: Option<Id>,
+    pub same_as: Option<usize>,
+    pub color: Option<[u8; 3]>,
+    /// Colours of single faces of the part's body, by the face's persistent id, as sRGB bytes.
+    pub face_colors: Vec<(u32, [u8; 3])>,
+}
+

@@ -35,6 +35,14 @@ mod tests {
         app
     }
 
+    /// Every contour clicked in the picker, as a person does before the first Enter: with several none is taken
+    /// for them.
+    fn pick_all(app: &mut App) {
+        let si = app.tools.cmd.sketch.expect("GUARD: the command has its sketch");
+        let closed = qymcad_ui_state::sketch_closed_contours(&app.project, si);
+        app.tools.gsel.profiles.extend(closed);
+    }
+
     /// TWO CONTOURS: the command opens ON THE CONTOURS, in the flat view.
     ///
     /// The flat view is the picker: `enter_contour_reselect` leaves 3D so that a click lands on a contour
@@ -80,6 +88,7 @@ mod tests {
         let mut app = a_sketch_of(2);
         app.start_feat_cmd(1);
         assert!(!app.viewing.mode_3d, "GUARD: the command must start in the picker");
+        pick_all(&mut app);
 
         app.apply_feat_cmd(); // the first Enter: the contours are chosen
         assert!(app.viewing.mode_3d, "leaving the picker must bring the person to the size, in the 3D preview");
@@ -102,6 +111,7 @@ mod tests {
     fn editing_a_feature_opens_on_its_size_not_on_the_contours() {
         let mut app = a_sketch_of(2);
         app.start_feat_cmd(1);
+        pick_all(&mut app);
         app.apply_feat_cmd(); // out of the picker
         app.apply_feat_cmd(); // and the feature is made
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());

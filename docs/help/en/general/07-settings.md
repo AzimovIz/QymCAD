@@ -4,14 +4,17 @@ The settings window is split into sections; above them is a search that finds a 
 
 ![The settings window: sections on the left, search above them, “Reset this section” at the bottom.](img/settings.png)
 
-- **General** — language, autosave, undo depth, how many recent files to keep, the settings profile.
+- **General** — language of the program and of the help, how to open the help, the start screen and
+  the last project, units on import, autosave, undo depth, how many processors to give to computing, update checks, recent
+  files, the settings profile.
 - **Appearance** — colour scheme, interface scale.
-- **Viewport** — engine, projection, shading, view cube, pointing precision, ghost transparency,
-  field of view, antialiasing.
-- **Sketch** — snapping, grid step, rotation step, auto constraints.
-- **Part**, **Assembly** — default values and what auxiliary geometry to show.
+- **Viewport** — engine, projection, shading, view cube, mouse navigation, wheel zoom, pointing
+  precision, ghost transparency, field of view, antialiasing.
+- **Sketch** — snapping, grid step, rotation step, auto constraints; what a dimension label says (name, formula), how its text lies
+  and its size — with the Smaller and Larger buttons.
+- **Part** — the default extrusion height and offset.
+- **Assembly** — showing sketch outlines, joint glyphs and the interference check.
 - **Layout** — where the panels stand: the tree, properties, the tool bars, the status line.
-- **Machining** — appears only when the module is on.
 
 Every section has **“Reset section”**: it restores the factory values in that section only, leaving
 the rest alone.
@@ -56,8 +59,7 @@ missing is taken from the factory values.
 ## What applies at once and what does not
 
 Almost everything applies at once. The single exception is named in the window itself: **GPU
-antialiasing** takes effect the next time the program starts, because it is baked into the drawing
-pipelines at startup.
+antialiasing** takes effect the next time the program starts.
 
 ## The panel layout
 

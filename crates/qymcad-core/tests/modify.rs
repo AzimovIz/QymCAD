@@ -29,13 +29,42 @@ fn move_translates() {
 
 #[test]
 fn rotate_turns_geometry_about_center() {
-    // Rotating the selected geometry by 90 degrees about (0,0) maps a point (x,y) to (-y, x).
-    let (mut p, si, eids) = rect_sketch();
+    // NOT ON A RECTANGLE ANY MORE, and that is the point. `add_rect_entity` puts two horizontal and two
+    // vertical constraints on the shape, and every edit now ends at the solver - so a rectangle CANNOT turn:
+    // it comes back upright and merely relocated. Measured on this very test, a 90 degree turn about zero
+    // left the corner that stood at (0,0) sitting at (-5,5). A pure turn is measured on free geometry; the
+    // constrained case is held by the test below.
+    let mut p = Project::default();
+    let si = p.new_sketch("free");
+    p.add_line_entity(si, 0.0, 0.0, 10.0, 0.0, qymcad_core::feature::Purpose::Real);
+    p.add_line_entity(si, 10.0, 0.0, 10.0, 10.0, qymcad_core::feature::Purpose::Real);
+    let eids: Vec<u64> = p.sketches[si].entities.iter().map(|e| e.id).collect();
     let before: Vec<(f64, f64)> = p.sketches[si].points.iter().map(|q| (q.x, q.y)).collect();
     p.rotate_entities(si, &eids, 0.0, 0.0, 90.0);
     let after: Vec<(f64, f64)> = p.sketches[si].points.iter().map(|q| (q.x, q.y)).collect();
     for ((x0, y0), (x1, y1)) in before.iter().zip(after.iter()) {
         assert!((x1 - (-y0)).abs() < 1e-9 && (y1 - x0).abs() < 1e-9, "a 90 degree rotation about the origin: ({x0},{y0}) -> ({x1},{y1})");
+    }
+}
+
+/// A CONSTRAINED SHAPE OBEYS ITS CONSTRAINTS THROUGH A TURN rather than being torn out of them.
+///
+/// Before the solver stood at the end of `rotate_entities`, the rectangle came out standing at 90 degrees
+/// with its horizontal constraints unsatisfied: the drawing said one thing and the model another, until the
+/// next edit put it back. Now the sides stay horizontal and vertical - the turn is refused, and the popup
+/// says so (`sk-turn-held`).
+#[test]
+fn a_constrained_rectangle_keeps_its_sides_upright_through_a_turn() {
+    use qymcad_core::model::EntityKind;
+    let (mut p, si, eids) = rect_sketch();
+    p.rotate_entities(si, &eids, 0.0, 0.0, 90.0);
+    let at = |id: u64| p.sketches[si].points.iter().find(|q| q.id == id).map(|q| (q.x, q.y)).expect("the point exists");
+    for e in &p.sketches[si].entities {
+        if let EntityKind::Line { a, b } = e.kind {
+            let (u, v) = (at(a), at(b));
+            let (dx, dy) = ((v.0 - u.0).abs(), (v.1 - u.1).abs());
+            assert!(dx < 1e-6 || dy < 1e-6, "a side of the rectangle came out slanted: {u:?} -> {v:?}");
+        }
     }
 }
 
@@ -137,7 +166,7 @@ fn fillet_stays_tangent_after_dimensioning() {
     let bl = pts.iter().find(|(_, x, y)| x.abs() < 0.1 && y.abs() < 0.1).unwrap().0;
     let tl = pts.iter().find(|(_, x, y)| x.abs() < 0.1 && (*y - 10.0).abs() < 0.1).unwrap().0;
     p.sketches[si].constraints.push(Constraint::Fixed { p: bl });
-    p.sketches[si].constraints.push(Constraint::Distance { a: bl, b: tl, d: 20.0, off: 0.0, expr: String::new(), driven: false, axis: 0 });
+    p.sketches[si].constraints.push(Constraint::Distance { a: bl, b: tl, d: 20.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
     p.solve_sketch(si);
     // The radius of the arc, found by id.
     fn arc_radius(p: &Project, si: usize, arc: u64) -> f64 {
@@ -574,7 +603,7 @@ fn slot_stays_parametric() {
     assert_eq!(centers.len(), 2, "two end arcs");
     let (c1, c2) = (centers[0], centers[1]);
     // A radius of 8 on one end; the other must follow.
-    p.sketches[si].constraints.push(Constraint::Diameter { c: c1, d: 8.0, off: 0.0, expr: String::new(), driven: false, diam: false });
+    p.sketches[si].constraints.push(Constraint::Diameter { c: c1, d: 8.0, off: 0.0, expr: String::new(), driven: false, diam: false, at: None });
     p.solve_sketch(si);
     let rad = |cid: u64| -> f64 {
         let c = p.sketches[si].points.iter().find(|q| q.id == cid).unwrap();
@@ -614,7 +643,7 @@ fn sketch_text_is_editable_object() {
     // Stand in for the glyphs the application bakes: two closed contours, the letters.
     let g0 = vec![Point2::new(0.0, 0.0), Point2::new(2.0, 0.0), Point2::new(2.0, 5.0), Point2::new(0.0, 5.0)];
     let g1 = vec![Point2::new(3.0, 0.0), Point2::new(5.0, 0.0), Point2::new(5.0, 5.0)];
-    let id = p.add_sketch_text(si, qymcad_core::model::TextSpec { at: Point2::new(0.0, 0.0), height: 5.0, angle: 0.0, text: "AB".into(), glyphs: vec![g0, g1] }, qymcad_core::feature::Purpose::Real);
+    let id = p.add_sketch_text(si, qymcad_core::model::TextSpec { at: Point2::new(0.0, 0.0), height: 5.0, angle: 0.0, text: "AB".into(), glyphs: vec![g0, g1], font: Default::default() }, qymcad_core::feature::Purpose::Real);
     assert!(id != 0 && p.sketches[si].texts.len() == 1, "the text object must be created");
     let contours_before = p.contours.len();
     assert!(contours_before >= 2, "the glyphs must become contours for the profile and CAM: {contours_before}");
@@ -625,7 +654,7 @@ fn sketch_text_is_editable_object() {
     assert!((t.glyphs[0][0].x - 10.0).abs() < 1e-9 && (t.glyphs[0][0].y - 4.0).abs() < 1e-9, "the glyphs must move");
     // Editing the string or the height replaces the glyphs.
     let newg = vec![vec![Point2::new(0.0, 0.0), Point2::new(1.0, 0.0), Point2::new(1.0, 9.0)]];
-    p.set_sketch_text(si, 0, qymcad_core::model::TextSpec { at: Point2::new(10.0, 4.0), height: 9.0, angle: 0.0, text: "C".into(), glyphs: newg });
+    p.set_sketch_text(si, 0, qymcad_core::model::TextSpec { at: Point2::new(10.0, 4.0), height: 9.0, angle: 0.0, text: "C".into(), glyphs: newg, font: Default::default() });
     assert_eq!(p.sketches[si].texts[0].text, "C");
     assert!((p.sketches[si].texts[0].height - 9.0).abs() < 1e-9, "the height must be updated");
     // Deleting removes the object together with its contours.

@@ -163,6 +163,23 @@ thread_local! {
     static LANGS: BTreeMap<String, Lang> = load_all();
     /// The current language. Changed by a setting; by default resolved from the system locale.
     static CURRENT: RefCell<String> = const { RefCell::new(String::new()) };
+    /// The locale of a system this thread stands for, in place of the one the process runs under.
+    static SYSTEM: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
+/// THIS THREAD RUNS THE PROGRAM AS ON A SYSTEM SET TO `locale` (`ru-RU`, `en`).
+///
+/// A program driven from outside meets the first-run choice of language like any other start, and that
+/// choice is read from the machine. Left to the process, a run of checks would speak whatever the
+/// developer's desktop is set to, and the words it looks for would change with the machine it runs on.
+/// Per thread: sessions run beside each other, each on its own.
+pub fn stand_for_system_locale(locale: &str) {
+    let changed = SYSTEM.with(|s| s.replace(Some(locale.to_string())).as_deref() != Some(locale));
+    // A NEW SYSTEM HAS NO LANGUAGE CHOSEN YET: the one left on the thread by the system before would otherwise
+    // speak for it until a setting said otherwise.
+    if changed {
+        CURRENT.with(|c| c.borrow_mut().clear());
+    }
 }
 
 /// The list of available languages: (code, the name in that language). Built from the catalogue — see
@@ -178,7 +195,7 @@ pub fn available() -> Vec<(String, String)> {
 /// `ru`. Demanding an exact match would mean ignoring regional variants — and a system set to a language
 /// we have would get an English interface anyway.
 pub fn system_default() -> String {
-    let sys = sys_locale::get_locale().unwrap_or_default().to_lowercase();
+    let sys = SYSTEM.with(|s| s.borrow().clone()).or_else(sys_locale::get_locale).unwrap_or_default().to_lowercase();
     let base = sys.split(['-', '_']).next().unwrap_or("").to_string();
     LANGS.with(|m| {
         if m.contains_key(&sys) {

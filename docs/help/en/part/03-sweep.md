@@ -1,20 +1,21 @@
 # Sweep
 
-Select the **profile** sketch, then point at the **path** sketch above and press Enter.
+![A round section run along a broken-line path.](img/part-sweep.png)
 
-![A round section swept along a two-segment path.](img/part-sweep.png)
+The profile travels along the path and sweeps a body: a pipe, a handrail, a cable duct, a seal along an outline.
 
-The profile travels along the path and sweeps a body: a tube, a handrail, a cable duct, a seal
-around an outline.
+## How to do it
 
-## Two sketches, not one
+1. Select the **profile** sketch — a closed contour of the section — and press **Sweep**.
+2. Click the **path** sketch in the tree: an open path or a closed one. The bar above shows **Path:** with its name.
+   The profile places itself at the start of the path, across it.
+3. **Enter** applies, **Esc** cancels.
 
-The profile and the path are different sketches and usually lie in different planes: the profile
-across, the path along. It is convenient to build them so that the start of the path lies in the
-plane of the profile.
+The profile and the path are separate sketches; the profile usually lies across the path, the path along it.
 
-## What can go wrong
+## If it did not work
 
-- **The path turns tighter than the profile allows.** If the turn radius is smaller than the profile
-  size, the body intersects itself and the operation fails. Increase the radius or shrink the profile.
-- **An open path** is normal; a closed one gives a ring.
+- The body is not built — the path turns more sharply than the profile allows: with a bend radius smaller than the
+  profile, the body would cross itself. Make the bend radius larger or the profile smaller.
+- The bar reads **Path?** — no path is picked yet: click its sketch in the tree.
+- A closed path gives a ring, an open one a body with two ends; both are allowed.

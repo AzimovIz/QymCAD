@@ -617,3 +617,30 @@ fn a_gear_relation_turns_the_driven_wheel_the_right_way_on_a_turned_anchor() {
         "the driving wheel travelled 20°, so the driven one has to travel 40° in the direction of its own gizmo, but travelled {d:.4}°"
     );
 }
+
+/// A TURN FAR FROM THE BODY'S ORIGIN, DRIVEN AND TIED BY A RELATION, CONVERGES. Each wheel's axis stands 100 and 200 mm
+/// from its body's origin, so a turn swings the origin round a lever. Reported behaviour: two parts on revolute mates
+/// tied by a relation, one driven to 45 deg, stayed where they were and both mates were called violated - the solver
+/// stood at a residual of 2.4e-7 after all its steps against a tolerance of 1e-7.
+#[test]
+fn wheels_turning_far_from_their_origins_converge_under_a_relation() {
+    let mut bad = Vec::new();
+    for drive in [15.0, 45.0, 90.0, 135.0] {
+        let hub_a = Anchor::from_axes(0, Vector3::new(100.0, 0.0, 0.0), Vector3::z(), Vector3::x()).unwrap();
+        let rim_a = Anchor::from_axes(1, Vector3::new(100.0, 0.0, 0.0), Vector3::z(), Vector3::x()).unwrap();
+        let hub_b = Anchor::from_axes(0, Vector3::new(200.0, 0.0, 10.0), Vector3::z(), Vector3::x()).unwrap();
+        let rim_b = Anchor::from_axes(2, Vector3::new(200.0, 0.0, 10.0), Vector3::z(), Vector3::x()).unwrap();
+        let ja = Joint::new(hub_a, rim_a, JointKind::Revolute).with_angle(drive);
+        let jb = Joint::new(hub_b, rim_b, JointKind::Revolute);
+        let bodies = vec![Body::grounded(at(0.0, 0.0, 0.0)), Body::new(at(0.0, 0.0, 0.0)), Body::new(at(0.0, 0.0, 0.0))];
+        let mut p = qymcad_core::asm::joint::problem_from(bodies, &[ja, jb]);
+        p.add(Constraint::slot_ratio(SlotMeasure::around(hub_b, rim_b, 2), SlotMeasure::around(hub_a, rim_a, 2), 1.0, 0.0));
+        let (poses, rep) = solve_assembly(&p);
+        if !rep.converged {
+            bad.push(format!("{drive} deg: did not converge, residual {:.3e}", rep.residual));
+        } else if (spin_deg(&poses[2]) - drive).abs() > 1e-4 {
+            bad.push(format!("{drive} deg: the tied wheel stands at {:.6} deg", spin_deg(&poses[2])));
+        }
+    }
+    assert!(bad.is_empty(), "turns far from the origin do not settle:\n  {}", bad.join("\n  "));
+}

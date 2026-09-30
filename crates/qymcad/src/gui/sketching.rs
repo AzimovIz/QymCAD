@@ -16,22 +16,15 @@ impl App {
     /// there are not enough letters.
     pub(super) fn sketch_hotkey(&mut self, key: egui::Key) {
         let Some(action) = qymcad_ui_state::hotkey_action(&self.set, "sketch", key) else { return };
+        if let Some(t) = qymcad_sketch::tool_for_action(action) {
+            return self.set_sk_tool(t);
+        }
         match action {
             "sketch.select" => {
                 self.tools.armed = qymcad_ui_state::Armed::None;
                 self.tools.tool.pts.clear();
                 self.status = crate::i18n::tr("sk-select");
             }
-            "sketch.line" => self.set_sk_tool(1),
-            "sketch.rect" => self.set_sk_tool(2),
-            "sketch.circle" => self.set_sk_tool(3),
-            "sketch.arc" => self.set_sk_tool(4),
-            "sketch.point" => self.set_sk_tool(5),
-            "sketch.polygon" => self.set_sk_tool(6),
-            "sketch.slot" => self.set_sk_tool(7),
-            "sketch.ellipse" => self.set_sk_tool(8),
-            "sketch.spline" => self.set_sk_tool(9),
-            "sketch.text" => self.set_sk_tool(11),
             "sketch.dim" => qymcad_ui_state::set_dim_tool(&mut qymcad_ui_state::tools_of!(self), &mut self.viewing.mode_3d, &self.project, self.chosen.sel, self.sketch_ses, &mut self.status, 1),
             "sketch.corner-fillet" => qymcad_ui_state::set_click_op(&mut qymcad_ui_state::tools_of!(self), &mut self.viewing.mode_3d, 4),
             "sketch.trim" => qymcad_ui_state::set_click_op(&mut qymcad_ui_state::tools_of!(self), &mut self.viewing.mode_3d, 1),
@@ -92,8 +85,8 @@ impl App {
                 // WHILE DRAGGING: every link carries ITS OWN object until the release
                 sketch_drag_update(&mut self.sketch_ctx(), ctx, resp, rect);
                 power_trim_drag(&mut self.sketch_ctx(), resp, rect); // trimming by dragging (the trim tool)
-                qymcad_ui_state::pan_sheet_2d(&mut self.viewing.view, ctx);
-                if scroll != 0.0 && resp.hovered() {
+                qymcad_ui_state::pan_sheet_2d(&mut self.viewing.view, ctx, resp, self.set.mouse_nav);
+                if scroll != 0.0 && resp.contains_pointer() {
                     qymcad_ui_state::wheel_zoom_2d(&mut self.viewing.view, &self.set, rect, resp.hover_pos(), scroll);
                 }
                 // A CLICK IN A SKETCH: a drawing tool, placing a dimension, or picking geometry
@@ -159,7 +152,7 @@ impl App {
                                 let ((c1, m1), (c2, m2)) = (edge_refs[0], edge_refs[1]);
                                 let d = self.project.measure_edge_distance(si, c1, m1, c2, m2);
                                 let ci = self.project.sketches[si].constraints.len();
-                                self.project.sketches[si].constraints.push(qymcad_core::model::Constraint::EdgeDistance { c1, c2, d, m1, m2, off: 0.0, expr: String::new(), driven: false });
+                                self.project.sketches[si].constraints.push(qymcad_core::model::Constraint::EdgeDistance { c1, c2, d, m1, m2, off: 0.0, expr: String::new(), driven: false, at: None });
                                 crate::gui::io_jobs::finish_dim(&mut self.project, &mut self.regen, si, ci);
                                 self.tools.gsel.constraint = Some(ci);
                                 qymcad_ui_state::invalidate(&mut self.regen);
@@ -187,7 +180,7 @@ impl App {
                     if self.tools.armed.draw_kind() == 1 {
                         self.tools.tool.pts.clear(); // finish the current chain; the tool stays armed
                     } else if self.tools.armed.draw_kind() == 9 {
-                        finish_spline(&mut self.project, &mut self.regen, self.chosen.sel, &mut self.tools.tool, &mut self.viewing.view);
+                        finish_spline(&mut self.sketch_ctx());
                     } else if let (Sel::Sketch(si), Some(pos)) = (self.chosen.sel, resp.interact_pointer_pos()) {
                         // a copy of an array opens its parameters; a text object opens for editing; so do a
                         // note, a dimension and a circle
@@ -217,11 +210,7 @@ impl App {
                             }
                             self.status = crate::i18n::tr("sk-array-edit-hint");
                         } else if let Some(ti) = qymcad_ui_state::text_at(&self.project, &self.viewing.view, rect, pos, si) {
-                            self.tools.inline = InlineEdit::Text(ti);
-                            self.tools.annot.text = Some(ti);
-                            let t = &self.project.sketches[si].texts[ti];
-                            self.tools.annot.text_buf = t.text.clone();
-                            self.tools.annot.text_h = t.height;
+                            qymcad_ui_state::begin_text_edit(&self.project, &mut qymcad_ui_state::tools_of!(self), &mut self.tool_prefs, si, ti);
                         } else if let Some(ni) = qymcad_ui_state::note_at(&self.project, &self.viewing.view, rect, pos, si) {
                             self.tools.inline = InlineEdit::Note(ni);
                             self.tools.annot.note_buf = self.project.sketches[si].notes.get(ni).map(|n| n.text.clone()).unwrap_or_default();
@@ -507,9 +496,10 @@ impl App {
                 // the in-place dimension editor (a double click on a dimension)
                 dim_editor(&mut self.sketch_ctx(), ctx, rect);
                 qymcad_ui_state::note_editor(&mut self.tools.annot, &mut self.tools.inline, &mut self.project, self.chosen.sel, self.viewing.view, ctx, rect); // editing the text of a note
-                qymcad_ui_state::text_obj_editor(qymcad_ui_state::editing_of!(self), &mut self.tools.annot, &mut self.font_cache, &mut self.tools.inline, ctx, rect); // editing a text object (the string and the height)
+                let asks = qymcad_ui_state::text_popups(qymcad_ui_state::editing_of!(self), &mut self.font_cache, &mut qymcad_ui_state::text_ctx_of!(self), ctx, rect); // the label editor and the list of fonts
+                self.do_bar_asks(asks, ctx);
                 place_input_popup(qymcad_ui_state::editing_of!(self), &mut self.tools.corner, &mut self.tools.place, &mut self.tools.sel_sk, &mut self.tool_prefs, ctx, rect); // typing the sizes right after a shape is built
-                sketch_rotate_popup(qymcad_ui_state::editing_of!(self), &mut self.tools.armed, &mut self.side.rot, &self.tools.sel_sk, &mut self.tools.tool, ctx, rect); // the rotation angle at the centre
+                sketch_rotate_popup(&mut self.sketch_ctx(), ctx, rect); // the rotation angle at the centre
     }
 }
 
@@ -531,4 +521,17 @@ impl App {
 }
 
 impl App {
+}
+
+/// Apply a NEW plane to sketch `si` (the 2D geometry is kept and carried onto it) and rebuild the bodies built on that
+/// sketch (just as an ordinary sketch edit does, through `mark_sketch_dirty`).
+pub(crate) fn set_sketch_plane(sk: &mut qymcad_ui_state::SketchCtx, si: usize, plane: qymcad_core::feature::SketchPlane) {
+    let plane = crate::gui::resolve_placement_plane(&mut *sk.cmd, &mut *sk.project, &mut *sk.status, plane);
+    let sid = sk.project.sketches[si].id;
+    sk.project.sketches[si].plane = plane;
+    sk.project.mark_sketch_dirty(sid); // associativity: the bodies on this sketch will be rebuilt
+    qymcad_ui_state::mark_dirty_for_rebuild(&mut sk.rebuild()); // the document is marked; the scheduler does the computing
+    sk.picking.clear();
+    sk.view.initialized = false;
+    *sk.status = crate::i18n::tr("g-sketch-moved");
 }

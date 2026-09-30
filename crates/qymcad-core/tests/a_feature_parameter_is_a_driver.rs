@@ -135,7 +135,7 @@ fn sketch_and_feature_names_share_one_scope() {
     let sid = p.sketches[0].id;
     let si = p.sketch_index(sid).unwrap();
     let pts: Vec<Id> = p.sketches[si].points.iter().take(2).map(|q| q.id).collect();
-    p.sketches[si].constraints.push(Constraint::Distance { a: pts[0], b: pts[1], d: 40.0, off: 0.0, expr: String::new(), driven: false, axis: 0 });
+    p.sketches[si].constraints.push(Constraint::Distance { a: pts[0], b: pts[1], d: 40.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
     assert!(p.add_named_dim("len".into(), sid, pts.clone()));
 
     assert!(!p.add_named_feat_dim("len".into(), node, "height"), "the name of a sketch dimension has to count as taken for a feature as well");

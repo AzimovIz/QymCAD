@@ -75,10 +75,10 @@ mod tests {
         let (pa, pb) = (aim(app, mine[0]), aim(app, mine[1]));
 
         let mut hand = Hand::new(app);
-        hand.look_at([30.0, 10.0, 5.0], 7.0).mate(JointKind::Rigid).anchor(3).click(pa).click(pb);
+        hand.look_at([30.0, 10.0, 5.0], 7.0).mate(JointKind::Rigid).anchor(3).click(pa).click(pb).key(egui::Key::Enter).key(egui::Key::Escape);
         let rigid = app.project.joints.last().map(|j| j.id).expect("the rigid joint");
         let mut hand = Hand::new(app);
-        hand.mate(JointKind::Slider).anchor(3).click(pa).click(pb);
+        hand.mate(JointKind::Slider).anchor(3).click(pa).click(pb).key(egui::Key::Enter).key(egui::Key::Escape);
         let hinge = app.project.joints.last().map(|j| j.id).expect("the slider");
         // THE SLIDER HAS A TRAVEL SET — and the rigid joint holds the origins aligned: the two
         // cannot be satisfied together.
@@ -131,7 +131,7 @@ mod tests {
         crate::gui::commands::refresh_edges(&mut app.part_ctx());
         let (pa, pb) = (aim(&app, mine[0]), aim(&app, mine[1]));
         let mut hand = Hand::new(&mut app);
-        hand.look_at([330.0, 10.0, 5.0], 5.0).mate(JointKind::Slider).anchor(3).click(pa).click(pb);
+        hand.look_at([330.0, 10.0, 5.0], 5.0).mate(JointKind::Slider).anchor(3).click(pa).click(pb).key(egui::Key::Enter).key(egui::Key::Escape);
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
         let good = app.project.joints.last().map(|j| j.id).expect("the healthy joint was created");
         let moving = app.project.body_owner(mine[1]).expect("the owner of the driven part");

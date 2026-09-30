@@ -41,7 +41,7 @@ fn body_inside(p: &mut Project, comp: Id) -> Id {
     p.timeline.push(qymcad_core::feature::FeatureNode {
         id: node,
         name: "body".into(),
-        kind: qymcad_core::feature::FeatureKind::Import { body, source: 0, solid: 0 },
+        kind: qymcad_core::feature::FeatureKind::Import { body, source: 0, solid: 0, scale: 1.0 },
         parent: Some(comp),
         dirty: false,
         suppressed: false,

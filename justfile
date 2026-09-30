@@ -14,7 +14,7 @@ dev:
 test:
     cargo test
 
-# --- Linux AppImage (locally, through Docker; OCCT 7.8 from source, glibc 2.35) ---
+# --- Linux AppImage (locally, through Docker; OCCT 7.9.3 from source, glibc 2.35) ---
 IMG := "qymcad-appimage-builder"
 
 # once (and after every edit of the Dockerfile): build the builder image

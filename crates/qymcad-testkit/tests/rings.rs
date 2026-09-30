@@ -71,7 +71,8 @@ fn extrude_disk_then_cut_middle_ring() {
     let cut = p.add_combine_multi_op(body, sid, vec![mid], qymcad_core::model::CombineSpan { height: 12.0, down: 0.0, extent: qymcad_core::feature::Extent { through: true, ..Default::default() }, fill: &[] }, 0);
     let (r2, s2) = qymcad_testkit::regenerate(&mut p);
     for (id,er) in &r2.errors { eprintln!("ERROR in the cut {id}: {er}"); }
-    let v2 = s2.get(&cut).map(|s| s.volume()).unwrap_or(0.0);
+    // the groove parts the disc from the ring: two bodies of the part, together the volume
+    let v2: f64 = p.timeline.iter().find(|n| n.kind.body() == Some(cut)).map(|n| n.kind.bodies()).unwrap_or_default().iter().filter_map(|b| s2.get(b)).map(|s| s.volume()).sum();
     let exp2 = pi*(500.0+100.0)*10.0;
     eprintln!("after cutting with the ring: V={v2:.0}, expected {exp2:.0}");
     assert!((v2-exp2).abs()/exp2 < 0.02, "cut with the middle ring: V={v2:.0} != {exp2:.0}");

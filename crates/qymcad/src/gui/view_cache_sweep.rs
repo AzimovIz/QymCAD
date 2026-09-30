@@ -89,4 +89,31 @@ mod tests {
         assert_eq!(before.1, after.1, "and come back to the previous one: the picture is the same as it was before the edit");
         assert_eq!(before.2, after.2, "the same for the GPU scene");
     }
+
+    /// PICKING CHANGES THE RASTER. What is picked is lit on the picture - a body lights itself, a component its whole
+    /// subtree - so the set of lit bodies belongs to the raster's key. A click on a row of the tree changes that set,
+    /// with the camera standing still.
+    #[test]
+    fn picking_in_the_tree_changes_the_raster() {
+        use crate::gui::a_component_stepped_into_is_not_lit::tests::calm;
+        use crate::gui::import_door::tests::{answer, click, frame, running, settle, spot};
+        let (mut app, ctx) = running();
+        answer(&mut app, &ctx, qymcad_ui_state::Want::Anything, concat!(env!("CARGO_MANIFEST_DIR"), "/../qymcad-kernel/tests/data/assembly.step"));
+        settle(&mut app, &ctx);
+        calm(&mut app, &ctx);
+        let lit = |app: &App| qymcad_ui_state::visible_mesh_items(&app.painting()).iter().filter(|m| m.hot).count();
+        let cam = |app: &App| (app.viewing.cam.yaw, app.viewing.cam.pitch, app.viewing.cam.scale, app.viewing.cam.target);
+        let r = rect();
+        let before = (lit(&app), qymcad_ui_state::view_key(&app.painting(), r, 1.0), cam(&app));
+        // the empty part the document starts with: picking it lights nothing
+        let part = crate::i18n::name("name-part-n#1");
+        let texts = frame(&mut app, &ctx, Vec::new());
+        let row = spot(&texts, &part).unwrap_or_else(|| panic!("no row {part:?}; the screen shows {:?}", texts.iter().map(|(t, _)| t).collect::<Vec<_>>()));
+        let _ = frame(&mut app, &ctx, click(row));
+        let _ = frame(&mut app, &ctx, Vec::new());
+        let after = (lit(&app), qymcad_ui_state::view_key(&app.painting(), r, 1.0), cam(&app));
+        assert_ne!(before.0, after.0, "setup: the click must change what is lit ({} lit before, {} after)", before.0, after.0);
+        assert_eq!(before.2, after.2, "setup: the camera must stand still, or the key changes for another reason");
+        assert_ne!(before.1, after.1, "what is lit changed and the RASTER key did not - the old highlight stays on the picture until the camera moves");
+    }
 }

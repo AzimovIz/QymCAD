@@ -102,8 +102,7 @@ mod tests {
                 off: 0.0,
                 expr: String::new(),
                 driven: false,
-                axis: 0,
-            });
+                axis: 0, at: None });
             assert!(app.project.add_named_dim(format!("dlina_proema_{i}"), sid, pts));
         }
         let ctx = egui::Context::default();

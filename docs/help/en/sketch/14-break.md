@@ -1,21 +1,18 @@
 # Break
 
-Clicking a line splits it in two at the point of the click.
+Click a line, an arc or a circle — it splits at the point of the click.
 
-![A whole segment and the same one broken at the intersection: from here the halves live apart.](img/sketch-break/)
+![A whole segment and the same one broken at the intersection: from here each half is its own line.](img/sketch-break/)
 
 ## When you need it
 
 - To give one half **its own dimension**: while the segment is one, a dimension sets its whole length.
 - To **delete the middle** of a segment without touching its ends.
-- To free a stretch for a corner fillet or a chamfer.
-- To insert an arc between the halves without redrawing the outline.
 
 ## What happens to the constraints
 
-Both halves inherit the constraints of the original line, and a coincidence of the ends appears at
-the break point. It keeps the outline closed: to pull the halves apart, remove that coincidence —
-otherwise they move together.
+The halves meet in one shared point, so the outline stays closed. A horizontal or vertical constraint
+of the original line goes to each half. Dimensions and other constraints stay on the old ends.
 
 ## How it differs from trim
 

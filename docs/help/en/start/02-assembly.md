@@ -7,34 +7,31 @@ the way they do in a real product — not “placed nearby” but **constrained*
 
 Read [the first lesson](start/01-first-part) first: this one assumes you have already built a part.
 
-## A component is a part inside an assembly
+## A part inside an assembly
 
-A new document is already an assembly: the root node of the tree is one. Press **N** (“New part”)
-and a component appears inside it; the path on top shows that you are now **inside** it:
-`Assembly › Part 1`.
+On the start screen press **New assembly** — an empty assembly opens. Press **N** ("New part"): a part appears in the
+assembly, and the path above shows that you are now **inside** it: `Assembly › Part 1`.
 
-Everything you build goes into that part, not into the assembly. This matters more than it looks: a
-body built by accident in the assembly root can afterwards be neither moved nor patterned.
-
-Build something simple — say a 60×40×10 plate with a hole. Click the assembly root in the tree to
-step back out.
+Everything you build goes into that part, not into the assembly. Build something simple — say a 60×40×10 plate with a
+hole. Click **Assembly** in the path above to step back out.
 
 ## The second part, and how to get one
 
 Press **N** again and build a second one — a 20×20×50 post, for instance.
 
-The other way is **I** (“Insert”) — it takes a finished document or a library item. That is how
-bought parts arrive: bearings, fasteners, extrusion.
+The other way is **I** ("Insert a component") — it takes a finished part from a STEP or STL file. That is how bought
+parts arrive: bearings, fasteners, extrusion. Finished products also come from the [library](general/12-library).
 
 ## A joint is a rule, not a move
 
-Press **J**, click a face on one part, then a face on the other. The parts snap together.
+Press **J**, click a face on one part, then a face on the other. The parts snap together. The kind of joint is chosen
+in the bar above, or later in the properties.
 
-And here is the difference from simply dragging: a joint is a **rule** that keeps holding. Change
-the thickness of the plate and the post stays standing on it instead of hanging in the air. It works
-the other way too: while the rule exists, the part cannot be dragged where the rule would break.
+The difference from simply moving: a joint is a **rule** that keeps holding. Change the thickness of the plate and the
+post stays standing on it instead of hanging in the air. While the rule exists, the part cannot be dragged where the
+rule would break.
 
-There are seven kinds of joint, and they differ in **what they leave free**:
+The kinds of joint differ in **what they leave free**:
 
 | Kind | What stays free |
 |---|---|
@@ -45,22 +42,24 @@ There are seven kinds of joint, and they differ in **what they leave free**:
 | Planar | two motions in a plane and rotation in it |
 | Ball | three rotations about a point |
 | Pin-slot | rotation about one axis and motion along another |
+| Parallel | three motions and rotation about the axis — only the direction is held |
 
 More in [Joints](assembly/02-joints).
 
 ## Degrees of freedom here too
 
-The counter at the bottom shows how many degrees of freedom the assembly has left. Zero means
-everything is fixed. More than zero means something can still move, and that is normal: a mechanism
-is supposed to move. What is not normal is a part being free when you thought you had pinned it.
+Select a joint: its properties show how many degrees of freedom the driven part has left. Zero — the part is fixed.
+More than zero — something can still move, and that is normal: a mechanism is supposed to move. What is not normal is
+a part being free when you thought you had pinned it. If the joints ask different things of the part, a red line
+"the mate is not satisfied" appears there too.
 
-The solver can also point out **redundant** constraints: two of them holding the same thing. That is
-not an error, but it hides the intent — which of the two is the one that matters?
+A part with freedom left can be led with the mouse: in our layout — **Shift** and the left button, begun on the part;
+it goes the way the joints allow.
 
-## Arrays and mirrors at the assembly level
+## Patterns at the assembly level
 
-Eight bolts around a circle are not placed one at a time. A [component array](assembly/04-arrays)
-patterns a part together with its joints.
+Eight bolts around a circle are not placed one at a time. A [component pattern](assembly/04-arrays) patterns a part as
+one row of the assembly timeline.
 
 ## Interference check
 

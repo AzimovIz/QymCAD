@@ -135,4 +135,33 @@ mod tests {
             now[3]
         );
     }
+
+    /// THE END OF A REBUILD DOES NOT WIPE WHAT THE OPERATION SAID. Reported behaviour: grounding a part says
+    /// which part it fixed, the quiet rebuild it asks for shows its progress and ends, and the line reads "Done" -
+    /// the name of the part is gone. The words of the operation come back; a line nobody wrote over becomes "Done".
+    #[test]
+    fn the_end_of_a_rebuild_does_not_wipe_what_the_operation_said() {
+        let mut app = App::default();
+        super::super::joint_flow::tests::add_part_at(&mut app, 0.0);
+        super::super::joint_flow::tests::add_part_at(&mut app, 100.0);
+        crate::gui::io_jobs::regenerate_now(&mut app.rebuild_ctx());
+        let first = app.project.timeline.iter().find(|n| n.kind.body().is_some()).map(|n| n.id).expect("the node of the body");
+        let rebuild = |app: &mut App| {
+            app.project.mark_node_dirty(first);
+            app.spawn_regen();
+            assert!(matches!(&app.regen.busy, Some(b) if b.quiet), "setup: one node is rebuilt quietly");
+            let (stamp, rebuilt) = (crate::gui::io_jobs::regen_doc_stamp(&app.project), app.project.clone_without_source_data());
+            app.regen.busy = None;
+            app.finish_regen_checked(stamp, rebuilt, Vec::new(), Vec::new(), Vec::new(), false);
+        };
+        let said = crate::i18n::tr1("jt-grounded", "name", "Part 2");
+        app.status = said.clone();
+        rebuild(&mut app);
+        assert!(app.status == said, "the operation said {said:?}, the rebuild it asked for ended and the line says {:?}", app.status);
+        // the words were put back by the rebuild and are its own now: the next one, asked for by nothing that
+        // spoke, ends with "Done" rather than with old news
+        rebuild(&mut app);
+        let done = format!("{} {}", crate::gui::ph::CHECK, crate::i18n::tr("io-ready"));
+        assert!(app.status == done, "a rebuild nobody spoke before ended well and the line says {:?}", app.status);
+    }
 }

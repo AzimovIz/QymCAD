@@ -37,6 +37,7 @@ mod tests {
             autosave_secs: 600,
             undo_cap: 7,
             ghost_alpha: 200,
+            kernel_threads: 0, // all the cores but one
             persp_fov_deg: 60.0,
             gpu_viewport: !d.gpu_viewport,
             projection: Projection::Perspective, // the default is Ortho
@@ -46,11 +47,17 @@ mod tests {
             show_interference: !d.show_interference,
             snap: super::super::Snapping { on: !d.snap.on, grid: 7.5, rot_deg: 30.0 },
             auto_constrain: !d.auto_constrain,
+            dim_show_name: !d.dim_show_name,
+            dim_show_formula: !d.dim_show_formula,
+            dim_font: 20.0, // the factory value is 13
+            dim_text: qymcad_ui_state::DimTextTurn::Horizontal, // the factory value is along the line
             defaults: super::super::Defaults { extrude_h: 42.0, offset_2d: 8.25 },
             ui_scale: 1.4,
             recent: vec!["/tmp/a.qcad".into()],
             recent_limit: 3,
             pick_precision: 2,
+            import_ask_always: !d.import_ask_always,
+            import_units: [("STL".to_string(), "m".to_string())].into_iter().collect(), // the factory value is empty
         }
     }
 
@@ -58,6 +65,8 @@ mod tests {
     /// meaningfully and with a clear message about which field failed to arrive.
     fn assert_same(a: &Settings, b: &Settings) {
         assert_eq!(a.language, b.language, "the language of the interface");
+        assert_eq!(a.import_ask_always, b.import_ask_always, "asking for units on every import");
+        assert_eq!(a.import_units, b.import_units, "the unit last chosen for a format without units");
         assert_eq!(a.scheme, b.scheme, "the colour scheme");
         assert_eq!(a.viewcube_size, b.viewcube_size, "the size of the navigation cube");
         assert_eq!(a.gpu_viewport, b.gpu_viewport, "the engine of the viewport");
@@ -70,6 +79,7 @@ mod tests {
         assert_eq!(a.snap.grid, b.snap.grid, "the grid step");
         assert_eq!(a.snap.rot_deg, b.snap.rot_deg, "the rotation step");
         assert_eq!(a.auto_constrain, b.auto_constrain, "the automatic constraints");
+        assert_eq!((a.dim_show_name, a.dim_show_formula, a.dim_font, a.dim_text), (b.dim_show_name, b.dim_show_formula, b.dim_font, b.dim_text), "what the labels of the dimensions say, their size and their turn");
         assert_eq!(a.defaults.extrude_h, b.defaults.extrude_h, "the height of an extrusion");
         assert_eq!(a.defaults.offset_2d, b.defaults.offset_2d, "the 2D offset");
         assert_eq!(a.open_last, b.open_last, "reopening the previous project");

@@ -50,7 +50,7 @@ mod tests {
     /// Delete a timeline node by its Id — by exactly the path the feature tree uses.
     fn delete_node(app: &mut App, nid: u64) {
         let ti = app.project.timeline.iter().position(|n| n.id == nid).expect("the feature node in the timeline");
-        crate::gui::commands::delete_feature(&mut app.part_ctx(), ti);
+        crate::gui::commands::delete_feature(&mut app.part_ctx(), ti, false);
     }
 
     /// PUSH FACE: deleted, and the source body stays on screen.
@@ -159,7 +159,7 @@ mod tests {
 
         let i = app.project.planes.iter().position(|p| p.id == pid).expect("the plane in the list");
         app.chosen.sel = Sel::Plane(i);
-        app.execute_delete(Sel::Plane(i));
+        app.execute_delete(Sel::Plane(i), false);
 
         assert!(!crate::gui::doc_changed_outside_edit(&app.disk.edits, &app.project), "deleting a datum must go through App::edit rather than past it");
         assert_eq!(app.disk.edits.undo.len(), undo_before + 1, "EXACTLY one undo step must appear");

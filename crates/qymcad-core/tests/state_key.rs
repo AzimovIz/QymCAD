@@ -63,6 +63,17 @@ fn every_user_edit_changes_the_key() {
             pt.x += 1.0;
         }
     });
+    check("a label was placed in a sketch", &mut p, &|p| {
+        p.sketches[0].texts.push(qymcad_core::model::SketchText { id: 900, x: 0.0, y: 0.0, height: 5.0, angle: 0.0, text: "A".into(), construction: false, glyphs: Vec::new(), font: Default::default() });
+    });
+    check("a label was retyped", &mut p, &|p| {
+        if let Some(t) = p.sketches[0].texts.last_mut() {
+            t.text = "B".into();
+        }
+    });
+    check("a line was turned into construction", &mut p, &|p| {
+        p.sketches[0].entities[0].construction = true;
+    });
     check("a datum plane was added", &mut p, &|p| {
         p.add_plane(WorkPlane { name: "Datum".into(), origin: [0.0, 0.0, 7.0], normal: [0.0, 0.0, 1.0], ..Default::default() });
     });
@@ -82,6 +93,15 @@ fn every_user_edit_changes_the_key() {
     check("the angle of a joint was edited", &mut p, &|p| {
         if let Some(j) = p.joints.last_mut() {
             j.angle = 30.0;
+        }
+    });
+    check("a relation was made between two mates", &mut p, &|p| {
+        let j = p.joints.last().map(|j| j.id).unwrap();
+        p.add_relation(qymcad_core::feature::RelationKind::Gear, j, 0, j, 0, 2.0);
+    });
+    check("the number of a relation was edited", &mut p, &|p| {
+        if let Some(r) = p.relations.last_mut() {
+            r.value = 3.0;
         }
     });
     check("a parameter was added", &mut p, &|p| {

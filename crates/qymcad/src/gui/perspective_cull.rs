@@ -14,6 +14,19 @@
 //! The defect had been there before — perspective has been in the program for a long time. It is just
 //! that with a hard-coded angle of 35.5 degrees the divergence was small, and it only became visible
 //! once the angle became a setting.
+//!
+//! SINCE THEN THE NORMAL LEFT THE VERTEX, and the two paths answer the question differently. The raster still
+//! asks it of the world normal and the ray from the eye; the card asks `front_facing` - the winding of the
+//! triangle as it came out on screen - which is the same question answered per triangle and per point, and so
+//! exact in perspective by construction.
+//!
+//! THIS FILE ONCE PROVED THE WRONG THING. It read the shader as text and was satisfied by a line that
+//! discarded exactly the faces it should have kept: `cross(dpdx, dpdy)` is built from the screen basis and
+//! points along the line of sight for EVERY triangle, so testing it against that same line of sight is a test
+//! of nothing. Extruded text lost its walls on screen while every check stayed green. What can only be seen in
+//! a picture is now checked in a picture - `gui/card_matches_raster.rs` draws the same scene both ways and
+//! compares them - and what is left here is the rule on the raster's side plus the fact that the card culls at
+//! all.
 #[cfg(test)]
 mod tests {
     use qymcad_ui_state::Projection;
@@ -138,12 +151,11 @@ mod tests {
         let render = crate::gui::render_source::RENDER;
         let gpu = include_str!("../viewport_gpu.rs");
         assert_eq!(render.matches("qymcad_ui_state::view_dir_at(").count(), 2, "the raster must cull by the ray from the eye in both places (bodies and face fill)");
-        // TOGETHER WITH THE CONDITION, not only the line that computes it: the first edition of the
-        // guard checked for the presence of `let eye = ...` and passed calmly when the branch was
-        // stubbed out with `if (false)`. The guard must see that the computation is SWITCHED ON in
-        // perspective, not merely present in the file.
-        let want = "if (inv_d > 0.0) {\n        let eye = cam.tgt.xyz - cam.fwd.xyz * (1.0 / inv_d);\n        view = normalize(in.wpos - eye);";
-        assert!(gpu.contains(want), "the shader stopped culling by the ray from the eye in perspective — the picture will diverge from the raster again");
-        assert!(crate::gui::render_source::has(gpu, "if (dot(in.nrm, view) >= 0.0) { discard; }"), "the shader culls by the general camera direction again");
+        // THE CARD CULLS BY THE WINDING ON SCREEN, which is the ray from the eye asked per triangle. What the
+        // rule actually DRAWS is checked against the raster in a picture (`gui/card_matches_raster.rs`); read
+        // as text, a culling rule can look right and discard the wrong half - that is how extruded text lost
+        // its walls with every check green.
+        assert!(crate::gui::render_source::has(gpu, "if (!front) { discard; }"), "the card stopped culling by the side of the triangle that is drawn");
+        assert!(!gpu.contains("dot(outward, view)"), "the card culls by a direction of view again - in perspective that answer is wrong near the edges of the frame");
     }
 }

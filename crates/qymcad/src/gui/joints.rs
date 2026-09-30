@@ -178,7 +178,7 @@ impl App {
     /// The only entry point for the search - and it leads to EXACTLY the same calls the panel button makes.
     /// A second launch path would be worse than having no search at all: it would start doing what the
     /// button does not, and the divergence would surface for whoever uses the program rather than in a test.
-    pub(crate) fn run_command(&mut self, code: &str) {
+    pub(crate) fn run_command(&mut self, code: &str, frame: &egui::Context) {
         use crate::command_catalog::Launch;
         let Some(cmd) = crate::command_catalog::by_code(code) else { return };
         match cmd.launch {
@@ -190,7 +190,7 @@ impl App {
             Launch::Modify(n) => qymcad_ui_state::modify_button(qymcad_ui_state::editing_of!(self), &mut qymcad_ui_state::tools_of!(self), self.sk_pat, &self.tool_prefs, n),
             Launch::Action("joint") => self.start_joint_pick(),
             Launch::Action("ground") => self.start_ground_pick(),
-            Launch::Action(_) => {}
+            Launch::Action(a) => crate::gui::piece_part::from_search(frame, &mut self.part_ctx(), a),
         }
     }
 

@@ -59,7 +59,7 @@ mod tests {
         let (pa, pb) = (aim(&app, mine[0]), aim(&app, mine[1]));
 
         let mut hand = Hand::new(&mut app);
-        hand.look_at([30.0, 10.0, 5.0], 7.0).mate(JointKind::Slider).anchor(0).click(pa).click(pb);
+        hand.look_at([30.0, 10.0, 5.0], 7.0).mate(JointKind::Slider).anchor(0).click(pa).click(pb).key(egui::Key::Enter).key(egui::Key::Escape);
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
         let jid = app.project.joints.last().map(|j| j.id).expect("the joint was created");
         let lost = app.project.joints.iter().find(|x| x.id == jid).map(|x| x.a).expect("anchor A");

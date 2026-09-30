@@ -87,17 +87,9 @@ impl App {
                 return a;
             }
         }
-        if self.sketch_ses.editing.is_some() {
-            if self.tools.armed.draw_kind() > 0 {
-                if let Some(a) = crate::help_map::sketch_article("sk", self.tools.armed.draw_kind()) {
-                    return a;
-                }
-            }
-            if self.tools.armed.dim_kind() > 0 {
-                if let Some(a) = crate::help_map::sketch_article("dim", self.tools.armed.dim_kind()) {
-                    return a;
-                }
-            }
+        let (a, modify) = (&self.tools.armed, self.tools.armed.modify_op());
+        if let Some(art) = self.sketch_ses.editing.and(crate::help_map::sketch_tool_article(a.draw_kind(), a.dim_kind(), a.click_op(), modify)) {
+            return art;
         }
         // TOOLBAR BUTTONS WITH NO COMMAND NUMBER are an occupied hand as well, and F1 must answer about
         // them. There are 36 of the 91: the boolean of bodies, move/copy/rotate, the array in a sketch,
@@ -113,40 +105,9 @@ impl App {
         crate::help_map::workbench_article(crate::gui::workbench_code(&self.workbench))
     }
 
-    /// WHAT OCCUPIES THE HAND among the things with no command number — by the key of its hint.
-    ///
-    /// The conditions here are THE SAME ones by which a button in the bar is shown as pressed
-    /// (`icon_tool(..., active)`). Otherwise F1 and the highlight of the button would diverge: the button
-    /// glows and the help is about something else.
-    ///
-    /// ACTION buttons (create a part, insert a component) are not here and cannot be: they leave no
-    /// state, and there is nothing to ask about during them. Their rows in the table hold a different
-    /// promise — that the article is written and will be found through the contents.
+    /// WHAT OCCUPIES THE HAND among the things with no command number (`armed_toolbar_hint`).
     pub(crate) fn armed_toolbar_hint(&self) -> Option<&'static str> {
-        if self.params.boolean.pick.is_some() {
-            return Some("tb-bool-bodies-hint");
-        }
-        match self.tools.armed.move_op() {
-            1 => return Some("tb-move-hint"),
-            2 => return Some("tb-copy-hint"),
-            3 => return Some("tb-rotate-hint"),
-            _ => {}
-        }
-        match self.tools.armed.pat_op() {
-            1 => return Some("tb-lin-array-hint"),
-            2 => return Some("tb-circ-array-hint"),
-            _ => {}
-        }
-        if self.side.m3.on {
-            return Some("tb-measure3d-hint");
-        }
-        if self.tools.armed.measuring() {
-            return Some("tb-measure-hint");
-        }
-        if self.side.section.pick || self.side.section.plane.is_some() {
-            return Some("tb-section-hint");
-        }
-        None
+        qymcad_ui_state::armed_toolbar_hint(&self.painting())
     }
 
 
@@ -219,7 +180,7 @@ pub(crate) fn browse(ctx: &mut HelpCtx, url: &str) {
         return;
     }
     let (cmd, args) = super::browse_command(egui::os::OperatingSystem::from_target_os(), url);
-    match std::process::Command::new(cmd).args(&args).spawn() {
+    match crate::system::start(cmd, &args) {
         Ok(_) => *ctx.say = crate::i18n::tr1("help-opened-in-browser", "url", url),
         // IT DID NOT WORK — THE ADDRESS IS SHOWN. There may be no browser at all (a bare server, a
         // stripped-down environment), and then the only useful thing is the link itself, to be

@@ -24,12 +24,12 @@ fn sketch_with_points(p: &mut Project, n: usize) -> (usize, Vec<Id>) {
 #[test]
 fn every_dimension_kind_is_recognised() {
     let cases: Vec<(&str, Constraint)> = vec![
-        ("distance", Constraint::Distance { a: 1, b: 2, d: 10.0, off: 0.0, expr: String::new(), driven: false, axis: 0 }),
-        ("angle", Constraint::Angle { a: 1, b: 2, c: 3, deg: 45.0, expr: String::new(), driven: false }),
-        ("angle between lines", Constraint::AngleLines { a: 1, b: 2, c: 3, d: 4, deg: 30.0, expr: String::new(), driven: false }),
-        ("diameter", Constraint::Diameter { c: 5, d: 12.0, off: 0.0, expr: String::new(), driven: false, diam: true }),
-        ("distance to a line", Constraint::DistancePL { p: 1, a: 2, b: 3, d: 7.0, off: 0.0, expr: String::new(), driven: false }),
-        ("edge gap", Constraint::EdgeDistance { c1: 5, c2: 6, d: 3.0, m1: 1, m2: -1, off: 0.0, expr: String::new(), driven: false }),
+        ("distance", Constraint::Distance { a: 1, b: 2, d: 10.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None }),
+        ("angle", Constraint::Angle { a: 1, b: 2, c: 3, deg: 45.0, expr: String::new(), driven: false, off: 0.0, at: None }),
+        ("angle between lines", Constraint::AngleLines { a: 1, b: 2, c: 3, d: 4, deg: 30.0, expr: String::new(), driven: false, off: 0.0, at: None }),
+        ("diameter", Constraint::Diameter { c: 5, d: 12.0, off: 0.0, expr: String::new(), driven: false, diam: true, at: None }),
+        ("distance to a line", Constraint::DistancePL { p: 1, a: 2, b: 3, d: 7.0, off: 0.0, expr: String::new(), driven: false, at: None }),
+        ("edge gap", Constraint::EdgeDistance { c1: 5, c2: 6, d: 3.0, m1: 1, m2: -1, off: 0.0, expr: String::new(), driven: false, at: None }),
         ("arc length", Constraint::ArcLength { c: 5, a: 1, b: 2, ccw: true, len: 15.0, off: 0.0, expr: String::new(), driven: false }),
     ];
     for (what, c) in &cases {
@@ -62,7 +62,7 @@ fn a_named_angle_becomes_a_driver_with_a_value() {
     p.new_document();
     let (si, ids) = sketch_with_points(&mut p, 4);
     let sid = p.sketches[si].id;
-    p.sketches[si].constraints.push(Constraint::Angle { a: ids[0], b: ids[1], c: ids[2], deg: 37.0, expr: String::new(), driven: false });
+    p.sketches[si].constraints.push(Constraint::Angle { a: ids[0], b: ids[1], c: ids[2], deg: 37.0, expr: String::new(), driven: false, off: 0.0, at: None });
 
     let refs = Project::dim_refs(p.sketches[si].constraints.last().unwrap()).expect("an angle is a dimension");
     assert!(p.add_named_dim("ugol".into(), sid, refs), "an angle has to be nameable as a driver");
@@ -81,7 +81,7 @@ fn a_named_diameter_becomes_a_driver() {
     let si = p.new_sketch("Circle");
     let sid = p.sketches[si].id;
     let cid = p.add_circle_entity(si, 0.0, 0.0, 20.0, qymcad_core::feature::Purpose::Real);
-    p.sketches[si].constraints.push(Constraint::Diameter { c: cid, d: 20.0, off: 0.0, expr: String::new(), driven: false, diam: true });
+    p.sketches[si].constraints.push(Constraint::Diameter { c: cid, d: 20.0, off: 0.0, expr: String::new(), driven: false, diam: true, at: None });
 
     let refs = Project::dim_refs(p.sketches[si].constraints.last().unwrap()).expect("a diameter is a dimension");
     assert_eq!(refs.len(), 1, "a diameter is identified by a single circle: {refs:?}");
@@ -105,8 +105,7 @@ fn the_reference_order_does_not_matter() {
         off: 0.0,
         expr: String::new(),
         driven: false,
-        axis: 0,
-    });
+        axis: 0, at: None });
 
     assert!(p.add_named_dim("len".into(), sid, vec![ids[1], ids[0]]), "the name is set with the order reversed");
     assert_eq!(p.param_map().get("len"), Some(&25.0), "the dimension was not found with the points in reverse order");
@@ -126,8 +125,7 @@ fn renaming_the_same_dimension_replaces_the_old_name() {
         off: 0.0,
         expr: String::new(),
         driven: false,
-        axis: 0,
-    });
+        axis: 0, at: None });
 
     assert!(p.add_named_dim("staroe".into(), sid, vec![ids[0], ids[1]]));
     assert!(p.add_named_dim("novoe".into(), sid, vec![ids[1], ids[0]]));
@@ -146,12 +144,12 @@ fn a_second_driver_cannot_take_a_used_name() {
     p.new_document();
     let (si1, ids1) = sketch_with_points(&mut p, 3);
     let sid1 = p.sketches[si1].id;
-    p.sketches[si1].constraints.push(Constraint::Distance { a: ids1[0], b: ids1[1], d: 20.0, off: 0.0, expr: String::new(), driven: false, axis: 0 });
+    p.sketches[si1].constraints.push(Constraint::Distance { a: ids1[0], b: ids1[1], d: 20.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
     assert!(p.add_named_dim("len".into(), sid1, vec![ids1[0], ids1[1]]), "the first driver is named");
 
     let (si2, ids2) = sketch_with_points(&mut p, 3);
     let sid2 = p.sketches[si2].id;
-    p.sketches[si2].constraints.push(Constraint::Distance { a: ids2[0], b: ids2[1], d: 90.0, off: 0.0, expr: String::new(), driven: false, axis: 0 });
+    p.sketches[si2].constraints.push(Constraint::Distance { a: ids2[0], b: ids2[1], d: 90.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
 
     assert!(!p.add_named_dim("len".into(), sid2, vec![ids2[0], ids2[1]]), "the name is taken, so the second driver has to be rejected");
     assert_eq!(p.named_dims.len(), 1, "two namesakes remain in the project: {:?}", p.named_dims);
@@ -167,7 +165,7 @@ fn a_driver_cannot_take_a_global_parameter_name() {
     p.parameters.push(Param { name: "w".into(), expr: "50".into(), value: 50.0 });
     let (si, ids) = sketch_with_points(&mut p, 3);
     let sid = p.sketches[si].id;
-    p.sketches[si].constraints.push(Constraint::Distance { a: ids[0], b: ids[1], d: 20.0, off: 0.0, expr: String::new(), driven: false, axis: 0 });
+    p.sketches[si].constraints.push(Constraint::Distance { a: ids[0], b: ids[1], d: 20.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
 
     assert!(!p.add_named_dim("w".into(), sid, vec![ids[0], ids[1]]), "the name of a global parameter has to count as taken");
     assert!(p.driver_name_taken("w", sid, &[ids[0], ids[1]]), "the interface has to learn the name is taken before the button is pressed");
@@ -180,7 +178,7 @@ fn renaming_the_same_dimension_is_still_allowed() {
     p.new_document();
     let (si, ids) = sketch_with_points(&mut p, 3);
     let sid = p.sketches[si].id;
-    p.sketches[si].constraints.push(Constraint::Distance { a: ids[0], b: ids[1], d: 20.0, off: 0.0, expr: String::new(), driven: false, axis: 0 });
+    p.sketches[si].constraints.push(Constraint::Distance { a: ids[0], b: ids[1], d: 20.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
 
     assert!(p.add_named_dim("len".into(), sid, vec![ids[0], ids[1]]));
     assert!(p.add_named_dim("len".into(), sid, vec![ids[0], ids[1]]), "the same dimension under the same name is not a conflict");

@@ -36,8 +36,7 @@ mod tests {
             off: 0.0,
             expr: String::new(),
             driven: false,
-            axis: 0,
-        });
+            axis: 0, at: None });
         assert!(p.add_named_dim(driver.into(), sid, vec![pts[0], pts[1]]));
     }
 
@@ -148,7 +147,7 @@ mod tests {
             }
             let out = ctx.run_ui(input, |ui| {
                 egui::CentralPanel::default().show(ui, |ui| {
-                    qymcad_ui_state::num_or_expr(&mut qymcad_ui_state::ExprBarCtx { bar_exprs: &mut app.bar_exprs, project: &app.project, scheme: &app.scheme }, ui, "t_h", 10.0, qymcad_ui_state::NumFormat { lo: 0.0, hi: 100.0, integer: false, suffix: "mm" });
+                    qymcad_ui_state::num_or_expr(&mut qymcad_ui_state::ExprBarCtx { bar_exprs: &mut app.bar_exprs, project: &app.project, scheme: &app.scheme }, ui, "t_h", 10.0, qymcad_ui_state::NumFormat { lo: 0.0, hi: 100.0, integer: false, suffix: "mm", nonzero: false });
                 });
             });
             if let Some(r) = ctx.read_response(egui::Id::new(("bar_expr", "t_h"))) {

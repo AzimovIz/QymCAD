@@ -62,7 +62,7 @@ mod tests {
         crate::gui::commands::refresh_edges(&mut app.part_ctx());
         let (pa, pb) = (aim(app, mine[0]), aim(app, mine[1]));
         let mut hand = Hand::new(app);
-        hand.look_at([x + 30.0, 10.0, 5.0], 5.0).mate(kind).anchor(3).click(pa).click(pb);
+        hand.look_at([x + 30.0, 10.0, 5.0], 5.0).mate(kind).anchor(3).click(pa).click(pb).key(egui::Key::Enter).key(egui::Key::Escape);
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
         app.project.joints.last().map(|j| j.id).expect("two clicks on the frame must create the joint")
     }

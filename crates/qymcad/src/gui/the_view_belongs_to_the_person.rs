@@ -69,9 +69,9 @@ mod tests {
     fn switching_construction_does_not_move_the_view() {
         let mut app = sketching_with_a_chosen_view();
         let before = view_of(&app);
-        app.run_command("sketch.construction");
+        app.run_command("sketch.construction", &egui::Context::default());
         assert_eq!(view_of(&app), before, "switching to construction moved the view");
-        app.run_command("sketch.construction");
+        app.run_command("sketch.construction", &egui::Context::default());
         assert_eq!(view_of(&app), before, "switching construction back moved the view");
     }
 

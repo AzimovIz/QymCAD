@@ -1,0 +1,119 @@
+//! A SHAPE IS DRAWN AND FINISHED THE WAY A PERSON FINISHES IT, IN THE WINDOW.
+//!
+//! A chain of lines and a spline take as many clicks as a person wants, so they end with a gesture: a double
+//! click on the last place, or Esc. In a whole frame a double click is two clicks AND a double click - egui
+//! reports both clicks before it reports the double one - so the drawing tool hears the last place twice.
+//!
+//! Held here: a chain ended by a double click carries no line of no length, a spline ended so has one node per
+//! place clicked, Esc keeps the nodes of a spline as its hint says, and every drawing tool names its step of
+//! undo after what it drew.
+#[cfg(test)]
+mod tests {
+    use super::super::hand::Hand;
+    use super::super::{App, Sel};
+    use qymcad_core::feature::SketchPlane;
+    use qymcad_core::model::EntityKind;
+
+    fn a_sketch() -> (App, usize) {
+        let mut app = App::default();
+        let si = app.create_sketch_on(SketchPlane::default());
+        app.chosen.sel = Sel::Sketch(si);
+        (app, si)
+    }
+
+    /// The lines of the sketch as their ends.
+    fn lines(app: &App, si: usize) -> Vec<((f64, f64), (f64, f64))> {
+        let sk = &app.project.sketches[si];
+        let at = |id: u64| sk.points.iter().find(|p| p.id == id).map(|p| (p.x, p.y));
+        sk.entities
+            .iter()
+            .filter_map(|e| match e.kind {
+                EntityKind::Line { a, b } => Some((at(a)?, at(b)?)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The nodes of every spline of the sketch, as places.
+    fn spline_nodes(app: &App, si: usize) -> Vec<Vec<(f64, f64)>> {
+        let sk = &app.project.sketches[si];
+        sk.splines.iter().map(|s| s.points.iter().filter_map(|id| sk.points.iter().find(|p| p.id == *id).map(|p| (p.x, p.y))).collect()).collect()
+    }
+
+    /// A DOUBLE CLICK ENDS A CHAIN OF LINES WITHOUT A LINE OF NO LENGTH.
+    #[test]
+    fn a_double_click_ends_a_chain_without_a_line_of_no_length() {
+        let (mut app, si) = a_sketch();
+        Hand::new(&mut app).sk_tool(1).click2d(0.0, 0.0).click2d(10.0, 10.0).click2d(20.0, 0.0).double_click2d(30.0, 10.0);
+        let got = lines(&app, si);
+        let empty: Vec<_> = got.iter().filter(|(a, b)| (a.0 - b.0).hypot(a.1 - b.1) < 1e-6).collect();
+        assert!(empty.is_empty() && got.len() == 3, "the chain of three segments ended by a double click holds {} lines, of no length: {empty:?}", got.len());
+        assert!(app.tools.tool.pts.is_empty(), "the chain did not end: {:?} still waits for the next click", app.tools.tool.pts);
+    }
+
+    /// A DOUBLE CLICK ENDS A SPLINE ON THE PLACE IT CLICKED - once, and as one step of undo named after it.
+    #[test]
+    fn a_double_click_ends_a_spline_on_the_node_it_clicked() {
+        let (mut app, si) = a_sketch();
+        Hand::new(&mut app).sk_tool(9).click2d(0.0, 0.0).click2d(10.0, 10.0).click2d(20.0, 0.0).double_click2d(30.0, 10.0);
+        let got = spline_nodes(&app, si);
+        assert_eq!(got, vec![vec![(0.0, 0.0), (10.0, 10.0), (20.0, 0.0), (30.0, 10.0)]], "four places were clicked for the spline");
+        let step = app.disk.edits.undo.last().map(|s| s.name.clone());
+        assert_eq!(step.as_deref(), Some(crate::i18n::tr("sk-spline").as_str()), "the spline is not one step of undo named after it");
+    }
+
+    /// Esc ENDS A SPLINE, AS ITS HINT SAYS, keeping the nodes that were clicked.
+    #[test]
+    fn escape_ends_a_spline_as_its_hint_says() {
+        let (mut app, si) = a_sketch();
+        let mut hand = Hand::new(&mut app);
+        hand.sk_tool(9).click2d(0.0, 0.0).click2d(10.0, 10.0).click2d(20.0, 0.0);
+        let hint = hand.app.status.clone();
+        hand.key(egui::Key::Escape).close_window();
+        assert_eq!(spline_nodes(&app, si), vec![vec![(0.0, 0.0), (10.0, 10.0), (20.0, 0.0)]], "Esc on a spline of three nodes, under the hint {hint:?}");
+    }
+
+    /// EVERY DRAWING TOOL NAMES ITS STEP OF UNDO AFTER WHAT IT DREW.
+    ///
+    /// Failures are gathered and given out together.
+    #[test]
+    fn every_drawing_tool_names_its_step_of_undo() {
+        let tools: [(u8, &str, &[(f64, f64)]); 11] = [
+            (1, "sk-line", &[(0.0, 0.0), (20.0, 0.0)]),
+            (2, "sk-rect", &[(0.0, 0.0), (20.0, 15.0)]),
+            (3, "sk-circle", &[(0.0, 0.0), (8.0, 0.0)]),
+            (4, "sk-arc", &[(0.0, 0.0), (10.0, 10.0), (20.0, 0.0)]),
+            (5, "sk-point", &[(5.0, 5.0)]),
+            (6, "sk-polygon", &[(0.0, 0.0), (8.0, 0.0)]),
+            (7, "sk-slot", &[(0.0, 0.0), (15.0, 0.0), (15.0, 5.0)]),
+            (8, "sk-ellipse", &[(0.0, 0.0), (12.0, 0.0), (6.0, 7.0)]),
+            (9, "sk-spline", &[(0.0, 0.0), (7.0, 7.0), (15.0, 0.0)]),
+            (10, "sk-circle", &[(0.0, 0.0), (8.0, 5.0), (12.0, -3.0)]),
+            (11, "sk-text", &[(0.0, 0.0)]),
+        ];
+        let mut problems = Vec::new();
+        for (tool, key, clicks) in tools {
+            let (mut app, _si) = a_sketch();
+            let mut hand = Hand::new(&mut app);
+            if tool == 11 {
+                hand.sk_text("CAD", 5.0);
+            } else {
+                hand.sk_tool(tool);
+            }
+            let (last, before) = clicks.split_last().expect("every tool takes a click");
+            for (x, y) in before {
+                hand.click2d(*x, *y);
+            }
+            if tool == 9 {
+                hand.double_click2d(last.0, last.1);
+            } else {
+                hand.click2d(last.0, last.1);
+            }
+            let step = app.disk.edits.undo.last().map(|s| s.name.clone());
+            if step.as_deref() != Some(crate::i18n::tr(key).as_str()) {
+                problems.push(format!("tool {tool}: the step of undo is {step:?}, it should be {:?}", crate::i18n::tr(key)));
+            }
+        }
+        assert!(problems.is_empty(), "a drawing is undone under another name:\n{}", problems.join("\n"));
+    }
+}

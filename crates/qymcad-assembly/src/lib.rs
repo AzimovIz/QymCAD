@@ -59,7 +59,13 @@ pub fn joint_slot_limits(ui: &mut egui::Ui, jj: &mut qymcad_core::feature::Joint
 /// WHERE THE PART ENDED UP and can be edited freely; editing the value turns driving on (the usual
 /// behaviour: drag the value and it becomes driven). The lock beside it takes the driver off again and
 /// gives the part its freedom back.
-pub fn joint_slot_drag(ui: &mut egui::Ui, jj: &mut qymcad_core::feature::Joint, slot: usize, speed: f64) -> bool {
+///
+/// THE FIELD TAKES AN EXPRESSION, as every value field does: `90*2/2` or a parameter name is evaluated over `vars`
+/// (the project's parameters) and turns the part as the number would. Reported behaviour: a number turned the part,
+/// while `90*2/2` or `pa` turned it by 0 deg. A typed expression lands in `exprs` as (slot, text) for the caller to keep
+/// as the slot's formula, so the part follows the parameter later; a typed number or a drag lands there as an empty
+/// text, which takes an old formula off - the last thing typed is what drives.
+pub fn joint_slot_drag(ui: &mut egui::Ui, jj: &mut qymcad_core::feature::Joint, slot: usize, speed: f64, vars: &std::collections::HashMap<String, f64>, exprs: &mut Vec<(usize, String)>) -> bool {
     let (label, suffix) = joint_slot_label(jj.kind, slot);
     let measured = match slot {
         0 => jj.angle,
@@ -69,9 +75,26 @@ pub fn joint_slot_drag(ui: &mut egui::Ui, jj: &mut qymcad_core::feature::Joint, 
     let driven = jj.drive[slot];
     let mut v = driven.unwrap_or(measured);
     ui.label(label);
-    let mut changed = ui.add(egui::DragValue::new(&mut v).speed(speed).suffix(suffix)).changed();
+    let typed = std::cell::RefCell::new(String::new());
+    let parser = |s: &str| {
+        let t = s.trim().replace('\u{2212}', "-");
+        let v = qymcad_core::expr::eval(&t, vars).ok()?;
+        *typed.borrow_mut() = if t.parse::<f64>().is_ok() { String::new() } else { t };
+        Some(v)
+    };
+    let r = ui.add(egui::DragValue::new(&mut v).speed(speed).suffix(suffix).custom_parser(parser));
+    // where the typing or the drag begins and ends is where its step of undo opens and closes (`joint_values_step`):
+    // the field writes the value while it is being typed, before it reports a change
+    if r.gained_focus() || r.drag_started() {
+        ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("joint_values_began"), true));
+    }
+    if r.lost_focus() || r.drag_stopped() {
+        ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("joint_values_ended"), true));
+    }
+    let mut changed = r.changed();
     if changed {
         jj.drive[slot] = Some(v);
+        exprs.push((slot, typed.into_inner()));
     }
     let (icon, tip) = match driven {
         Some(_) => (ph::LOCK, &qymcad_i18n::tr("j-value-set")),
@@ -82,6 +105,17 @@ pub fn joint_slot_drag(ui: &mut egui::Ui, jj: &mut qymcad_core::feature::Joint, 
         changed = true;
     }
     changed
+}
+
+/// THE FORMULAS TYPED INTO THE SLOT FIELDS OF JOINT `jid` (`joint_slot_drag`) kept as the slots' expressions, the
+/// same ones the `f=` fields edit: an empty text takes the formula off, and one already standing is not written again.
+pub fn keep_slot_exprs(project: &mut Project, jid: Id, exprs: Vec<(usize, String)>) {
+    for (slot, text) in exprs {
+        let key = ["angle", "offset", "offset2"][slot.min(2)];
+        if project.feat_dim(jid, key).unwrap_or("") != text {
+            project.set_feat_dim(jid, key, text);
+        }
+    }
 }
 
 /// HOW MANY JOINTS A KIND EXPECTS: two for all of them except the screw, which makes do with one.
@@ -205,6 +239,12 @@ pub fn joint_drag_active(joint: &qymcad_ui_state::JointCommand, part_pull: &Opti
     joint.giz_drag.is_some() || part_pull.is_some()
 }
 
+/// WHETHER A TOOL IS READING CLICKS ON PARTS: the anchors of a mate, width, tangent, group, grounding, relation or a
+/// connector. While it is, a drag across a part turns the view and never carries the part.
+pub fn joint_picking(joint: &qymcad_ui_state::JointCommand) -> bool {
+    joint.pick_faces || joint.ground_pick || joint.group_pick.is_some() || joint.width_pick.is_some() || joint.tangent_pick.is_some() || joint.relation_pick.is_some() || joint.conn_pick
+}
+
 /// WHETHER THE LIVE GEOMETRY an anchor derives its axes from is ready.
 ///
 /// The origin of a part and a base plane are given by the component itself - they need no kernel. Faces,
@@ -250,6 +290,13 @@ pub fn width_pick_click(active_path: &[Id], joint: &mut qymcad_ui_state::JointCo
     let comp = project.ancestor_child_of(ctx, owner).unwrap_or(owner);
     let n = key.normal;
     let Some(sel) = joint.width_pick.as_mut() else { return };
+    // THE SAME FACE AGAIN lets it go, as a second click lets go every pick - it was taken twice, two anchors of three
+    let same = |a: &AnchorRef| matches!(a, AnchorRef::FaceCenter(b, k) if *b == body && (if k.id != 0 { k.id == key.id } else { k.index == key.index }));
+    if let Some(i) = sel.iter().position(|(_, a)| same(a)) {
+        sel.remove(i);
+        *status = qymcad_i18n::tr1("j-width-picked", "n", &sel.len().to_string());
+        return;
+    }
     if sel.len() == 1 {
         if let Some((_, AnchorRef::FaceCenter(_, k0))) = sel.first() {
             let dot = k0.normal[0] * n[0] + k0.normal[1] * n[1] + k0.normal[2] * n[2];
@@ -593,8 +640,17 @@ pub fn relation_pick_confirm(jc: &mut qymcad_ui_state::JointCtx) {
 /// A click on A JOINT while the relation tool is active: take its degree of the required sort.
 pub fn relation_pick_click(jc: &mut qymcad_ui_state::JointCtx, joint: Id) {
     let Some(pick) = jc.joint.relation_pick.clone() else { return };
-    let (rot_a, rot_b) = pick.kind.slots_are_rotations();
     let need = relation_picks_needed(pick.kind);
+    // A MATE TAKEN AND CLICKED AGAIN IS LET GO, as a second click on any pick; it used to answer "two different mates"
+    if pick.picks.iter().any(|(id, _)| *id == joint) {
+        if let Some(p) = jc.joint.relation_pick.as_mut() {
+            p.picks.retain(|(id, _)| *id != joint);
+            let got = if need == 1 { 0 } else { p.picks.len() };
+            *jc.status = qymcad_i18n::tr2("j-relation-picked", "n", &got.to_string(), "need", &need.to_string());
+        }
+        return;
+    }
+    let (rot_a, rot_b) = pick.kind.slots_are_rotations();
     // THE SCREW TAKES BOTH DEGREES OF ONE JOINT - the angle and the travel of a cylindrical one.
     let wanted: Vec<bool> = if need == 1 { vec![rot_a, rot_b] } else { vec![if pick.picks.is_empty() { rot_a } else { rot_b }] };
     let mut taken: Vec<(Id, usize)> = Vec::new();
@@ -605,10 +661,6 @@ pub fn relation_pick_click(jc: &mut qymcad_ui_state::JointCtx, joint: Id) {
             return;
         };
         taken.push((joint, slot));
-    }
-    if need == 2 && pick.picks.iter().any(|(id, _)| *id == joint) {
-        *jc.status = qymcad_i18n::tr("j-relation-need-two");
-        return;
     }
     let Some(pick) = jc.joint.relation_pick.as_mut() else { return };
     pick.picks.extend(taken);
@@ -646,7 +698,7 @@ pub fn width_pick_confirm(jc: &mut qymcad_ui_state::JointCtx) {
     jc.project.add_width(&[ids[0], ids[1]], ids[2]);
     jc.joint.width_pick = None;
     *jc.status = qymcad_i18n::tr("j-width-made-ok");
-    qymcad_ui_state::mark_dirty_for_rebuild(&mut jc.rebuild()); // the document is marked; the planner does the counting
+    joint_console_settle(jc); // the tab goes halfway now, not on some later solve
     qymcad_ui_state::commit_edit(&mut jc.rebuild());
 }
 
@@ -668,6 +720,15 @@ pub fn tangent_pick_click(jc: &mut qymcad_ui_state::JointCtx, body: Id, key: qym
     let comp = jc.project.ancestor_child_of(ctx, owner).unwrap_or(owner);
     let is_cyl = jc.project.face_cylinder(body, &key).is_some();
     let Some(sel) = jc.joint.tangent_pick.as_mut() else { return };
+    if sel.len() >= 2 {
+        return; // the condition is made and waits for Apply or Esc; a further click adds nothing
+    }
+    // the surface taken and clicked again is let go, as a second click on any pick
+    if let Some(k) = sel.iter().position(|(_, a)| matches!(a, AnchorRef::FaceCenter(b, fk) if *b == body && fk.index == key.index)) {
+        sel.remove(k);
+        *jc.status = qymcad_i18n::tr("j-tangent-pick");
+        return;
+    }
     if let Some((_, AnchorRef::FaceCenter(b0, k0))) = sel.first().cloned() {
         // the second surface must complement the first: a cylinder to a plane and the other way round
         if jc.project.face_cylinder(b0, &k0).is_some() == is_cyl {
@@ -684,10 +745,25 @@ pub fn tangent_pick_click(jc: &mut qymcad_ui_state::JointCtx, body: Id, key: qym
     let pair = sel.clone();
     qymcad_ui_state::begin_edit(jc.edits, jc.project, qymcad_i18n::tr("j-tangent-made")); // THE BOUNDARY OF AN OPERATION
     jc.project.add_tangent(pair[0].0, pair[0].1.clone(), pair[1].0, pair[1].1.clone());
-    jc.joint.tangent_pick = None;
     *jc.status = qymcad_i18n::tr("j-tangent-made-ok");
-    qymcad_ui_state::mark_dirty_for_rebuild(&mut jc.rebuild()); // the document is marked; the planner does the counting
-    qymcad_ui_state::commit_edit(&mut jc.rebuild());
+    joint_console_settle(jc); // the round part rests on the flat one now, not on some later solve
+    // THE OPERATION STAYS OPEN: the part rests where the condition puts it as a preview until Apply or Enter keeps it and
+    // Esc takes it away (`tangent_finish`); the two picks stay in `tangent_pick` as the mark of that
+}
+
+/// FINISH A TANGENT CONDITION JUST MADE by its second pick: kept, its open operation closes as one step; not kept, the
+/// operation is rolled back. The tool is put down either way. Nothing happens while the second surface is awaited.
+pub fn tangent_finish(jc: &mut qymcad_ui_state::JointCtx, keep: bool) {
+    if !jc.joint.tangent_pick.as_ref().is_some_and(|s| s.len() >= 2) {
+        return;
+    }
+    jc.joint.tangent_pick = None;
+    if keep {
+        qymcad_ui_state::close_edit(jc.edits, jc.project); // closed, not committed: committing drops the asked rebuild
+    } else {
+        qymcad_ui_state::abort_edit(&mut jc.rebuild());
+        *jc.status = qymcad_i18n::tr("j-tangent-off");
+    }
 }
 
 /// Confirm the set and make a group of it. Fewer than two parts leaves nothing to fasten.
@@ -706,6 +782,14 @@ pub fn group_pick_confirm(jc: &mut qymcad_ui_state::JointCtx) {
     qymcad_ui_state::commit_edit(&mut jc.rebuild());
 }
 
+/// A CLICK OF THE GROUNDING TOOL: on a part it fixes or releases it, past every part it says so.
+pub fn ground_click(jc: &mut qymcad_ui_state::JointCtx, hit: Option<Id>) {
+    match hit {
+        Some(body) => joint_pick_ground_click(jc, body),
+        None => *jc.status = qymcad_i18n::tr("vp-miss-part-ground"),
+    }
+}
+
 /// The grounding tool: a click on a body fixes or releases its part (at the level of the context).
 /// As when creating a joint, what gets grounded is the DIRECT child of the context (the subassembly)
 /// rather than a leaf body.
@@ -717,10 +801,12 @@ pub fn joint_pick_ground_click(jc: &mut qymcad_ui_state::JointCtx, body: Id) {
     };
     let comp = jc.project.ancestor_child_of(ctx, owner).unwrap_or(owner);
     let g = jc.project.is_grounded(comp);
+    qymcad_ui_state::begin_edit(jc.edits, jc.project, qymcad_i18n::tr("jt-ground-btn")); // THE BOUNDARY OF AN OPERATION
     jc.project.set_grounded(comp, !g);
     qymcad_ui_state::mark_dirty_for_rebuild(&mut jc.rebuild()); // the document is marked; the planner does the counting
     let name = jc.project.components.iter().find(|c| c.id == comp).map(|c| qymcad_i18n::name(&c.name)).unwrap_or_default();
     *jc.status = if !g { qymcad_i18n::tr1("jt-grounded", "name", &name) } else { qymcad_i18n::tr1("jt-released", "name", &name) };
+    qymcad_ui_state::close_edit(jc.edits, jc.project); // closed, not committed: committing drops the asked rebuild, and the assembly would not be solved
 }
 
 pub fn joint_pick_anchor_click(jc: &mut qymcad_ui_state::JointCtx, owner: Id, anchor: qymcad_core::feature::AnchorRef) {
@@ -790,6 +876,12 @@ pub fn joint_pick_anchor_click(jc: &mut qymcad_ui_state::JointCtx, owner: Id, an
             *jc.status = qymcad_i18n::tr("j-anchor-a-picked");
         }
         Some((owner_a, anchor_a)) => {
+            // THE SAME PLACE AGAIN lets anchor A go, as a second click lets go every pick: the joint asks for A anew
+            if owner_a == owner && anchor_a == anchor {
+                let target = if jc.joint.anchor_mode == 3 { qymcad_i18n::tr("j-origin-lower") } else { qymcad_i18n::tr("j-place-lower") };
+                *jc.status = qymcad_i18n::tr1("jt-click-a", "what", &target);
+                return;
+            }
             if owner_a == owner {
                 jc.joint.pick_first = Some((owner_a, anchor_a)); // the same part - wait for another one
                 *jc.status = qymcad_i18n::tr("j-pick-other-part");
@@ -812,6 +904,7 @@ pub fn joint_pick_anchor_click(jc: &mut qymcad_ui_state::JointCtx, owner: Id, an
             // the side of the contact is decided by the solver (coplanar, minimal motion) plus the
             // `joint.flip` toggle in the panel - forcing a flip on the connector is no longer needed
             // (it caused a spurious 180 deg turn).
+            qymcad_ui_state::begin_edit(jc.edits, jc.project, qymcad_i18n::tr("jt-joint-btn")); // THE BOUNDARY OF AN OPERATION
             let ca = jc.project.add_connector(place_a, anchor_a);
             let cb = jc.project.add_connector(place_b, anchor);
             let jid = jc.project.add_joint(ca, cb, jc.joint.new_kind);
@@ -839,6 +932,11 @@ pub fn joint_pick_anchor_click(jc: &mut qymcad_ui_state::JointCtx, owner: Id, an
             jc.joint.edit = Some(jid);
             qymcad_ui_state::mark_dirty_for_rebuild(&mut jc.rebuild()); // the document is marked; the planner does the counting
             *jc.status = qymcad_i18n::tr("j-created");
+            // THE OPERATION STAYS OPEN: the joint stands solved as a preview until Apply or Enter keeps it and Esc takes it
+            // away (`joint_create_finish`). It is solved here: no rebuild runs while an operation is open, and the parts
+            // would stand where they were until Enter.
+            joint_console_settle(jc);
+            jc.joint.creating = true;
         }
     }
 }
@@ -867,8 +965,18 @@ pub fn joint_pick_anchor_click_for_test(jc: &mut qymcad_ui_state::JointCtx, owne
 pub fn joint_hud_swap_roles(jc: &mut qymcad_ui_state::JointCtx, jid: Id) {
     qymcad_ui_state::begin_edit(jc.edits, jc.project, qymcad_i18n::tr("jt-swap-roles")); // THE BOUNDARY OF AN OPERATION
     if jc.project.swap_joint_roles(jid) {
-        qymcad_ui_state::mark_dirty_for_rebuild(&mut jc.rebuild()); // the document is marked; the planner does the counting
+        joint_console_settle(jc);
     }
+    qymcad_ui_state::commit_edit(&mut jc.rebuild());
+}
+
+/// WHAT A HANDLE OF THE JOINT CONSOLE LEAVES BEHIND: the assembly solved again and its placement marked, at once. Marking
+/// the document for a rebuild alone moved nothing - a rebuild computes shapes, and the placement the flip or the swap
+/// changes comes from the solve; "Done" was said over a part standing where it stood.
+fn joint_console_settle(jc: &mut qymcad_ui_state::JointCtx) {
+    jc.project.solve_joints();
+    qymcad_ui_state::invalidate_placement(jc.regen);
+    qymcad_ui_state::mark_dirty_for_rebuild(&mut jc.rebuild()); // what leans on the placement is rebuilt
 }
 
 /// THE CONSOLE HANDLE "FLIP THE AXIS".
@@ -878,8 +986,10 @@ pub fn joint_hud_swap_roles(jc: &mut qymcad_ui_state::JointCtx, jid: Id) {
 /// THE CORE's business (`flip_joint_side`): the interface only presses the handle.
 pub fn joint_hud_flip_axis(jc: &mut qymcad_ui_state::JointCtx, jid: Id) {
     qymcad_ui_state::begin_edit(jc.edits, jc.project, qymcad_i18n::tr("jt-flip-axis")); // THE BOUNDARY OF AN OPERATION
-    jc.project.flip_joint_side(jid);
-    qymcad_ui_state::mark_dirty_for_rebuild(&mut jc.rebuild()); // the document is marked; the planner does the counting
+    if jc.project.flip_joint_side(jid) {
+        joint_console_settle(jc);
+    }
+    qymcad_ui_state::commit_edit(&mut jc.rebuild());
 }
 
 /// The top bar of JOINT EDIT MODE (a double click on the glyph), in the style of the tool bars: the
@@ -899,6 +1009,7 @@ pub fn joint_edit_bar(jc: &mut qymcad_ui_state::JointCtx, ui: &mut egui::Ui) {
     let desc_a = jc.project.connector(j.a).map(|c| qymcad_ui_state::anchor_desc(&qymcad_ui_state::DrawCtx { cam: jc.cam, set: jc.set, scheme: jc.scheme, project: jc.project, active_path: jc.active_path }, &c.anchor)).unwrap_or_default();
     let desc_b = jc.project.connector(j.b).map(|c| qymcad_ui_state::anchor_desc(&qymcad_ui_state::DrawCtx { cam: jc.cam, set: jc.set, scheme: jc.scheme, project: jc.project, active_path: jc.active_path }, &c.anchor)).unwrap_or_default();
     let repick = jc.joint.edit_repick;
+    let (creating, mut finish) = (jc.joint.creating, None::<bool>);
     let mut done = false;
     let mut set_repick: Option<Option<(Id, bool)>> = None;
     let mut set_kind: Option<qymcad_core::feature::JointKind> = None;
@@ -964,11 +1075,24 @@ pub fn joint_edit_bar(jc: &mut qymcad_ui_state::JointCtx, ui: &mut egui::Ui) {
                 ui.label(egui::RichText::new(qymcad_i18n::tr2("jt-click-new", "what", &t, "side", if is_b { "B" } else { "A" })).color(jc.scheme.pal.hint()));
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button(qymcad_i18n::tr("j-done-esc")).clicked() {
-                    done = true;
+                if !creating {
+                    if ui.button(qymcad_i18n::tr("j-done-esc")).clicked() {
+                        done = true;
+                    }
+                } else {
+                    if ui.button(qymcad_i18n::tr("cmd-cancel-btn")).clicked() {
+                        finish = Some(false);
+                    }
+                    if ui.button(qymcad_i18n::tr("cmd-apply-enter")).clicked() {
+                        finish = Some(true);
+                    }
                 }
             });
         });
+    }
+    let ctx = ui.ctx().clone();
+    if creating && ((!ctx.egui_wants_keyboard_input() && ctx.input(|i| i.key_pressed(egui::Key::Enter))) || qymcad_ui_state::bar_enter_take(&ctx)) {
+        finish = Some(true);
     }
     if let Some(v) = set_repick {
         jc.joint.edit_repick = v;
@@ -987,6 +1111,37 @@ pub fn joint_edit_bar(jc: &mut qymcad_ui_state::JointCtx, ui: &mut egui::Ui) {
     if done {
         qymcad_ui_state::exit_joint_edit(jc.joint, jc.status);
     }
+    if let Some(keep) = finish {
+        joint_create_finish(jc, keep);
+    }
+}
+
+/// FINISH A JOINT JUST MADE: kept, its open operation closes as one step «Joint»; not kept, the operation is rolled back
+/// and the document is as it was before the first pick. Nothing happens when no joint is being made.
+pub fn joint_create_finish(jc: &mut qymcad_ui_state::JointCtx, keep: bool) {
+    if !std::mem::take(&mut jc.joint.creating) {
+        return;
+    }
+    if keep {
+        qymcad_ui_state::close_edit(jc.edits, jc.project); // closed, not committed: committing drops the asked rebuild
+    } else {
+        qymcad_ui_state::abort_edit(&mut jc.rebuild());
+    }
+    qymcad_ui_state::exit_joint_edit(jc.joint, jc.status);
+    // A JOINT KEPT LEAVES THE TOOL IN HAND for the next pair, as a mate dialog does; one taken away puts it down
+    if keep {
+        (jc.joint.pick_faces, jc.joint.pick_first) = (true, None);
+        *jc.status = qymcad_i18n::tr("j-created");
+    }
+}
+
+/// Esc WITH THE JOINT CONSOLE OPEN: a joint just made is taken away, an edited one is left as edited.
+pub fn joint_edit_leave(jc: &mut qymcad_ui_state::JointCtx) {
+    if jc.joint.creating {
+        joint_create_finish(jc, false);
+    } else {
+        qymcad_ui_state::exit_joint_edit(jc.joint, jc.status);
+    }
 }
 
 pub fn joint_tool_bar(jc: &mut qymcad_ui_state::JointCtx, ui: &mut egui::Ui) {
@@ -994,19 +1149,27 @@ pub fn joint_tool_bar(jc: &mut qymcad_ui_state::JointCtx, ui: &mut egui::Ui) {
     // input and viewport commands, and it comes from the same place.
     let ctx = &ui.ctx().clone();
     use qymcad_core::feature::JointKind;
-    // the tangency tool bar - a hint and a way out. There is nothing to confirm: the condition is set
-    // on the second pick, and tangency has no connectors.
+    // the tangency tool bar - a hint and a way out; once the second surface is picked the condition stands as a preview,
+    // and the bar offers Apply and Cancel
     if let Some(sel) = jc.joint.tangent_pick.clone() {
-        let mut cancel = false;
+        let made = sel.len() >= 2;
+        let (mut cancel, mut apply) = (false, false);
         egui::Panel::top("tangent_tool_bar").frame(qymcad_ui_state::tool_bar_frame(jc.scheme))
 .show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.label(egui::RichText::new(format!("{} {}", ph::CIRCLE_HALF_TILT, qymcad_i18n::tr("j-tangent-made"))).strong());
                 ui.separator();
-                let hint = if sel.is_empty() { qymcad_i18n::tr("j-tangent-pick") } else { qymcad_i18n::tr("j-tangent-second") };
+                let hint = if made { qymcad_i18n::tr("j-tangent-made-ok") } else if sel.is_empty() { qymcad_i18n::tr("j-tangent-pick") } else { qymcad_i18n::tr("j-tangent-second") };
                 ui.label(egui::RichText::new(hint).color(jc.scheme.pal.hint()));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button(qymcad_i18n::tr("j-cancel-esc")).clicked() {
+                    if made {
+                        if ui.button(qymcad_i18n::tr("cmd-cancel-btn")).clicked() {
+                            cancel = true;
+                        }
+                        if ui.button(qymcad_i18n::tr("cmd-apply-enter")).clicked() {
+                            apply = true;
+                        }
+                    } else if ui.button(qymcad_i18n::tr("j-cancel-esc")).clicked() {
                         cancel = true;
                     }
                 });
@@ -1015,7 +1178,15 @@ pub fn joint_tool_bar(jc: &mut qymcad_ui_state::JointCtx, ui: &mut egui::Ui) {
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             cancel = true;
         }
-        if cancel {
+        if made {
+            apply |= (!ctx.egui_wants_keyboard_input() && ctx.input(|i| i.key_pressed(egui::Key::Enter))) || qymcad_ui_state::bar_enter_take(ctx);
+        } else {
+            // the tangent is made by its second pick: Enter before it has nothing to make
+            qymcad_ui_state::enter_not_ready(ctx, jc.status, &qymcad_i18n::tr(if sel.is_empty() { "j-tangent-pick" } else { "j-tangent-second" }));
+        }
+        if made && (apply || cancel) {
+            tangent_finish(jc, apply && !cancel);
+        } else if cancel {
             jc.joint.tangent_pick = None;
             *jc.status = qymcad_i18n::tr("j-tangent-off");
         }
@@ -1034,7 +1205,7 @@ pub fn joint_tool_bar(jc: &mut qymcad_ui_state::JointCtx, ui: &mut egui::Ui) {
                     if ui.button(qymcad_i18n::tr("j-cancel-esc")).clicked() {
                         cancel = true;
                     }
-                    if ui.button(format!("{} {}", ph::CHECK, qymcad_i18n::tr("j-width-make-btn"))).clicked() {
+                    if ui.button(qymcad_i18n::tr("cmd-apply-enter")).clicked() {
                         make = true;
                     }
                 });
@@ -1068,7 +1239,7 @@ pub fn joint_tool_bar(jc: &mut qymcad_ui_state::JointCtx, ui: &mut egui::Ui) {
                     if ui.button(qymcad_i18n::tr("j-cancel-esc")).clicked() {
                         cancel = true;
                     }
-                    if ui.button(format!("{} {}", ph::CHECK, qymcad_i18n::tr("j-group-make-btn"))).clicked() {
+                    if ui.button(qymcad_i18n::tr("cmd-apply-enter")).clicked() {
                         make = true;
                     }
                 });
@@ -1097,6 +1268,12 @@ pub fn joint_tool_bar(jc: &mut qymcad_ui_state::JointCtx, ui: &mut egui::Ui) {
                 ui.label(egui::RichText::new(format!("{} {}", ph::ANCHOR, qymcad_i18n::tr("jt-ground-btn"))).strong());
                 ui.separator();
                 ui.label(egui::RichText::new(qymcad_i18n::tr("j-ground-click")).color(jc.scheme.pal.hint()));
+                // what the clicks have grounded, named in the bar and not only in the status line
+                let grounded: Vec<String> = jc.project.components.iter().filter(|c| c.parent.is_some() && jc.project.is_grounded(c.id)).map(|c| qymcad_i18n::name(&c.name)).collect();
+                if !grounded.is_empty() {
+                    ui.separator();
+                    ui.label(qymcad_i18n::tr1("j-grounded-list", "names", &grounded.join(", ")));
+                }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button(qymcad_i18n::tr("j-done-esc")).clicked() {
                         cancel = true;
@@ -1104,6 +1281,8 @@ pub fn joint_tool_bar(jc: &mut qymcad_ui_state::JointCtx, ui: &mut egui::Ui) {
                 });
             });
         });
+        // grounding is done by the click itself: Enter has nothing to make
+        qymcad_ui_state::enter_not_ready(ui.ctx(), jc.status, &qymcad_i18n::tr("j-ground-click"));
         if cancel {
             jc.joint.ground_pick = false;
             *jc.status = qymcad_i18n::tr("j-ground-off");
@@ -1171,7 +1350,7 @@ pub fn joint_tool_bar(jc: &mut qymcad_ui_state::JointCtx, ui: &mut egui::Ui) {
                     if ui.button(qymcad_i18n::tr("j-cancel-esc")).clicked() {
                         cancel = true;
                     }
-                    if ui.add_enabled(have >= need, egui::Button::new(qymcad_i18n::tr("j-done-enter"))).clicked() {
+                    if ui.add_enabled(have >= need, egui::Button::new(qymcad_i18n::tr("cmd-apply-enter"))).clicked() {
                         done = true;
                     }
                 });
@@ -1204,6 +1383,8 @@ pub fn joint_tool_bar(jc: &mut qymcad_ui_state::JointCtx, ui: &mut egui::Ui) {
     let target = if jc.joint.anchor_mode == 3 { qymcad_i18n::tr("j-origin-lower") } else { qymcad_i18n::tr("j-place-lower") };
     let target = &target;
     let hint = if jc.joint.pick_first.is_some() { qymcad_i18n::tr1("jt-click-b", "what", target) } else { qymcad_i18n::tr1("jt-click-a", "what", target) };
+    // a joint is laid by its second pick: Enter before it has nothing to make
+    qymcad_ui_state::enter_not_ready(ctx, jc.status, &hint);
     let mut cancel = false;
     // THE PLACE BELONGS TO THE SHELL. This used to open its own top panel, and the frame order was
     // then held by the order of lines rather than written down anywhere.
@@ -1296,8 +1477,15 @@ pub fn joint_tool_bar_for_test(jc: &mut qymcad_ui_state::JointCtx, ui: &mut egui
 /// document is marked. It lived in `gui.rs` for no better reason than that the animation field does.
 pub fn stop_joint_anim(jc: &mut qymcad_ui_state::JointCtx) {
     let Some(a) = jc.joint_anim.take() else { return };
-    jc.project.set_joint_drive(a.joint, a.slot, a.saved);
-    jc.project.solve_joints();
+    // a preview gives everything back: the mates as they read (the drive of the swept degree with them) and the parts
+    // exactly where they stood - solving again would only add the solver's noise to what was there
+    jc.project.joints = a.mates;
+    for (id, m) in a.placed {
+        if let Some(c) = jc.project.components.iter_mut().find(|c| c.id == id) {
+            c.transform = m;
+        }
+    }
+    qymcad_ui_state::invalidate_placement(jc.regen);
     qymcad_ui_state::mark_dirty_for_rebuild(&mut jc.rebuild()); // the document is marked; the scheduler does the computing
 }
 
@@ -1340,6 +1528,13 @@ pub fn joint_grab_part(jc: &mut qymcad_ui_state::JointCtx, body: Id, rect: Rect,
     if let Some(comp) = jc.project.pull_target_component(owner, ctx) {
         let p0 = qymcad_core::feature::apply12(&jc.project.relative_transform(comp, ctx), [0.0, 0.0, 0.0]);
         qymcad_ui_state::begin_edit(jc.edits, jc.project, qymcad_i18n::tr("status-edit-joint"));
+        *jc.part_pull = Some((comp, [0.0, 0.0, 0.0], p0));
+        return true;
+    }
+    // A PART NO MATE HOLDS is moved as it is, following the pointer
+    if let Some(comp) = jc.project.free_pull_component(owner, ctx) {
+        let p0 = qymcad_core::feature::apply12(&jc.project.relative_transform(comp, ctx), [0.0, 0.0, 0.0]);
+        qymcad_ui_state::begin_edit(jc.edits, jc.project, qymcad_i18n::tr("status-move-component"));
         *jc.part_pull = Some((comp, [0.0, 0.0, 0.0], p0));
         return true;
     }
@@ -1392,6 +1587,17 @@ pub fn joint_giz_drag_to(jc: &mut qymcad_ui_state::JointCtx, cursor: Pos2, d: eg
         }
         *jc.part_pull = Some((comp, local, to));
         let ctx = qymcad_ui_state::current_ctx_id(jc.active_path, jc.project);
+        // a part no mate holds has nothing to solve: it goes where the hand leads, in the coordinates of the assembly
+        // it stands in (the context itself)
+        if jc.project.free_pull_component(comp, ctx) == Some(comp) {
+            let mut m = jc.project.component_transform(comp);
+            for (a, k) in [3, 7, 11].into_iter().enumerate() {
+                m[k] += to[a] - from[a];
+            }
+            jc.project.set_component_transform(comp, m);
+            qymcad_ui_state::invalidate_placement(jc.regen);
+            return;
+        }
         let to_world = qymcad_core::feature::apply12(&jc.project.world_transform(ctx), to);
         jc.project.drag_pull = Some((comp, local, to_world));
         jc.project.solve_joints();
@@ -1471,6 +1677,9 @@ pub fn joint_popup(jc: &mut qymcad_ui_state::JointCtx, ctx: &egui::Context, rect
     let free = j.kind.free_slots();
     let mut changed = false;
     let mut close = false;
+    let before = jc.project.joints.clone();
+    let vars = jc.project.param_map();
+    let mut exprs = Vec::new();
     egui::Area::new(egui::Id::new("joint_edit_popup")).fixed_pos(qymcad_ui_state::clamp_popup(mid, rect) + egui::vec2(12.0, -12.0)).order(egui::Order::Foreground).show(ctx, |ui| {
         egui::Frame::popup(ui.style()).show(ui, |ui| {
             ui.set_max_width(260.0);
@@ -1491,13 +1700,13 @@ pub fn joint_popup(jc: &mut qymcad_ui_state::JointCtx, ctx: &egui::Context, rect
             if let Some(jj) = jc.project.joints.iter_mut().find(|x| x.id == jid) {
                 ui.horizontal_wrapped(|ui| {
                     if has_angle {
-                        changed |= joint_slot_drag(ui, jj, 0, 1.0);
+                        changed |= joint_slot_drag(ui, jj, 0, 1.0, &vars, &mut exprs);
                     }
                     if has_off {
-                        changed |= joint_slot_drag(ui, jj, 1, 0.5);
+                        changed |= joint_slot_drag(ui, jj, 1, 0.5, &vars, &mut exprs);
                     }
                     if has_off2 {
-                        changed |= joint_slot_drag(ui, jj, 2, 0.5);
+                        changed |= joint_slot_drag(ui, jj, 2, 0.5, &vars, &mut exprs);
                     }
                 });
                 if nested {
@@ -1606,10 +1815,38 @@ pub fn joint_popup(jc: &mut qymcad_ui_state::JointCtx, ctx: &egui::Context, rect
             }
         });
     });
+    keep_slot_exprs(jc.project, jid, exprs);
+    joint_values_step(ctx, jc.edits, jc.project, before, changed);
     if changed {
         qymcad_ui_state::mark_dirty_for_rebuild(&mut jc.rebuild()); // the document is marked; the planner does the counting
     }
     if close {
+        joint_create_finish(jc, true); // the popup's Done keeps a joint just made
         qymcad_ui_state::exit_joint_edit(jc.joint, jc.status);
     }
+}
+
+/// THE VALUES OF A JOINT TYPED OR DRAGGED IN A PANEL ARE ONE STEP OF UNDO. The field writes into the document while it
+/// is typed or dragged, before it reports a change, and a rebuild in between takes the written value as the committed
+/// state - so the step opens where the typing or the drag begins (`before` is the joints as they stood before the widgets
+/// of this frame) and closes where it ends. A change of any other widget of the panel is laid as a step of its own.
+/// Called after the widgets and before the solve, so the step begins before the part moves.
+pub fn joint_values_step(ctx: &egui::Context, edits: &mut qymcad_ui_state::Edits, project: &mut qymcad_core::model::Project, before: Vec<qymcad_core::feature::Joint>, changed: bool) {
+    let take = |key: &str| ctx.data_mut(|d| d.remove_temp::<bool>(egui::Id::new(key))).unwrap_or(false);
+    let (began, ended) = (take("joint_values_began"), take("joint_values_ended"));
+    let open_id = egui::Id::new("joint_values_open");
+    let mut open = ctx.data(|d| d.get_temp::<bool>(open_id)).unwrap_or(false) && edits.open.is_some();
+    if began && !open && edits.open.is_none() {
+        let after = std::mem::replace(&mut project.joints, before);
+        qymcad_ui_state::begin_edit(edits, project, qymcad_i18n::tr("status-edit-joint"));
+        project.joints = after;
+        open = true;
+    }
+    if open && ended {
+        qymcad_ui_state::close_edit(edits, project);
+        open = false;
+    } else if changed && !open {
+        qymcad_ui_state::settle_step(edits, project, qymcad_i18n::tr("status-edit-joint"), false);
+    }
+    ctx.data_mut(|d| d.insert_temp(open_id, open));
 }

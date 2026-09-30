@@ -865,6 +865,17 @@ impl Joint {
     }
 }
 
+/// A PIECE A CUT LEFT: a cut or an intersection that parts a body in several solids makes each solid a body of the same
+/// part. The first piece is the node's own body (the biggest solid when the pieces first appear), the others get bodies
+/// of their own. `at` is where the piece was when last built - the centre of its mass: the next build gives each stored
+/// piece the solid nearest its point, so an edit of the cut that moves the pieces keeps every body on its piece, and
+/// the faces named on it stay named.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct CutPiece {
+    pub body: Id,
+    pub at: [f64; 3],
+}
+
 /// A node of the feature timeline. Sketches, datum planes and part features are all nodes of one ordered
 /// timeline; the cached geometry lives in the project pools, keyed by id.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -882,6 +893,17 @@ pub struct FeatureNode {
     /// Unlike `rollback`, which suppresses the tail of the timeline, this switches off a single feature.
     #[serde(default)]
     pub suppressed: bool,
+}
+
+impl FeatureNode {
+    /// THE COMPONENT BODY `body` OF THIS NODE BELONGS TO: the node's own component, except for a pattern of
+    /// components, whose every body belongs to its copy.
+    pub fn owner_of(&self, body: Id) -> Option<Id> {
+        match &self.kind {
+            FeatureKind::ComponentPattern { copies, bodies, .. } => bodies.iter().position(|b| *b == body).and_then(|k| copies.get(k).copied()),
+            _ => self.parent,
+        }
+    }
 }
 
 /// Chamfer mode. `Symmetric` uses an equal setback on both faces (`dist`). `TwoDist` uses two setbacks
@@ -964,6 +986,9 @@ pub enum FeatureKind {
         #[serde(default)]
         op: u8,
         body: Id,
+        /// The solids a cut or an intersection left, each a body of its own (see `CutPiece`); empty for one solid.
+        #[serde(default)]
+        pieces: Vec<CutPiece>,
     },
     /// Sweep: profiles (sketch `sketch`, contours `profiles`) along a path (sketch `path_sketch`, contour
     /// `path`), producing body `body`.
@@ -989,6 +1014,9 @@ pub enum FeatureKind {
         #[serde(default)]
         op: u8,
         body: Id,
+        /// The solids a cut or an intersection left, each a body of its own (see `CutPiece`); empty for one solid.
+        #[serde(default)]
+        pieces: Vec<CutPiece>,
     },
     /// Loft: a body through an ordered set of section profiles (sketches `sketches`, each taking the contour
     /// from `contours[i]`, where 0 means the first closed one). Each section sits on its own plane. `ruled`
@@ -1012,6 +1040,9 @@ pub enum FeatureKind {
         #[serde(default)]
         surface: bool,
         body: Id,
+        /// The solids a cut or an intersection left, each a body of its own (see `CutPiece`); empty for one solid.
+        #[serde(default)]
+        pieces: Vec<CutPiece>,
     },
     /// Box primitive (centred in XY at the origin, base at z = 0), producing a body.
     Box3 { dx: f64, dy: f64, dz: f64, body: Id },
@@ -1048,6 +1079,9 @@ pub enum FeatureKind {
         #[serde(default)]
         fill: Vec<Id>,
         body: Id,
+        /// The solids a cut or an intersection left, each a body of its own (see `CutPiece`); empty for one solid.
+        #[serde(default)]
+        pieces: Vec<CutPiece>,
     },
     /// Fillet the edges of body `src` with radius `radius`, producing `body`.
     ///
@@ -1078,10 +1112,37 @@ pub enum FeatureKind {
     /// thickening would take each piece on its own. If the result closes, the output is a solid. Every input
     /// is consumed: what continues down the timeline is the result.
     Stitch { parts: Vec<Id>, tol: f64, body: Id },
+    /// A mesh turned into a solid a person can cut and drill: every triangle a flat face, flat neighbours merged into
+    /// one, sewn - a polyhedron, not the exact geometry a recognition would give. `src` is the mesh body and is
+    /// consumed; the solid is built again from its mesh, which the document keeps.
+    /// `simplify` is the deviation in mm the mesh is made lighter within first (edges collapsed by their quadric
+    /// error); zero leaves every triangle.
+    MeshSolid {
+        src: Id,
+        body: Id,
+        #[serde(default)]
+        simplify: f64,
+    },
+    /// A mesh recognised into a body of exact surfaces: planes, cylinders, cones, spheres and tori found on it, their
+    /// edges the curves those surfaces meet in. `src` is the mesh body and is consumed; `tol` multiplies the distance a
+    /// corner may lie from its surface - the person chooses it, 1 for a mesh from a CAD, more for a coarser one.
+    /// `simplify` makes the mesh lighter first, as for `MeshSolid`.
+    MeshRecognised {
+        src: Id,
+        body: Id,
+        tol: f64,
+        sharp: f64,
+        #[serde(default)]
+        simplify: f64,
+    },
     /// Copy faces into a separate surface: faces of body `src`, selected by a query, become an independent
     /// sheet `body`. The source is not consumed — a copy is a copy, so the body stays where it is while the
     /// surface lives its own life and returns to it through a face replacement.
     FaceCopy { src: Id, faces: crate::refs::Ref, body: Id },
+    /// Offset a surface: faces of body `src` (or a whole sheet), selected by a query, taken out as a sheet `body` moved
+    /// `dist` along their normals - outward for the faces of a solid, a negative distance going in, zero a copy in
+    /// place. Like a face copy the source is read, not consumed.
+    OffsetSurface { src: Id, faces: crate::refs::Ref, dist: f64, body: Id },
     /// Chamfer the edges of body `src` by `dist`, producing `body`. `edges` is a query reference.
     ///
     /// `mode`, `d2` and `flip` cover the asymmetric variants: `d2` is the second setback or the angle in
@@ -1190,7 +1251,7 @@ pub enum FeatureKind {
     Thicken { src: Id, face: u32, thickness: f64, #[serde(default)] join: Id, body: Id },
     /// Split faces by a plane without cutting the body: one body, more faces. The plane is given by a
     /// reference (a datum, or the world plane in `plane`) plus a parametric `offset`, as for a body split.
-    SplitFace { src: Id, plane: u8, datum: Id, offset: f64, body: Id },
+    SplitFace { src: Id, plane: u8, datum: Id, offset: f64, body: Id, #[serde(default)] face: Option<(Id, FaceKey)> },
     /// Part instance (a copy inside a component pattern): the body is a one-to-one copy of the active body of
     /// `src_comp`, and the placement comes from the transform of the copied component itself.
     ///
@@ -1199,9 +1260,15 @@ pub enum FeatureKind {
     /// construction (an isolation exception, as for `MirrorPart`): `src_comp` is resolved dynamically through
     /// `active_body`.
     PartInstance { src_comp: Id, body: Id },
-    /// Mirror body `src` about a plane: `plane` selects a world plane (0 XY, 1 XZ, 2 YZ), or a non-zero
-    /// `datum` selects an arbitrary datum plane. `keep` unites the result with the original.
-    Mirror { src: Id, plane: u8, keep: bool, #[serde(default)] datum: Id, body: Id },
+    /// A pattern of components: ONE node of the assembly's timeline that builds the body of every copy. The copies
+    /// are parts of their own - mated, moved by the pattern - listed in `copies`, each with its body at the same
+    /// place in `bodies`; the body repeats the active body of `src` and belongs to its copy (`FeatureNode::owner_of`).
+    /// The layout is `kind`. Deleting the node takes the copies with it, the source stays.
+    ComponentPattern { src: Id, kind: crate::model::CompPatternKind, copies: Vec<Id>, bodies: Vec<Id> },
+    /// Mirror body `src` about a plane: `plane` selects a world plane (0 XY, 1 XZ, 2 YZ), a non-zero `datum` an
+    /// arbitrary datum plane, and `face` the plane of a face of a body, read off it at every rebuild - the one node of
+    /// the timeline, rather than a datum plane of its own beside it. `keep` unites the result with the original.
+    Mirror { src: Id, plane: u8, keep: bool, #[serde(default)] datum: Id, body: Id, #[serde(default)] face: Option<(Id, FaceKey)> },
     /// Hole in body `src`: a cylinder of `diameter` and `depth` cut at the centre of face `face`, so the hole
     /// travels with the face; `point` and `normal` are the fallback fingerprint.
     ///
@@ -1233,6 +1300,9 @@ pub enum FeatureKind {
         #[serde(default)]
         flip: bool,
         body: Id,
+        /// The solids a cut or an intersection left, each a body of its own (see `CutPiece`); empty for one solid.
+        #[serde(default)]
+        pieces: Vec<CutPiece>,
     },
     /// Thread: a modifier of a cylinder or a hole, associative to the circular edge `edge` of body `src` (the
     /// rim of the cylinder or hole, which supplies the centre point on the axis together with the axis and the
@@ -1287,7 +1357,7 @@ pub enum FeatureKind {
     /// makes the split associative — when the face moves, the split moves with it. `offset` shifts along the
     /// normal (the `offset` feature dimension), so a cut can be made next to the plane rather than on it,
     /// without creating a separate datum for one number.
-    SplitBody { src: Id, plane: u8, datum: Id, offset: f64, bodies: Vec<Id> },
+    SplitBody { src: Id, plane: u8, datum: Id, offset: f64, bodies: Vec<Id>, #[serde(default)] face: Option<(Id, FaceKey)> },
     /// Offset a face: planar face `face` of body `src` is moved by `dist` along its own normal, producing
     /// `body`. Parametric like everything else in the timeline — `dist` is edited and recomputed, and the face
     /// reference is a query resolved by recipe rather than matched by similarity.
@@ -1295,10 +1365,22 @@ pub enum FeatureKind {
     /// Rigid translation and rotation of body `src` (3x4 row-major), producing `body`. It moves the B-rep
     /// rather than the mesh, so the body stays parametric, and it replaces `src` in the chain as a modifier.
     Move { src: Id, mat: [f64; 12], body: Id },
+    /// A PIECE MADE A PART by hand: body `src`, one of the bodies a cut or a split of another part left, as body `body`
+    /// of a part of its own, in the same place. It reads the body of the part it came from - the named exception to
+    /// the isolation of parts - so an edit of the cut rebuilds both; the piece leaves the part it came from.
+    Piece { src: Id, body: Id },
     /// Parametric body-to-body boolean: `op` applied to the B-reps of body `a` (the base) and body `b` (the
     /// tool), producing `body`. `op` is 0 for a cut (a minus b), 1 for a union and 2 for an intersection. Both
     /// input bodies are consumed and hidden.
-    BodyBoolean { a: Id, b: Id, op: u8, body: Id },
+    BodyBoolean {
+        a: Id,
+        b: Id,
+        op: u8,
+        body: Id,
+        /// The solids a cut or an intersection left, each a body of its own (see `CutPiece`); empty for one solid.
+        #[serde(default)]
+        pieces: Vec<CutPiece>,
+    },
     /// An imported external B-rep solid (STEP) as the base body of a part: `body` is its id, `source` is the
     /// id of the embedded original file (`Project::sources`) and `solid` is the index of the solid within that
     /// file.
@@ -1306,7 +1388,34 @@ pub enum FeatureKind {
     /// There is no build recipe — the shape is restored by re-importing the source, and regenerate only
     /// re-tessellates the already loaded shape. The result is a full part: sketches, chamfers, fillets and
     /// booleans can be built on top of it as on any base body.
-    Import { body: Id, source: Id, solid: u32 },
+    Import {
+        body: Id,
+        source: Id,
+        solid: u32,
+        /// The factor the solid is taken at from the file's own numbers, as set when the file came in: a file can
+        /// name the wrong unit. 1 is the file as it is.
+        #[serde(default = "unit_scale")]
+        scale: f64,
+    },
+    /// A piece of an imported mesh (STL, OBJ, PLY, glTF, 3MF, AMF) as the body of a part: `body` is its id, `source`
+    /// the embedded original file and `piece` its place among the pieces the file was read into.
+    ///
+    /// Apart from `Import` on purpose: an imported solid has a B-rep, is raised again from its source and is exported
+    /// as one; a mesh piece never has a B-rep. Its mesh is the geometry, kept by the document, and it is exported as
+    /// a mesh.
+    MeshPiece {
+        body: Id,
+        source: Id,
+        piece: u32,
+        /// The factor the piece is taken at from the file's own numbers, as set when the file came in or since: its
+        /// mesh is kept at it, and a new factor is taken from the mesh divided by this one. 1 is the file as it is.
+        #[serde(default = "unit_scale")]
+        scale: f64,
+    },
+}
+
+fn unit_scale() -> f64 {
+    1.0
 }
 
 /// Identity rigid transform (3x4 row-major): the body is built in place.
@@ -1688,6 +1797,41 @@ pub struct Extruded<'a> {
     pub height: f64,
 }
 
+/// A PARCEL OF WORK FOR THE KERNEL: one node's geometry, with nothing borrowed from the document.
+///
+/// The rebuild of a node has three parts: reading the document (which references resolve to what, what the
+/// numbers are), asking the kernel to build the geometry, and writing the result back. Only the middle part is
+/// slow, and only it can be done for several nodes at once - but it could not be lifted out while it sat in
+/// the middle of a method holding `&mut Project`.
+///
+/// A parcel is that middle part, already prepared: the ids of the bodies whose shapes it needs, and the work
+/// itself. It owns everything it uses, so it can be handed to another thread: ownership is passed, a cache is
+/// not shared.
+pub struct KernelJob {
+    inputs: Vec<Id>,
+    work: Box<dyn FnOnce(&dyn Kernel) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> + Send>,
+}
+
+impl KernelJob {
+    /// `inputs` are the bodies whose live shapes the work reads; they are what a worker has to be given.
+    pub fn new(inputs: Vec<Id>, work: impl FnOnce(&dyn Kernel) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> + Send + 'static) -> Self {
+        Self { inputs, work: Box::new(work) }
+    }
+
+    /// A parcel that asks for nothing: the node refused before the kernel was needed at all.
+    pub fn refused(e: crate::errors::CoreError) -> Self {
+        Self::new(Vec::new(), move |_| Err(e))
+    }
+
+    pub fn inputs(&self) -> &[Id] {
+        &self.inputs
+    }
+
+    pub fn run(self, kernel: &dyn Kernel) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+        (self.work)(kernel)
+    }
+}
+
 pub trait Kernel {
     fn extrude(&self, body: Id, profile: &[f64], height: f64, place: [f64; 12]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError>;
     fn revolve(&self, body: Id, profile: &[f64], axis: u8, angle_deg: f64, place: [f64; 12]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError>;
@@ -1852,6 +1996,12 @@ pub trait Kernel {
         Err(crate::errors::CoreError::OpFailed(crate::errors::Op::CopyFaces))
     }
 
+    /// Offset sheet: the faces `faces` of body `src` moved `dist` along their normals as body `body`, each named by
+    /// `names`. The default refuses: the mock has no surfaces to move.
+    fn offset_faces(&self, _body: Id, _src: Id, _faces: &[u32], _names: &[u32], _dist: f64) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+        Err(crate::errors::CoreError::KernelRequired(crate::errors::Op::OffsetSurface))
+    }
+
     /// Patch: span a surface over a chain of edges. The default is a refusal.
     fn patch(&self, _body: Id, _src: Id, _edges: &[u32], _tangent: bool, _name: u32) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
         Err(crate::errors::CoreError::OpFailed(crate::errors::Op::Patch))
@@ -1874,11 +2024,47 @@ pub trait Kernel {
         Err(crate::errors::CoreError::OpFailed(crate::errors::Op::Stitch))
     }
 
+    /// Turn a mesh into a solid of its flat faces, a polyhedron. The default is a refusal: only a real kernel has
+    /// faces to sew.
+    fn mesh_solid(&self, _body: Id, _mesh: &Mesh) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+        Err(crate::errors::CoreError::KernelRequired(crate::errors::Op::MeshSolid))
+    }
+
+    /// Recognise a mesh into a body of exact surfaces, `tol` multiplying the distance a corner may lie from its
+    /// surface. The default is a refusal: only a real kernel builds the faces found.
+    fn mesh_recognised(&self, _body: Id, _mesh: &Mesh, _tol: f64, _sharp: f64) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+        Err(crate::errors::CoreError::KernelRequired(crate::errors::Op::MeshRecognise))
+    }
+
     /// Whether a body is a sheet (a surface) rather than a solid. The document has to know: a sheet has no
     /// volume, is not exported to CAM and does not count as the one body of a part. The default is `false`,
     /// since the mock works with solids.
     fn body_is_sheet(&self, _body: Id) -> bool {
         false
+    }
+
+    /// How many separate pieces (solids) a body is made of. The default is one, since the mock builds one solid a
+    /// body.
+    fn body_pieces(&self, _body: Id) -> u32 {
+        1
+    }
+
+    /// The edges the last blend of `body` left out, taken once: (edges asked, edges left out). `None` when it
+    /// took every edge.
+    fn take_dropped_edges(&self, _body: Id) -> Option<(usize, usize)> {
+        None
+    }
+
+    /// The solids body `body` is made of, in the kernel's order: the centre of mass and the volume of each. The default
+    /// is none, since the mock builds one solid a body and has nothing to tell apart.
+    fn body_solids(&self, _body: Id) -> Vec<([f64; 3], f64)> {
+        Vec::new()
+    }
+
+    /// The solid number `index` of body `src` (in the order of `body_solids`) as body `body`. The default refuses, since
+    /// the mock builds one solid a body.
+    fn take_solid(&self, _body: Id, _src: Id, _index: usize) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+        Err(crate::errors::CoreError::BodyInOnePiece)
     }
 
     /// Chamfer the edges of body `src` by `dist` (an empty `edges` means every edge).
@@ -1999,6 +2185,25 @@ pub trait Kernel {
         Vec::new()
     }
 
+    /// HOW MANY THREADS THE KERNEL IS WILLING TO BE DIVIDED INTO. One means "compute in this thread", which is
+    /// what a mock says and what a person asking for a single-threaded rebuild gets.
+    fn workers(&self) -> usize {
+        1
+    }
+
+    /// A KERNEL OF ITS OWN FOR ANOTHER THREAD, holding the bodies asked for AND NOTHING ELSE.
+    ///
+    /// This is what lets a wave of independent nodes be computed at once. The shapes are MOVED rather than
+    /// shared: two threads over one shape is precisely what this kernel is not safe for, and a copy of a body
+    /// costs as much as the operation would. `None` means the kernel cannot divide itself, and the rebuild
+    /// stays on one thread - which is the honest answer for a mock.
+    fn split_off(&self, _bodies: &[Id]) -> Option<Box<dyn KernelWorker>> {
+        None
+    }
+
+    /// The bodies come home: the shapes the worker was given, plus whatever it built.
+    fn absorb(&self, _worker: Box<dyn KernelWorker>) {}
+
     /// What distinguishes two edges sharing one pair of faces: `(edge, name1, name2)`, the lowest names of the
     /// faces meeting at its endpoints. The ordinal within a pair has to follow the recipe rather than the
     /// traversal order.
@@ -2058,6 +2263,29 @@ pub struct RegenReport {
     /// from it that a feature failed to build is wrong — the pass simply never reached it. The caller has to
     /// discard such a result entirely rather than apply it partially.
     pub cancelled: bool,
+    /// HOW MANY NODES WENT INTO EACH BATCH COMPUTED SIDE BY SIDE.
+    ///
+    /// One number per batch, in the order they were computed. An empty list means the rebuild went node by
+    /// node - the honest answer for a single-threaded setting, for a mock, and for a document whose every node
+    /// waits for the one before it.
+    pub waves: Vec<usize>,
+    /// WHAT EACH NODE COST, in microseconds: (node id, the kind's name, the time it took).
+    ///
+    /// Only the nodes that were actually rebuilt are here - a pass that walks past a clean node costs nothing
+    /// and says nothing. Without this, "the rebuild is slow" can only be answered with a stopwatch over the
+    /// whole document, and a stopwatch cannot tell a boolean from a tessellation. The cost is one clock
+    /// reading per rebuilt node.
+    pub spent: Vec<(Id, String, u128)>,
+}
+
+/// A KERNEL THAT CAN TRAVEL: the half of a kernel handed to a worker thread for one wave.
+///
+/// It is a kernel like any other - the parcels of work know nothing about which one they are run on - and it
+/// is `Send`, which the shared one is not: the shared one is reachable from the document's thread.
+pub trait KernelWorker: Send {
+    fn kernel(&self) -> &dyn Kernel;
+    /// For the shared kernel to take its bodies back, it has to recognise its own kind.
+    fn as_any(self: Box<Self>) -> Box<dyn std::any::Any>;
 }
 
 /// Rebuild observer: learns how much has been done and can stop the rebuild.
@@ -2072,6 +2300,10 @@ pub trait RegenWatch {
     fn step(&self, done: usize, total: usize) -> bool {
         let _ = (done, total);
         true
+    }
+    /// Has a stop been asked at all, between the nodes or while one was being built?
+    fn stopped(&self) -> bool {
+        false
     }
 }
 
@@ -2160,7 +2392,7 @@ impl FeatureKind {
             FeatureKind::Shell { thickness, .. } => vec![("thickness", thickness)],
             FeatureKind::Thicken { thickness, .. } => vec![("thickness", thickness)],
             FeatureKind::Draft { angle, .. } => vec![("angle", angle)],
-            FeatureKind::PushFace { dist, .. } => vec![("dist", dist)],
+            FeatureKind::PushFace { dist, .. } | FeatureKind::OffsetSurface { dist, .. } => vec![("dist", dist)],
             FeatureKind::Stitch { tol, .. } => vec![("tol", tol)],
             FeatureKind::SplitFace { offset, .. } => vec![("offset", offset)],
             FeatureKind::SplitBody { offset, .. } => vec![("offset", offset)],
@@ -2211,7 +2443,10 @@ impl FeatureKind {
             | FeatureKind::RemoveFace { body, .. }
             | FeatureKind::Chamfer { body, .. }
             | FeatureKind::FaceCopy { body, .. }
+            | FeatureKind::OffsetSurface { body, .. }
             | FeatureKind::Stitch { body, .. }
+            | FeatureKind::MeshSolid { body, .. }
+            | FeatureKind::MeshRecognised { body, .. }
             | FeatureKind::Trim { body, .. }
             | FeatureKind::Patch { body, .. }
             | FeatureKind::SurfaceReplace { body, .. }
@@ -2227,12 +2462,14 @@ impl FeatureKind {
             | FeatureKind::Thread { body, .. }
             | FeatureKind::Auger { body, .. }
             | FeatureKind::Move { body, .. }
+            | FeatureKind::Piece { body, .. }
             | FeatureKind::BodyBoolean { body, .. }
             | FeatureKind::MirrorPart { body, .. }
             | FeatureKind::PartInstance { body, .. }
             | FeatureKind::Thicken { body, .. }
             | FeatureKind::SplitFace { body, .. }
-            | FeatureKind::Import { body, .. } => Some(body),
+            | FeatureKind::Import { body, .. }
+            | FeatureKind::MeshPiece { body, .. } => Some(body),
             _ => None,
         }
     }
@@ -2242,8 +2479,59 @@ impl FeatureKind {
     /// disappears.
     pub fn bodies(&self) -> Vec<Id> {
         match self {
-            FeatureKind::SplitBody { bodies, .. } => bodies.clone(),
-            _ => self.body().into_iter().collect(),
+            FeatureKind::SplitBody { bodies, .. } | FeatureKind::ComponentPattern { bodies, .. } => bodies.clone(),
+            _ => self.body().into_iter().chain(self.cut_pieces().iter().skip(1).map(|p| p.body)).collect(),
+        }
+    }
+
+    /// THE PIECES A CUT OR AN INTERSECTION LEFT, the node's own body first; empty while the result is one solid, and for
+    /// a node that never cuts.
+    pub fn cut_pieces(&self) -> &[CutPiece] {
+        match self {
+            FeatureKind::Revolve { pieces, .. }
+            | FeatureKind::Sweep { pieces, .. }
+            | FeatureKind::Loft { pieces, .. }
+            | FeatureKind::Combine { pieces, .. }
+            | FeatureKind::Hole { pieces, .. }
+            | FeatureKind::BodyBoolean { pieces, .. } => pieces,
+            _ => &[],
+        }
+    }
+
+    /// The pieces of a node that may leave some - a cut or an intersection - to be written by the rebuild; `None` for a
+    /// node that adds material or makes a body of its own, which keeps its result one body whatever it is.
+    pub fn cut_pieces_mut(&mut self) -> Option<&mut Vec<CutPiece>> {
+        match self {
+            FeatureKind::Revolve { op, src, pieces, .. } | FeatureKind::Sweep { op, src, pieces, .. } | FeatureKind::Loft { op, src, pieces, .. } if *op != 1 && *src != 0 => Some(pieces),
+            FeatureKind::Combine { op, pieces, .. } if *op != 1 => Some(pieces),
+            FeatureKind::BodyBoolean { op, pieces, .. } if *op != 1 => Some(pieces),
+            FeatureKind::Hole { pieces, .. } => Some(pieces),
+            _ => None,
+        }
+    }
+
+    /// WHETHER THE BODY OF THIS NODE GETS A LIVE B-REP - the one rule for every list of "bodies still waiting for
+    /// one". A mesh piece never has one; counted as waiting, it asked for a rebuild of nothing every time a live
+    /// B-rep was wanted and kept the cache from ever being ready.
+    pub fn waits_for_brep(&self) -> bool {
+        !matches!(self, FeatureKind::MeshPiece { .. })
+    }
+
+    /// WHETHER THIS NODE BROUGHT A FILE IN - a solid or a piece of a mesh. It has no command of its own to reopen:
+    /// editing it is asking again about the file's units and scale, from its row in the tree and from its properties.
+    pub fn is_import(&self) -> bool {
+        matches!(self, FeatureKind::Import { .. } | FeatureKind::MeshPiece { .. })
+    }
+
+    /// DOES THIS NODE OWN THIS BODY - the same question as `bodies().contains(&id)`, without building the list.
+    ///
+    /// Measured on a document of 1296 bodies: asking it through `bodies()` allocated a vector per node per
+    /// body - 1.7 million allocations for one pass over the scene, about 175 ms, and that pass happens on
+    /// EVERY frame. It showed up as the whole program going sluggish, settings windows included.
+    pub fn owns_body(&self, id: Id) -> bool {
+        match self {
+            FeatureKind::SplitBody { bodies, .. } | FeatureKind::ComponentPattern { bodies, .. } => bodies.contains(&id),
+            _ => self.body() == Some(id) || self.cut_pieces().iter().any(|p| p.body == id),
         }
     }
 
@@ -2254,6 +2542,16 @@ impl FeatureKind {
     /// sketch, a datum plane, a point and an axis also appear as timeline nodes and also serve as inputs to
     /// others. Without this, "what created it" would only answer for bodies while half the tree — sketches and
     /// datums — would have no provenance.
+    /// THE PART WHOSE ACTIVE BODY THIS NODE REPEATS: a mirrored part, a clone, a pattern of components. That body is
+    /// not among `inputs` - it is whatever the source ends in - so the rebuild asks for it here.
+    pub fn copy_source(&self) -> Option<Id> {
+        match *self {
+            FeatureKind::MirrorPart { src_comp, .. } | FeatureKind::PartInstance { src_comp, .. } => Some(src_comp),
+            FeatureKind::ComponentPattern { src, .. } => Some(src),
+            _ => None,
+        }
+    }
+
     pub fn declares(&self) -> Vec<Id> {
         match *self {
             FeatureKind::Sketch { sketch } => vec![sketch],
@@ -2279,12 +2577,16 @@ impl FeatureKind {
         match *self {
             // A referenced plane is an input too: without it a split or a mirror would not follow a datum that
             // moved, and deleting the datum would leave the feature cutting against geometry that is gone.
+            // the body whose face the plane is read off, when it is not the source itself
+            FeatureKind::SplitBody { src, face: Some((b, _)), .. } | FeatureKind::SplitFace { src, face: Some((b, _)), .. } | FeatureKind::Mirror { src, face: Some((b, _)), .. } if b != src => vec![src, b],
             FeatureKind::SplitBody { src, datum, .. } if datum != 0 => vec![src, datum],
             FeatureKind::SplitBody { src, .. } => vec![src],
             FeatureKind::SplitFace { src, datum, .. } if datum != 0 => vec![src, datum],
             FeatureKind::SplitFace { src, .. } => vec![src],
             FeatureKind::Thicken { src, .. } => vec![src],
             FeatureKind::Mirror { src, datum, .. } if datum != 0 => vec![src, datum],
+            // the axis a circular pattern turns about, the same way: resolved first, and followed when it moves
+            FeatureKind::CircularArray { src, axis, .. } if axis != 0 => vec![src, axis],
             FeatureKind::Extrude { sketch, .. } => vec![sketch],
             // The target body is an input too: without it a revolved or swept cut would not follow the body it
             // cuts from, and deleting that body would leave the feature cutting from nothing.
@@ -2307,10 +2609,14 @@ impl FeatureKind {
             | FeatureKind::Thread { src, .. }
             | FeatureKind::Auger { src, .. }
             | FeatureKind::Move { src, .. }
+            | FeatureKind::Piece { src, .. }
             // A face copy depends on its source body but does not consume it: the body stays where it is while
             // the surface lives alongside. Otherwise taking a face into the surface layer would lose the
             // part.
             | FeatureKind::FaceCopy { src, .. }
+            | FeatureKind::OffsetSurface { src, .. }
+            | FeatureKind::MeshSolid { src, .. }
+            | FeatureKind::MeshRecognised { src, .. }
             | FeatureKind::Patch { src, .. } => vec![src],
             FeatureKind::SurfaceReplace { src, surface, .. } => vec![src, surface],
             FeatureKind::Stitch { ref parts, .. } => parts.clone(),
@@ -2322,6 +2628,9 @@ impl FeatureKind {
     /// Re-point the body input of a node from `from` to `to`, leaving sketches alone. Used when restructuring
     /// chains — for example while editing a grouped cut — so that consumers of the old last body point at the
     /// new one.
+    ///
+    /// A piece made a part is not handed over: it IS that piece, and the whole body its split or cut came from would
+    /// make the whole of the part it left a second part, silently. Its base deleted, it stands red with the reason.
     pub fn remap_body_input(&mut self, from: Id, to: Id) {
         let fix = |x: &mut Id| {
             if *x == from {
@@ -2346,7 +2655,33 @@ impl FeatureKind {
             | FeatureKind::Thread { src, .. }
             | FeatureKind::Auger { src, .. }
             | FeatureKind::Move { src, .. }
-            | FeatureKind::SplitBody { src, .. } => fix(src),
+            | FeatureKind::SplitBody { src, .. }
+            // a body read without being consumed is handed over the same way: a patch over the rim of a deleted
+            // hole left naming the hole's body built green step by step, over the live body the deletion left
+            // behind, and red rebuilt from the start
+            | FeatureKind::Revolve { src, .. }
+            | FeatureKind::Sweep { src, .. }
+            | FeatureKind::PushFace { src, .. }
+            | FeatureKind::RemoveFace { src, .. }
+            | FeatureKind::FaceCopy { src, .. }
+            | FeatureKind::OffsetSurface { src, .. }
+            | FeatureKind::Patch { src, .. }
+            | FeatureKind::MeshSolid { src, .. }
+            | FeatureKind::MeshRecognised { src, .. }
+            | FeatureKind::SplitFace { src, .. } => fix(src),
+            FeatureKind::SurfaceReplace { src, surface, .. } => {
+                fix(src);
+                fix(surface);
+            }
+            FeatureKind::Trim { src, tool, .. } => {
+                fix(src);
+                fix(tool);
+            }
+            FeatureKind::Thicken { src, join, .. } => {
+                fix(src);
+                fix(join);
+            }
+            FeatureKind::Stitch { parts, .. } => parts.iter_mut().for_each(fix),
             _ => {}
         }
     }
@@ -2368,7 +2703,10 @@ impl FeatureKind {
             FeatureKind::PartInstance { body, .. } => {
                 m(body); // `src_comp` is a component and is remapped by the component map separately.
             }
-            FeatureKind::PushFace { src, body, .. } | FeatureKind::FaceCopy { src, body, .. } | FeatureKind::Patch { src, body, .. } => {
+            FeatureKind::ComponentPattern { bodies, .. } => {
+                bodies.iter_mut().for_each(m); // the source and the copies are components, remapped separately
+            }
+            FeatureKind::PushFace { src, body, .. } | FeatureKind::FaceCopy { src, body, .. } | FeatureKind::OffsetSurface { src, body, .. } | FeatureKind::Patch { src, body, .. } | FeatureKind::MeshSolid { src, body, .. } | FeatureKind::MeshRecognised { src, body, .. } => {
                 m(src);
                 m(body);
             }
@@ -2397,15 +2735,21 @@ impl FeatureKind {
                 m(join);
                 m(body);
             }
-            FeatureKind::SplitFace { src, datum, body, .. } => {
+            FeatureKind::SplitFace { src, datum, body, face, .. } => {
                 m(src);
                 m(datum);
                 m(body);
+                if let Some((b, _)) = face {
+                    m(b);
+                }
             }
-            FeatureKind::SplitBody { src, datum, bodies, .. } => {
+            FeatureKind::SplitBody { src, datum, bodies, face, .. } => {
                 m(src);
                 m(datum);
                 bodies.iter_mut().for_each(&m);
+                if let Some((b, _)) = face {
+                    m(b);
+                }
             }
             FeatureKind::Sketch { sketch } => m(sketch),
             FeatureKind::Plane { plane } => m(plane),
@@ -2453,7 +2797,8 @@ impl FeatureKind {
             | FeatureKind::Hole { src, body, .. }
             | FeatureKind::Thread { src, body, .. }
             | FeatureKind::Auger { src, body, .. }
-            | FeatureKind::Move { src, body, .. } => {
+            | FeatureKind::Move { src, body, .. }
+            | FeatureKind::Piece { src, body, .. } => {
                 m(src);
                 m(body);
             }
@@ -2462,10 +2807,13 @@ impl FeatureKind {
                 m(axis);
                 m(body);
             }
-            FeatureKind::Mirror { src, datum, body, .. } => {
+            FeatureKind::Mirror { src, datum, body, face, .. } => {
                 m(src);
                 m(datum);
                 m(body);
+                if let Some((b, _)) = face {
+                    m(b);
+                }
             }
             FeatureKind::BodyBoolean { a, b, body, .. } => {
                 m(a);
@@ -2474,7 +2822,7 @@ impl FeatureKind {
             }
             // `source` is the shared embedded file and is not part of the clone map, so it is left alone; the
             // body is remapped.
-            FeatureKind::Import { body, .. } => m(body),
+            FeatureKind::Import { body, .. } | FeatureKind::MeshPiece { body, .. } => m(body),
         }
     }
 
@@ -2512,7 +2860,7 @@ impl FeatureKind {
             FeatureKind::RemoveFace { faces, .. } => faces.remap_descs(&mut |d| m(d)),
             // Surface features hold references of the same kind: without translation a cloned part and a
             // deleted node would break them exactly as they broke a thread.
-            FeatureKind::FaceCopy { faces, .. } | FeatureKind::SurfaceReplace { faces, .. } => faces.remap_descs(&mut |d| m(d)),
+            FeatureKind::FaceCopy { faces, .. } | FeatureKind::OffsetSurface { faces, .. } | FeatureKind::SurfaceReplace { faces, .. } => faces.remap_descs(&mut |d| m(d)),
             FeatureKind::Patch { edges, .. } => edges.remap_descs(&mut |d| m(d)),
             FeatureKind::Thread { edge, .. } | FeatureKind::Auger { edge, .. } => m(edge),
             // The rest address geometry through ids (a sketch, a datum, a body), which `remap_ids` handles.
@@ -2585,6 +2933,8 @@ impl FeatureKind {
             | FeatureKind::Thread { src, .. }
             | FeatureKind::Auger { src, .. }
             | FeatureKind::Move { src, .. }
+            // the piece that went into a part of its own leaves the part it came from
+            | FeatureKind::Piece { src, .. }
             | FeatureKind::SplitBody { src, .. }
             // A thicken carries its body onward. Leaving the plate as a separate body turns one part into
             // two, visible on screen as a differently coloured piece, which the "one part is one body" rule
@@ -2592,7 +2942,11 @@ impl FeatureKind {
             | FeatureKind::Thicken { src, .. }
             // Splitting faces carries the same body onward (there is only one body), so the source is consumed
             // as it is for a chamfer.
-            | FeatureKind::SplitFace { src, .. } => Some(src),
+            | FeatureKind::SplitFace { src, .. }
+            // a mesh turned into a solid is carried on by the solid: the mesh would otherwise stand beside it as a
+            // second body of the part
+            | FeatureKind::MeshSolid { src, .. }
+            | FeatureKind::MeshRecognised { src, .. } => Some(src),
             FeatureKind::BodyBoolean { a, .. } => Some(a), // The base is primary, for lineage; `b` is in `consumed()` too.
             // For a stitch the lineage follows the first sheet; the rest are in `consumed()` as well.
             FeatureKind::Stitch { ref parts, .. } => parts.first().copied(),

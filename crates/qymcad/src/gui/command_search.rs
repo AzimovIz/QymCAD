@@ -82,11 +82,13 @@ pub(crate) fn command_search_window(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui
     // THE ARROWS AND ENTER ARE READ BEFORE THE FIELD: `TextEdit` does not use them, but the
     // order matters for Esc - it must close the SEARCH rather than fall through into the general
     // cancel ladder.
-    let (up, down, enter, esc) = ctx.input(|i| {
+    // Enter is TAKEN, not only read: it launches the command found, and a tool launched in this frame must not see
+    // the same key as its own Enter - a joint answered "not yet" to a key nobody pressed for it
+    let (up, down, enter, esc) = ctx.input_mut(|i| {
         (
             i.key_pressed(egui::Key::ArrowUp),
             i.key_pressed(egui::Key::ArrowDown),
-            i.key_pressed(egui::Key::Enter),
+            i.consume_key(egui::Modifiers::NONE, egui::Key::Enter),
             i.key_pressed(egui::Key::Escape),
         )
     });

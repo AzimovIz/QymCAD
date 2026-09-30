@@ -18,6 +18,8 @@ members = [
     "crates/qymcad-part",
     "crates/qymcad-testkit",
     "crates/qymcad-update",
+    "crates/qymcad-meshfit",
+    "crates/qymcad-acceptance",
 ]
 
 # THE BAN ON "WRITTEN AND NEVER WIRED UP" - THE MOST IMPORTANT THING IN THIS FILE.
@@ -48,9 +50,8 @@ unused_must_use = "deny"
 #
 # A BAG OF PARAMETERS WHERE A STRUCT BELONGS. 31 functions, every one of them in `qymcad-core`:
 # `model/regen.rs` holds twelve and the worst takes SIXTEEN arguments. That is not a matter of style -
-# it is the regeneration code carrying its state by hand. Shuffling the signatures now would be work
-# that step 6 of the rebuild (the query graph, decision R4) undoes, so the count is kept VISIBLE in one
-# place rather than silenced function by function. See docs/ARCHITECTURE_PLAN.md.
+# it is the regeneration code carrying its state by hand, and the signatures go when that state does, not
+# one by one. Until then the count is kept VISIBLE in one place rather than silenced function by function.
 too_many_arguments = "allow"
 
 [workspace.package]
@@ -76,6 +77,7 @@ readme = "README.md"
 # --- internal crates ---
 qymcad-core = { path = "crates/qymcad-core" }
 qymcad-kernel = { path = "crates/qymcad-kernel" }
+qymcad-meshfit = { path = "crates/qymcad-meshfit" }
 qymcad-io = { path = "crates/qymcad-io" }
 
 # --- external (wired in per crate as each phase starts) ---

@@ -12,10 +12,8 @@
 //! draws too — which is why the text, the lines and the glyphs come out the same as on screen rather
 //! than merely similar.
 //!
-//! As a side effect this opens up captures of the WHOLE WINDOW (panels, menus, bars), should they be
-//! needed.
-#![cfg(test)]
-
+//! As a side effect this opens up captures of the WHOLE WINDOW (panels, menus, bars): a session takes its
+//! picture of the window through `paint`.
 use egui::{Color32, ColorImage};
 
 /// Capture an `egui` frame into a picture.
@@ -23,6 +21,7 @@ use egui::{Color32, ColorImage};
 /// `draw` paints exactly what must land in the frame; the background is given separately, because a
 /// transparent background is meaningless for A CAPTURE OF THE INTERFACE — text is drawn with
 /// semi-transparent antialiasing and spreads into mud over transparency.
+#[cfg(test)]
 pub(super) fn shot_ui(size: [usize; 2], bg: Color32, mut draw: impl FnMut(&mut egui::Ui)) -> ColorImage {
     const SS: usize = 2;
     let (w, h) = (size[0] * SS, size[1] * SS);
@@ -66,17 +65,23 @@ pub(super) fn shot_ui(size: [usize; 2], bg: Color32, mut draw: impl FnMut(&mut e
     // texture) turned into white noise: the letters read, the body did not. Everything the frame loaded
     // is collected, by the frame's own identifiers.
     let prims = ctx.tessellate(out.shapes, SS as f32);
-    let mut img = ColorImage::filled([w, h], bg);
-    for p in &prims {
+    downscale(&paint(&prims, &texes, [w, h], bg, SS as f32), SS)
+}
+
+/// FILL THE TRIANGLES OF A FRAME into a picture of `size` pixels over `bg`, `k` pixels to a point, sampling the
+/// textures the frames loaded.
+pub(super) fn paint(prims: &[egui::ClippedPrimitive], texes: &std::collections::HashMap<egui::TextureId, Tex>, size: [usize; 2], bg: Color32, k: f32) -> ColorImage {
+    let mut img = ColorImage::filled(size, bg);
+    for p in prims {
         if let egui::epaint::Primitive::Mesh(mesh) = &p.primitive {
             let tex = texes.get(&mesh.texture_id);
             for tri in mesh.indices.as_chunks::<3>().0 {
                 let v = [&mesh.vertices[tri[0] as usize], &mesh.vertices[tri[1] as usize], &mesh.vertices[tri[2] as usize]];
-                fill_triangle(&mut img, tex, v, p.clip_rect, SS as f32);
+                fill_triangle(&mut img, tex, v, p.clip_rect, k);
             }
         }
     }
-    downscale(&img, SS)
+    img
 }
 
 /// A texture of the frame.
@@ -92,12 +97,24 @@ pub(super) struct Tex {
 
 /// Apply a texture change sent by the frame. `pos` = Some means a PIECE was updated (the font atlas
 /// is appended to as new letters appear), otherwise it was loaded whole.
-fn apply_delta(texes: &mut std::collections::HashMap<egui::TextureId, Tex>, id: egui::TextureId, d: &egui::epaint::ImageDelta) {
+pub(super) fn apply_delta(texes: &mut std::collections::HashMap<egui::TextureId, Tex>, id: egui::TextureId, d: &egui::epaint::ImageDelta) {
     // ONE KIND OF IMAGE SINCE egui 0.35. The font atlas used to arrive as its own `Font` variant, a
     // plane of coverage values, and there was a separate branch to blend it. Now it comes as colour like
     // everything else, and the special case - along with the `Tex::Cover` it fed - is simply gone.
-    match &d.image {
-        egui::ImageData::Color(c) => {
+    let egui::ImageData::Color(c) = &d.image;
+    match (d.pos, texes.get_mut(&id)) {
+        // A PIECE IS WRITTEN INTO THE PICTURE IT BELONGS TO, not in its place: a piece taken for the whole atlas
+        // leaves every letter drawn before it sampling outside the picture
+        (Some([x0, y0]), Some(tex)) => {
+            for y in 0..c.size[1] {
+                for x in 0..c.size[0] {
+                    if x0 + x < tex.size[0] && y0 + y < tex.size[1] {
+                        tex.px[(y0 + y) * tex.size[0] + x0 + x] = c.pixels[y * c.size[0] + x];
+                    }
+                }
+            }
+        }
+        _ => {
             texes.insert(id, Tex { size: c.size, px: c.pixels.clone() });
         }
     }
@@ -192,10 +209,23 @@ fn sample(tex: Option<&Tex>, uv: egui::Pos2) -> (Color32, f32) {
     if uv == egui::epaint::WHITE_UV {
         return (Color32::WHITE, 1.0);
     }
-    let at = |size: [usize; 2]| {
-        let x = (uv.x * size[0] as f32).round().clamp(0.0, size[0] as f32 - 1.0) as usize;
-        let y = (uv.y * size[1] as f32).round().clamp(0.0, size[1] as f32 - 1.0) as usize;
-        y * size[0] + x
+    // BETWEEN FOUR TEXELS, as the card samples a texture, not the nearest one. Measured on a window at a pixel to
+    // a point: the nearest texel dropped the thin strokes of the letters, "File" came out "Fi e" and "Help" "Hel ".
+    let at = |size: [usize; 2], px: &[Color32]| {
+        let (fx, fy) = (uv.x * size[0] as f32 - 0.5, uv.y * size[1] as f32 - 0.5);
+        let (x0, y0) = (fx.floor(), fy.floor());
+        let (tx, ty) = (fx - x0, fy - y0);
+        let texel = |x: f32, y: f32| {
+            let (x, y) = (x.clamp(0.0, size[0] as f32 - 1.0) as usize, y.clamp(0.0, size[1] as f32 - 1.0) as usize);
+            px.get(y * size[0] + x).copied().unwrap_or(Color32::WHITE)
+        };
+        let (a, b, c, d) = (texel(x0, y0), texel(x0 + 1.0, y0), texel(x0, y0 + 1.0), texel(x0 + 1.0, y0 + 1.0));
+        let mix = |g: fn(Color32) -> u8| {
+            let top = g(a) as f32 * (1.0 - tx) + g(b) as f32 * tx;
+            let bottom = g(c) as f32 * (1.0 - tx) + g(d) as f32 * tx;
+            (top * (1.0 - ty) + bottom * ty).round().clamp(0.0, 255.0) as u8
+        };
+        Color32::from_rgba_premultiplied(mix(|c| c.r()), mix(|c| c.g()), mix(|c| c.b()), mix(|c| c.a()))
     };
     // ONE BRANCH SINCE egui 0.35. There used to be a second one for the font atlas, which arrived as
     // coverage values and needed a gamma of 0.55 - the same lightening egui applied when it loaded the
@@ -203,12 +233,13 @@ fn sample(tex: Option<&Tex>, uv: egui::Pos2) -> (Color32, f32) {
     // window capture read "as if under a shade". Now the atlas comes as colour already gamma-corrected,
     // and the correction would double up.
     match tex {
-        Some(Tex { size, px }) => (px.get(at(*size)).copied().unwrap_or(Color32::WHITE), 1.0),
+        Some(Tex { size, px }) => (at(*size, px), 1.0),
         None => (Color32::WHITE, 1.0),
     }
 }
 
 /// Average `k` by `k` pixels. The background is opaque, so there is nothing to premultiply.
+#[cfg(test)]
 fn downscale(img: &ColorImage, k: usize) -> ColorImage {
     let (w, h) = (img.size[0] / k, img.size[1] / k);
     let mut out = ColorImage::filled([w, h], Color32::BLACK);

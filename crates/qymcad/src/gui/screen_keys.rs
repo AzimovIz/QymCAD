@@ -201,7 +201,7 @@ pub(in crate::gui) mod tests {
             }),
             ("section bar", |a, c| {
                 a.side.section.plane = Some(([0.0; 3], [0.0, 0.0, 1.0]));
-                crate::gui::panels_bars::section_bar(&mut a.regen, &mut a.side.section, c);
+                crate::gui::panels_bars::section_bar(&mut qymcad_part::PlaneBarCtx { regen: &mut a.regen, section: &mut a.side.section, mirror: &mut a.params.mirror, picking: &mut a.tools.picking, project: &mut a.project, edits: &mut a.disk.edits, active_path: &a.active_path, status: &mut a.status, m3: &mut a.side.m3 }, c);
             }),
             ("component pattern bar", |a, c| {
                 a.side.carr.mode = 1;
@@ -260,7 +260,8 @@ pub(in crate::gui) mod tests {
                     for t in frame_text(&mut app, *draw) {
                         drawn += 1;
                         *per_surface.entry(name).or_default() += 1;
-                        if keys.contains(&t) {
+                        // a key of the catalogue, or a word shaped as one - a key the catalogue lacks
+                        if keys.contains(&t) || !crate::gui::key_leak::leaks(&t).is_empty() {
                             let msg = format!("{code}: \"{name}\" ({sel_name}) drew the key \"{t}\"");
                             if !leaks.contains(&msg) {
                                 leaks.push(msg);

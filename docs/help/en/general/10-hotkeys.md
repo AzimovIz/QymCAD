@@ -10,10 +10,10 @@ The full list is “Help -> Keyboard shortcuts”. Keys are reassigned there too
 `Delete` removes the selection, `F2` renames the selection in the tree, `Ctrl+Z` and `Ctrl+Y` undo and
 redo, `Ctrl+S` saves.
 
-These seven **cannot be reassigned**: they are the same in every program, and they work as expected here.
+These **cannot be reassigned**: they, and every Ctrl combination, belong to the system.
 
 `Ctrl+Enter` goes one level up: out of a sketch into the part, out of a part into the assembly, out of a
-subassembly into the assembly holding it. The same as the “Done” button at the top, without taking your
+subassembly into the assembly holding it. The same as the **Finish** button at the top, without taking your
 hands off the keyboard. While a command or an array is open it leaves them alone — there `Enter` applies,
 and you leave afterwards.
 
@@ -38,8 +38,8 @@ Assembly: `I` insert, `N` new part, `U` sub-assembly, `J` joint, `D` datum plane
 
 ## When the cursor is in a text field
 
-While the cursor is in a field — the extrusion depth, a name, the search box — **a letter is typed**.
-That is what you want: fields take expressions like `w*2`, where a letter has to stay a letter.
+While the cursor is in a field — the extrusion depth, a name, the search box — **a letter is typed**:
+fields take expressions like `w*2`.
 
 To call a tool straight from a field, **hold Alt**: `Alt+U` instead of `U`.
 
@@ -58,5 +58,5 @@ while the cursor is outside a field — inside one it types a space.
 In the reference window click the key of an action, then press the one you want. If it is already
 taken in the same workbench, the program says which command has it and leaves things as they were.
 
-Reassignments are kept in the settings and travel with the profile. “Reset” restores the factory
-layout.
+Reassignments are kept in the settings and travel with the profile. **reset** next to a key
+returns its default; **Reset every key to the default** returns them all.

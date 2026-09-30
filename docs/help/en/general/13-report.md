@@ -17,7 +17,8 @@ files in and send it.
 
 **The document is not attached by default.** An issue in the tracker is open to everyone, for ever:
 attach the file and anyone will see the model. The tick is yours and the choice is yours. A report
-without the document is accepted too — a picture and a description are often enough.
+without the document is accepted too — a picture and a description are often enough. A document that has never been saved cannot be
+attached — save it first.
 
 ## Two buttons
 
@@ -36,9 +37,9 @@ stays where it is.
 
 ## What to write so it is understood the first time
 
-- **What you did** — step by step: what you opened, what you selected, what you pressed.
-- **What you expected** — one line. "The fillet should have taken."
-- **What came out** — one line too. "Nothing happened, the part stayed as it was."
+- **What happened** — one line. "Nothing happened, the part stayed as it was."
+- **What was expected** — one line too. "The fillet should have taken."
+- **How to repeat it** — step by step: what you opened, what you selected, what you pressed.
 
 The **Build** line from the About window goes on its own; there is no need to copy it by hand.
 

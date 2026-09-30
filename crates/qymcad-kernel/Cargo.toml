@@ -10,6 +10,7 @@ description = "B-rep geometry kernel (OpenCASCADE FFI): STEP import, tessellatio
 
 [dependencies]
 qymcad-core.workspace = true
+qymcad-meshfit.workspace = true # the last step of recognition: the faces found become a body here
 
 [build-dependencies]
 cc = "1"

@@ -22,23 +22,33 @@ fn winding(ccw: bool) -> qymcad_core::feature::Winding {
     }
 }
 
+/// WHAT A SKETCH STANDS ON, in words: a base plane, a work plane by its name, a face by the part it belongs to.
+/// Reported behaviour: the properties said "face of body #37" - a number nobody sees anywhere else.
+pub fn sketch_plane_words(project: &qymcad_core::model::Project, plane: qymcad_core::feature::SketchPlane) -> String {
+    use qymcad_core::feature::{BasePlane, SketchPlane};
+    match plane {
+        SketchPlane::World(BasePlane::XY) => qymcad_i18n::tr("sk-plane-xy"),
+        SketchPlane::World(BasePlane::XZ) => qymcad_i18n::tr("sk-plane-xz"),
+        SketchPlane::World(BasePlane::YZ) => qymcad_i18n::tr("sk-plane-yz"),
+        SketchPlane::Datum(id) => {
+            let name = project.planes.iter().find(|p| p.id == id).map(|p| qymcad_i18n::name(&p.name)).unwrap_or_default();
+            qymcad_i18n::tr1("sk-on-work-plane", "name", &name)
+        }
+        SketchPlane::Face(body, _) => {
+            let part = project.body_owner(body).and_then(|c| project.components.iter().find(|x| x.id == c)).map(|c| qymcad_i18n::name(&c.name)).unwrap_or_default();
+            qymcad_i18n::tr1("sk-on-body-face", "name", &part)
+        }
+    }
+}
+
 pub fn sketch_props(pr: &mut qymcad_ui_state::PropsCtx, ui: &mut egui::Ui, si: usize) {
     let lin = qymcad_ui_state::lineage_of(&*pr.project, Some(pr.project.sketches[si].id));
     if let Some(n) = qymcad_ui_state::props_header(ui, ph::POLYGON, "sk-props", qymcad_ui_state::NameSlot::Editable(pr.project.sketches[si].name.clone()), &lin) {
         pr.project.sketches[si].name = n;
     }
     // the plane the sketch is placed on
-    {
-        use qymcad_core::feature::{BasePlane, SketchPlane};
-        let pl = match pr.project.sketches[si].plane {
-            SketchPlane::World(BasePlane::XY) => qymcad_i18n::tr("sk-plane-xy"),
-            SketchPlane::World(BasePlane::XZ) => qymcad_i18n::tr("sk-plane-xz"),
-            SketchPlane::World(BasePlane::YZ) => qymcad_i18n::tr("sk-plane-yz"),
-            SketchPlane::Datum(id) => qymcad_i18n::tr1("sk-on-work-plane", "id", &id.to_string()),
-            SketchPlane::Face(body, _) => qymcad_i18n::tr1("sk-on-body-face", "b", &body.to_string()),
-        };
-        ui.label(egui::RichText::new(qymcad_i18n::tr1("sk-on", "what", &pl)).weak().small());
-    }
+    let pl = sketch_plane_words(&*pr.project, pr.project.sketches[si].plane);
+    ui.label(egui::RichText::new(qymcad_i18n::tr1("sk-on", "what", &pl)).weak().small());
     let cids = pr.project.sketches[si].contour_ids.clone();
     let src = pr.project.sketches[si].source;
     ui.label(qymcad_i18n::tr1("sk-contours-n", "n", &cids.len().to_string()));
@@ -315,7 +325,7 @@ pub fn parse_num(project: &qymcad_core::model::Project, text: &str) -> Option<f6
     qymcad_core::expr::eval(&t, &project.param_map()).ok().filter(|v| v.is_finite())
 }
 
-/// SET THE VALUE OF DIMENSION `ci`, REFUSING ONE THAT CANNOT EXIST. Says whether it was taken.
+/// SET THE VALUE OF DIMENSION `ci`, REFUSING ONE THAT CANNOT EXIST. On a refusal, the catalogue key of the reason.
 ///
 /// Reported behaviour: "negative dimensions in sketches ... while you are erasing, 100 becomes 1 - and at
 /// that moment the geometry gets thrown into the negative, and since negative dimensions do not exist the
@@ -326,45 +336,58 @@ pub fn parse_num(project: &qymcad_core::model::Project, text: &str) -> Option<f6
 /// (50, 0) - and leaves a residual of 100, an inconsistent system. `DistancePL` already took the magnitude
 /// and kept its own sign, so the rule was known; it was applied to one kind of dimension out of six.
 ///
-/// AN ANGLE IS THE EXCEPTION and stays free: a negative angle means the other way round, and there is no
-/// such thing as the other way round for a length.
+/// AN ANGLE HAS BOUNDS OF ITS OWN: between two lines it is the opening, over 0 and under 180 deg, as in the
+/// professional systems - the side is where the dimension stands, not a sign; through three points it goes round
+/// the vertex and stays under a whole turn.
 ///
 /// WHY REFUSING RATHER THAN ROLLING BACK. The editor does roll a conflicting value back afterwards, and
 /// that saved the sketch here. But a rollback is a cure applied after the damage: it waits for the residual
 /// to rise above a threshold, and a value that quietly solves to a mirrored answer never trips it.
-pub fn set_dim_value(project: &mut Project, si: usize, ci: usize, v: f64) -> bool {
+pub fn set_dim_value(project: &mut Project, si: usize, ci: usize, v: f64) -> Result<(), &'static str> {
     use qymcad_core::model::Constraint as C;
-    let Some(c) = project.sketches.get_mut(si).and_then(|s| s.constraints.get_mut(ci)) else { return false };
+    let Some(c) = project.sketches.get_mut(si).and_then(|s| s.constraints.get_mut(ci)) else { return Err("sk-dim-gone") };
     if !v.is_finite() {
-        return false;
+        return Err("sk-dim-must-be-positive");
     }
     match c {
-        // an angle may be negative: it says which way round
+        // the angle between two lines is their opening, more than 0 and less than 180 deg; which side it is on is
+        // where the dimension stands, not a sign
+        C::AngleLines { .. } if v <= 0.0 || v >= HALF_TURN_DEG => Err("sk-angle-range"),
+        // three points go round the vertex, so the opening may pass 180 deg, but not a whole turn
+        C::Angle { .. } if v <= 0.0 || v >= 2.0 * HALF_TURN_DEG => Err("sk-angle-range-3pt"),
         C::Angle { deg, expr, .. } | C::AngleLines { deg, expr, .. } => {
             *deg = v;
             expr.clear();
-            true
+            Ok(())
         }
-        _ if v <= 0.0 => false,
+        _ if v <= 0.0 => Err("sk-dim-must-be-positive"),
+        // the lengths a sketch takes end where the fields of the bars end: 10 m
+        _ if v > MAX_SKETCH_LENGTH => Err("sk-dim-too-large"),
         // `DistancePL` keeps its own sign - it says which side of the line - and takes the magnitude typed
         C::DistancePL { d, expr, .. } => {
             *d = if *d < 0.0 { -v } else { v };
             expr.clear();
-            true
+            Ok(())
         }
         C::Distance { d, expr, .. } | C::Diameter { d, expr, .. } | C::EdgeDistance { d, expr, .. } => {
             *d = v;
             expr.clear();
-            true
+            Ok(())
         }
         C::ArcLength { len, expr, .. } => {
             *len = v;
             expr.clear();
-            true
+            Ok(())
         }
-        _ => false,
+        _ => Err("sk-dim-gone"),
     }
 }
+
+/// Half a turn, in degrees: the bound of the opening between two lines.
+const HALF_TURN_DEG: f64 = 180.0;
+
+/// The longest length a dimension of a sketch takes, in mm - the same bound the fields of the tool bars keep.
+pub const MAX_SKETCH_LENGTH: f64 = 10000.0;
 
 /// What is under the cursor in a sketch: (kind, Id). 0 is a point, 1 an entity (a line, an arc, a
 /// circle), 2 a primitive (a contour). Ordinary geometry takes priority over construction geometry.
@@ -422,13 +445,8 @@ pub fn sketch_hit(pick: &qymcad_ui_state::PickCtx, rect: Rect, pos: Pos2, si: us
                 }
                 None => f32::INFINITY,
             },
-            EntityKind::Arc { center, a, .. } => match (pt(center), pt(a)) {
-                (Some(c), Some(pa)) => {
-                    let sc = sh.at(c);
-                    let r = ((pa.x - c.x).powi(2) + (pa.y - c.y).powi(2)).sqrt();
-                    let rp = (sh.at(Point2::new(c.x + r, c.y)).x - sc.x).abs();
-                    (sc.distance(pos) - rp).abs()
-                }
+            EntityKind::Arc { center, a, b, ccw } => match (pt(center), pt(a), pt(b)) {
+                (Some(c), Some(pa), Some(pb)) => qymcad_pick::arc_screen_dist(&sh, pos, c, pa, pb, ccw),
                 _ => f32::INFINITY,
             },
             EntityKind::Ellipse { c, ma, mi } => match (pt(c), pt(ma), pt(mi)) {
@@ -505,12 +523,51 @@ pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Conte
         let enter = ctx.input(|i| i.key_pressed(egui::Key::Enter));
         let (mut apply, mut cancel) = (false, false);
         let mut buf = std::mem::take(&mut cc.corner.buf);
+        // A VALUE THAT CANNOT BE TAKEN IS REFUSED IN WORDS, as it is typed and again at Enter, the field staying open with
+        // it: an empty field, a text that is no expression, zero or less, and past the most the corners take - all the
+        // corners of a shape together take less than one of them alone (half the short side of a rectangle).
+        let limit = if pid == 0 {
+            let sel: std::collections::HashSet<Id> = cc.sel_sk.items.iter().filter(|(k, _)| *k == 1).map(|(_, id)| *id).collect();
+            let only = cc.corner.only.clone().or_else(|| (!sel.is_empty()).then_some(sel));
+            cc.project.all_corners_limit(si, only.as_ref())
+        } else {
+            cc.project.corner_limit(si, pid, chamfer)
+        };
+        let judge = |project: &qymcad_core::model::Project, text: &str| -> Option<String> {
+            match qymcad_core::expr::eval(text.trim(), &project.param_map()) {
+                Err(e) => Some(qymcad_i18n::error_words::expr_error_text(&e)),
+                Ok(v) if !v.is_finite() || v <= 1e-6 => Some(qymcad_i18n::tr("cmd-value-zero")),
+                Ok(v) if limit.is_some_and(|l| v >= l * (1.0 - 1e-9)) => Some(qymcad_i18n::tr("sk-fillet-too-big")),
+                Ok(_) => None,
+            }
+        };
         egui::Area::new(egui::Id::new(("cornerinput", si, pid))).fixed_pos(qymcad_ui_state::clamp_popup(at, rect) + egui::vec2(10.0, -10.0)).order(egui::Order::Foreground).show(ctx, |ui| {
             egui::Frame::popup(ui.style()).show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(if chamfer { qymcad_i18n::tr("cmd-leg") } else if pid == 0 { qymcad_i18n::tr("sk-r-all-corners") } else { qymcad_i18n::tr("sk-radius") });
                     let r0 = qymcad_ui_state::focus_edit(ui, &mut buf, 64.0, "", want_focus);
-                    if r0.lost_focus() && enter {
+                    if let Some(why) = judge(&*cc.project, &buf) {
+                        ui.label(egui::RichText::new(ph::WARNING).color(ui.visuals().warn_fg_color)).on_hover_text(why);
+                    }
+                    // ONE VALUE IN TWO PLACES: the radius on the bar and the one at the corner. Typed at the corner it is
+                    // the bar's too; while the corner field is not the one being typed in, it shows the bar's. Two fields
+                    // apart, a radius typed on the bar was not the one Enter applied at the corner - the corner kept the
+                    // radius of the time before.
+                    if r0.has_focus() {
+                        if let Some(v) = parse_num(cc.project, &buf).filter(|v| *v > 1e-6) {
+                            cc.tool_prefs.fillet = v;
+                        }
+                    } else if !enter && !r0.lost_focus() && cc.corner.why.is_none() && parse_num(cc.project, &buf).is_none_or(|v| (v - cc.tool_prefs.fillet).abs() > 1e-12) {
+                        // the bar's value is taken only by a field at rest: in the frame of Enter it would put the old radius
+                        // over the text being applied, and after a refusal over the text refused
+                        buf = qymcad_core::expr::fmt_num(cc.tool_prefs.fillet);
+                    }
+                    // Enter in the field at the corner applies it, or Enter in the radius field of the bar (below)
+                    if enter && (r0.lost_focus() || r0.has_focus()) {
+                        apply = true;
+                    }
+                    // Enter in the radius field of the bar is this Enter too
+                    if qymcad_ui_state::bar_enter_take(ui.ctx()) {
                         apply = true;
                     }
                     if ui.button(ph::CHECK).clicked() {
@@ -520,11 +577,22 @@ pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Conte
                         cancel = true;
                     }
                 });
+                if let Some(why) = cc.corner.why.as_ref() {
+                    ui.label(egui::RichText::new(format!("{} {why}", ph::WARNING)).color(ui.visuals().warn_fg_color));
+                }
             });
         });
         cc.corner.buf = buf;
+        let refused = judge(&*cc.project, &cc.corner.buf); // taken as zero, it closed the field and did nothing
+        if apply && refused.is_some() {
+            *cc.status = format!("{} {}", ph::WARNING, refused.clone().unwrap_or_default());
+            cc.corner.why = refused;
+            apply = false;
+        }
         if apply {
             let r = parse_num(cc.project, &cc.corner.buf.clone()).unwrap_or(0.0);
+            // THE BOUNDARY OF AN OPERATION: one step of undo, named after the tool
+            qymcad_ui_state::begin_edit(&mut *cc.edits, &*cc.project, qymcad_i18n::tr(if chamfer { "tool-chamfer" } else { "tool-fillet" }));
             if r > 1e-6 {
                 cc.tool_prefs.fillet = r; // sticky: the next corner offers the same value
                 let ok_n = if pid == 0 {
@@ -545,10 +613,19 @@ pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Conte
                     *cc.status = if pid == 0 { qymcad_i18n::tr1("sk-filleted-n", "n", &ok_n.to_string()) } else { qymcad_i18n::tr("sk-done") };
                 } else {
                     *cc.status = format!("{} {}", ph::WARNING, qymcad_i18n::tr("sk-fillet-too-big"));
+                    cc.corner.why = Some(qymcad_i18n::tr("sk-fillet-too-big"));
                 }
+                qymcad_ui_state::close_edit(&mut *cc.edits, &*cc.project);
+                if ok_n > 0 {
+                    cc.corner.clear(); // ALL of the input: `only` (a restricted set of corners) otherwise travelled
+                    // into the next call, and "round every corner" silently worked on the old set
+                }
+                // A VALUE THE CORNER CANNOT TAKE keeps the field open with it, the reason said: closed, it left a person
+                // no field to put a smaller one in, and no words beside it.
+            } else {
+                qymcad_ui_state::close_edit(&mut *cc.edits, &*cc.project);
+                cc.corner.clear();
             }
-            cc.corner.clear(); // ALL of the input: `only` (a restricted set of corners) otherwise travelled
-            // into the next call, and "round every corner" silently worked on the old set
         }
         if cancel || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             cc.corner.clear();
@@ -784,6 +861,7 @@ pub fn place_input_popup(ed: qymcad_ui_state::Editing, corner: &mut qymcad_ui_st
         &mut qymcad_ui_state::CornerCtx {
             corner,
             project: &mut *ed.project,
+            edits: &mut *ed.edits,
             sel_sk,
             regen: &mut *ed.regen,
             status: ed.status,
@@ -807,16 +885,37 @@ pub fn place_input_popup(ed: qymcad_ui_state::Editing, corner: &mut qymcad_ui_st
 /// Split out of the event handling for the same reason as everything else: a test must finish the shape
 /// through THE SAME code rather than a copy of its own. Esc cancels a spline - that is a different
 /// action, and substituting it for finishing would mean checking the wrong thing.
-pub fn finish_spline(project: &mut Project, regen: &mut qymcad_ui_state::Rebuilding, sel: qymcad_ui_state::Sel, tool: &mut qymcad_ui_state::SketchTool, view: &mut qymcad_ui_state::View2d) {
-    if let qymcad_ui_state::Sel::Sketch(si) = sel {
-        if tool.pts.len() >= 2 {
-            let pts = std::mem::take(&mut tool.pts);
-            project.add_spline(si, pts, qymcad_core::feature::Ends::Open, qymcad_core::feature::Purpose::of(tool.construction));
-            qymcad_ui_state::invalidate(regen);
-            view.initialized = false;
+pub fn finish_spline(sk: &mut qymcad_ui_state::SketchCtx) {
+    if let qymcad_ui_state::Sel::Sketch(si) = *sk.sel {
+        if sk.tool.pts.len() >= 2 {
+            // THE BOUNDARY OF AN OPERATION: the spline enters the document here, not at its clicks, so this is the
+            // step of undo named after it.
+            qymcad_ui_state::begin_edit(&mut *sk.edits, &*sk.project, qymcad_i18n::tr("sk-spline"));
+            let pts = std::mem::take(&mut sk.tool.pts);
+            sk.project.add_spline(si, pts, qymcad_core::feature::Ends::Open, qymcad_core::feature::Purpose::of(sk.tool.construction));
+            qymcad_ui_state::invalidate(&mut *sk.regen);
+            sk.view.initialized = false;
+            qymcad_ui_state::commit_edit(&mut sk.rebuild());
         }
     }
-    tool.pts.clear();
+    sk.tool.pts.clear();
+}
+
+/// TWO CLICKS ON ONE PLACE, as the drawing tools see them: closer than the tolerance that welds the points of a
+/// drawing, about 8 px on screen and never more than 0.4 mm. The two clicks of a double click land there - the
+/// snap puts the second one exactly onto the node the first one made.
+fn same_place(sk: &qymcad_ui_state::SketchCtx, a: Point2, b: Point2) -> bool {
+    (a.x - b.x).hypot(a.y - b.y) <= (8.0 / sk.view.scale as f64).clamp(1e-4, 0.4)
+}
+
+/// Esc ON A CONSTRUCTION UNDER WAY. A spline has no last click - it is finished by a double click or by Esc, as
+/// its hint says - so Esc keeps the nodes clicked so far as a spline. Any other shape is broken off.
+pub fn end_construction(sk: &mut qymcad_ui_state::SketchCtx) {
+    if sk.armed.draw_kind() == 9 {
+        finish_spline(sk);
+    } else {
+        sk.tool.pts.clear();
+    }
 }
 
 /// A CLICK IN A SKETCH: what it is right now - a step of a drawing tool, the placing of a dimension, or
@@ -833,11 +932,15 @@ pub fn finish_spline(project: &mut Project, regen: &mut qymcad_ui_state::Rebuild
 /// it would have been checking its own fake.
 pub fn begin_point_drag(drag: &mut qymcad_ui_state::Dragging, project: &Project, set: &qymcad_ui_state::Settings, sheet: qymcad_ui_state::Sheet, si: usize, pp: Pos2, skip: &std::collections::HashSet<Id>) -> bool {
     let qymcad_ui_state::Sheet { view, rect } = sheet;
-    let driven = project.sketches[si].projected_points();
+    // WHAT THE SKETCH HOLDS IS NOT TAKEN INTO HAND AT ALL: the frame, the driven projections and the points
+    // the person pinned. A pin carries no coordinates - it holds the point where it IS - so a pinned point
+    // dragged by the mouse used to travel with the cursor and the pin travelled with it, silently. Refusing
+    // to pick it up says the same thing honestly: it does not move.
+    let held = project.sketches[si].held_points();
     let mut best: Option<(f32, usize)> = None;
     for pi in 0..project.sketches[si].points.len() {
         let p = project.sketches[si].points[pi];
-        if skip.contains(&p.id) || driven.contains(&p.id) {
+        if skip.contains(&p.id) || held.contains(&p.id) {
             continue;
         }
         let sp = (qymcad_ui_state::Sheet { view, rect }).at(Point2::new(p.x, p.y));
@@ -874,23 +977,41 @@ pub fn make_dim_driven(project: &mut Project, regen: &mut qymcad_ui_state::Rebui
     }
 }
 
+/// The largest turn a rotation takes, in degrees: ten whole turns.
+const TEN_TURNS: f64 = 3600.0;
+
+/// THE ANGLE OF A TURN as typed, or in words why it cannot be taken: not a number, no turn at all, or past ten whole
+/// turns.
+fn angle_of(project: &Project, text: &str) -> Result<f64, String> {
+    match parse_num(project, text) {
+        None => Err(qymcad_i18n::tr("sk-angle-not-number")),
+        Some(v) if v.abs() < 1e-9 => Err(qymcad_i18n::tr("cmd-value-zero")),
+        Some(v) if v.abs() > TEN_TURNS => Err(qymcad_i18n::tr2("cmd-value-out-of-range", "lo", &(-TEN_TURNS).to_string(), "hi", &TEN_TURNS.to_string())),
+        Some(v) => Ok(v),
+    }
+}
+
 /// The ANGLE popup for the rotate tool (`move_op == 3`), placed at the picked centre. Enter or the tick
 /// applies `rotate_entities`; editing the value gives a live preview (the ghost in `draw_move_preview`).
-pub fn sketch_rotate_popup(ed: qymcad_ui_state::Editing, armed: &mut qymcad_ui_state::Armed, rot: &mut qymcad_ui_state::RotInput, sel_sk: &qymcad_ui_state::SketchSelection, tool: &mut qymcad_ui_state::SketchTool, ctx: &egui::Context, rect: Rect) {
-    if armed.move_op() != 3 {
+pub fn sketch_rotate_popup(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context, rect: Rect) {
+    if sk.armed.move_op() != 3 {
         return;
     }
-    let qymcad_ui_state::Sel::Sketch(si) = *ed.sel else { return };
-    let Some(base) = tool.move_base else { return };
-    let eids: Vec<Id> = sel_sk.items.iter().filter(|(k, _)| *k == 1).map(|(_, id)| *id).collect();
+    let qymcad_ui_state::Sel::Sketch(si) = *sk.sel else { return };
+    let Some(base) = sk.tool.move_base else { return };
+    let eids: Vec<Id> = sk.sel_sk.items.iter().filter(|(k, _)| *k == 1).map(|(_, id)| *id).collect();
     if eids.is_empty() {
         return;
     }
-    let at = (qymcad_ui_state::Sheet { view: *ed.view, rect: rect }).at(base);
+    let rot = &mut *sk.rot;
+    let at = (qymcad_ui_state::Sheet { view: *sk.view, rect: rect }).at(base);
     let want_focus = std::mem::take(&mut rot.focus);
     let enter = ctx.input(|i| i.key_pressed(egui::Key::Enter));
     let (mut chg, mut apply, mut got_focus) = (false, false, false);
     let mut buf = std::mem::take(&mut rot.buf);
+    // AN ANGLE THAT CANNOT BE TAKEN is refused where it is typed: the reason on the mark beside the field, the tool
+    // and what was typed staying. It used to be applied as 0 or taken away with the popup.
+    let checked = angle_of(sk.project, &buf);
     egui::Area::new(egui::Id::new(("rotinput", si))).fixed_pos(qymcad_ui_state::clamp_popup(at, rect) + egui::vec2(12.0, -12.0)).order(egui::Order::Foreground).show(ctx, |ui| {
         egui::Frame::popup(ui.style()).show(ui, |ui| {
             ui.horizontal(|ui| {
@@ -900,6 +1021,9 @@ pub fn sketch_rotate_popup(ed: qymcad_ui_state::Editing, armed: &mut qymcad_ui_s
                 got_focus |= r.has_focus();
                 if r.lost_focus() && enter {
                     apply = true;
+                }
+                if let Err(msg) = &checked {
+                    ui.colored_label(sk.scheme.pal.error_mild(), ph::X).on_hover_text(msg);
                 }
                 if ui.button(ph::CHECK).on_hover_text(qymcad_i18n::tr("sk-apply-enter")).clicked() {
                     apply = true;
@@ -912,16 +1036,58 @@ pub fn sketch_rotate_popup(ed: qymcad_ui_state::Editing, armed: &mut qymcad_ui_s
         rot.focus = false;
     }
     if chg || want_focus {
-        rot.angle = parse_num(ed.project, &rot.buf.clone()).unwrap_or(0.0); // the live preview
+        rot.angle = parse_num(sk.project, &rot.buf.clone()).unwrap_or(0.0); // the live preview
+    }
+    if let (true, Err(msg)) = (apply, angle_of(sk.project, &sk.rot.buf.clone())) {
+        *sk.status = msg;
+        sk.rot.focus = true;
+        return;
     }
     if apply {
-        if let Some(v) = parse_num(ed.project, &rot.buf.clone()) {
-            ed.project.rotate_entities(si, &eids, base.x, base.y, v);
-            *ed.status = qymcad_i18n::tr1("sk-rotated-by", "a", &v.to_string());
+        if let Some(v) = parse_num(sk.project, &sk.rot.buf.clone()) {
+            // THE BOUNDARY OF AN OPERATION: applying the angle is the act, so it makes one step of undo named
+            // after the tool, as the target click of a move does.
+            qymcad_ui_state::begin_edit(&mut *sk.edits, &*sk.project, qymcad_i18n::tr("tool-rotate"));
+            // WHERE A FREE TURN WOULD HAVE PUT THE POINTS, and where the constraints let them go.
+            //
+            // A rectangle carries two horizontal and two vertical constraints, so it CANNOT turn: the solver
+            // brings it back to upright, merely relocated - measured, a 90 degree turn about zero left the
+            // corner at (-5, 5) instead of (0, 0). Saying "Rotated by 90 deg" over that is the same lie the
+            // move tool used to tell, and it is told out loud here instead.
+            let ids = sk.project.entity_point_ids(si, &eids);
+            let at = |p: &qymcad_core::model::Project| -> Vec<(f64, f64)> {
+                p.sketches.get(si).map(|s| ids.iter().filter_map(|id| s.points.iter().find(|q| q.id == *id).map(|q| (q.x, q.y))).collect()).unwrap_or_default()
+            };
+            let before = at(sk.project);
+            let (sn, cs) = (v.to_radians().sin(), v.to_radians().cos());
+            let want: Vec<(f64, f64)> = before
+                .iter()
+                .map(|(x, y)| {
+                    let (dx, dy) = (x - base.x, y - base.y);
+                    (base.x + dx * cs - dy * sn, base.y + dx * sn + dy * cs)
+                })
+                .collect();
+            sk.project.rotate_entities(si, &eids, base.x, base.y, v);
+            let after = at(sk.project);
+            let mean = |a: &[(f64, f64)], b: &[(f64, f64)]| -> f64 {
+                if a.len() != b.len() || a.is_empty() {
+                    return 0.0;
+                }
+                a.iter().zip(b).map(|((x0, y0), (x1, y1))| (x1 - x0).hypot(y1 - y0)).sum::<f64>() / a.len() as f64
+            };
+            let asked = mean(&before, &want); // how far the turn alone would have carried the points
+            let off = mean(&after, &want); // how far the result stands from that
+            // a tenth of what was asked, and at least a hundredth of a millimetre: below that it did turn
+            *sk.status = if asked > 1e-9 && off > (asked * 0.1).max(1e-2) {
+                format!("{} {}", ph::WARNING, qymcad_i18n::tr("sk-turn-held"))
+            } else {
+                qymcad_i18n::tr1("sk-rotated-by", "a", &v.to_string())
+            };
+            qymcad_ui_state::commit_edit(&mut sk.rebuild());
         }
-        *armed = qymcad_ui_state::Armed::None;
-        tool.move_base = None;
-        qymcad_ui_state::invalidate(ed.regen);
+        *sk.armed = qymcad_ui_state::Armed::None;
+        sk.tool.move_base = None;
+        qymcad_ui_state::invalidate(&mut *sk.regen);
     }
 }
 
@@ -995,10 +1161,48 @@ pub fn try_constraint_inner(project: &mut Project, regen: &mut qymcad_ui_state::
     if new.is_empty() {
         return false;
     }
+    let (had, old_pts): (usize, Vec<(f64, f64)>) = (project.sketches[si].constraints.len(), project.sketches[si].points.iter().map(|p| (p.x, p.y)).collect());
+    // EQUAL ON TWO CIRCLES THAT EACH CARRY THEIR RADIUS: the second one's radius becomes a reference and follows the
+    // first - one radius, not a contradiction. Reported behaviour: the circle tool gives each circle its dimension, and
+    // Equal on two of them left the sketch over-defined (residual 2.89).
+    let referenced: Vec<usize> = new
+        .iter()
+        .filter_map(|c| match c {
+            Constraint::EqualRadius { c1, c2 } => {
+                let driving = |cc: Id| project.sketches[si].constraints.iter().position(|k| matches!(k, Constraint::Diameter { c, driven: false, .. } if *c == cc));
+                driving(*c1).and(driving(*c2))
+            }
+            _ => None,
+        })
+        .collect();
+    for &k in &referenced {
+        if let Constraint::Diameter { driven, .. } = &mut project.sketches[si].constraints[k] {
+            *driven = true;
+        }
+    }
     project.sketches[si].constraints.extend(new);
     let resid = project.solve_sketch(si);
     sel_sk.clear(); // the selection and whatever was waiting for it
     qymcad_ui_state::invalidate(regen);
+    // A CONSTRAINT THE SKETCH CANNOT MEET IS NOT KEPT, as a dimension that does not fit is not: parallel on two lines an
+    // angle of 45 deg holds apart left both in the sketch, unsolved (residual 0.79), with nothing marked. It is taken
+    // back, the points return where they were, and the status line says why. 1e-2 mm is the threshold the dimension
+    // editor rolls back at: above the solver's noise, below any real conflict.
+    if resid > 1e-2 {
+        project.sketches[si].constraints.truncate(had);
+        for &k in &referenced {
+            if let Constraint::Diameter { driven, .. } = &mut project.sketches[si].constraints[k] {
+                *driven = false; // taken back with the constraint
+            }
+        }
+        for (p, (x, y)) in project.sketches[si].points.iter_mut().zip(old_pts) {
+            p.x = x;
+            p.y = y;
+        }
+        project.solve_sketch(si);
+        *status = qymcad_i18n::tr1("sk-constraint-conflict", "r", &qymcad_i18n::num(resid, 2));
+        return true;
+    }
     *status = if resid < 1e-3 { qymcad_i18n::tr("sk-constraint-added") } else { qymcad_i18n::tr1("sk-constraint-added-resid", "r", &qymcad_i18n::num(resid, 2)) };
     true
 }
@@ -1176,8 +1380,9 @@ pub fn dim_at(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos2, si: us
     let cs = sk.project.sketches.get(si)?.constraints.clone();
     let mut best: Option<(f32, usize)> = None;
     for ci in 0..cs.len() {
-        // the distance to the caption
-        let mut d = dim_label_pos(sk, rect, si, ci).map(|p| p.distance(pos)).unwrap_or(f32::INFINITY);
+        // the distance to the caption: taken anywhere on its text, however large the settings make it and however
+        // it is turned
+        let mut d = dim_label_box(sk, rect, si, ci).map(|(at, size, angle)| qymcad_ui_state::label_reach_turned(at, size, angle, pos)).unwrap_or(f32::INFINITY);
         // ...and to the dimension line itself (a click on the line picks it too)
         if let Some(Constraint::Distance { a, b, off, .. }) = cs.get(ci).cloned() {
             if let (Some(pa), Some(pb)) = (qymcad_ui_state::sketch_pt(sk.project, si, a), qymcad_ui_state::sketch_pt(sk.project, si, b)) {
@@ -1197,89 +1402,21 @@ pub fn dim_at(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos2, si: us
 
 /// The screen position of a dimension caption (for editing in place and for hit testing).
 pub fn dim_label_pos(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, si: usize, ci: usize) -> Option<Pos2> {
+    dim_label_box(sk, rect, si, ci).map(|(at, _, _)| at)
+}
+
+/// WHERE THE TEXT OF A DIMENSION STANDS AND HOW MUCH ROOM IT TAKES - its middle, its size and its turn - from the same
+/// geometry the drawing uses, so the text is taken where the eye sees it.
+pub fn dim_label_box(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, si: usize, ci: usize) -> Option<(Pos2, egui::Vec2, f32)> {
     let sh = qymcad_ui_state::Sheet { view: *sk.view, rect: rect };
     use qymcad_core::model::Constraint;
-    let s = sk.project.sketches.get(si)?;
-    // the caption offset `off` is stored in WORLD units and converted to pixels through the scale
-    // (otherwise the caption does not scale with the geometry on zoom and drifts off screen). Angles (the
-    // diameter) are left alone.
-    let sc = sk.view.scale;
-    match *s.constraints.get(ci)? {
-        Constraint::Distance { a, b, off, axis, .. } => {
-            let (pa, pb) = (qymcad_ui_state::sketch_pt(sk.project, si, a)?, qymcad_ui_state::sketch_pt(sk.project, si, b)?);
-            let (sa, sb) = (sh.at(pa), sh.at(pb));
-            let (la, lb, perp) = match axis {
-                1 => {
-                    let y = (sa.y + sb.y) / 2.0 + off as f32 * sc;
-                    (Pos2::new(sa.x, y), Pos2::new(sb.x, y), egui::vec2(0.0, 1.0))
-                }
-                2 => {
-                    let x = (sa.x + sb.x) / 2.0 + off as f32 * sc;
-                    (Pos2::new(x, sa.y), Pos2::new(x, sb.y), egui::vec2(1.0, 0.0))
-                }
-                _ => {
-                    let dir = (sb - sa).normalized();
-                    let perp = egui::vec2(-dir.y, dir.x);
-                    let o = 16.0 + off as f32 * sc;
-                    (sa + perp * o, sb + perp * o, perp)
-                }
-            };
-            Some(((la.to_vec2() + lb.to_vec2()) / 2.0 + perp * 8.0).to_pos2())
-        }
-        Constraint::DistancePL { p, a, b, off, .. } => {
-            let (pp, pa, _pb) = (qymcad_ui_state::sketch_pt(sk.project, si, p)?, qymcad_ui_state::sketch_pt(sk.project, si, a)?, qymcad_ui_state::sketch_pt(sk.project, si, b)?);
-            let (sp, sa) = (sh.at(pp), sh.at(pa));
-            let ab = qymcad_ui_state::line_screen_dir(sk.project, sk.view, si, a, b, rect)?;
-            let foot = sa + ab * (sp - sa).dot(ab);
-            let perp = (sp - foot).normalized();
-            let o = off as f32 * sc;
-            let (lp, lf) = (sp + ab * o, foot + ab * o); // the leader runs along the line (see the drawing and the hit test)
-            Some(((lp.to_vec2() + lf.to_vec2()) / 2.0 + perp * 8.0).to_pos2())
-        }
-        Constraint::EdgeDistance { c1, c2, m1, m2, off, .. } => {
-            let (p1, p2) = (qymcad_ui_state::sketch_pt(sk.project, si, c1)?, qymcad_ui_state::sketch_pt(sk.project, si, c2)?);
-            let r_of = |cid: Id| -> f64 {
-                s.entities.iter().find_map(|e| match e.kind {
-                    qymcad_core::model::EntityKind::Circle { center, r } if center == cid => Some(r),
-                    qymcad_core::model::EntityKind::Arc { center, a, .. } if center == cid => qymcad_ui_state::sketch_pt(sk.project, si, a).zip(qymcad_ui_state::sketch_pt(sk.project, si, center)).map(|(pa, pc)| ((pa.x - pc.x).powi(2) + (pa.y - pc.y).powi(2)).sqrt()),
-                    _ => None,
-                }).unwrap_or(0.0)
-            };
-            let (r1, r2) = (r_of(c1), r_of(c2));
-            let len = ((p2.x - p1.x).powi(2) + (p2.y - p1.y).powi(2)).sqrt().max(1e-9);
-            let (ux, uy) = ((p2.x - p1.x) / len, (p2.y - p1.y) / len);
-            let e1 = Point2::new(p1.x - m1 as f64 * r1 * ux, p1.y - m1 as f64 * r1 * uy);
-            let e2 = Point2::new(p2.x + m2 as f64 * r2 * ux, p2.y + m2 as f64 * r2 * uy);
-            let (sa, sb) = (sh.at(e1), sh.at(e2));
-            let dir = (sb - sa).normalized();
-            let perp = egui::vec2(-dir.y, dir.x);
-            let o = 16.0 + off as f32 * sc;
-            Some((((sa + perp * o).to_vec2() + (sb + perp * o).to_vec2()) / 2.0 + perp * 8.0).to_pos2())
-        }
-        Constraint::Angle { a, b, c, .. } => {
-            let (pa, pb, pc) = (qymcad_ui_state::sketch_pt(sk.project, si, a)?, qymcad_ui_state::sketch_pt(sk.project, si, b)?, qymcad_ui_state::sketch_pt(sk.project, si, c)?);
-            let (sa, sb, sc) = (sh.at(pa), sh.at(pb), sh.at(pc));
-            let bis = ((sa - sb).normalized() + (sc - sb).normalized()).normalized();
-            Some(sb + bis * 40.0)
-        }
-        Constraint::Diameter { c, off, .. } => {
-            let cp = qymcad_ui_state::sketch_pt(sk.project, si, c)?;
-            let r = qymcad_ui_state::center_radius(&qymcad_ui_state::DrawCtx { cam: sk.cam, set: sk.set, scheme: sk.scheme, project: sk.project, active_path: sk.active_path }, si, c)?; // a circle OR an arc
-            let sc = sh.at(cp);
-            // the diameter or radius label is placed AROUND THE CIRCLE - `off` holds the angle of the
-            // leader in radians, in screen coordinates. By default (off = 0) it goes horizontally to the
-            // right, but it can be dragged to any angle about the centre.
-            let r_px = (sh.at(Point2::new(cp.x + r, cp.y)) - sc).length();
-            let ang = off as f32;
-            Some(sc + egui::vec2(ang.cos(), ang.sin()) * (r_px + 14.0))
-        }
-        Constraint::AngleLines { a, b, c, d, .. } => {
-            let (pa, pb, pc, pd) = (qymcad_ui_state::sketch_pt(sk.project, si, a)?, qymcad_ui_state::sketch_pt(sk.project, si, b)?, qymcad_ui_state::sketch_pt(sk.project, si, c)?, qymcad_ui_state::sketch_pt(sk.project, si, d)?);
-            let (sa, sb, sc, sd) = (sh.at(pa), sh.at(pb), sh.at(pc), sh.at(pd));
-            let ix = qymcad_ui_state::lines_intersect(sa, sb, sc, sd).unwrap_or(((sb.to_vec2() + sd.to_vec2()) / 2.0).to_pos2());
-            let bis = ((sb - ix).normalized() + (sd - ix).normalized()).normalized();
-            Some(ix + bis * 40.0)
-        }
+    let c = sk.project.sketches.get(si)?.constraints.get(ci)?.clone();
+    let size = qymcad_ui_state::dim_text_size(&qymcad_ui_state::dim_caption(sk.project, si, &c, sk.set)?, sk.set.dim_font);
+    match c {
+        Constraint::Distance { .. } | Constraint::DistancePL { .. } | Constraint::EdgeDistance { .. } => qymcad_ui_state::linear_text_of(sk.project, si, ci, &sh, sk.set).map(|(place, size)| (place.center, size, place.angle)),
+        // both angles: where the drawing puts the label, from the one geometry of an angular dimension
+        Constraint::Angle { .. } | Constraint::AngleLines { .. } => qymcad_ui_state::angle_dim_geom(sk.project, si, ci, &sh, sk.set).map(|g| (g.label, size, 0.0)),
+        Constraint::Diameter { .. } => qymcad_ui_state::radial_dim_geom(sk.project, si, ci, &sh, sk.set).map(|g| (g.text, g.size, g.angle)),
         // an arc length: the caption sits at the middle of the arc, matching how it is drawn - otherwise
         // `dim_at` does not find it, and the dimension can be neither picked, nor edited, nor dragged.
         Constraint::ArcLength { c, a, b, off, .. } => {
@@ -1288,7 +1425,7 @@ pub fn dim_label_pos(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, si: usize,
             let mid = Point2::new((pa.x + pb.x) / 2.0 - cp.x, (pa.y + pb.y) / 2.0 - cp.y);
             let ml = (mid.x * mid.x + mid.y * mid.y).sqrt().max(1e-9);
             let ed = sh.at(Point2::new(cp.x + mid.x / ml * r, cp.y + mid.y / ml * r));
-            Some((ed.to_vec2() + egui::vec2(10.0, -8.0 + off as f32 * sc)).to_pos2())
+            Some(((ed.to_vec2() + egui::vec2(10.0, -8.0 + off as f32 * sk.view.scale)).to_pos2(), size, 0.0))
         }
         _ => None,
     }
@@ -1316,6 +1453,7 @@ pub fn constraint_button(sk: &mut qymcad_ui_state::SketchCtx, code: u8) {
     *sk.armed = qymcad_ui_state::Armed::None;
     sk.sel_sk.constraint = None;
     sk.sel_sk.modify = None;
+    let picked = !sk.sel_sk.items.is_empty();
     if try_constraint(sk, code) {
         sk.sel_sk.constraint = None;
     } else {
@@ -1324,7 +1462,39 @@ pub fn constraint_button(sk: &mut qymcad_ui_state::SketchCtx, code: u8) {
         // tie the wrong things together.
         sk.sel_sk.clear(); // the selection and whatever was waiting for it
         sk.sel_sk.constraint = Some(code);
-        *sk.status = qymcad_i18n::tr("sk-pick-for-constraint");
+        // WHAT WAS PICKED DOES NOT TAKE IT, and that is said: two points are not parallel, two lines have no centre.
+        // Asking for the geometry again as if nothing had been picked left the person guessing what was wrong.
+        *sk.status = if picked {
+            qymcad_i18n::tr1("sk-constraint-not-for-pick", "takes", &qymcad_i18n::tr(constraint_hint_key(code)))
+        } else {
+            qymcad_i18n::tr("sk-pick-for-constraint")
+        };
+    }
+}
+
+/// The words of a constraint's button - its name and what it ties - by its code.
+pub fn constraint_hint_key(code: u8) -> &'static str {
+    match code {
+        0 => "con-coincident-hint",
+        1 => "con-horizontal-hint",
+        2 => "con-vertical-hint",
+        3 => "con-parallel-hint",
+        4 => "con-perpendicular-hint",
+        5 => "con-equal",
+        6 => "con-fix",
+        7 => "con-collinear-hint",
+        8 => "con-concentric-hint",
+        9 => "con-tangent-hint",
+        10 => "con-symmetric-hint",
+        _ => "con-midpoint-hint",
+    }
+}
+
+/// Put the label of angular dimension `ci` where `angle_dim_follow` says: the radius of its arc and its share of the angle.
+fn put_angle_label(project: &mut Project, si: usize, ci: usize, (r, t): (f64, Option<f64>)) {
+    use qymcad_core::model::Constraint;
+    if let Some(Constraint::Angle { off, at, .. } | Constraint::AngleLines { off, at, .. }) = project.sketches.get_mut(si).and_then(|s| s.constraints.get_mut(ci)) {
+        (*off, *at) = (r, t);
     }
 }
 
@@ -1386,6 +1556,13 @@ pub fn update_placing_dim(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect) {
                 if let Some(Constraint::DistancePL { off: o, .. }) = sk.project.sketches[si].constraints.get_mut(ci) {
                     *o = off;
                 }
+            }
+        }
+        // THE LABEL OF AN ANGLE FOLLOWS THE CURSOR - the radius of its arc and its place along it - and the next click
+        // places it and opens its value, as a length's does
+        Some(Constraint::AngleLines { .. }) | Some(Constraint::Angle { .. }) => {
+            if let Some(placed) = qymcad_ui_state::angle_dim_follow(sk.project, si, ci, &sh, sk.set, sc) {
+                put_angle_label(sk.project, si, ci, placed);
             }
         }
         _ => {
@@ -1464,7 +1641,7 @@ pub fn dim_click(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos2) -> 
     // THE BOUNDARY OF AN OPERATION: placing a dimension is a deliberate act and makes one undo step.
     qymcad_ui_state::begin_edit(&mut *sk.edits, &*sk.project, qymcad_i18n::tr("sk-dim"));
     let r = dim_click_inner(sk, rect, pos);
-    qymcad_ui_state::commit_edit(&mut sk.rebuild());
+    qymcad_ui_state::commit_edit_if_changed(&mut sk.rebuild()); // picking the first line changes nothing yet
     r
 }
 
@@ -1506,12 +1683,15 @@ pub fn dim_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos
                 sk.project.sketches[si].constraints.remove(ci); // remove the provisional length
                 sk.place.dim = None;
                 sk.dim.first = None;
+                sk.dim.before = None; // a distance to the second reference is made instead
                 make_between_dim(sk, si, qymcad_ui_state::DimRef::Line(la, lb), r2);
                 return true;
             }
         }
         sk.place.dim = None;
         sk.dim.first = None;
+        sk.dim.before = None; // placed: the length is the person's now
+        sk.dim.fresh = Some((ci, sk.edits.undo.len()));
         *sk.inline = qymcad_ui_state::InlineEdit::Dim(ci); // place it and go straight into typing the value
         sk.dim.focus = true;
         *sk.status = qymcad_i18n::tr("sk-dim-placed");
@@ -1554,6 +1734,8 @@ pub fn dim_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos
     // (point to line, line to a parallel line, or to an axis). A single line and nothing else is a
     // length.
     if sk.armed.dim_kind() == 1 {
+        // the sketch before this pick: resolving it may make an axis of the sketch on demand, and Esc takes that back too
+        let before = sk.dim.first.is_none().then(|| Box::new(sk.project.sketches[si].clone()));
         let Some(r) = resolve_dim_ref(sk, rect, pos, si) else {
             *sk.status = if sk.dim.first.is_some() { qymcad_i18n::tr("sk-need-second") } else { qymcad_i18n::tr("sk-dim-pick-hint") };
             return true;
@@ -1571,8 +1753,9 @@ pub fn dim_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos
                     // the provisional LENGTH of the line, following the cursor; a second click may switch it
                     // to a distance
                     if let (Some(pa), Some(pb)) = (qymcad_ui_state::sketch_pt(&*sk.project, si, a), qymcad_ui_state::sketch_pt(&*sk.project, si, b)) {
+                        sk.dim.before = before;
                         let d = ((pa.x - pb.x).powi(2) + (pa.y - pb.y).powi(2)).sqrt();
-                        sk.project.sketches[si].constraints.push(Constraint::Distance { a, b, d, off: 0.0, expr: String::new(), driven: false, axis: 0 });
+                        sk.project.sketches[si].constraints.push(Constraint::Distance { a, b, d, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
                         let ci = sk.project.sketches[si].constraints.len() - 1;
                         let (_, conflict) = qymcad_ui_state::finish_dim(&mut *sk.project, &mut *sk.regen, si, ci);
                         sk.place.dim = Some(ci);
@@ -1631,9 +1814,10 @@ pub fn dim_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos
             let (ux, uy) = (pa.x - pb.x, pa.y - pb.y);
             let (vx, vy) = (pc.x - pb.x, pc.y - pb.y);
             let deg = (ux * vy - uy * vx).atan2(ux * vx + uy * vy).abs().to_degrees();
-            sk.project.sketches[si].constraints.push(Constraint::Angle { a, b, c, deg, expr: String::new(), driven: false });
+            sk.project.sketches[si].constraints.push(Constraint::Angle { a, b, c, deg, expr: String::new(), driven: false, off: 0.0, at: None });
             let ci = sk.project.sketches[si].constraints.len() - 1;
             let (redundant, conflict) = qymcad_ui_state::finish_dim(&mut *sk.project, &mut *sk.regen, si, ci);
+            sk.place.dim = Some(ci); // the next click places it and opens its value
             *sk.status = if conflict {
                 format!("{} {}", ph::WARNING, qymcad_i18n::tr("sk-angle-conflict"))
             } else if redundant {
@@ -1646,7 +1830,59 @@ pub fn dim_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos
     true
 }
 
+/// A PROVISIONAL LENGTH LEFT BEHIND by taking another tool (every way of taking one lets go of the dimension without
+/// the document in hand): the sketch it was put on comes back as it was before the pick, as on Esc.
+fn drop_abandoned_dim(sk: &mut qymcad_ui_state::SketchCtx) {
+    if sk.place.dim.is_some() || sk.dim.first.is_some() {
+        return;
+    }
+    let Some(before) = sk.dim.before.take() else { return };
+    if let Some(si) = sk.project.sketches.iter().position(|s| s.id == before.id) {
+        sk.project.sketches[si] = *before;
+        sk.project.solve_sketch(si);
+        qymcad_ui_state::invalidate(sk.regen);
+    }
+}
+
+/// Esc WHILE A DIMENSION IS BEING PLACED: a provisional length on a picked line (the second reference still awaited)
+/// goes without a trace - the sketch as it was before the pick comes back whole, the axis the length made on demand
+/// too; a dimension being moved stays where it is. Reported behaviour: after the pick and Esc a click where the
+/// dimension would have stood still placed one, and the sketch kept a fixed point it did not have.
+pub fn cancel_placing_dim(sk: &mut qymcad_ui_state::SketchCtx) {
+    if let (Some(_), qymcad_ui_state::Sel::Sketch(si), Some(before)) = (sk.dim.first, *sk.sel, sk.dim.before.take()) {
+        if let Some(s) = sk.project.sketches.get_mut(si) {
+            *s = *before;
+            sk.project.solve_sketch(si);
+            qymcad_ui_state::invalidate(sk.regen);
+        }
+    }
+    sk.dim.before = None;
+    sk.place.dim = None;
+    sk.dim.first = None;
+}
+
 /// A click in the sketch workbench: pick the nearest point or entity (Shift adds to the selection).
+/// WHICH DRAWING TOOL A HOTKEY ACTION NAMES, or `None` when it names something else.
+///
+/// The table belongs to the sketch, not to the window: the window's job is to hear the key and to take the
+/// tool, and it had eleven lines of "this action means that number" written into it - one per tool, growing
+/// by one with every tool added.
+pub fn tool_for_action(action: &str) -> Option<u8> {
+    Some(match action {
+        "sketch.line" => 1,
+        "sketch.rect" => 2,
+        "sketch.circle" => 3,
+        "sketch.arc" => 4,
+        "sketch.point" => 5,
+        "sketch.polygon" => 6,
+        "sketch.slot" => 7,
+        "sketch.ellipse" => 8,
+        "sketch.spline" => 9,
+        "sketch.text" => 11,
+        _ => return None,
+    })
+}
+
 pub fn sketch_select_click(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos2, additive: bool) {
     let sh = qymcad_ui_state::Sheet { view: *sk.view, rect: rect };
     let qymcad_ui_state::Sel::Sketch(si) = *sk.sel else { return };
@@ -1814,8 +2050,8 @@ pub fn dim_editor(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context, rect
             // learnt this; the field one over, the radius and diameter of a circle, still rebuilt the
             // circle on every keystroke, so erasing "100" really did build it at 10 and at 1 on the way.
             //
-            // The value is evaluated when an expression is typed, and stored as a number - an arc has no
-            // parametric dimension constraint - just as any value set by dragging is.
+            // The value is evaluated when an expression is typed, and stored in the arc's radius dimension - put
+            // there by the tool when the arc had none.
             let _ = buf_changed; // the model is not touched while the text is being typed - see below
             if close {
                 match parse_num(&*sk.project, &buf) {
@@ -1837,7 +2073,7 @@ pub fn dim_editor(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context, rect
                     // a fillet arc has its radius edited through the dimension constraint (parametrically);
                     // failing that, the fillet is recomputed geometrically; failing that, it is a plain arc
                     if !sk.project.set_fillet_radius_dim(si, eid, rr) && !sk.project.set_fillet_radius(si, eid, rr) {
-                        sk.project.set_arc_radius(si, eid, rr);
+                        sk.project.put_arc_radius_dim(si, eid, rr); // a plain arc gets its dimension, as a circle has
                     }
                 } else {
                     if let Some(e) = sk.project.sketches.get_mut(si).and_then(|s| s.entities.iter_mut().find(|e| e.id == eid)) {
@@ -1845,7 +2081,11 @@ pub fn dim_editor(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context, rect
                             *r = rr;
                         }
                     }
-                    sk.project.regen_sketch(si);
+                    // THE SOLVER, not a rebuild. The radius of a circle is a variable of the solve (it is
+                    // keyed by the centre), so a radius written straight into the entity is a value the
+                    // solver has not seen: a tangency or an equality holding this circle would go on being
+                    // drawn as satisfied while it no longer is.
+                    sk.project.solve_sketch(si);
                 }
                 qymcad_ui_state::invalidate(&mut *sk.regen);
             }
@@ -2008,12 +2248,33 @@ pub fn dim_editor(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context, rect
     // or moved a fixed point - the soft least-squares compromise. An inconsistent dimension is rejected
     // rather than allowed to break the sketch.
     let old_con = sk.project.sketches[si].constraints.get(ci).cloned();
+    // WHAT THE FIELD DOES TO THE DOCUMENT IS ONE OPERATION, named: the value of a dimension just made joins the step
+    // that made it; any other change of a dimension is a step of its own rather than an unnamed one the frame notices
+    let fold = sk.dim.fresh.is_some_and(|(fc, steps)| fc == ci && steps == sk.edits.undo.len());
     // THE TEXT DIFFERS FROM WHAT IS STORED, so there is something to apply on commit. TEXTS are compared
     // rather than the number parsed again: parsing a value in the sketcher must go through one door
     // (`parse_num`), and a second `parse::<f64>()` is caught at once by the ratchet in `expr_fields.rs`.
     let shown_before = if cur_expr.trim().is_empty() { qymcad_core::expr::fmt_num(cur_val) } else { cur_expr.clone() };
     let value_differs = buf.trim() != shown_before.trim();
+    // A VALUE THAT CANNOT BE TAKEN KEEPS THE FIELD OPEN with what was typed in it, and the status line says why: an
+    // empty field, or a formula that does not evaluate - an unknown name included, since a name that is not there
+    // yet would hold the dimension at a value nobody typed
+    if close && !is_driven && value_differs {
+        let why = match &eval_res {
+            None => Some(qymcad_i18n::tr("sk-dim-value-empty")),
+            Some(Err(e)) => Some(qymcad_i18n::error_words::expr_error_text(e)),
+            Some(Ok(_)) => None,
+        };
+        if let Some(why) = why {
+            close = false;
+            *sk.status = why;
+        }
+    }
     let apply_value = close && !is_driven && value_differs;
+    let acting = !fold && (apply_value || toggle_driven || toggle_diam || toggle_edge);
+    if acting {
+        qymcad_ui_state::begin_edit(&mut *sk.edits, &*sk.project, qymcad_i18n::tr("sk-dim"));
+    }
     // apply the changes to the constraint
     let mut new_buf: Option<String> = None; // refresh the field after a value edit (a diameter/radius swap, say)
     if let Some(c) = sk.project.sketches[si].constraints.get_mut(ci) {
@@ -2052,7 +2313,8 @@ pub fn dim_editor(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context, rect
         let as_number = t.parse::<f64>().ok();
         match as_number.or_else(|| parse_num(&*sk.project, t)) {
             Some(v) => {
-                if set_dim_value(&mut *sk.project, si, ci, v) {
+                let took = set_dim_value(&mut *sk.project, si, ci, v);
+                if took.is_ok() {
                     if as_number.is_none() {
                         // a formula keeps its text beside the value it evaluates to now
                         if let Some(e) = sk.project.sketches[si].constraints.get_mut(ci).and_then(Constraint::expr_mut) {
@@ -2060,8 +2322,10 @@ pub fn dim_editor(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context, rect
                         }
                     }
                     changed = true;
-                } else {
-                    *sk.status = qymcad_i18n::tr("sk-dim-must-be-positive");
+                } else if let Err(key) = took {
+                    // refused: the field stays open with what was typed, and the status line says why
+                    *sk.status = qymcad_i18n::tr1(key, "max", &qymcad_i18n::num(MAX_SKETCH_LENGTH, 0));
+                    close = false;
                 }
             }
             // not a number and not a formula that evaluates yet - the text is kept, and it will be read
@@ -2140,10 +2404,18 @@ pub fn dim_editor(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context, rect
         }
         qymcad_ui_state::invalidate(&mut *sk.regen);
     }
+    // the value typed into a dimension just made is part of making it
+    if changed && fold {
+        qymcad_ui_state::fold_into_last_step(&mut *sk.edits, &*sk.project);
+    }
+    if acting {
+        qymcad_ui_state::commit_edit_if_changed(&mut sk.rebuild());
+    }
     if close || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
         sk.inline.clear();
         sk.dim.buf.clear();
         sk.dim.focus = false;
+        sk.dim.fresh = None;
         if dim_refs.is_some() && !sk.project.named_dims.is_empty() {
             qymcad_ui_state::mark_dirty_for_rebuild(&mut sk.rebuild()); // the document is marked; the planner does the counting - the driver reaches the bodies that consume it
         }
@@ -2162,15 +2434,16 @@ pub fn sketch_tool_click(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: P
         4 => &qymcad_i18n::tr("sk-arc"),
         5 => &qymcad_i18n::tr("sk-point"),
         6 => &qymcad_i18n::tr("sk-polygon"),
-        7 => &qymcad_i18n::tr("sk-spline"),
+        7 => &qymcad_i18n::tr("sk-slot"),
         8 => &qymcad_i18n::tr("sk-ellipse"),
-        9 => &qymcad_i18n::tr("sk-text"),
-        11 => &qymcad_i18n::tr("sk-slot"),
+        9 => &qymcad_i18n::tr("sk-spline"),
+        10 => &qymcad_i18n::tr("sk-circle"), // a circle through three points is a circle
+        11 => &qymcad_i18n::tr("sk-text"),
         _ => &qymcad_i18n::tr("sk-drawing"),
     };
     qymcad_ui_state::begin_edit(&mut *sk.edits, &*sk.project, name);
     sketch_tool_click_inner(sk, rect, pos);
-    qymcad_ui_state::commit_edit(&mut sk.rebuild());
+    qymcad_ui_state::commit_edit_if_changed(&mut sk.rebuild());
 }
 
 pub fn sketch_tool_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos2) {
@@ -2182,6 +2455,9 @@ pub fn sketch_tool_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, 
     match sk.armed.draw_kind() {
         1 => {
             // a chain of lines: every further click adds a segment
+            if sk.tool.pts.last().is_some_and(|last| same_place(sk, *last, w)) {
+                return; // the second click of the double click that ends the chain: no segment of no length
+            }
             if let Some(&last) = sk.tool.pts.last() {
                 let prev = (sk.tool.pts.len() >= 2).then(|| sk.tool.pts[sk.tool.pts.len() - 2]);
                 sk.project.add_line_entity(si, last.x, last.y, w.x, w.y, qymcad_core::feature::Purpose::of(con));
@@ -2329,21 +2605,19 @@ pub fn sketch_tool_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, 
         6 => {
             // a polygon: the centre plus a vertex (the number of sides and the kind come from the options bar)
             sk.tool.pts.push(w);
+            if sk.tool.pts.len() == 2 && sk.tool.pts[0].dist(sk.tool.pts[1]) < 1e-3 {
+                // A CORNER AT THE CENTRE is no polygon: refused in words, the centre kept for the next click. The core
+                // stretched such a radius to 0.01 and laid twelve corners on one spot, and finishing it ran the memory
+                // past 1.5 GB (a second polygon centred on the corner of the first).
+                sk.tool.pts.pop();
+                *sk.status = qymcad_i18n::tr("sk-polygon-no-size");
+                return;
+            }
             if sk.tool.pts.len() == 2 {
-                let (c, vtx) = (sk.tool.pts[0], sk.tool.pts[1]);
                 let n = sk.tool_prefs.poly_n.max(3);
-                let half = std::f64::consts::PI / n as f64;
-                // the radius of the circumscribed circle (through the vertices), by the click mode
-                let r_click = ((vtx.x - c.x).powi(2) + (vtx.y - c.y).powi(2)).sqrt().max(1e-6);
-                let rr = match sk.tool_prefs.poly_mode {
-                    1 => r_click * half.cos(),                              // inscribed, touching the edges
-                    2 => sk.tool_prefs.poly_edge.max(0.01) / (2.0 * half.sin()),  // by the length of an edge
-                    _ => r_click,                                           // circumscribed, through the vertices
-                };
-                // the vertex direction, normalised to the required radius rr (the angle of the click is kept)
-                let (ux, uy) = ((vtx.x - c.x) / r_click, (vtx.y - c.y) / r_click);
-                // A PARAMETRIC regular polygon: the circumscribed circle plus constraints
-                let (center, _sides) = sk.project.add_polygon_param(si, Point2::new(c.x, c.y), Point2::new(c.x + ux * rr, c.y + uy * rr), n, qymcad_core::feature::Purpose::of(con));
+                let (c, v) = qymcad_ui_state::polygon_from_clicks(sk.tool.pts[0], sk.tool.pts[1], n, sk.tool_prefs.poly_mode);
+                // A PARAMETRIC regular polygon: the circle through its vertices plus constraints
+                let (center, _sides) = sk.project.add_polygon_param(si, c, v, n, qymcad_core::feature::Purpose::of(con));
                 sk.tool.pts.clear();
                 qymcad_ui_state::invalidate(&mut *sk.regen);
                 sk.place.set(qymcad_ui_state::PlacingShape::Poly(center)); // typing the radius and angle through the centre handle
@@ -2364,14 +2638,15 @@ pub fn sketch_tool_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, 
             }
         }
         8 => {
-            // an ellipse: the centre plus a corner of the bounding rectangle, then the width and height are typed
+            // an ellipse: the centre, the end of the major semi-axis (its length and direction), then a point that
+            // sets the minor semi-axis by its distance from the major axis. Two clicks (centre and a corner of the
+            // bounding box) could only draw an axis-aligned ellipse, and the entity was laid on the second click,
+            // so a third click started a new one.
             sk.tool.pts.push(w);
-            if sk.tool.pts.len() == 2 {
-                let (cc, corner) = (sk.tool.pts[0], sk.tool.pts[1]);
-                let (rx, ry) = ((corner.x - cc.x).abs(), (corner.y - cc.y).abs());
-                // A PARAMETRIC ellipse entity (the axes are perpendicular and the semi-axes can carry
-                // dimensions); the rotation is 0, so the axes follow X and Y
-                let center = sk.project.add_ellipse_entity(si, Point2::new(cc.x, cc.y), rx.max(0.5), ry.max(0.5), 0.0, qymcad_core::feature::Purpose::of(con));
+            if sk.tool.pts.len() == 3 {
+                let (cc, a, e) = (sk.tool.pts[0], sk.tool.pts[1], sk.tool.pts[2]);
+                let (major, rot, minor) = qymcad_ui_state::ellipse_from_clicks(cc, a, e);
+                let center = sk.project.add_ellipse_entity(si, Point2::new(cc.x, cc.y), major.max(0.5), minor.max(0.5), rot, qymcad_core::feature::Purpose::of(con));
                 sk.tool.pts.clear();
                 qymcad_ui_state::invalidate(&mut *sk.regen);
                 sk.place.set(qymcad_ui_state::PlacingShape::Ellipse(center, cc)); // typing the semi-axes through the centre handle
@@ -2379,8 +2654,11 @@ pub fn sketch_tool_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, 
             }
         }
         9 => {
-            // a spline: a set of nodes (a double click or Esc finishes it)
-            sk.tool.pts.push(w);
+            // a spline: a set of nodes (a double click or Esc finishes it). The second click of the double click
+            // lands on the node just put down and adds nothing.
+            if !sk.tool.pts.last().is_some_and(|last| same_place(sk, *last, w)) {
+                sk.tool.pts.push(w);
+            }
         }
         10 => {
             // a circle through three points
@@ -2406,26 +2684,51 @@ pub fn sketch_tool_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, 
         11 if sk.tool_prefs.text.trim().is_empty() => {
             // AN EMPTY STRING IS NO REASON TO STAY SILENT. The tool was armed, the click went through, and
             // nothing happened: there was no telling whether the program was broken or something had been
-            // left undone.
-            *sk.status = qymcad_i18n::tr("sk-text-needs-string");
+            // left undone. Emptied by the font, which could not write the letters typed, it is the font that is
+            // named.
+            *sk.status = if sk.tool.text_refused {
+                qymcad_i18n::tr1("sk-text-no-letters", "name", &qymcad_ui_state::font_label(&sk.tool_prefs.font, "opt-font"))
+            } else {
+                qymcad_i18n::tr("sk-text-needs-string")
+            };
         }
         11 => {
+            // A CLICK ON A LABEL THAT IS ALREADY THERE PLACES NOTHING. The tool stays in hand after a label is
+            // placed, and the next thing a person does to fix a typo is double-click the label: each click of
+            // that double click would place a label of its own on top of it - three labels where there was one.
+            // The double click itself opens the editor, in the frame of its second click.
+            //
+            // Not opened here, on the first click: the second click of the double click lands outside the field
+            // that has just taken the focus, egui takes the focus away, and the editor opens with no caret in it.
+            if qymcad_ui_state::text_at(&*sk.project, &*sk.view, rect, pos, si).is_some() {
+                *sk.status = qymcad_i18n::tr("sk-text-on-label");
+                return;
+            }
             // text AS GEOMETRY: a parametric object (the outlines of the glyphs) that can be selected,
             // moved, scaled and retyped - not the loose contours it used to be
-            let glyphs = qymcad_ui_state::bake_text_glyphs(&mut *sk.font_cache, w.x, w.y, sk.tool_prefs.text_h, &sk.tool_prefs.text.clone());
+            // THE FONT TRAVELS WITH THE LABEL. Without it a later edit re-bakes in whatever the application
+            // has in hand, which after a reopen is the system font: the label changes typeface with nobody
+            // asked and nobody told.
+            let font = sk.font_cache.for_tool(&mut sk.tool_prefs.font).map(|(f, _)| f).unwrap_or_default();
+            let glyphs = qymcad_ui_state::bake_text_glyphs(&mut *sk.font_cache, &font, w.x, w.y, sk.tool_prefs.text_h, &sk.tool_prefs.text.clone());
             let n = glyphs.len();
             if n > 0 {
                 let id = sk.project.add_sketch_text(
                     si,
-                    qymcad_core::model::TextSpec { at: w, height: sk.tool_prefs.text_h, angle: 0.0, text: sk.tool_prefs.text.clone(), glyphs },
+                    qymcad_core::model::TextSpec { at: w, height: sk.tool_prefs.text_h, angle: 0.0, text: sk.tool_prefs.text.clone(), glyphs, font },
                     qymcad_core::feature::Purpose::of(sk.tool.construction),
                 );
                 sk.annot.text = sk.project.sketches[si].texts.iter().position(|t| t.id == id);
                 qymcad_ui_state::invalidate(&mut *sk.regen);
                 sk.view.initialized = false;
                 *sk.status = qymcad_i18n::tr1("sk-text-placed", "n", &n.to_string());
-            } else if qymcad_ui_state::default_font(&mut *sk.font_cache).is_none() {
+            } else if !qymcad_ui_state::any_font_at_all(&mut *sk.font_cache) {
                 *sk.status = qymcad_i18n::tr("sk-font-not-found");
+            } else if !qymcad_ui_state::font_can_write(&mut *sk.font_cache, &font, &sk.tool_prefs.text) {
+                // THE FONT IS NAMED, because the string is not the one at fault. The list marks a face that
+                // cannot write its own name, which is a different question: a font with Latin and no Cyrillic
+                // looks good there and writes nothing at all in Russian. Here the string is known.
+                *sk.status = qymcad_i18n::tr1("sk-text-no-letters", "name", &qymcad_ui_state::font_label(&font, "opt-font"));
             } else {
                 *sk.status = qymcad_i18n::tr("sk-text-empty");
             }
@@ -2448,9 +2751,17 @@ pub fn constraint_glyph_at(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos:
 /// fired the dimension branch. Now the chain has a name, and the question
 /// "is something already being dragged?" is asked in exactly one place - `qymcad_ui_state::Dragging::active`.
 pub fn sketch_drag_start(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context, resp: &egui::Response, rect: Rect, ctrl: bool, handle: Option<qymcad_core::geom::Point2>) {
+    // A CHORD OF THE LEFT BUTTON WITH ANOTHER moves or zooms the sheet by the layout: the sketch starts nothing of its own
+    if qymcad_ui_state::Gesture::chord_held(ctx) {
+        return;
+    }
     let sh = qymcad_ui_state::Sheet { view: *sk.view, rect: rect };
             if resp.drag_started() && ctx.input(|i| i.pointer.button_down(egui::PointerButton::Primary)) {
-                let pp = resp.interact_pointer_pos();
+                // WHAT IS TAKEN IS WHAT WAS PRESSED ON. egui decides that a press is a drag once the pointer is
+                // 6 px away from it, and a point is taken within 8 px: looked for under the pointer at that
+                // moment, the grab depended on the speed of the hand - at 3 px a frame the drag was decided at
+                // 8.5 px and the view panned instead of the point moving.
+                let pp = ctx.input(|i| i.pointer.press_origin()).or(resp.interact_pointer_pos());
                 // moving a text object (the highest priority among the captions)
                 if !sk.drag.active() && !ctrl {
                     if let (qymcad_ui_state::Sel::Sketch(si), Some(pp)) = (*sk.sel, pp) {
@@ -2474,7 +2785,10 @@ pub fn sketch_drag_start(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Contex
                         if let Some(ci) = dim_at(sk, rect, pp, si) {
                             // a diameter or radius, an arc length and a tangent distance are draggable too -
                             // their labels used to be impossible to move.
-                            if matches!(sk.project.sketches[si].constraints.get(ci), Some(qymcad_core::model::Constraint::Distance { .. }) | Some(qymcad_core::model::Constraint::DistancePL { .. }) | Some(qymcad_core::model::Constraint::Diameter { .. }) | Some(qymcad_core::model::Constraint::ArcLength { .. }) | Some(qymcad_core::model::Constraint::EdgeDistance { .. })) {
+                            if matches!(sk.project.sketches[si].constraints.get(ci), Some(qymcad_core::model::Constraint::Distance { .. }) | Some(qymcad_core::model::Constraint::DistancePL { .. }) | Some(qymcad_core::model::Constraint::Diameter { .. }) | Some(qymcad_core::model::Constraint::ArcLength { .. }) | Some(qymcad_core::model::Constraint::EdgeDistance { .. }) | Some(qymcad_core::model::Constraint::Angle { .. }) | Some(qymcad_core::model::Constraint::AngleLines { .. })) {
+                                // THE DRAG OF A LABEL IS ONE STEP OF UNDO, closed on the release, as the drag of a point
+                                // is: without the boundary Ctrl+Z after moving a label took back the operation before it
+                                qymcad_ui_state::begin_edit(&mut *sk.edits, &*sk.project, qymcad_i18n::tr("sk-move-dim-label"));
                                 *sk.drag = qymcad_ui_state::Dragging::Dim(ci);
                                 sk.gsel.constraint = Some(ci); // grabbing a dimension selects it, even on a tiny drag
                                 sk.annot.note = None;
@@ -2487,10 +2801,11 @@ pub fn sketch_drag_start(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Contex
                                 // geometry - grabbing the radius used to fall through into moving the entire
                                 // arc. A circle gets a diameter, an arc a radius.
                                 use qymcad_core::model::Constraint;
+                                qymcad_ui_state::begin_edit(&mut *sk.edits, &*sk.project, qymcad_i18n::tr("sk-move-dim-label"));
                                 let r = qymcad_ui_state::center_radius(&sk.draw(), si, center).unwrap_or(0.0);
                                 let ang = qymcad_ui_state::sketch_pt(&*sk.project, si, center).map(|cp| { let sc = sh.at(cp); (pp.y - sc.y).atan2(pp.x - sc.x) as f64 }).unwrap_or(0.0);
                                 let d = if diam { 2.0 * r } else { r };
-                                sk.project.sketches[si].constraints.push(Constraint::Diameter { c: center, d, off: ang, expr: String::new(), driven: true, diam });
+                                sk.project.sketches[si].constraints.push(Constraint::Diameter { c: center, d, off: ang, expr: String::new(), driven: true, diam, at: None });
                                 let ci = sk.project.sketches[si].constraints.len() - 1;
                                 *sk.drag = qymcad_ui_state::Dragging::Dim(ci);
                                 sk.gsel.constraint = Some(ci);
@@ -2603,11 +2918,14 @@ pub fn power_trim_drag(sk: &mut qymcad_ui_state::SketchCtx, resp: &egui::Respons
     if sk.armed.click_op() != 1 {
         return;
     }
-    if resp.drag_started() {
+    // THE LEFT BUTTON ONLY: the sheet is moved with the middle one (or the gesture of the scheme), and a move of the
+    // sheet with the trim in hand cut everything the pointer crossed. Reported behaviour: after a new project, where
+    // the point had to be brought into view first, a click on the lower arc cut the line in two and failed.
+    if resp.drag_started_by(egui::PointerButton::Primary) {
         sk.trim.path.clear();
         sk.trim.done.clear();
     }
-    if !resp.dragged() {
+    if !resp.dragged_by(egui::PointerButton::Primary) || qymcad_ui_state::Gesture::chord_held(&resp.ctx) {
         if resp.drag_stopped() {
             sk.trim.path.clear();
             sk.trim.done.clear();
@@ -2806,9 +3124,11 @@ pub fn passive_radius_label_at(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, 
         } else {
             egui::vec2(1.0, 0.0)
         };
-        let label_at = sc + dir * (r_px + 14.0);
-        // a radius mark is a LABEL: 15 px in place became the Label role (12 px at normal precision)
-        if label_at.distance(pos) <= qymcad_ui_state::grab::grab(sk.set, Grab::Label) {
+        let txt = if diam { format!("Ø{:.1}", 2.0 * r) } else { format!("R{r:.1}") };
+        let size = qymcad_ui_state::dim_text_size(&txt, sk.set.dim_font);
+        let label_at = qymcad_ui_state::radial_text_place(sc + dir * (r_px + 14.0), dir, size).0;
+        // a radius mark is a LABEL: taken anywhere on its text, or within the Label reach of its middle
+        if qymcad_ui_state::label_reach(label_at, size, pos) <= qymcad_ui_state::grab::grab(sk.set, Grab::Label) {
             return Some((center, diam));
         }
     }
@@ -2866,12 +3186,21 @@ pub fn sketch_drag_update(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Conte
                         // the diameter or radius label travels AROUND THE CIRCLE - `off` is the absolute
                         // angle of the leader (in radians) from the centre to the cursor. It is set directly
                         // rather than by a delta, so the label sticks to the pointer.
-                        if let Some(Constraint::Diameter { c, .. }) = sk.project.sketches[si].constraints.get(ci).cloned() {
-                            if let (Some(cp), Some(pp)) = (qymcad_ui_state::sketch_pt(&*sk.project, si, c), resp.interact_pointer_pos()) {
-                                let sc = sh.at(cp);
-                                let ang = (pp.y - sc.y).atan2(pp.x - sc.x) as f64;
-                                if let Some(Constraint::Diameter { off, .. }) = sk.project.sketches[si].constraints.get_mut(ci) {
-                                    *off = ang;
+                        // AN ANGLE'S LABEL sticks to the pointer: the radius of the arc and the place along it, past a side if
+                        // it is led there. Reported behaviour: an angle could be placed but not moved afterwards, as a
+                        // length or a radius can.
+                        let angle = matches!(sk.project.sketches[si].constraints.get(ci), Some(Constraint::Angle { .. } | Constraint::AngleLines { .. }));
+                        if angle {
+                            if let Some(placed) = resp.interact_pointer_pos().and_then(|pp| qymcad_ui_state::angle_dim_follow(&*sk.project, si, ci, &sh, &*sk.set, pp)) {
+                                put_angle_label(&mut *sk.project, si, ci, placed);
+                            }
+                            qymcad_ui_state::invalidate(&mut *sk.regen);
+                        } else if let Some(Constraint::Diameter { .. }) = sk.project.sketches[si].constraints.get(ci) {
+                            // the line turns to the pointer, and the text lies ON the line within the circle, on the
+                            // shelf past it
+                            if let Some((ang, t)) = resp.interact_pointer_pos().and_then(|pp| qymcad_ui_state::radial_text_follow(&*sk.project, si, ci, &sh, pp)) {
+                                if let Some(Constraint::Diameter { off, at, .. }) = sk.project.sketches[si].constraints.get_mut(ci) {
+                                    (*off, *at) = (ang, t);
                                 }
                             }
                             qymcad_ui_state::invalidate(&mut *sk.regen);
@@ -2917,7 +3246,15 @@ pub fn sketch_drag_update(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Conte
                             _ => 0.0,
                         };
                         let dadd = dadd / sk.view.scale as f64; // a screen delta becomes WORLD units, so the offset scales with the zoom
-                        if let Some(Constraint::Distance { off, .. }) | Some(Constraint::DistancePL { off, .. }) | Some(Constraint::ArcLength { off, .. }) | Some(Constraint::EdgeDistance { off, .. }) = sk.project.sketches[si].constraints.get_mut(ci) {
+                        // THE TEXT GOES ALONG THE LINE TOO: the part of the move along the dimension line carries the text
+                        // there, past an arrow onto a shelf, while the part across it moves the line
+                        let led = qymcad_ui_state::linear_text_led(&*sk.project, si, ci, &sh, &*sk.set, dl);
+                        if let Some(Constraint::Distance { off, at, .. }) | Some(Constraint::DistancePL { off, at, .. }) | Some(Constraint::EdgeDistance { off, at, .. }) = sk.project.sketches[si].constraints.get_mut(ci) {
+                            *off += dadd;
+                            if led.is_some() {
+                                *at = led;
+                            }
+                        } else if let Some(Constraint::ArcLength { off, .. }) = sk.project.sketches[si].constraints.get_mut(ci) {
                             *off += dadd;
                         }
                         }
@@ -2925,6 +3262,7 @@ pub fn sketch_drag_update(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Conte
                 }
                 if resp.drag_stopped() {
                     sk.drag.clear();
+                    qymcad_ui_state::commit_edit_if_changed(&mut sk.rebuild());
                 }
             } else if let Some((si, spi, ki)) = sk.drag.handle() {
                 // dragging a tangent handle of a spline changes its shape (the tangent becomes explicit)
@@ -3019,6 +3357,7 @@ pub fn drag_point_to(sk: &mut qymcad_ui_state::SketchCtx, si: usize, pi: usize, 
 
 /// AN EVENT BECOMES A POINT (the same split as for a click in 3D).
 pub fn sketch_click(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context, resp: &egui::Response, rect: Rect) {
+    drop_abandoned_dim(sk);
     if !resp.clicked() {
         return;
     }
@@ -3031,7 +3370,13 @@ pub fn sketch_click_at(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context,
     {
         {
                     if sk.picking.fillet_all() {
-                        // a click on a shape follows the connected chain and opens the radius popup
+                        // a click on a shape follows the connected chain and opens the radius popup. While the popup is
+                        // open a click does not take the shape again: the popup stands at the shape, the click into its
+                        // field reached the canvas too, and taking the shape anew put the old radius back over what was
+                        // typed
+                        if sk.corner.at.is_some() {
+                            return;
+                        }
                         if let qymcad_ui_state::Sel::Sketch(si) = *sk.sel {
                             if let Some(eid) = qymcad_ui_state::entity_near(&sk.pick(), rect, pos, si) {
                                 let comp = sk.project.connected_entities(si, eid);
@@ -3039,12 +3384,15 @@ pub fn sketch_click_at(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context,
                                 sk.corner.only = Some(comp);
                                 sk.corner.pos = Some(pos);
                                 sk.corner.buf = qymcad_core::expr::fmt_num(sk.tool_prefs.fillet);
-                                sk.corner.focus = true;
-                                sk.picking.clear();
+                                sk.corner.focus = true; // the tool stays held: after Enter it waits for the next shape
                             } else {
                                 *sk.status = qymcad_i18n::tr("sk-click-shape-line");
                             }
                         }
+                    } else if sk.armed.draw_kind() != 0 && !qymcad_ui_state::bar_fields_valid(ctx) {
+                        // A FIELD OF THE BAR THAT CANNOT BE TAKEN stops the click as it stops Enter: the shape would
+                        // be made with the last value the field held, not with what is written in it
+                        *sk.status = qymcad_i18n::tr("sk-fix-bar-field");
                     } else if sk.armed.draw_kind() != 0 {
                         sketch_tool_click(sk, rect, pos);
                     } else if sk.armed.dim_kind() != 0 {
@@ -3090,6 +3438,14 @@ pub fn sketch_click_at(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context,
                         // trimming, extending or breaking by click: a line first, then a circle or an arc
                         if let qymcad_ui_state::Sel::Sketch(si) = *sk.sel {
                             let w = qymcad_ui_state::to_world(&*sk.view, rect, pos);
+                            // THE BOUNDARY OF AN OPERATION: the click is the act, one step of undo named after the tool
+                            // - left for the frame to notice, the change was a step called "Edit"
+                            let tool = match sk.armed.click_op() {
+                                1 => "tool-trim",
+                                2 => "tool-extend",
+                                _ => "tool-break",
+                            };
+                            qymcad_ui_state::begin_edit(&mut *sk.edits, &*sk.project, qymcad_i18n::tr(tool));
                             let line_eid = qymcad_pick::nearest_line_eid(&sk.pick(), rect, pos, si);
                             let ok = if let Some(eid) = line_eid {
                                 match sk.armed.click_op() {
@@ -3118,6 +3474,7 @@ pub fn sketch_click_at(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context,
                             } else {
                                 *sk.status = qymcad_i18n::tr("sk-op-failed-no-intersection");
                             }
+                            qymcad_ui_state::commit_edit_if_changed(&mut sk.rebuild()); // a click that changed nothing lays no step
                         }
                     } else if sk.clip.geom_pending.is_some() && matches!(*sk.sel, qymcad_ui_state::Sel::Sketch(_)) {
                         // a click on THE ANCHOR point takes the geometry into the buffer (on a cut, the
@@ -3126,6 +3483,10 @@ pub fn sketch_click_at(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context,
                         let w = snap_world(sk, rect, pos);
                         // it should not be empty, but the program must not crash over that
                         let Some((eids, cut)) = sk.clip.geom_pending.take() else { return };
+                        // a cut removes the source here, so it is a step of its own; a copy changes nothing until placed
+                        if cut {
+                            qymcad_ui_state::begin_edit(&mut *sk.edits, &*sk.project, qymcad_i18n::tr("menu-cut"));
+                        }
                         let clip = sk.project.copy_sketch_geometry(si, &eids, w.x, w.y);
                         if cut {
                             sk.project.delete_entities(si, &eids);
@@ -3138,18 +3499,28 @@ pub fn sketch_click_at(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context,
                         let n = clip.entities.len();
                         sk.clip.geom = Some(clip);
                         *sk.status = qymcad_i18n::tr2("sk-clipboard", "what", &if cut { qymcad_i18n::tr("sk-cut-done") } else { qymcad_i18n::tr("sk-copied") }, "n", &n.to_string());
-                    } else if sk.clip.geom_place && matches!(*sk.sel, qymcad_ui_state::Sel::Sketch(_)) {
+                        if cut {
+                            qymcad_ui_state::commit_edit_if_changed(&mut sk.rebuild());
+                        } else {
+                            // A COPY GOES ON TO ITS PLACE: base point, then where the copy lands, as the copy of entities
+                            // in the professional systems. The buffer used to fill silently and the next click did nothing.
+                            sk.clip.geom_place = Some(true);
+                            *sk.status = qymcad_i18n::tr("g-insert-click");
+                        }
+                    } else if let (Some(copying), qymcad_ui_state::Sel::Sketch(_)) = (sk.clip.geom_place, *sk.sel) {
                         // a placement click pastes the buffer so that the anchor lands on the clicked point
                         let qymcad_ui_state::Sel::Sketch(si) = *sk.sel else { return }; // the selection may have changed between frames - do not crash
                         let w = snap_world(sk, rect, pos);
                         if let Some(clip) = sk.clip.geom.clone() {
+                            qymcad_ui_state::begin_edit(&mut *sk.edits, &*sk.project, qymcad_i18n::tr(if copying { "tool-copy" } else { "win-insert" }));
                             let ids = sk.project.paste_sketch_geometry(si, &clip, w.x, w.y);
                             sk.project.solve_sketch(si);
                             sk.sel_sk.items = ids.into_iter().map(|id| (1u8, id)).collect();
                             qymcad_ui_state::invalidate(&mut *sk.regen);
                             *sk.status = qymcad_i18n::tr("sk-pasted");
+                            qymcad_ui_state::commit_edit_if_changed(&mut sk.rebuild());
                         }
-                        sk.clip.geom_place = false;
+                        sk.clip.geom_place = None;
                     } else if sk.armed.pat_op() != 0 && matches!(*sk.sel, qymcad_ui_state::Sel::Sketch(_)) {
                         // an array: pick the entities, then (for a circular one) click THE CENTRE of
                         // rotation, then Enter
@@ -3198,6 +3569,9 @@ pub fn sketch_click_at(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context,
                         } else if sk.armed.move_op() != 3 {
                             let Some(base) = sk.tool.move_base.take() else { return };
                             let (dx, dy) = (w.x - base.x, w.y - base.y);
+                            // THE BOUNDARY OF AN OPERATION: the target click is the act, so it makes one step of
+                            // undo named after the tool. A change left for the frame to notice is called "Edit".
+                            qymcad_ui_state::begin_edit(&mut *sk.edits, &*sk.project, qymcad_i18n::tr(if sk.armed.move_op() == 2 { "tool-copy" } else { "tool-move" }));
                             if sk.armed.move_op() == 2 {
                                 let ids = sk.project.copy_entities(si, &eids, dx, dy);
                                 sk.project.solve_sketch(si);
@@ -3214,11 +3588,11 @@ pub fn sketch_click_at(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context,
                                 // The move shifted the points and never asked the solver, so the screen
                                 // showed a shape standing where nothing allows it to stand. The lie held
                                 // until the next edit, and the jump back then looked like a defect of its
-                                // own. The solver runs HERE, and if the drawing did not go, that is said
-                                // out loud rather than discovered later.
+                                // own. THE SOLVER NOW RUNS INSIDE `move_entities`, where no caller can
+                                // forget it; what is left here is telling the person that the drawing did
+                                // not go where it was asked.
                                 let before = qymcad_ui_state::entities_centroid(&*sk.project, si, &eids);
                                 sk.project.move_entities(si, &eids, dx, dy);
-                                sk.project.solve_sketch(si);
                                 let after = qymcad_ui_state::entities_centroid(&*sk.project, si, &eids);
                                 let asked = (dx * dx + dy * dy).sqrt();
                                 let went = match (before, after) {
@@ -3235,6 +3609,7 @@ pub fn sketch_click_at(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context,
                             }
                             *sk.armed = qymcad_ui_state::Armed::None;
                             qymcad_ui_state::invalidate(&mut *sk.regen);
+                            qymcad_ui_state::commit_edit(&mut sk.rebuild());
                         }
                     } else if sk.armed.cmd_kind() == 3 && sk.rev.pick_line {
                         // the axis of revolution is picked BY CLICKING a line of the sketch. It used to be
@@ -3320,10 +3695,18 @@ pub fn snap_world(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, screen: Pos2)
     // plus a cost of O(the whole model) per frame. The reference geometry of neighbours and of the host
     // face arrives separately, below, through `qymcad_pick::sketch_ref_edges_2d`, already projected into the sketch.
     let mut best: Option<(f32, Point2, u8)> = None;
+    // A POINT BEING DRAGGED DOES NOT SNAP TO ITSELF. Its own place, and whatever stands on it (a coincident end, the
+    // vertex of the contour drawn through it), is a vertex within reach until the hand is 9 px away: a point led
+    // at 3 px a frame stuck, moved in jerks and was let go short - measured, 1 mm short of a 7 mm drag.
+    let dragged = sk.drag.pt().and_then(|(dsi, pi)| sk.project.sketches.get(dsi)?.points.get(pi).map(|q| Point2::new(q.x, q.y)));
+    let own = |p: Point2| dragged.is_some_and(|q| (p.x - q.x).abs() < 1e-9 && (p.y - q.y).abs() < 1e-9);
     if let Some(asi) = qymcad_ui_state::edit_si(&*sk.project, &*sk.sketch_ses) {
         if let Some(s) = sk.project.sketches.get(asi) {
             for sp in &s.points {
                 let p = Point2::new(sp.x, sp.y);
+                if own(p) {
+                    continue;
+                }
                 let d = sd(p, &*sk.view);
                 let ty = if centers.contains(&sp.id) { 4 } else { 0 };
                 if best.is_none_or(|(bd, _, _)| d < bd) {
@@ -3332,7 +3715,7 @@ pub fn snap_world(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, screen: Pos2)
             }
             for cid in &s.contour_ids {
                 let Some(ci) = sk.project.contour_index(*cid) else { continue };
-                for p in &sk.project.contours[ci].points {
+                for p in sk.project.contours[ci].points.iter().filter(|p| !own(**p)) {
                     let d = sd(*p, &*sk.view);
                     if best.is_none_or(|(bd, _, _)| d < bd) {
                         best = Some((d, *p, 0));
@@ -3524,11 +3907,11 @@ pub fn make_between_dim(sk: &mut qymcad_ui_state::SketchCtx, si: usize, r1: qymc
                 (Some(a), Some(b)) => ((a.x - b.x).powi(2) + (a.y - b.y).powi(2)).sqrt(),
                 _ => 0.0,
             };
-            Some(Constraint::Distance { a: p1, b: p2, d, off: 0.0, expr: String::new(), driven: false, axis: 0 })
+            Some(Constraint::Distance { a: p1, b: p2, d, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None })
         }
         (qymcad_ui_state::DimRef::Point(p), qymcad_ui_state::DimRef::Line(a, b)) | (qymcad_ui_state::DimRef::Line(a, b), qymcad_ui_state::DimRef::Point(p)) => {
             let d = perp(&*sk.project, p, a, b);
-            Some(Constraint::DistancePL { p, a, b, d, off: 0.0, expr: String::new(), driven: false })
+            Some(Constraint::DistancePL { p, a, b, d, off: 0.0, expr: String::new(), driven: false, at: None })
         }
         (qymcad_ui_state::DimRef::Line(a1, b1), qymcad_ui_state::DimRef::Line(a2, b2)) => {
             let (ax1, ax2) = (qymcad_ui_state::is_axis_line(&*sk.project, si, a1, b1), qymcad_ui_state::is_axis_line(&*sk.project, si, a2, b2));
@@ -3540,7 +3923,7 @@ pub fn make_between_dim(sk: &mut qymcad_ui_state::SketchCtx, si: usize, r1: qymc
                 let (ga, gb, axa, axb) = if ax2 { (a1, b1, a2, b2) } else { (a2, b2, a1, b1) };
                 let (da, db) = (perp(&*sk.project, ga, axa, axb), perp(&*sk.project, gb, axa, axb));
                 let (p, d) = if db.abs() > da.abs() { (gb, db) } else { (ga, da) };
-                Some(Constraint::DistancePL { p, a: axa, b: axb, d, off: 0.0, expr: String::new(), driven: false })
+                Some(Constraint::DistancePL { p, a: axa, b: axb, d, off: 0.0, expr: String::new(), driven: false, at: None })
             } else {
                 // parallel? then it is the distance between the lines (a perpendicular from the end of one
                 // to the other)
@@ -3553,7 +3936,7 @@ pub fn make_between_dim(sk: &mut qymcad_ui_state::SketchCtx, si: usize, r1: qymc
                 if cross.abs() / (l1 * l2).max(1e-9) < 0.05 {
                     // parallel: the distance from the end a1 to the line (a2, b2)
                     let d = perp(&*sk.project, a1, a2, b2);
-                    Some(Constraint::DistancePL { p: a1, a: a2, b: b2, d, off: 0.0, expr: String::new(), driven: false })
+                    Some(Constraint::DistancePL { p: a1, a: a2, b: b2, d, off: 0.0, expr: String::new(), driven: false, at: None })
                 } else if let (Some(pa1), Some(pb1), Some(pa2), Some(pb2)) = (pt(&*sk.project, a1), pt(&*sk.project, b1), pt(&*sk.project, a2), pt(&*sk.project, b2)) {
                     // THE ANGLE between the lines. The directions of both lines are ORIENTED OUTWARDS FROM
                     // their (virtual) INTERSECTION, so the angle equals the visual opening between the
@@ -3568,7 +3951,7 @@ pub fn make_between_dim(sk: &mut qymcad_ui_state::SketchCtx, si: usize, r1: qymc
                     let (na2, nb2, ec, ed) = if far(pa2, pb2) { (a2, b2, pa2, pb2) } else { (b2, a2, pb2, pa2) };
                     let (u, v) = ((eb.x - ea.x, eb.y - ea.y), (ed.x - ec.x, ed.y - ec.y));
                     let deg = (u.0 * v.1 - u.1 * v.0).atan2(u.0 * v.0 + u.1 * v.1).abs().to_degrees();
-                    Some(Constraint::AngleLines { a: na1, b: nb1, c: na2, d: nb2, deg, expr: String::new(), driven: false })
+                    Some(Constraint::AngleLines { a: na1, b: nb1, c: na2, d: nb2, deg, expr: String::new(), driven: false, off: 0.0, at: None })
                 } else {
                     None
                 }
@@ -3599,6 +3982,13 @@ pub fn make_between_dim(sk: &mut qymcad_ui_state::SketchCtx, si: usize, r1: qymc
 /// about a sketch and nothing about a window: deleting an entity, a point, a constraint, a note. It is the
 /// sketcher's, and it is here.
 pub fn delete_selected_in_sketch(sk: &mut qymcad_ui_state::SketchCtx, si: usize) {
+    // THE BOUNDARY OF AN OPERATION: one step of undo, named after the tool; a key that deleted nothing lays none
+    qymcad_ui_state::begin_edit(&mut *sk.edits, &*sk.project, qymcad_i18n::tr("sk-delete"));
+    delete_selected_in(sk, si);
+    qymcad_ui_state::commit_edit_if_changed(&mut sk.rebuild());
+}
+
+fn delete_selected_in(sk: &mut qymcad_ui_state::SketchCtx, si: usize) {
     if let Some(ti) = sk.annot.text.take() {
         if ti < sk.project.sketches[si].texts.len() {
             sk.project.delete_sketch_text(si, ti);
@@ -3640,4 +4030,17 @@ pub fn delete_selected_in_sketch(sk: &mut qymcad_ui_state::SketchCtx, si: usize)
     sk.sel_sk.clear(); // the selection and whatever was waiting for it
     qymcad_ui_state::invalidate(&mut *sk.regen);
     *sk.status = qymcad_i18n::tr("in-deleted");
+}
+
+/// EDIT -> INSERT IN A SKETCH: with geometry in the clipboard, the placing is armed (a ghost, then a click), the tool in
+/// hand put down first - one thing in hand at a time, as the copy does. False outside a sketch or with nothing to insert,
+/// when the paste goes to the tree.
+pub fn arm_paste(sk: &mut qymcad_ui_state::SketchCtx) -> bool {
+    if qymcad_ui_state::edit_si(&*sk.project, &*sk.sketch_ses).is_none() || !sk.clip.geom.as_ref().is_some_and(|c| !c.is_empty()) {
+        return false;
+    }
+    qymcad_ui_state::exit_draw_tools(&mut qymcad_ui_state::tools_in!(sk));
+    (sk.clip.geom_pending, sk.clip.geom_place) = (None, Some(false));
+    *sk.status = qymcad_i18n::tr("g-insert-click");
+    true
 }

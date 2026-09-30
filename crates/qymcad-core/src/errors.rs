@@ -49,6 +49,8 @@ pub enum Op {
     Thicken,
     /// A copy of faces as a standalone surface.
     CopyFaces,
+    /// Faces moved along their normals as a standalone surface.
+    OffsetSurface,
     /// Replacing faces of a body with a surface.
     ReplaceFaces,
     /// Stitching sheets together.
@@ -76,6 +78,9 @@ pub enum Op {
     Prism,
     FuseProfiles,
     Place,
+    /// A mesh turned into a solid of its flat faces.
+    MeshSolid,
+    MeshRecognise,
 }
 
 impl Op {
@@ -107,6 +112,7 @@ impl Op {
             RemoveFaces => "remove-faces",
             Thicken => "thicken",
             CopyFaces => "copy-faces",
+            OffsetSurface => "offset-surface",
             ReplaceFaces => "replace-faces",
             Stitch => "stitch",
             Trim => "trim",
@@ -130,6 +136,8 @@ impl Op {
             Prism => "prism",
             FuseProfiles => "fuse-profiles",
             Place => "place",
+            MeshSolid => "mesh-solid",
+            MeshRecognise => "mesh-recognise",
         }
     }
 
@@ -140,6 +148,8 @@ impl Op {
             Extrude, ExtrudeProfile, ExtrudeContour, Revolve, RevolveProfile, RevolveAxis, Sweep, Loft, LoftBoolean, Boolean, BodyBoolean,
             Fillet, FilletVar, Chamfer, ChamferAsym, Shell, ShellCenter, Draft, PushFace, RemoveFaces, Thicken, SplitBody, SplitFaces, Hole,
             Holes, Thread, Helix, Auger, Mirror, MirrorPlane, Array, Move, Transform, Cylinder, Sphere, Cone, Torus, Prism, FuseProfiles, Place,
+            MeshSolid,
+    MeshRecognise,
         ]
     }
 }
@@ -208,6 +218,14 @@ pub enum CoreError {
     KernelRequired(Op),
     /// The source body is not built, its own feature having failed earlier in the timeline.
     SourceBodyNotBuilt,
+    /// The body the feature stands on was deleted: the node that made it is gone from the timeline. Final - it
+    /// does not come back by itself, unlike a body not built yet.
+    SourceBodyDeleted,
+    /// The operation left the part's body in more pieces than it had: a part is one body of one piece, and an addition
+    /// that touches nothing or a shell that leaves an island makes several.
+    BodyInPieces,
+    /// A piece was asked of a body that is one piece: nothing to take out into a part of its own.
+    BodyInOnePiece,
     /// The source part has no active body, as with a mirrored part or a pattern instance.
     SourcePartHasNoBody,
     /// Body A of the boolean is not built.
@@ -237,6 +255,18 @@ pub enum CoreError {
     ThickenFaceRefused,
     /// The plate was built but did not join the part.
     ThickenPlateNotJoined,
+    /// The plate went into the body and added nothing to it: a thickness below zero on a face of a solid.
+    ThickenAddedNothing,
+    /// A draft of 0 degrees tilts nothing.
+    DraftAngleZero,
+    /// A torus whose tube is as thick as its ring or thicker passes through itself.
+    TorusThroughItself,
+    /// A pattern of one copy is the body alone.
+    ArrayOfOne,
+    /// The thread is not the size of the face it is cut on: a shaft or a hole of another diameter.
+    ThreadNotItsSize { face: f64, nominal: f64 },
+    /// A WARNING, not a failure: the blend was built, but `dropped` of the `asked` edges could not be taken.
+    EdgesDropped { asked: usize, dropped: usize },
     /// A shell cannot be built on this body: offsetting the faces fails inside the kernel, which raises an
     /// internal error. This is neither the user's fault nor a lost reference but a limit of the algorithm.
     ShellNotBuiltHere,
@@ -269,6 +299,10 @@ pub enum CoreError {
     MirrorPlaneDeleted,
     /// The cutting plane was deleted, so there is nothing to cut with.
     CutPlaneDeleted,
+    /// The body whose face a sketch stands on is gone: the feature that built it was deleted.
+    SketchFaceGone,
+    /// The datum plane a sketch stands on was deleted.
+    SketchPlaneGone,
     /// The plane used to split faces was deleted.
     SplitPlaneDeleted,
     /// The plane of a mirrored part is not set, as in a file from an older version.
@@ -321,6 +355,8 @@ pub enum CoreError {
     ThreadDepthTooDeep { depth: f64, radius: f64, dia: f64, pitch: f64 },
     /// Thread: too many turns.
     ThreadTooManyTurns { turns: f64 },
+    /// Thread: longer than the cylinder it is cut on.
+    ThreadLongerThanFace { length: f64, face: f64 },
     /// Isolation: a body may only be built inside a part.
     BodyOnlyInPart,
     /// Isolation: the input belongs to a different component.
@@ -390,6 +426,9 @@ impl CoreError {
             OpFailed(op) => format!("error-op-failed-{}", op.key()),
             KernelRequired(op) => format!("error-kernel-required-{}", op.key()),
             SourceBodyNotBuilt => "error-source-body-not-built".into(),
+            SourceBodyDeleted => "error-source-body-deleted".into(),
+            BodyInPieces => "error-body-in-pieces".into(),
+            BodyInOnePiece => "error-body-in-one-piece".into(),
             SourcePartHasNoBody => "error-source-part-has-no-body".into(),
             BodyANotBuilt => "error-body-a-not-built".into(),
             BodyBNotBuilt => "error-body-b-not-built".into(),
@@ -405,11 +444,19 @@ impl CoreError {
             StitchNothingJoined => "error-stitch-nothing-joined".into(),
             ThickenFaceRefused => "error-thicken-face-refused".into(),
             ThickenPlateNotJoined => "error-thicken-plate-not-joined".into(),
+            ThickenAddedNothing => "error-thicken-added-nothing".into(),
+            DraftAngleZero => "error-draft-angle-zero".into(),
+            TorusThroughItself => "error-torus-through-itself".into(),
+            ArrayOfOne => "error-array-of-one".into(),
+            ThreadNotItsSize { .. } => "error-thread-not-its-size".into(),
+            EdgesDropped { .. } => "warn-edges-dropped".into(),
             PushFaceOnSheet => "error-push-face-on-sheet".into(),
             NeedsSolidNotSheet => "error-needs-solid-not-sheet".into(),
             DraftFailed { .. } => "error-draft-failed".into(),
             EdgesNotFound { .. } => "error-edges-not-found".into(),
             CutPlaneDeleted => "error-cut-plane-deleted".into(),
+            SketchFaceGone => "error-sketch-face-gone".into(),
+            SketchPlaneGone => "error-sketch-plane-gone".into(),
             MirrorPlaneDeleted => "error-mirror-plane-deleted".into(),
             SplitPlaneDeleted => "error-split-plane-deleted".into(),
             MirrorPlaneUnset => "error-mirror-plane-unset".into(),
@@ -436,6 +483,7 @@ impl CoreError {
             ThreadPitchTooSmall { .. } => "error-thread-pitch-too-small".into(),
             ThreadDepthTooDeep { .. } => "error-thread-depth-too-deep".into(),
             ThreadTooManyTurns { .. } => "error-thread-too-many-turns".into(),
+            ThreadLongerThanFace { .. } => "error-thread-longer-than-face".into(),
             BodyOnlyInPart => "error-body-only-in-part".into(),
             CrossComponentInput { .. } => "error-cross-component-input".into(),
             SketchOnForeignFace { .. } => "error-sketch-on-foreign-face".into(),
@@ -496,6 +544,7 @@ impl std::fmt::Display for CoreError {
             ThreadPitchTooSmall { pitch } => write!(f, "thread pitch {pitch:.3} too small"),
             ThreadDepthTooDeep { depth, radius, .. } => write!(f, "thread depth {depth:.2} >= radius {radius:.2}"),
             ThreadTooManyTurns { turns } => write!(f, "{turns:.0} turns is too many"),
+            ThreadLongerThanFace { length, face } => write!(f, "a thread of {length:.1} on a face {face:.1} long"),
             CrossComponentInput { input } => write!(f, "cross-component input {input}"),
             SketchOnForeignFace { input } => write!(f, "sketch input {input} sits on a foreign face"),
             SketchFaceRefLost { sketch, body } => write!(f, "sketch {sketch} lost its face ref on body {body}"),
@@ -511,6 +560,12 @@ impl std::fmt::Display for CoreError {
             StitchNothingJoined => write!(f, "surfaces share no edges — nothing to stitch"),
             ThickenFaceRefused => write!(f, "cannot give this face a thickness — the offset would run into itself; try a smaller thickness or thicken earlier"),
             ThickenPlateNotJoined => write!(f, "the plate was built but would not join the part"),
+            ThickenAddedNothing => write!(f, "the plate went into the body and added nothing"),
+            DraftAngleZero => write!(f, "a draft of 0 degrees tilts nothing"),
+            TorusThroughItself => write!(f, "the tube is as thick as the ring: the torus passes through itself"),
+            ArrayOfOne => write!(f, "a pattern of one copy is the body alone"),
+            ThreadNotItsSize { face, nominal } => write!(f, "a thread of {nominal:.2} does not fit a face of {face:.2}"),
+            EdgesDropped { asked, dropped } => write!(f, "{dropped} of the {asked} edges could not be taken"),
             PushFaceOnSheet => write!(f, "push face on a sheet"),
             NeedsSolidNotSheet => write!(f, "solid tool on a sheet"),
             DraftFailed { angle } => write!(f, "draft {angle:.1} failed"),

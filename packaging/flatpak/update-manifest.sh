@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 # Point the Flatpak manifest at a release and regenerate the list of crate sources.
 #
-# TWO THINGS HAVE TO MOVE TOGETHER: the tag with its commit, and cargo-sources.json. The second is the list
-# of every crate in the lock file, written out as declared sources - the build sandbox has no network, so
-# a crate that is not on that list is a build that stops halfway with a message about being offline.
+# TWO THINGS HAVE TO MOVE TOGETHER: the commit that gets built, and cargo-sources.json. The second is the
+# list of every crate in the lock file, written out as declared sources - the build sandbox has no network,
+# so a crate that is not on that list is a build that stops halfway with a message about being offline.
 #
 #   packaging/flatpak/update-manifest.sh v0.1.0-dev.20260908
+#   packaging/flatpak/update-manifest.sh v0.1.0-dev.20260908 2a3201e3a8a3be44b5daa6991f170b27a9bccd05
+#
+# THE SECOND ARGUMENT IS FOR WHEN PACKAGING LANDED AFTER THE TAG. The manifest names a commit and not a
+# tag - flatpak-builder stops when the two disagree - so what is submitted is a commit, normally the one
+# the tag stands on and otherwise the one named here.
 set -euo pipefail
 
 TAG=${1:-}
@@ -29,7 +34,9 @@ if [ "$kind" = "tag" ]; then
     commit=$(gh api "repos/${REPO}/git/tags/${commit}" -q '.object.sha')
 fi
 
-sed -i -e "s|^        tag: .*|        tag: ${TAG}|" -e "s|^        commit: .*|        commit: ${commit}|" "$HERE/tech.qymis.cad.yml"
+commit=${2:-$commit}
+
+sed -i -e "s|^        commit: .*|        commit: ${commit}|" "$HERE/tech.qymis.cad.yml"
 
 # --- the crates, as declared sources ---
 #
@@ -50,5 +57,5 @@ python3 "$GEN" "$ROOT/Cargo.lock" -o "$HERE/cargo-sources.json"
 # address. See the comment in tech.qymis.cad.metainfo.xml.
 
 echo ">>> the manifest now points at ${TAG} (${commit})"
-grep -E '^        (tag|commit):' "$HERE/tech.qymis.cad.yml"
+grep -E '^        commit:' "$HERE/tech.qymis.cad.yml"
 echo ">>> crate sources: $(python3 -c "import json,sys; print(len(json.load(open('$HERE/cargo-sources.json'))))")"

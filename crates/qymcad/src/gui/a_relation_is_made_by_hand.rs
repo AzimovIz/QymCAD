@@ -84,9 +84,11 @@ pub(in crate::gui) mod tests {
 
         qymcad_assembly::relation_pick_click(&mut app.joint_ctx(), ja);
         assert_eq!(app.side.joint.relation_pick.as_ref().map_or(0, |p| p.picks.len()), 1, "after the first click the selection should hold one degree");
-        // A SECOND CLICK ON THE SAME JOINT WILL NOT DO: a gear needs TWO different mates.
+        // A SECOND CLICK ON THE SAME JOINT LETS IT GO, as a second click on any pick; a third takes it again
         qymcad_assembly::relation_pick_click(&mut app.joint_ctx(), ja);
-        assert_eq!(app.side.joint.relation_pick.as_ref().map_or(0, |p| p.picks.len()), 1, "the same joint was taken twice — the selection should have refused");
+        assert_eq!(app.side.joint.relation_pick.as_ref().map_or(9, |p| p.picks.len()), 0, "the joint clicked again was not let go");
+        qymcad_assembly::relation_pick_click(&mut app.joint_ctx(), ja);
+        assert_eq!(app.side.joint.relation_pick.as_ref().map_or(0, |p| p.picks.len()), 1, "the joint clicked a third time was not taken again");
         qymcad_assembly::relation_pick_click(&mut app.joint_ctx(), jb);
         assert_eq!(app.side.joint.relation_pick.as_ref().map_or(0, |p| p.picks.len()), 2, "after the second click the selection should hold two degrees");
 

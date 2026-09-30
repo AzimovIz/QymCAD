@@ -47,12 +47,7 @@ mod tests {
     /// `Hand::sk_tool` would do this too, but it also takes a drawing tool - and taking one puts the
     /// dimension tool down, which is exactly what must not happen here.
     fn canvas(app: &mut App) -> Hand<'_> {
-        let hand = Hand::new(app);
-        hand.app.viewing.mode_3d = false;
-        hand.app.viewing.view.scale = 6.0;
-        hand.app.viewing.view.center = super::super::Vec2::new(0.0, 0.0);
-        hand.app.viewing.view.initialized = true;
-        hand
+        Hand::canvas(app)
     }
 
     /// Arm the linear dimension tool - the same door the toolbar button uses.
@@ -145,9 +140,9 @@ mod tests {
     /// the new circle's centre. From then on the circle WAS the origin: drag it and both axes tilt with
     /// it; pin the frame and the circle cannot move at all.
     ///
-    /// 🟡 WHAT THIS DOES NOT ASK. The cause is checked, not the gesture: the drag of a selected shape is
-    /// not driven here, because `Hand` has no action for it - see the note in `hand.rs`. A person's own
-    /// drag of a circle away from zero is still unchecked.
+    /// AND THE GESTURE ITSELF IS DRIVEN, not only the cause. A shape is not moved by dragging it - the
+    /// program has no such gesture - it is moved with the move tool: pick it, set the base point, set the
+    /// target. That is what the last part of this test does.
     #[test]
     fn a_circle_drawn_at_zero_is_not_the_origin_itself() {
         let mut app = App::default();
@@ -174,6 +169,21 @@ mod tests {
             !s.constraints.iter().any(|c| matches!(c, qymcad_core::model::Constraint::Fixed { p } if *p == centre)),
             "the centre of the circle carries a Fixed of its own - it could never be moved"
         );
+
+        // THE COMPLAINT WORD FOR WORD: "I cannot move a circle away from the origin with the move tool".
+        // The rim is clicked at 45 degrees, away from the centre and from anything else.
+        let where_it_was = at(&app, si, centre);
+        Hand::new(&mut app).sk_move(1, (17.7, 17.7), (0.0, 0.0), (40.0, 30.0));
+        app.project.regen_sketch(si);
+        let now = at(&app, si, centre);
+        let went = (now.0 - where_it_was.0).hypot(now.1 - where_it_was.1);
+        assert!(went > 1.0, "the move tool did not move the circle: its centre stayed at {now:?}, the status line says {:?}", app.status);
+    }
+
+    /// Where a point of the sketch stands.
+    fn at(app: &App, si: usize, id: u64) -> (f64, f64) {
+        let p = app.project.sketches[si].points.iter().find(|p| p.id == id).expect("the point is still there");
+        (p.x, p.y)
     }
 
     /// AND THE GUIDES OF THE AXES DO NOT MOVE EITHER.

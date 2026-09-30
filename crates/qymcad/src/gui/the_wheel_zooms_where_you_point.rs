@@ -97,7 +97,7 @@ mod tests {
     /// THE FLAT VIEW OF A SKETCH DOES THE SAME.
     #[test]
     fn zooming_a_sketch_holds_the_point_under_the_cursor() {
-        let mut view = qymcad_ui_state::View2d { center: egui::vec2(0.0, 0.0), scale: 4.0, initialized: true };
+        let mut view = qymcad_ui_state::View2d { center: egui::vec2(0.0, 0.0), scale: 4.0, initialized: true, fit: 4.0 };
         let cursor = egui::pos2(700.0, 200.0);
         let before = qymcad_ui_state::to_world(&view, RECT, cursor);
 
@@ -114,7 +114,7 @@ mod tests {
     /// view a little on every notch of the wheel - a view that slides away while the zoom stands still.
     #[test]
     fn at_the_limit_the_view_does_not_creep() {
-        let mut view = qymcad_ui_state::View2d { center: egui::vec2(3.0, -2.0), scale: 800.0, initialized: true };
+        let mut view = qymcad_ui_state::View2d { center: egui::vec2(3.0, -2.0), scale: 800.0, initialized: true, fit: 4.0 };
         let before = view.center;
         for _ in 0..5 {
             qymcad_ui_state::zoom_view_2d(&mut view, RECT, egui::pos2(700.0, 200.0), 1.4, 0.02, 800.0);
@@ -154,5 +154,47 @@ mod tests {
             }
         }
         assert!(moved.is_empty(), "the wheel over the viewport does not honour the setting:\n{}", moved.join("\n"));
+    }
+
+    /// THE FLAT VIEW TAKES IN A SKETCH OF ANY SIZE, AND THE WHEEL ZOOMS ON FROM WHERE IT FRAMED IT, as the 3D view
+    /// does: a square of 40 m and one of 0.1 mm, each opened for editing, are framed in the view, and one notch of the
+    /// wheel zooms in from the fitted scale, by less than twice.
+    #[test]
+    fn the_flat_view_takes_in_a_sketch_of_any_size() {
+        use crate::gui::import_door::tests::{frame, running};
+        for side in [40_000.0, 0.1] {
+            let (mut app, ctx) = running();
+            let si = app.create_sketch_on(qymcad_core::feature::SketchPlane::default());
+            app.project.add_rect_entity(si, 0.0, 0.0, side, side, qymcad_core::feature::Purpose::Real);
+            app.project.regen_sketch(si);
+            app.finish_sketch_edit();
+            app.enter_sketch_edit(si); // the flat view of the sketch, fitted on its first frame
+            for _ in 0..3 {
+                let _ = frame(&mut app, &ctx, Vec::new());
+            }
+            let r = app.viewing.view_rect;
+            let across = app.viewing.view.scale as f64 * side;
+            let (short, long) = (r.width().min(r.height()) as f64, r.width().max(r.height()) as f64);
+            assert!(across > 0.3 * short && across < long, "{side} mm: the sketch is framed {across:.1} px across on a view {short:.0} px high, at {} px/mm", app.viewing.view.scale);
+            let fit = app.viewing.view.scale;
+            let wheel = vec![egui::Event::PointerMoved(r.center()), egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: egui::vec2(0.0, 120.0), phase: egui::TouchPhase::Move, modifiers: Default::default() }];
+            let _ = frame(&mut app, &ctx, vec![egui::Event::PointerMoved(r.center())]); // the hand comes over the view first
+            let _ = frame(&mut app, &ctx, wheel);
+            for _ in 0..10 {
+                let _ = frame(&mut app, &ctx, vec![egui::Event::PointerMoved(r.center())]); // the wheel is smoothed over frames
+            }
+            let now = app.viewing.view.scale;
+            assert!(now > fit && now < fit * 2.0, "{side} mm: one notch of the wheel took the flat view from {fit} to {now} px/mm");
+            // AND OUT PAST THE FIT: a person zooms out to see what stands around the drawing
+            for _ in 0..4 {
+                let out = vec![egui::Event::PointerMoved(r.center()), egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: egui::vec2(0.0, -120.0), phase: egui::TouchPhase::Move, modifiers: Default::default() }];
+                let _ = frame(&mut app, &ctx, out);
+                for _ in 0..10 {
+                    let _ = frame(&mut app, &ctx, vec![egui::Event::PointerMoved(r.center())]);
+                }
+            }
+            let out = app.viewing.view.scale;
+            assert!(out < fit * 0.6, "{side} mm: four notches out took the flat view from {now} only to {out} px/mm, fitted at {fit}");
+        }
     }
 }

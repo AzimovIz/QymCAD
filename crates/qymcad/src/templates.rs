@@ -12,6 +12,15 @@
 use std::path::PathBuf;
 
 /// The template directory. `None` — the OS has no config directory (happens in sandboxes).
+/// THE CHOOSER OF A TEMPLATE: documents only, opened in the folder of templates when there is one.
+pub fn chooser() -> rfd::AsyncFileDialog {
+    let d = rfd::AsyncFileDialog::new().add_filter("QymCAD", &["qcad"]);
+    match dir() {
+        Some(p) => d.set_directory(p),
+        None => d,
+    }
+}
+
 pub fn dir() -> Option<PathBuf> {
     qymcad_paths::config("templates")
 }
@@ -26,26 +35,6 @@ pub fn file_name(title: &str) -> String {
         s = "template".into();
     }
     format!("{s}.qcad")
-}
-
-/// The templates lying in the directory: (display name, path). Sorted by name.
-///
-/// The name is taken from the FILE rather than from the document properties inside: reading every
-/// template for the sake of a menu caption would mean unpacking a dozen zip bundles every time the
-/// menu opens.
-pub fn list() -> Vec<(String, String)> {
-    let Some(d) = dir() else { return Vec::new() };
-    let Ok(rd) = std::fs::read_dir(&d) else { return Vec::new() };
-    let mut out: Vec<(String, String)> = rd
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.extension().is_some_and(|x| x == "qcad"))
-        .filter_map(|p| {
-            let name = p.file_stem()?.to_string_lossy().into_owned();
-            Some((name, p.to_string_lossy().into_owned()))
-        })
-        .collect();
-    out.sort_by(|a, b| a.0.cmp(&b.0));
-    out
 }
 
 /// Write the document out as a template. Returns the path.

@@ -32,6 +32,37 @@ mod tests {
         app.project.bodies.iter().map(|b| b.id).filter(|b| !before.contains(b)).collect()
     }
 
+    /// TAKING A TOOL CLOSES THE EDIT OF A MATE. Reported behaviour: the first hinge of an assembly was made, its
+    /// popup stayed open over the canvas, and when the second mate was started the corner of the third part lay
+    /// under the popup's fields - the click went to them. The axis pick and the anchor re-pick are taken FROM that
+    /// popup, so they keep it.
+    #[test]
+    fn taking_a_tool_closes_the_edit_of_a_mate() {
+        let mut open: Vec<String> = Vec::new();
+        for t in AssemblyTool::ALL {
+            if matches!(t, AssemblyTool::Axis | AssemblyTool::Repick) {
+                continue;
+            }
+            let mut app = App::default();
+            let (jid, _) = super::super::assembly_tools::doors::a_joint(&mut app);
+            crate::gui::enter_joint_edit(&mut app.side.joint, &mut app.chosen.sel, &mut app.status, jid);
+            arm(&mut app, t);
+            if app.side.joint.edit.is_some() {
+                open.push(format!("{t:?}"));
+            }
+        }
+        assert!(open.is_empty(), "the edit of a mate stayed open over the canvas after taking {open:?}");
+        // the tools taken from the popup itself keep it
+        for t in [AssemblyTool::Axis, AssemblyTool::Repick] {
+            let mut app = App::default();
+            arm(&mut app, t);
+            let jid = app.project.joints.first().map(|j| j.id).expect("the joint");
+            app.side.joint.edit = Some(jid);
+            crate::gui::assembly_tools::drop_assembly_tools(&mut app.joint_ctx());
+            assert!(app.side.joint.edit.is_some(), "putting down {t:?} closed the popup it was taken from");
+        }
+    }
+
     #[test]
     fn taking_a_tool_releases_the_previous_one() {
         let mut both: Vec<String> = Vec::new();

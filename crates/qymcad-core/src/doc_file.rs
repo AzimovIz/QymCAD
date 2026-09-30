@@ -52,10 +52,6 @@ pub(crate) struct DocumentFile {
     /// one file has to produce one export for everybody.
     #[serde(default)]
     pub geom_quality: crate::model::GeomQuality,
-    /// Component patterns. Also absent from the schema: an assembly with a pattern saved and reopened without
-    /// it — the copies remained but stopped being a pattern, so editing and deleting went one at a time.
-    #[serde(default)]
-    pub comp_patterns: Vec<crate::model::comp_pattern::CompPattern>,
     #[serde(default)]
     pub next_id: Id,
     #[serde(default)]
@@ -73,6 +69,10 @@ pub(crate) struct DocumentFile {
     pub imported_bodies: std::collections::HashSet<Id>,
     #[serde(default)]
     pub part_colors: Map<Id, [u8; 3]>,
+    #[serde(default)]
+    pub face_colors: Map<Id, Vec<(u32, [u8; 3])>>,
+    #[serde(default)]
+    pub tri_colors: Map<Id, (Vec<[u8; 3]>, Vec<u8>)>,
     #[serde(default)]
     pub planes: Vec<WorkPlane>,
     #[serde(default)]
@@ -120,10 +120,16 @@ pub(crate) struct DocumentFile {
     pub face_refs: Map<Id, Vec<crate::model::ElemSnapshot>>,
     #[serde(default)]
     pub rollback: Option<usize>,
+    /// Why a node did not build, and what a node that built left out. Derived by a rebuild, but opening a file
+    /// does not rebuild - the geometry comes from the file - so without them a red node stood green after open.
+    #[serde(default)]
+    pub node_errors: Map<Id, crate::errors::CoreError>,
+    #[serde(default)]
+    pub node_warnings: Map<Id, crate::errors::CoreError>,
 }
 
 impl DocumentFile {
-    /// Model to file schema. Derived fields are not carried across: the schema has none.
+    /// Model to file schema. Derived fields are not carried across, save the node reasons (see `node_errors`).
     pub(crate) fn from_model(p: &Project) -> Self {
         let parts = p.contours.parts();
         // STAMPED HERE, NOT IN THE MODEL: saving must not modify the open document. Were the field set on
@@ -134,7 +140,6 @@ impl DocumentFile {
             units: p.units,
             meta,
             geom_quality: p.geom_quality,
-            comp_patterns: p.comp_patterns.clone(),
             next_id: p.next_id,
             names: p.names.clone(),
             contours: parts.list.to_vec(),
@@ -144,6 +149,8 @@ impl DocumentFile {
             bodies: p.bodies.clone(),
             imported_bodies: p.imported_bodies.clone(),
             part_colors: p.part_colors.iter().map(|(k, v)| (*k, *v)).collect(),
+            face_colors: p.face_colors.iter().map(|(k, v)| (*k, v.clone())).collect(),
+            tri_colors: p.tri_colors.iter().map(|(k, v)| (*k, v.clone())).collect(),
             planes: p.planes.clone(),
             sketches: p.sketches.clone(),
             timeline: p.timeline.clone(),
@@ -165,6 +172,8 @@ impl DocumentFile {
             edge_refs: p.edge_refs.iter().map(|(k, v)| (*k, v.clone())).collect(),
             face_refs: p.face_refs.iter().map(|(k, v)| (*k, v.clone())).collect(),
             rollback: p.rollback,
+            node_errors: p.regen_errors.iter().map(|(k, v)| (*k, v.clone())).collect(),
+            node_warnings: p.regen_warnings.iter().map(|(k, v)| (*k, v.clone())).collect(),
         }
     }
 
@@ -174,13 +183,14 @@ impl DocumentFile {
             units: self.units,
             meta: self.meta,
             geom_quality: self.geom_quality,
-            comp_patterns: self.comp_patterns,
             next_id: self.next_id,
             names: self.names,
             contours: crate::model::contours::Contours::from_parts(self.contours, self.contour_ids, self.contour_ents.into_iter().collect(), self.contour_parent.into_iter().collect()),
             bodies: self.bodies,
             imported_bodies: self.imported_bodies,
             part_colors: self.part_colors.into_iter().collect(),
+            face_colors: self.face_colors.into_iter().collect(),
+            tri_colors: self.tri_colors.into_iter().collect(),
             planes: self.planes,
             sketches: self.sketches,
             timeline: self.timeline,
@@ -202,6 +212,8 @@ impl DocumentFile {
             edge_refs: self.edge_refs.into_iter().collect(),
             face_refs: self.face_refs.into_iter().collect(),
             rollback: self.rollback,
+            regen_errors: self.node_errors.into_iter().collect(),
+            regen_warnings: self.node_warnings.into_iter().collect(),
             ..Project::default()
         }
     }

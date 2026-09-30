@@ -248,6 +248,13 @@ impl ThreadSpec {
 
     /// The full geometry: diameters per the standard plus the groove profile as exact edges.
     pub fn geometry(&self) -> ThreadGeom {
+        self.geometry_in(None)
+    }
+
+    /// The geometry of the thread cut on a face of diameter `face_d`. For an ISO nut the groove starts at the wall of
+    /// the hole as drilled: the room of the bolt's tooth cut off there, its width at that radius by the standard and
+    /// its root the flat of P/8 at the major diameter. A hole drilled under D1 is cut from D1.
+    pub fn geometry_in(&self, face_d: Option<f64>) -> ThreadGeom {
         let p = self.effective_pitch().max(1e-6);
         let d = self.nominal_d.max(1e-6);
         let angle = if self.standard == ThreadStandard::Custom && self.custom_angle > 1.0 { self.custom_angle } else { self.standard.angle_deg() };
@@ -287,6 +294,19 @@ impl ThreadSpec {
                 let h = if self.custom_depth > 1e-9 { self.custom_depth } else { 0.6 * p };
                 (h, d - h, d - 2.0 * h, 0.1 * p, 0.05 * p, 0.05 * p)
             }
+        };
+        // AN ISO NUT IS CUT TO THE ROOM OF THE BOLT'S TOOTH, not to the groove of a bolt: from the basic minor diameter
+        // D1 = d - 1.082532 P, where it is 3/4 of the pitch wide (the nut's crest flat P/4), out to the major one, where
+        // the bolt's crest flat of P/8 is left - a depth of 5H/8 with a flat root. The bolt's groove (0.6134 P deep,
+        // 7/8 P wide at the surface) cut M10 in a hole of 8.5 at 1.55 times the standard's volume.
+        let (depth, minor_d, crest_flat, std_root_r, std_crest_r) = if self.internal && self.standard == ThreadStandard::MetricIso {
+            let d1 = d - 1.082_532 * p;
+            let wall = face_d.map_or(d1, |f| f.max(d1)).min(d - 1e-3);
+            // the width of the room of the bolt's tooth at the radius of the wall: 3/4 P at D1, P/8 at D
+            let width = p * (0.75 - 0.625 * (wall - d1) / (d - d1));
+            ((d - wall) * 0.5, d1, p - width, 0.0, 0.0)
+        } else {
+            (depth, minor_d, crest_flat, std_root_r, std_crest_r)
         };
         let major_d = d;
         // ── fit clearance: an external thread thins and an internal one thickens, so the pair screws

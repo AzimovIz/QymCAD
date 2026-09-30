@@ -69,9 +69,11 @@ pub const COMMANDS: &[Command] = &[
     Command { code: "sketch.trim", workbench: "sketch", launch: Launch::ClickOp(1), name_key: "" },
     Command { code: "sketch.extend", workbench: "sketch", launch: Launch::ClickOp(2), name_key: "" },
     Command { code: "sketch.break", workbench: "sketch", launch: Launch::ClickOp(3), name_key: "" },
-    Command { code: "sketch.project", workbench: "sketch", launch: Launch::ClickOp(4), name_key: "" },
-    Command { code: "sketch.corner", workbench: "sketch", launch: Launch::ClickOp(5), name_key: "" },
-    Command { code: "sketch.project-body", workbench: "sketch", launch: Launch::ClickOp(6), name_key: "" },
+    // the projection is the tool of button 6 - of edges and of a body alike, one tool with one row; the corner the fillet
+    // of button 4 (5 is its chamfer)
+    Command { code: "sketch.project", workbench: "sketch", launch: Launch::ClickOp(6), name_key: "" },
+    Command { code: "sketch.corner", workbench: "sketch", launch: Launch::ClickOp(4), name_key: "" },
+    Command { code: "sketch.corner-chamfer", workbench: "sketch", launch: Launch::ClickOp(5), name_key: "cmdname-corner-chamfer" },
     Command { code: "sketch.delete", workbench: "sketch", launch: Launch::Modify(0), name_key: "" },
     Command { code: "sketch.mirror", workbench: "sketch", launch: Launch::Modify(1), name_key: "" },
     Command { code: "sketch.offset", workbench: "sketch", launch: Launch::Modify(6), name_key: "" },
@@ -94,16 +96,18 @@ pub const COMMANDS: &[Command] = &[
     // the bridge from the parametric side into the design layer — the name comes from the article
     // title, as with the neighbours
     Command { code: "part.face-copy", workbench: "part", launch: Launch::Feat(30), name_key: "" },
+    Command { code: "part.offset-surface", workbench: "part", launch: Launch::Feat(36), name_key: "" },
     Command { code: "part.surface-replace", workbench: "part", launch: Launch::Feat(31), name_key: "" },
     Command { code: "part.patch", workbench: "part", launch: Launch::Feat(32), name_key: "" },
     Command { code: "part.stitch", workbench: "part", launch: Launch::Feat(33), name_key: "" },
     Command { code: "part.trim", workbench: "part", launch: Launch::Feat(34), name_key: "" },
+    Command { code: "part.recognise", workbench: "part", launch: Launch::Feat(35), name_key: "" },
     Command { code: "part.mirror", workbench: "part", launch: Launch::Feat(16), name_key: "" },
     Command { code: "part.array-linear", workbench: "part", launch: Launch::Feat(17), name_key: "" },
     Command { code: "part.array-circular", workbench: "part", launch: Launch::Feat(18), name_key: "" },
     Command { code: "part.datum-plane", workbench: "part", launch: Launch::Feat(20), name_key: "cmdname-datum-plane" },
-    Command { code: "part.datum-axis", workbench: "part", launch: Launch::Feat(21), name_key: "cmdname-datum-axis" },
-    Command { code: "part.datum-point", workbench: "part", launch: Launch::Feat(22), name_key: "cmdname-datum-point" },
+    Command { code: "part.datum-axis", workbench: "part", launch: Launch::Feat(22), name_key: "cmdname-datum-axis" },
+    Command { code: "part.datum-point", workbench: "part", launch: Launch::Feat(21), name_key: "cmdname-datum-point" },
     // THE SIX PRIMITIVES — a caption of its own for each: they share ONE article, and without names
     // the search would show six identical rows reading "Primitives".
     Command { code: "part.box", workbench: "part", launch: Launch::Prim(10), name_key: "cmdname-box" },
@@ -115,6 +119,8 @@ pub const COMMANDS: &[Command] = &[
     // ── Assembly ────────────────────────────────────────────────────────────────────────────
     Command { code: "assembly.joint", workbench: "assembly", launch: Launch::Action("joint"), name_key: "" },
     Command { code: "assembly.ground", workbench: "assembly", launch: Launch::Action("ground"), name_key: "cmdname-ground" },
+    // one of the several bodies a part shows made a part of its own; the right button on it does the same
+    Command { code: "part.piece-to-part", workbench: "part", launch: Launch::Action("piece"), name_key: "act-piece-to-part" },
 ];
 
 /// A command by its code.
@@ -159,7 +165,35 @@ impl Command {
             Launch::ClickOp(n) => crate::help_map::sketch_article("click", n),
             Launch::Modify(n) => crate::help_map::sketch_article("mod", n),
             Launch::Action("joint") => crate::help_map::assembly_article("asm.joint"),
+            Launch::Action("piece") => Some("part/13-split-body"),
             Launch::Action(_) => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{by_code, Launch};
+
+    /// The kind a button of the Part panel lights for, read off the panel's source: the number in
+    /// `tr("<hint>"), bc.armed.cmd_kind() == N`.
+    fn kind_of_button(hint: &str) -> Option<u8> {
+        let src = include_str!("../../qymcad-part/src/lib.rs");
+        let at = src.find(&format!("tr(\"{hint}\"), bc.armed.cmd_kind() == "))?;
+        let rest = &src[at..];
+        let n = rest.split("cmd_kind() == ").nth(1)?;
+        n.chars().take_while(|c| c.is_ascii_digit()).collect::<String>().parse().ok()
+    }
+
+    /// A COMMAND FOUND BY NAME OPENS THE TOOL OF THAT NAME: the catalog launches the kind the panel's own button
+    /// takes. Reported behaviour: Ctrl+K "Datum axis" opened the point (the bar "Point", the fields X, Y, Z) and
+    /// "Datum point" the axis - the catalog had 21 for the axis and 22 for the point, the window the other way.
+    #[test]
+    fn a_command_found_by_name_launches_the_kind_of_its_own_button() {
+        for (code, hint) in [("part.datum-axis", "g-datum-axis-hint"), ("part.datum-point", "g-datum-point-hint")] {
+            let button = kind_of_button(hint).unwrap_or_else(|| panic!("the button {hint} was not found in the Part panel"));
+            let launch = by_code(code).map(|c| c.launch);
+            assert!(matches!(launch, Some(Launch::Feat(k)) if k == button), "{code} launches {launch:?}, its button takes kind {button}");
         }
     }
 }

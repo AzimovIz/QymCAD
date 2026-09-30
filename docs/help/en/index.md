@@ -23,14 +23,16 @@ Start with the lessons — they are short and run in order, with no steps skippe
 
 ## How the window is laid out
 
-Tools of the current workbench are on the left. The document path and the parameter bar of the
+Tools of the current workbench are on the left. The document path and the bar with the modes of the
 active command are on top. Properties of the selection are on the right. The status line at the
 bottom says what is happening, how many degrees of freedom the sketch has and where the cursor is.
 
 ## Rules shared by every tool
 
-- A tool is a **command**: pick what it stands on, type the values, watch the preview, **Enter**
-  applies, **Esc** cancels.
+- A tool is a **command**: what is selected before it is taken at once, otherwise the tool waits for you to
+  point; modes are in the bar on top, values in fields right at the geometry; the preview shows the result,
+  **Enter** applies, **Esc** cancels.
+- A double click on a timeline row reopens its command with the same fields.
 - Every numeric field takes a **formula**: `40/2`, `len*2`, `sin(30)*10`. Names come from the global
   parameters.
 - Nothing is applied on the fly: until you press Enter the document is unchanged.
@@ -41,7 +43,7 @@ bottom says what is happening, how many degrees of freedom the sketch has and wh
 - [Parameters and formulas](general/05-parameters) — one number for the whole part.
 - [The history timeline and rollback](general/03-timeline) — why a model is a recipe, not a picture.
 - [Keyboard shortcuts](general/10-hotkeys) — the full reference and how to reassign them.
-- [Report a problem](general/13-report) — something does not work: how to tell it so it gets fixed.
+- [Report a problem](general/13-report) — something does not work: how to tell about it.
 - [Updates](general/14-updates) — how to learn about a new version, and what goes over the network.
 
 **F1** at any moment opens the article about what you are doing right now, not the contents page.

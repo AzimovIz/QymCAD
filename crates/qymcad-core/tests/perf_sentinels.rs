@@ -31,7 +31,7 @@ fn big_assembly(parts: usize) -> Project {
         p.timeline.push(qymcad_core::feature::FeatureNode {
             id: body,
             name: "Import".into(),
-            kind: qymcad_core::feature::FeatureKind::Import { body, source: 0, solid: i as u32 },
+            kind: qymcad_core::feature::FeatureKind::Import { body, source: 0, solid: i as u32, scale: 1.0 },
             parent: Some(c),
             dirty: false,
             suppressed: false,

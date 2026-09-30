@@ -164,7 +164,8 @@ fn matrix_ops_on_plate() {
             for (id, er) in &report.errors {
                 fails.push(format!("{label}: REGEN ERROR {id}: {er}"));
             }
-            let v = shapes.get(&node).map(|s| s.volume()).unwrap_or(0.0);
+            // every body the node makes: an intersection with several islands leaves each a body of its own
+            let v: f64 = p.timeline.iter().find(|n| n.kind.body() == Some(node)).map(|n| n.kind.bodies()).unwrap_or_default().iter().filter_map(|b| shapes.get(b)).map(|s| s.volume()).sum();
             run_case(&mut fails, &label, v, expect, 0.02);
         }
     }

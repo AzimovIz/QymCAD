@@ -49,15 +49,15 @@ tangent) and relations between degrees of freedom. Each row has its own icon, na
 The difference matters: in the first case the item itself is at fault, in the second a pair of items
 demand incompatible things.
 
-## The solver tells the truth
+## Freedom and conflicts
 
-Parts are placed so that all joints hold **at once**, not one after another. That lets the solver say
-two things that “placed and forgot” cannot:
+The parts are placed so that all joints hold **at once**, not one after another. Select a joint: its properties show
+how many degrees of freedom the driven part has left (**Dof of the driven part**) — zero means it is defined. If the
+joints ask something incompatible of the part, the program says **The joints conflict** and leaves the parts where
+they were instead of scattering them: remove the extra or incompatible joint.
 
-- how many **degrees of freedom** the assembly has left — that is, what you have not defined yet;
-- which constraints are **redundant** — they repeat what others already said. A redundant constraint
-  is not an error, but it hides the intent: two constraints hold one thing and it is unclear which
-  one is the real one.
+A part with freedom left can be led with the mouse — in our layout **Shift** and the left button, begun on the part:
+it goes the way the joints allow.
 
 ## The joint panel
 
@@ -66,9 +66,9 @@ the viewport. The panel offers:
 
 - **Swap roles** — the two sides are not equal, the part of the second anchor is the one that moves.
   Swapping changes which part stays and which one travels.
-- **Flip side** — the part faces the wrong way: this turns it half a turn about the joint axis.
-- **Limits** — the bounds of travel. When a degree runs into a bound, its row reads **“at limit”**
-  and “put at limit” appears next to it: the degree is set exactly on the bound.
+- **flip the side** — the part faces the wrong way: this turns it half a turn about the joint axis.
+- **Limits** — the bounds of travel. When a degree runs into a bound, its row reads **at the stop**, and
+  **Apply limit position** appears next to it: the degree is set exactly on the bound.
 
 ## When there is nothing to hold on to
 
@@ -90,8 +90,9 @@ travel, remove the grounding from the part — it holds nothing anyway.
 
 ## Ground
 
-One part in an assembly must be **grounded** — otherwise the whole structure has nothing to measure
-its position from and floats as a whole. Usually the housing or the frame is grounded.
+One part in an assembly must be **grounded** — otherwise the whole structure has nothing to measure its position from
+and floats as a whole. Usually the housing or the frame is grounded: in the joints panel press **Grounding (the
+assembly anchor)** and click the part; a second click releases it.
 
 ## See also
 

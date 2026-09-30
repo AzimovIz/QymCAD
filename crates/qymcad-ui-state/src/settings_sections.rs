@@ -55,10 +55,10 @@ impl SettingsSection {
     pub fn row_keys(self) -> &'static [&'static str] {
         use SettingsSection::*;
         match self {
-            General => &["settings-language", "settings-help-lang", "settings-help-open", "settings-open-last", "settings-show-start", "settings-autosave", "settings-undo-cap", "settings-updates", "settings-recent-limit", "settings-profile"],
+            General => &["settings-language", "settings-help-lang", "settings-help-open", "settings-open-last", "settings-show-start", "settings-import-ask", "settings-autosave", "settings-undo-cap", "settings-kernel-threads", "settings-updates", "settings-recent-limit", "settings-profile"],
             Appearance => &["settings-scheme", "settings-ui-scale"],
             Viewport => &["settings-engine", "settings-projection", "settings-shading", "settings-viewcube", "settings-mouse-nav", "settings-zoom-at", "settings-pick-precision", "settings-ghost-alpha", "settings-fov", "settings-msaa"],
-            Sketch => &["settings-snap-on", "settings-grid-step", "settings-rot-step", "settings-auto-constrain"],
+            Sketch => &["settings-snap-on", "settings-grid-step", "settings-rot-step", "settings-auto-constrain", "settings-dim-name", "settings-dim-formula", "settings-dim-font", "settings-dim-text"],
             Part => &["settings-default-extrude", "settings-default-offset"],
             Assembly => &["settings-show-contours", "settings-show-joints", "settings-show-interference"],
             Layout => &["settings-layout-place", "settings-layout-reset"],
@@ -91,6 +91,8 @@ impl SettingsSection {
                 s.help_external = d.help_external;
                 s.open_last = d.open_last;
                 s.show_start_screen = d.show_start_screen;
+                s.import_ask_always = d.import_ask_always;
+                s.import_units = d.import_units.clone();
                 s.autosave_secs = d.autosave_secs;
                 s.undo_cap = d.undo_cap;
                 s.recent_limit = d.recent_limit;
@@ -122,6 +124,7 @@ impl SettingsSection {
             Sketch => {
                 s.snap = d.snap;
                 s.auto_constrain = d.auto_constrain;
+                (s.dim_show_name, s.dim_show_formula, s.dim_font, s.dim_text) = (d.dim_show_name, d.dim_show_formula, d.dim_font, d.dim_text);
             }
             Part => s.defaults = d.defaults,
             Assembly => {

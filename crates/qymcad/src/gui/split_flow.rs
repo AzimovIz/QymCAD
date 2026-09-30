@@ -53,7 +53,7 @@ mod tests {
             .expect("the top face is there");
         let basis = app.viewing.cam.basis();
         let at = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: rect, basis: &basis }.at(top).0;
-        let sp = app.pick_sketch_plane_at(rect, at).expect("a click on a face must give a plane");
+        let sp = crate::gui::pick::pick_sketch_plane_at(&app.painting(), rect, at).expect("a click on a face must give a plane");
         app.params.split.plane = Some(sp);
 
         // THE OFFSET DOWN BY HALF THE HEIGHT (the normal of the face looks upwards, so the offset is
@@ -148,8 +148,8 @@ mod tests {
         assert!(crate::gui::render_source::has(gui, "FK::SplitBody { .. } => ph::"), "the icon");
         assert!(!crate::i18n::tr("feat-name-split-body").is_empty() && crate::i18n::tr("feat-name-split-body") != "feat-name-split-body", "the default name of the feature must have a translation");
         let cmds = crate::gui::sketch_source::PART;
-        assert!(crate::gui::render_source::has(cmds, "FeatureKind::SplitBody { plane, datum, offset, .. } => {"), "reopening for editing");
-        assert!(crate::gui::render_source::has(cmds, "FeatureKind::SplitBody { plane, datum, offset, bodies, .. } => {"), "applying the edit");
+        assert!(crate::gui::render_source::has(cmds, "FeatureKind::SplitBody { plane, datum, offset, face, .. } => {"), "reopening for editing");
+        assert!(crate::gui::render_source::has(cmds, "FeatureKind::SplitBody { plane, datum, offset, bodies, face, .. } => {"), "applying the edit");
     }
 
     /// Editing the split moves the plane and does NOT recreate the bodies.
@@ -253,7 +253,7 @@ mod tests {
         assert!(crate::gui::render_source::has(panels, "FeatureKind::SplitFace { offset, .. } =>"), "the row in the tree");
         let _gui = include_str!("../gui.rs");
         assert!(!crate::i18n::tr("feat-name-split-face").is_empty() && crate::i18n::tr("feat-name-split-face") != "feat-name-split-face", "the default name of the feature must have a translation");
-        assert!(crate::gui::render_source::has(crate::gui::sketch_source::PART, "FeatureKind::SplitFace { plane, datum, offset, .. } => {"), "reopening for editing");
+        assert!(crate::gui::render_source::has(crate::gui::sketch_source::PART, "FeatureKind::SplitFace { plane, datum, offset, face, .. } => {"), "reopening for editing");
     }
 
 

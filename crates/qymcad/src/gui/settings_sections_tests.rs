@@ -83,6 +83,7 @@ mod tests {
             autosave_secs: 600,
             undo_cap: 7,
             ghost_alpha: 200,
+            kernel_threads: 0, // all the cores but one
             persp_fov_deg: 60.0,
             gpu_viewport: false,
             projection: Projection::Perspective,
@@ -92,11 +93,17 @@ mod tests {
             show_interference: true,
             snap: super::super::Snapping { on: false, grid: 7.5, rot_deg: 30.0 },
             auto_constrain: false,
+            dim_show_name: true,
+            dim_show_formula: true,
+            dim_font: 20.0,
+            dim_text: qymcad_ui_state::DimTextTurn::Horizontal,
             defaults: super::super::Defaults { extrude_h: 42.0, offset_2d: 9.5 },
             ui_scale: 1.4,
             recent: vec!["/tmp/a.qcad".into()],
             recent_limit: 3,
             pick_precision: 2,
+            import_ask_always: true,
+            import_units: [("STL".to_string(), "m".to_string())].into_iter().collect(),
         }
     }
 
@@ -143,6 +150,7 @@ mod tests {
         assert_eq!((v.viewcube_size, v.gpu_viewport, v.projection, v.shading), (d.viewcube_size, d.gpu_viewport, d.projection, d.shading));
         let sk = after(Sec::Sketch);
         assert_eq!((sk.snap.on, sk.snap.grid, sk.snap.rot_deg, sk.auto_constrain), (d.snap.on, d.snap.grid, d.snap.rot_deg, d.auto_constrain));
+        assert_eq!((sk.dim_show_name, sk.dim_show_formula, sk.dim_font, sk.dim_text), (d.dim_show_name, d.dim_show_formula, d.dim_font, d.dim_text), "the labels of the dimensions belong to the sketch section");
         let pt = after(Sec::Part);
         assert_eq!((pt.defaults.extrude_h, pt.defaults.offset_2d), (d.defaults.extrude_h, d.defaults.offset_2d));
         let asm = after(Sec::Assembly);

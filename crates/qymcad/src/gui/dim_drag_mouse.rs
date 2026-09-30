@@ -41,7 +41,7 @@ mod tests {
                 .expect("a point of the rectangle")
         };
         let (a, b) = (pt(&app, 0.0, 0.0), pt(&app, 40.0, 0.0));
-        app.project.sketches[si].constraints.push(Constraint::Distance { a, b, d: 40.0, off: 0.0, expr: String::new(), driven: false, axis: 0 });
+        app.project.sketches[si].constraints.push(Constraint::Distance { a, b, d: 40.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
         app.project.solve_sketch(si);
         app.project.regen_sketch(si);
 
@@ -58,6 +58,18 @@ mod tests {
         super::super::install_fonts(&ctx);
         let _ = ctx.run_ui(frame(Vec::new()), |c| app.viewport(c));
         (app, ctx, si)
+    }
+
+    /// The middle of the text reading `value` in what a frame drew.
+    fn caption_of(out: &egui::FullOutput, value: &str) -> Option<egui::Pos2> {
+        fn walk(s: &egui::epaint::Shape, value: &str) -> Option<egui::Pos2> {
+            match s {
+                egui::epaint::Shape::Text(t) if t.galley.text().trim() == value => Some(egui::Rect::from_min_size(t.pos, t.galley.size()).center()),
+                egui::epaint::Shape::Vec(v) => v.iter().find_map(|s| walk(s, value)),
+                _ => None,
+            }
+        }
+        out.shapes.iter().find_map(|c| walk(&c.shape, value))
     }
 
     fn label_offset(app: &App, si: usize) -> f64 {
@@ -81,13 +93,14 @@ mod tests {
         let rect = app.viewing.view_rect;
         assert!(rect.is_positive(), "setup: the canvas did not lay out");
 
-        // the caption stands by the middle of the bottom side — exactly where it is drawn
-        let mid = (qymcad_ui_state::Sheet { view: app.viewing.view, rect: rect }).at(qymcad_core::geom::Point2::new(20.0, 0.0));
+        // THE HAND PRESSES WHERE THE NUMBER IS DRAWN: what is taken is what was pressed on, and the caption stands
+        // 35 px below the side it measures.
+        let drawn = ctx.run_ui(frame(Vec::new()), |c| app.viewport(c));
+        let mid = caption_of(&drawn, "40.0").expect("setup: the caption 40.0 is not drawn");
         let _ = ctx.run_ui(frame(vec![egui::Event::PointerMoved(mid)]), |c| app.viewport(c));
         let _ = ctx.run_ui(frame(vec![press(mid, true)]), |c| app.viewport(c));
 
-        // DRAG OVER SEVERAL FRAMES: the grab is decided not by the press but when the motion is
-        // recognised as a drag
+        // DRAG OVER SEVERAL FRAMES: nothing is taken at the press, only once the motion is recognised as a drag
         let mut grabbed = false;
         for k in 1..=4 {
             let p = mid + egui::vec2(0.0, 12.0 * k as f32);

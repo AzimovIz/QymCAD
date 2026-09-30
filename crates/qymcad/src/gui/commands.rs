@@ -144,8 +144,9 @@ impl App {
     pub(super) fn apply_job_result(&mut self, res: JobResult) {
         match res {
             JobResult::Regenerated { stamp, project, shapes, built, errors, cancelled } => self.finish_regen_checked(stamp, *project, shapes, built, errors, cancelled),
-            JobResult::StepImported { path, bodies, shapes } => self.finish_step_import(path, bodies, shapes),
-            JobResult::StlImported { path, mesh, faces } => self.finish_stl_import(path, mesh, faces),
+            JobResult::ExactImported { path, format, bodies, shapes, nodes } => crate::gui::import_scale::land_exact(&mut self.win_ctx(&mut Vec::new()), path, format, bodies, shapes, nodes),
+            JobResult::DrawingRead { path, curves, note } => { self.arm_sketch_import(curves, &path); if !note.is_empty() { self.status = format!("{} {note}", self.status); } }
+            JobResult::MeshImported { path, format, pieces } => crate::gui::import_scale::land_mesh(&mut self.win_ctx(&mut Vec::new()), path, format, pieces),
             JobResult::ProjectLoaded { path, project, shapes } => self.finish_project_load(path, *project, shapes),
             JobResult::Saved { path, autosave, error } => {
                 // "clean" is set ONLY once the write has actually succeeded; if it failed, the project stays
@@ -200,8 +201,8 @@ impl App {
                 if regen {
                     qymcad_ui_state::mark_dirty_for_rebuild(&mut self.rebuild_ctx()); // the document is marked; the planner does the counting - a file with no geometry now has something to rebuild from
                     self.status = crate::i18n::tr1("io-loaded-brep-rebuilt", "n", &n.to_string());
-                } else {
-                    self.status = crate::i18n::tr1("io-brep-restored-n", "n", &n.to_string());
+                } else if n > 0 {
+                    self.status = crate::i18n::tr1("io-brep-restored-n", "n", &n.to_string()); // none raised: nothing to tell
                 }
                 qymcad_ui_state::invalidate(&mut self.regen);
                 if was_clean {
@@ -255,10 +256,11 @@ impl App {
             23 => start_draft_cmd(&mut self.part_ctx()),
             25 => start_push_face_cmd(&mut self.part_ctx()),
             26 => start_remove_face_cmd(&mut self.part_ctx()),
-            30 => start_face_copy_cmd(&mut self.part_ctx()),
+            30 | 36 => start_face_copy_cmd(&mut self.part_ctx(), cmd),
             31 => start_surface_replace_cmd(&mut self.part_ctx()),
             32 => crate::gui::commands::start_patch_cmd(&mut self.part_ctx()),
             33 => start_stitch_cmd(&mut self.part_ctx()),
+            35 => start_recognise_cmd(&mut self.part_ctx()),
             34 => start_trim_cmd(&mut self.part_ctx()),
             27 => start_split_cmd(&mut self.part_ctx()),
             28 => start_thicken_cmd(&mut self.part_ctx()),
@@ -362,7 +364,7 @@ impl App {
         self.cancel_all_tools(); // exclusivity: the array drops the previous tool
         self.side.carr = CompArrayCmd { mode, src, dir: 0, axis: 2, edit: 0 };
         self.params.arr.count = if mode == 2 { 6 } else { 3 };
-        self.params.arr.full = true;
+        (self.params.arr.full, self.params.arr.two, self.params.arr.three, self.params.arr.axis) = (true, false, false, 0); // a full turn, one direction, the assembly's axis
         self.viewing.mode_3d = true;
         self.tools.cmd.params = if mode == 2 { vec![] } else { vec![CmdParam::new("f-pitch", "cstep", 30.0, 0.01, 100000.0)] };
         self.status = if mode == 2 {
@@ -374,23 +376,8 @@ impl App {
 
     /// Reopen an EXISTING component array for editing (a double click in the tree).
     pub(super) fn start_comp_array_edit(&mut self, pid: Id) {
-        use qymcad_core::model::CompPatternKind;
-        let Some(pat) = self.project.comp_patterns.iter().find(|p| p.id == pid).cloned() else { return };
         self.cancel_all_tools();
-        let (mode, dir, axis, count, val) = match pat.kind {
-            CompPatternKind::Linear { dir, step, count } => (1u8, axis_of(dir), 2u8, count, step),
-            CompPatternKind::Circular { dir, angle, count, .. } => (2u8, 0u8, axis_of(dir), count, angle),
-        };
-        self.side.carr = CompArrayCmd { mode, src: pat.src, dir, axis, edit: pid };
-        self.params.arr.count = count.max(1);
-        self.viewing.mode_3d = true;
-        if mode == 2 {
-            self.params.arr.full = (val - 360.0).abs() < 0.1;
-            self.tools.cmd.params = if self.params.arr.full { vec![] } else { vec![CmdParam::new("f-angle", "cangle", val, -3600.0, 3600.0)] };
-        } else {
-            self.tools.cmd.params = vec![CmdParam::new("f-pitch", "cstep", val, 0.01, 100000.0)];
-        }
-        self.status = crate::i18n::tr("msg-edit-comp-array");
+        crate::gui::commands::open_comp_array_edit(&mut self.part_ctx(), pid);
     }
 
 
@@ -424,63 +411,32 @@ impl App {
 
 
     /// Carry out a confirmed deletion of a tree node. One set of cascading core methods, plus a resync.
-    pub(super) fn execute_delete(&mut self, sel: Sel) {
+    pub(super) fn execute_delete(&mut self, sel: Sel, dependents: bool) {
         match sel {
-            Sel::Feature(ti) => crate::gui::commands::delete_feature(&mut self.part_ctx(), ti),
-            Sel::Mesh(mi) => crate::gui::commands::delete_body_mesh(&mut self.part_ctx(), mi),
+            Sel::Feature(ti) => crate::gui::commands::delete_feature(&mut self.part_ctx(), ti, dependents),
+            Sel::Mesh(mi) => crate::gui::commands::delete_body_mesh(&mut self.part_ctx(), mi, dependents),
             Sel::Contour(i) => qymcad_ui_state::delete_contour(&mut self.project, &mut self.regen, &mut self.chosen.sel, &mut self.viewing.view, i),
             Sel::Sketch(si) => {
                 if let Some(s) = self.project.sketches.get(si) {
                     let sid = s.id;
-                    crate::gui::commands::delete_sketch_full(&mut self.part_ctx(), sid);
+                    crate::gui::commands::delete_sketch_full(&mut self.part_ctx(), sid, dependents);
                 }
             }
             // DELETING A DATUM IS THE SAME KIND OF OPERATION as deleting a feature or a sketch, and must go
             // through the same boundary. Without it the edit went past `App::edit`: the guard reported the
             // document changed outside `App::edit`, and the undo step came out as a nameless "edit" picked up
             // after the fact by a snapshot. It was hit on a cut - the cutting plane and the feature deleted.
-            Sel::Plane(i) => {
-                if let Some(p) = self.project.planes.get(i) {
-                    let pid = p.id;
-                    qymcad_ui_state::begin_edit(&mut self.disk.edits, &self.project, crate::i18n::tr("status-plane-delete"));
-                    self.project.delete_plane(pid);
-                    self.chosen.sel = Sel::None;
-                    crate::gui::commands::resync_after_topology_change(&mut self.part_ctx());
-                    qymcad_ui_state::commit_edit(&mut self.rebuild_ctx());
-                }
-            }
-            Sel::DatumPoint(i) => {
-                if let Some(d) = self.project.datum_points.get(i) {
-                    let did = d.id;
-                    qymcad_ui_state::begin_edit(&mut self.disk.edits, &self.project, crate::i18n::tr("status-delete-point"));
-                    self.project.delete_datum_point(did);
-                    self.chosen.sel = Sel::None;
-                    crate::gui::commands::resync_after_topology_change(&mut self.part_ctx());
-                    qymcad_ui_state::commit_edit(&mut self.rebuild_ctx());
-                }
-            }
-            Sel::DatumAxis(i) => {
-                if let Some(d) = self.project.datum_axes.get(i) {
-                    let did = d.id;
-                    qymcad_ui_state::begin_edit(&mut self.disk.edits, &self.project, crate::i18n::tr("status-axis-delete"));
-                    self.project.delete_datum_axis(did);
-                    self.chosen.sel = Sel::None;
-                    crate::gui::commands::resync_after_topology_change(&mut self.part_ctx());
-                    qymcad_ui_state::commit_edit(&mut self.rebuild_ctx());
-                }
-            }
-            Sel::Joint(jid) => {
-                // delete the joint and any orphaned connectors, through the same core method the cross in the
-                // list uses
-                self.project.delete_joint(jid);
-                self.chosen.sel = Sel::None;
-                qymcad_ui_state::mark_dirty_for_rebuild(&mut self.rebuild_ctx()); // the document is marked; the planner does the counting
-            }
+            Sel::Plane(i) => delete_one(&mut self.part_ctx(), "status-plane-delete", |p| p.planes.get(i).map(|x| x.id).is_some_and(|id| if dependents { p.delete_plane_with_dependents(id) } else { p.delete_plane(id) })),
+            Sel::DatumPoint(i) => delete_one(&mut self.part_ctx(), "status-delete-point", |p| p.datum_points.get(i).map(|x| x.id).is_some_and(|id| p.delete_datum_point(id))),
+            Sel::DatumAxis(i) => delete_one(&mut self.part_ctx(), "status-axis-delete", |p| p.datum_axes.get(i).map(|x| x.id).is_some_and(|id| p.delete_datum_axis(id))),
+            // the joint and any orphaned connectors, through the same core method the cross in the list uses
+            Sel::Joint(jid) => delete_one(&mut self.part_ctx(), "status-delete-joint", |p| { p.delete_joint(jid); true }),
             Sel::Component(ci) => {
                 // a part or a subassembly WHOLE: one core method clears the bodies, sketches, datums,
                 // connectors and joints of the subtree. Deleting the active context returns to the root.
                 if let Some(c) = self.project.components.get(ci) {
                     let cid = c.id;
+                    qymcad_ui_state::begin_edit(&mut self.disk.edits, &self.project, crate::i18n::tr("status-delete-component"));
                     if self.active_path.contains(&cid) {
                         let root = self.project.ensure_root();
                         self.set_context_to(root);
@@ -502,10 +458,48 @@ impl App {
                     }
                     self.chosen.sel = Sel::None;
                     crate::gui::commands::resync_after_topology_change(&mut self.part_ctx());
+                    qymcad_ui_state::commit_edit(&mut self.rebuild_ctx());
                 }
             }
             _ => {}
         }
         self.status = crate::i18n::tr("msg-deleted");
     }
+}
+
+/// DELETE ONE THING OF THE DOCUMENT as one named step of undo: `del` finds it and deletes it, answering whether there was
+/// anything to delete; the selection goes, and the document is brought in step with its new topology.
+fn delete_one(pc: &mut qymcad_ui_state::PartCtx, name: &str, del: impl FnOnce(&mut qymcad_core::model::Project) -> bool) {
+    qymcad_ui_state::begin_edit(&mut *pc.edits, &*pc.project, crate::i18n::tr(name));
+    if del(&mut *pc.project) {
+        *pc.sel = Sel::None;
+        crate::gui::commands::resync_after_topology_change(pc);
+    }
+    qymcad_ui_state::commit_edit(&mut pc.rebuild());
+}
+
+/// CARRY OUT WHAT THE PROPERTIES PANEL ASKED FOR, after it has drawn. It lives here rather than on `App`: the panel
+/// hands over a typed request, and what each request does is a command of its own workbench.
+pub(crate) fn do_props_asks(app: &mut crate::gui::App, asks: Vec<qymcad_ui_state::PropsAsk>) {
+    use qymcad_ui_state::PropsAsk;
+    for a in asks {
+            match a {
+                PropsAsk::EditFeature(id) => crate::gui::commands::start_feat_cmd_edit(&mut app.part_ctx(), id),
+                PropsAsk::EditJoint(jid) => crate::gui::enter_joint_edit(&mut app.side.joint, &mut app.chosen.sel, &mut app.status, jid),
+                PropsAsk::RescaleImport(id) => crate::gui::import_scale::rescale(&mut app.win_ctx(&mut Vec::new()), id),
+                PropsAsk::SketchOnDatum(id) => {
+                    app.create_sketch_on(qymcad_core::feature::SketchPlane::Datum(id));
+                }
+                PropsAsk::JointPick => app.start_joint_pick(),
+                PropsAsk::ConnPick => app.start_conn_pick(),
+                PropsAsk::DeleteConnector(cid) => qymcad_assembly::delete_connector_asked(&mut app.joint_ctx(), cid),
+                PropsAsk::RelationPick(j) => qymcad_assembly::relation_pick_click(&mut app.joint_ctx(), j),
+                PropsAsk::SketchOnBasePlane(b) => {
+                    app.create_sketch_on(qymcad_core::feature::SketchPlane::World(b));
+                }
+                PropsAsk::EnterSketch(si) => app.enter_sketch_edit(si),
+                PropsAsk::ExitContext => app.exit_context(),
+                PropsAsk::SetContext(cid) => app.set_context_to(cid),
+            }
+        }
 }

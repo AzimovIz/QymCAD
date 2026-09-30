@@ -19,7 +19,7 @@ pub fn regenerate(project: &mut Project) -> (qymcad_core::feature::RegenReport, 
 /// ready shapes.
 pub fn regenerate_dirty_with_shapes(project: &mut Project, shapes: HashMap<Id, qymcad_kernel::Shape>) -> (qymcad_core::feature::RegenReport, HashMap<Id, qymcad_kernel::Shape>) {
     let _gate = qymcad_kernel::kernel_gate();
-    let kernel = OcctKernel { shapes: std::cell::RefCell::new(shapes), quality_k: project.geom_quality.deflection_k() };
+    let kernel = OcctKernel { shapes: std::cell::RefCell::new(shapes), quality_k: project.geom_quality.deflection_k(), ..Default::default() };
     let report = project.regenerate(&kernel);
     (report, kernel.shapes.into_inner())
 }
@@ -34,7 +34,7 @@ pub fn regenerate_with_shapes(project: &mut Project, shapes: HashMap<Id, qymcad_
         }
     }
     let _gate = qymcad_kernel::kernel_gate();
-    let kernel = OcctKernel { shapes: std::cell::RefCell::new(shapes), quality_k: project.geom_quality.deflection_k() };
+    let kernel = OcctKernel { shapes: std::cell::RefCell::new(shapes), quality_k: project.geom_quality.deflection_k(), ..Default::default() };
     let report = project.regenerate(&kernel);
     (report, kernel.shapes.into_inner())
 }
@@ -55,7 +55,7 @@ pub fn restore_import_shapes(project: &Project) -> HashMap<Id, qymcad_kernel::Sh
     use qymcad_core::feature::FeatureKind;
     let mut by_src: HashMap<Id, Vec<(Id, u32)>> = HashMap::new();
     for n in &project.timeline {
-        if let FeatureKind::Import { body, source, solid } = n.kind {
+        if let FeatureKind::Import { body, source, solid, .. } = n.kind {
             by_src.entry(source).or_default().push((body, solid));
         }
     }
@@ -71,7 +71,9 @@ pub fn restore_import_shapes(project: &Project) -> HashMap<Id, qymcad_kernel::Sh
             continue;
         }
         // a shape does not clone: each solid is taken by index exactly once
-        let mut shapes: Vec<Option<qymcad_kernel::Shape>> = qymcad_kernel::step_solids(tmp.to_string_lossy().as_ref()).unwrap_or_default().into_iter().map(Some).collect();
+        // read by what the source is, the same way the application does
+        let format = qymcad_kernel::ExactFormat::of_extension(ext);
+        let mut shapes: Vec<Option<qymcad_kernel::Shape>> = qymcad_kernel::exact_solids(format, tmp.to_string_lossy().as_ref()).unwrap_or_default().into_iter().map(Some).collect();
         let _ = std::fs::remove_file(&tmp);
         for (body, solid) in items {
             if let Some(s) = shapes.get_mut(solid as usize).and_then(|o| o.take()) {

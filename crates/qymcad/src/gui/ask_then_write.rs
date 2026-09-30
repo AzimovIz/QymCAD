@@ -37,7 +37,7 @@ mod tests {
     ];
 
     /// Where the requests are carried out, and where the functions they delegate to live.
-    const HANDLERS: [&str; 14] = [
+    const HANDLERS: [&str; 16] = [
         include_str!("../gui.rs"),
         include_str!("commands.rs"),
         include_str!("sketching.rs"),
@@ -48,6 +48,8 @@ mod tests {
         include_str!("file_ask.rs"),
         include_str!("help_window.rs"),
         include_str!("measure3d.rs"),
+        include_str!("import_scale.rs"),
+        include_str!("import_door.rs"),
         include_str!("../../../qymcad-ui-state/src/lib.rs"),
         include_str!("../../../qymcad-sketch/src/lib.rs"),
         include_str!("../../../qymcad-part/src/lib.rs"),
@@ -117,7 +119,9 @@ mod tests {
                         continue;
                     }
                     let Some(paren) = src[s..].find('(') else { break };
+                    // a generic function is read by its name, its type parameters left off: `win_ctx<'a>`
                     let name = src[s + 3..s + paren].trim();
+                    let name = name.split('<').next().unwrap_or(name).trim();
                     if name.is_empty() || !name.chars().all(|c| c.is_alphanumeric() || c == '_') {
                         continue;
                     }

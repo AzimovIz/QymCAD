@@ -1,20 +1,28 @@
 # Circle
 
-Key **C**. The ways to define it are switched in the top bar.
+Key **C**.
 
-![A circle with the automatic diameter label.](img/sketch-circle.png)
+![A circle with its diameter labelled automatically.](img/sketch-circle.png)
 
-- **Centre and radius** — the usual way.
-- **By two points** — they set the diameter.
-- **By three points** — a circle through three given points.
-- **Tangent** — a circle touching the chosen line.
+## How to draw it
 
-## The radius is held by constraints
+Press **Circle** and choose the way in the bar above:
 
-Tangency, equal radii and point-on-circle are full constraints: move a neighbour and the circle
-rebuilds after it. A circle boxed in by tangencies can be fully defined without a dimension at all.
+- **centre + radius** — a click at the centre, a second click sets the radius;
+- **by 2 points** — two clicks set the ends of a diameter;
+- **tangent** — a circle touching a line already drawn.
 
-## What next
+As soon as the circle lies down it gets a **Diameter Ø** dimension with its field open: type a number or a formula
+and press **Enter** — or just keep drawing. The tool stays in hand; **Esc** puts it down.
 
-A closed circle is a ready profile: extrude it into a cylinder or cut a hole with it. For holes in a
-body the **Hole** command is usually better: it keeps a reference to the face and survives a rebuild.
+## A circle holds by constraints
+
+Tangency, equal radii, a point on the circle are full constraints: move the neighbour and the circle rebuilds after
+it.
+
+A closed circle is a ready profile: extrude it into a cylinder straight away. For a hole in a body, [Hole](part/08-hole)
+is handier: it stands on a face and follows it.
+
+## If it did not work
+
+**tangent** draws nothing — there is nothing to touch: draw the line or arc the circle should lie against first.

@@ -1,0 +1,235 @@
+//! THE DATUMS: a plane, an axis and a point, each made every way the program offers, and each read back from the
+//! document - where it stands and which way it looks.
+use qymcad::{Key, Session};
+use qymcad_acceptance::build;
+use qymcad_acceptance::probe;
+
+/// The datums of the document, newest last.
+fn datums(s: &mut Session) -> Vec<qymcad::Datum> {
+    s.document().datums
+}
+
+/// The last datum of `kind`.
+fn last(s: &mut Session, kind: &str) -> qymcad::Datum {
+    datums(s).into_iter().filter(|d| d.kind == kind).next_back().unwrap_or_else(|| panic!("the document holds no {kind}: {:?}", datums(s)))
+}
+
+/// Take the tool whose hint is `hint`.
+fn take(s: &mut Session, hint: &str) {
+    let hint = s.word(hint);
+    s.press_hint(&hint);
+}
+
+/// Press the word `key` names in the bar of options at the top.
+fn bar_word(s: &mut Session, key: &str) {
+    let word = s.word(key);
+    s.press_word_near(&word, qymcad::pos2(640.0, 24.0));
+}
+
+/// Type `text` into the field under the caption `caption`.
+fn field(s: &mut Session, caption: &str, text: &str) {
+    s.fill(caption, text);
+}
+
+/// Whether the place `at` is `want`, to a thousandth.
+fn stands_at(at: [f64; 3], want: [f64; 3]) -> bool {
+    at.iter().zip(want).all(|(a, b)| (a - b).abs() < 1e-3)
+}
+
+/// Whether the direction `dir` points along `want` (either way).
+fn points_along(dir: [f64; 3], want: [f64; 3]) -> bool {
+    let dot: f64 = dir.iter().zip(want).map(|(a, b)| a * b).sum();
+    let n: f64 = dir.iter().map(|a| a * a).sum::<f64>().sqrt() * want.iter().map(|a| a * a).sum::<f64>().sqrt();
+    n > 0.0 && (dot.abs() / n - 1.0).abs() < 1e-3
+}
+
+/// WHERE THE ROUND SIDE OF A SHAFT CAN BE CLICKED: only the facets turned towards the eye can be, so the places round
+/// it are tried in turn.
+fn the_side_of_a_shaft(s: &mut Session, r: f64, z: f64) -> qymcad::Pos2 {
+    let middle = s.document().bodies.iter().filter(|b| !b.consumed && !b.sheet).last().map(|b| [(b.min[0] + b.max[0]) / 2.0, (b.min[1] + b.max[1]) / 2.0]).unwrap_or([0.0, 0.0]);
+    for k in 0..(72 * 3) {
+        let a = (k % 72) as f64 * std::f64::consts::TAU / 72.0;
+        let r = r - 0.05 * (k / 72) as f64;
+        let p = [middle[0] + r * a.cos(), middle[1] + r * a.sin(), z];
+        let mut seen = None;
+        let message = qymcad_acceptance::refusal(|| seen = Some(s.face_at(p)));
+        if message.is_empty() {
+            if let Some(at) = seen {
+                return at;
+            }
+        }
+    }
+    panic!("no place on the round side of the shaft can be seen from here");
+}
+
+/// A datum plane `dist` from what stands under the pointer at `p`, made the way a person makes one.
+fn plane_from(s: &mut Session, p: [f64; 3], dist: &str) {
+    take(s, "g-datum-plane-hint");
+    let at = s.in_space(p);
+    s.click(at);
+    let field = s
+        .widgets()
+        .into_iter()
+        .filter(|w| w.kind == qymcad::Kind::TextField)
+        .min_by(|a, b| a.rect.center().distance(at).total_cmp(&b.rect.center().distance(at)))
+        .unwrap_or_else(|| panic!("the datum plane asks for no offset; on screen: {:?}", s.words()));
+    s.click(field.rect.center()).chord(qymcad::Modifiers::COMMAND, Key::A).type_text(dist).key(Key::Enter);
+}
+
+probe! {
+    /// A PLANE FROM A PLANE OF THE WORLD stands the offset away from it, facing the same way.
+    fn a_plane_is_made_from_a_plane_of_the_world() {
+        let mut s = Session::start();
+        build::into_the_first_part(&mut s);
+        plane_from(&mut s, [0.0, 0.0, 0.0], "20");
+        let d = last(&mut s, "plane");
+        assert!(stands_at(d.at, [0.0, 0.0, 20.0]), "the plane 20 above the table stands at {:?}", d.at);
+        assert!(points_along(d.dir, [0.0, 0.0, 1.0]), "the plane above the table does not lie flat: it looks {:?}", d.dir);
+    }
+}
+
+probe! {
+    /// A PLANE FROM A FACE OF A BODY stands the offset away from that face.
+    fn a_plane_is_made_from_a_face_of_a_body() {
+        let mut s = Session::start();
+        build::block(&mut s);
+        take(&mut s, "g-datum-plane-hint");
+        let top = s.face_at([20.0, 15.0, 10.0]);
+        s.click(top);
+        let field = s
+            .widgets()
+            .into_iter()
+            .filter(|w| w.kind == qymcad::Kind::TextField)
+            .min_by(|a, b| a.rect.center().distance(top).total_cmp(&b.rect.center().distance(top)))
+            .unwrap_or_else(|| panic!("the datum plane asks for no offset; on screen: {:?}", s.words()));
+        s.click(field.rect.center()).chord(qymcad::Modifiers::COMMAND, Key::A).type_text("5").key(Key::Enter);
+        let d = last(&mut s, "plane");
+        assert!((d.at[2] - 15.0).abs() < 1e-3, "the plane 5 above the top of a block 10 thick stands at {:?}", d.at);
+        assert!(points_along(d.dir, [0.0, 0.0, 1.0]), "the plane over the top face does not lie flat: it looks {:?}", d.dir);
+    }
+}
+
+probe! {
+    /// A PLANE FROM ANOTHER PLANE adds its offset to the one it was made from.
+    fn a_plane_is_made_from_another_plane() {
+        let mut s = Session::start();
+        build::into_the_first_part(&mut s);
+        plane_from(&mut s, [0.0, 0.0, 0.0], "20");
+        plane_from(&mut s, [0.0, 0.0, 20.0], "5");
+        let all: Vec<qymcad::Datum> = datums(&mut s).into_iter().filter(|d| d.kind == "plane").collect();
+        assert!(all.len() == 2, "two planes were made, and the document holds {}", all.len());
+        assert!((all[1].at[2] - 25.0).abs() < 1e-3, "the plane 5 above the one at 20 stands at {:?}", all[1].at);
+    }
+}
+
+probe! {
+    /// A POINT BY ITS COORDINATES stands where the three numbers say.
+    fn a_point_is_made_by_its_coordinates() {
+        let mut s = Session::start();
+        build::into_the_first_part(&mut s);
+        take(&mut s, "g-datum-point-hint");
+        bar_word(&mut s, "cmd-coordinates");
+        for (caption, value) in [("X", "5"), ("Y", "6"), ("Z", "7")] {
+            field(&mut s, caption, value);
+        }
+        s.key(Key::Enter);
+        let d = last(&mut s, "point");
+        assert!(stands_at(d.at, [5.0, 6.0, 7.0]), "the point typed as (5, 6, 7) stands at {:?}", d.at);
+    }
+}
+
+probe! {
+    /// A POINT AT A VERTEX stands on the corner of the body that was clicked.
+    fn a_point_is_made_at_a_vertex_of_a_body() {
+        let mut s = Session::start();
+        build::block(&mut s);
+        take(&mut s, "g-datum-point-hint");
+        bar_word(&mut s, "cmd-to-vertex");
+        let corner = s.vertex_at([40.0, 30.0, 10.0]);
+        s.click(corner);
+        s.key(Key::Enter);
+        let d = last(&mut s, "point");
+        assert!(stands_at(d.at, [40.0, 30.0, 10.0]), "the point put on the corner of the block stands at {:?}", d.at);
+    }
+}
+
+probe! {
+    /// AN AXIS ALONG AN EDGE runs the way that edge runs.
+    fn an_axis_is_made_along_an_edge() {
+        let mut s = Session::start();
+        build::block(&mut s);
+        take(&mut s, "g-datum-axis-hint");
+        let edge = s.edge_at([20.0, 0.0, 10.0]);
+        s.click(edge);
+        s.key(Key::Enter);
+        let d = last(&mut s, "axis");
+        assert!(points_along(d.dir, [1.0, 0.0, 0.0]), "the axis along the front top edge of the block runs {:?}", d.dir);
+        assert!((d.at[2] - 10.0).abs() < 1e-3 && (d.at[1]).abs() < 1e-3, "the axis does not lie on that edge: it starts at {:?}", d.at);
+    }
+}
+
+probe! {
+    /// AN AXIS ALONG A ROUND FACE runs up the middle of it - the middle of that face, not of the world.
+    fn an_axis_is_made_along_a_round_face() {
+        let mut s = Session::start();
+        build::into_the_first_part(&mut s);
+        // the cylinder is put on a point of its own, away from the origin, so that the world's own axis cannot pass
+        // for the axis of the face
+        take(&mut s, "g-datum-point-hint");
+        bar_word(&mut s, "cmd-coordinates");
+        field(&mut s, "X", "25");
+        s.key(Key::Enter);
+        take(&mut s, "tb-cylinder-hint");
+        let place = s.in_space([25.0, 0.0, 0.0]);
+        s.click(place);
+        s.key(Key::Enter);
+        let cylinder = s.document().bodies.iter().filter(|b| !b.consumed && !b.sheet).last().cloned().unwrap_or_else(|| panic!("no cylinder was made"));
+        assert!((cylinder.min[0] - 15.0).abs() < 0.1, "the cylinder was not put on the point at 25: it runs from {:?}", cylinder.min);
+        take(&mut s, "g-datum-axis-hint");
+        let side = the_side_of_a_shaft(&mut s, 10.0, 10.0);
+        s.click(side);
+        s.key(Key::Enter);
+        let d = last(&mut s, "axis");
+        assert!(points_along(d.dir, [0.0, 0.0, 1.0]), "the axis of an upright cylinder runs {:?}", d.dir);
+        assert!((d.at[0] - 25.0).abs() < 1e-3 && (d.at[1]).abs() < 1e-3, "the axis does not run up the middle of the cylinder at (25, 0): it starts at {:?}", d.at);
+    }
+}
+
+probe! {
+    /// AN AXIS THROUGH TWO POINTS runs from one to the other - not along the world's own axis it would take by
+    /// default.
+    fn an_axis_is_made_through_two_points() {
+        let mut s = Session::start();
+        build::into_the_first_part(&mut s);
+        for y in [0.0, 20.0] {
+            take(&mut s, "g-datum-point-hint");
+            bar_word(&mut s, "cmd-coordinates");
+            field(&mut s, "X", "10");
+            field(&mut s, "Y", &y.to_string());
+            s.key(Key::Enter);
+        }
+        take(&mut s, "g-datum-axis-hint");
+        bar_word(&mut s, "cmd-two-points");
+        for y in [0.0, 20.0] {
+            let at = s.in_space([10.0, y, 0.0]);
+            s.click(at);
+        }
+        s.key(Key::Enter);
+        let d = last(&mut s, "axis");
+        assert!(points_along(d.dir, [0.0, 1.0, 0.0]), "the axis through (10, 0, 0) and (10, 20, 0) runs {:?}", d.dir);
+        assert!((d.at[0] - 10.0).abs() < 1e-3, "the axis does not pass through the points: it starts at {:?}", d.at);
+    }
+}
+
+probe! {
+    /// AN AXIS BY HAND runs where the numbers say.
+    fn an_axis_is_made_by_hand() {
+        let mut s = Session::start();
+        build::into_the_first_part(&mut s);
+        take(&mut s, "g-datum-axis-hint");
+        bar_word(&mut s, "cmd-manual");
+        s.key(Key::Enter);
+        let d = last(&mut s, "axis");
+        assert!(d.dir.iter().any(|v| v.abs() > 1e-6), "the axis made by hand has no direction at all: {:?}", d.dir);
+    }
+}

@@ -42,7 +42,7 @@ mod tests {
             let right = s.points.iter().max_by(|p, q| p.x.total_cmp(&q.x)).expect("the points of the rectangle").id;
             (left, right)
         };
-        app.project.sketches[si].constraints.push(Constraint::Distance { a, b, d: 40.0, off: 0.0, expr: String::new(), driven: false, axis: 0 });
+        app.project.sketches[si].constraints.push(Constraint::Distance { a, b, d: 40.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
         let sid = app.project.sketches[si].id;
         assert!(app.project.add_named_dim("len".into(), sid, vec![a, b]), "setup: the dimension is named");
         app.project.regen_sketch(si);
@@ -188,6 +188,41 @@ mod tests {
         let after = qymcad_ui_state::tallest_body(&app.painting());
         assert!((after - before - 6.0).abs() < 0.05, "the part must follow the parameter: it was {before:.2}, it became {after:.2}, +6 was expected");
         assert!(app.project.regen_errors.is_empty(), "editing a parameter must not break features; status: {}", app.status.clone());
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// A MESH PIECE OPENS AS IT WAS SAVED: a cube from STL through the import door, saved and opened again - its mesh
+    /// comes back from the file and nothing reaches for its source: no restoring of a B-rep from the embedded file (the
+    /// path an exact import takes; a mesh read as STEP fails), in the modal slot or in the background, and no more than
+    /// the one rebuild opening schedules for every document (`opening_a_parametric_project_rebuilds_once_not_every_frame`).
+    #[test]
+    fn a_mesh_piece_opens_without_reading_its_source_again() {
+        use crate::gui::import_door::tests::{answer, cube_stl, frame, key, running, settle};
+        let dir = std::env::temp_dir().join("qym_open_keeps_bodies_test");
+        std::fs::create_dir_all(&dir).expect("the directory for the check");
+        let stl = dir.join("piece.stl");
+        std::fs::write(&stl, cube_stl(10.0)).expect("written");
+        let path = dir.join("mesh-piece.qcad").to_string_lossy().into_owned();
+        let _ = std::fs::remove_file(&path);
+        {
+            let (mut app, ctx) = running();
+            answer(&mut app, &ctx, qymcad_ui_state::Want::Anything, &stl.to_string_lossy());
+            settle(&mut app, &ctx);
+            let _ = frame(&mut app, &ctx, key(egui::Key::Enter)); // the window about the unit, as the file has it
+            let _ = frame(&mut app, &ctx, Vec::new());
+            assert!(app.project.timeline.iter().any(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::MeshPiece { .. })), "setup: the STL came in as a mesh piece");
+            crate::gui::set_project_path(&mut app.disk.project_path, &mut app.set, path.clone());
+            app.save_project();
+            app.wait_bg();
+        }
+        let mut app = opened_in_a_live_window(&path);
+        // a document whose geometry is all in the file restores B-reps in the background (`regen.bg`), not the modal slot
+        let restoring = app.regen.busy.iter().chain(app.regen.bg.iter()).any(|b| matches!(b.kind, BgKind::ImportShapes));
+        assert!(!restoring, "opening reaches for the mesh piece's source as for an exact import");
+        let regens = (0..5).filter(|_| pump_frame(&mut app)).count();
+        assert!(regens <= 1, "opening a mesh piece rebuilds {regens} times, past the one opening schedules");
+        assert_eq!(app.project.bodies.iter().map(|b| b.mesh.tris.len()).collect::<Vec<_>>(), [12], "the mesh piece does not come back from the file");
+        assert!(app.project.regen_errors.is_empty(), "opening a mesh piece fails: {}", app.status);
         let _ = std::fs::remove_file(&path);
     }
 }

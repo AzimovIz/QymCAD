@@ -249,3 +249,39 @@ fn the_projected_outline_is_a_closed_contour_you_can_extrude() {
     let v = live.p.bodies.iter().find(|b| b.id == nb).map(|b| b.mesh.volume()).unwrap_or(0.0);
     assert!((v - 20.0 * 20.0 * 5.0).abs() < 1.0, "a 20x20 face projection extruded by 5 mm must give 2000, and it came out {v}");
 }
+
+/// DRIVEN GEOMETRY HAS NO FREEDOM: the solver and the degree count take a projection as given.
+///
+/// Reported behaviour: a projected edge counted 4 degrees of freedom and a face outline 8, so the status
+/// bar called the sketch under-constrained and a solve could drag the projection off the part.
+#[test]
+fn projected_geometry_has_no_degrees_of_freedom() {
+    let mut fails = Vec::new();
+    // a box face (lines) and a cylinder cap (a circle, whose radius is a solver variable too)
+    for cyl in [false, true] {
+        let mut p = Project::default();
+        let root = p.ensure_root();
+        p.set_active_component(Some(root));
+        let part = p.add_part("part");
+        p.set_active_component(Some(part));
+        let body = if cyl { p.add_cylinder(8.0, 20.0) } else { p.add_box(20.0, 20.0, 20.0) };
+        let si = p.new_sketch("Sketch");
+        let sid = p.sketches[si].id;
+        p.add_sketch_node(sid, "Sketch");
+        let mut live = Live { p, shapes: HashMap::new() };
+        live.rebuild();
+        let face = top_face_id(&live.p, body);
+        assert_ne!(live.project_into(si, body, ProjSource::Face(face)), 0, "setup: the projection is made");
+        let (dof, redundant) = live.p.sketch_dof(si);
+        if dof != 0 || redundant != 0 {
+            fails.push(format!("cylinder={cyl}: dof {dof}, redundant {redundant}, want 0 and 0"));
+        }
+        let before: Vec<(f64, f64)> = live.p.sketches[si].points.iter().map(|q| (q.x, q.y)).collect();
+        live.p.solve_sketch(si);
+        let after: Vec<(f64, f64)> = live.p.sketches[si].points.iter().map(|q| (q.x, q.y)).collect();
+        if before != after {
+            fails.push(format!("cylinder={cyl}: a solve moved the projection {before:?} -> {after:?}"));
+        }
+    }
+    assert!(fails.is_empty(), "{}", fails.join("\n"));
+}

@@ -1,30 +1,32 @@
 # Delete the selection
 
-Key **Del**. Removes the selected sketch entities.
+Key **Del**.
 
-![Before and after: the circle takes its constraints with it, and the degrees of freedom grow.](img/sketch-delete/)
+![Before and after: the circle goes with its constraints, and the degrees of freedom go up.](img/sketch-delete/)
+
+## How to delete
+
+Select lines, arcs, points in the sketch — or one constraint in the list of constraints, a text, a note — and press
+**Del**. The deletion is one step of undo: **Ctrl+Z** brings everything back at once.
 
 ## What goes with them
 
-The constraints and dimensions that were held on the deleted geometry: a constraint missing one of
-its sides cannot work.
+The constraints and dimensions that held on the deleted geometry: a constraint missing one of its sides cannot work.
+Points where other entities meet stay — only what belongs to no one any more goes. The origin and the axes of the
+sketch are not deleted.
 
-So after a delete the **degrees of freedom usually go up** — you have removed what held the shape.
-The counter at the bottom shows how many were freed. If the sketch stopped being defined, define it
-again before building a body on it.
+So after a deletion there are **usually more degrees of freedom**: you removed what held the shape. How many there
+are now shows in the properties of the sketch on the right. If the sketch is no longer defined, define it before
+building on it further.
 
-## What stays
+## If a body already stands on the sketch
 
-Points where other entities meet: they belong to the junction, not to one line. Only what has become
-nobody's is removed.
+An operation that took the deleted contour — an extrusion, a revolve — turns **red** in the timeline after you leave
+the sketch, with the reason "The sketch profile was not found"; the body stays as it was. Restore the contour in the
+sketch and open the operation again to pick it — or **Ctrl+Z**.
 
-## Careful with what already carries a body
+## A common mistake
 
-If a feature stands on the entity you delete, the feature goes with it. The program asks first and
-lists by name what else will disappear — read that list, it is the price of the action.
-
-## A common beginner's mistake
-
-Deleting a “spare” line in a defined sketch and finding the part has drifted. The cause is not the
-deletion but the constraints of neighbouring entities that sat on that line. The degrees-of-freedom
-counter shows how many were freed.
+Deleting an "extra" line in a defined sketch and finding the shape moved. It is not the deletion: the constraints of
+the neighbouring entities held on that line. The properties of the sketch show how many degrees of freedom were
+freed.

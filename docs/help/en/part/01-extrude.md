@@ -1,35 +1,48 @@
 # Extrude
 
-Key **E**; straight to a cut — **Q**.
+Key **E**; straight as a cut — **Q**.
 
-![The outline rises to the given height — that is extrusion.](img/part-extrude/)
+![A contour rises to a given height — that is an extrusion.](img/part-extrude/)
 
-Select one or more sketch outlines, set the **operation** and the height above, press Enter.
+## How to do it
 
-## The operation matters more than it looks
+1. Select a sketch or its contours — or press **Extrude** with nothing selected and click contours: they add up, and
+   the bar above shows **Profiles: N**. A sketch you have just finished is already selected — the tool takes it at
+   once.
+2. Type the **Length** into the field at the geometry or drag the arrow. The preview shows the body before it is
+   applied.
+3. **Enter** applies, **Esc** cancels.
 
-- **Add** — material appears.
-- **Cut** — material is removed.
-- **Intersect** — only the common part stays.
+**Pick contours (U)** takes you back to picking contours after you have gone on to the size.
 
-This is one command with three modes, not three different tools. That is why “Extrude” and “Cut” are
-a single button: they share the fields, the preview and the timeline node.
+## Operation and direction
 
-## Several outlines — one node
+In the bar above:
 
-Select three outlines and you get **one** feature with three profiles, not three features. That
-matters: editing reopens all three at once, and deleting removes the whole operation without
-breaking the part.
+- **Add** — material appears; **Cut** — it is removed; **Intersect** — only what is common with the body stays.
+- **To a length** — one way; **Symmetric** — equally both ways from the sketch; **Two sides** — a length of its own
+  each way, the second in the **Second side** field; for a cut through a body also **Through all**.
+- **Flip** — the other way from the sketch. The length is always positive: this button changes the side, not a sign.
 
-Nested outlines (an outline inside an outline) are handled by themselves: the inner one becomes a
-hole.
+A cut that splits the body in two leaves both pieces bodies of the same part. To make a piece a part of its own —
+the right button on it -> **Make a part**.
 
-## Direction and depth
+## Several contours — one operation
 
-The height is a number or a formula. A negative height extrudes the other way.
+Pick three contours, and the timeline gets **one** row with three profiles. An edit opens all three at once, a delete
+removes the whole operation. A contour inside a contour becomes a hole; pick the inner one too, and it is extruded as an
+island inside the hole.
+
+## If it did not work
+
+- The field is red and **Apply** is grey — the value is not allowed (zero, negative, not a number); the reason is
+  written at the field.
+- **Cut** or **Intersect** on the first sketch of a part refuses in words — there is nothing to cut yet: a body comes
+  first.
+- A contour cannot be picked — it is not closed. Open the sketch and join the ends.
 
 ## See also
 
-- [Revolve](part/02-revolve) — when the shape goes around an axis.
-- [Hole](part/08-hole) — instead of a circular cut.
-- [Fillet](part/05-fillet) — what to do once the shape is done.
+- [Revolve](part/02-revolve) — when the shape goes round an axis.
+- [Hole](part/08-hole) — instead of a round cut.
+- [Fillet](part/05-fillet) — what to do once the shape is ready.

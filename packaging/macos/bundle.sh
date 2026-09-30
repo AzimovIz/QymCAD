@@ -58,8 +58,8 @@ PLIST
 # --- the kernel libraries, with their paths rewritten to live inside the bundle ---
 #
 # THE LINKS ARE KEPT AS LINKS, and that is the difference between an 80 MB download and a third of it.
-# OCCT installs every module under three names - `libTKernel.dylib` -> `libTKernel.7.8.dylib` ->
-# `libTKernel.7.8.1.dylib`, one file and two links to it. A plain `cp` follows each link and writes THREE
+# OCCT installs every module under three names - `libTKernel.dylib` -> `libTKernel.7.9.dylib` ->
+# `libTKernel.7.9.3.dylib`, one file and two links to it. A plain `cp` follows each link and writes THREE
 # full copies: 144 files for 48 modules, measured on the runner. Only one of the three is ever loaded -
 # the name written into the dependencies - so the other two were pure weight.
 #

@@ -59,7 +59,7 @@ pub(crate) fn render_component_thumbnail(dc: &qymcad_ui_state::DrawCtx, cid: qym
     let center = [(mn[0] + mx[0]) / 2.0, (mn[1] + mx[1]) / 2.0, (mn[2] + mx[2]) / 2.0];
     let ext = (mx[0] - mn[0]).max(mx[1] - mn[1]).max(mx[2] - mn[2]).max(1e-3);
     let (right, up, fwd) = Cam3::default().basis(); // a fixed isometric view, independent of the current camera
-    let light = v_norm([0.35, 0.5, 0.78]);
+    let light = qymcad_ui_state::scene_light();
     let s = (TS as f64 * 0.42) / ext; // the scale that fits it into the frame
     let hc = TS as f64 / 2.0;
     let proj = |p: [f64; 3]| -> (f64, f64, f64) {
@@ -124,15 +124,84 @@ pub(crate) fn render_component_thumbnail(dc: &qymcad_ui_state::DrawCtx, cid: qym
 /// edges stay sharp (the mesh topology is split by face). Flat mode puts the face normal into all three.
 /// Returns `(vertices, opaque_count)`: the opaque ones FIRST, in `[0..opaque_count)`, and the ghosts
 /// (alpha<255) AFTER (two passes: opaque writes depth, then transparent tests without writing and alpha-blends).
-pub(crate) fn gpu_scene(pn: &qymcad_ui_state::Painting) -> (Vec<qymcad_ui_state::GpuVert>, u32) {
-    let light = v_norm([0.35, 0.5, 0.78]);
+/// THE SCENE AS ONE VECTOR - FOR MEASUREMENT ONLY.
+///
+/// The drawing path never glues the pieces: that was a second full copy of the scene in memory, 739 MB of it
+/// on the reference engine. A check that wants to walk every vertex glues them itself, and the cost falls on
+/// the check rather than on every frame a person sees.
+#[cfg(test)]
+pub(crate) fn gpu_scene_flat(pn: &qymcad_ui_state::Painting) -> (Vec<qymcad_ui_state::GpuVert>, Vec<qymcad_ui_state::BodyLook>) {
+    let scene = gpu_scene(pn);
+    // THE TRIANGLES AS THE CARD SEES THEM: the indices followed through, so a check reads the same three
+    // vertices per triangle whether or not the scene is indexed.
+    let verts = scene.pieces.iter().flat_map(|p| p.idx.iter().map(|&i| p.verts[i as usize])).collect();
+    (verts, scene.looks)
+}
+
+/// WHAT EVERY VISIBLE BODY LOOKS LIKE RIGHT NOW - without touching a single vertex.
+///
+/// This is the cheap half of the scene, and it is asked for on EVERY frame: the pointer moves over the model,
+/// a subassembly is entered, a colour is changed - all of that lives here. The order is the display order, the
+/// same one `gpu_scene` puts the pieces in, so the number in a vertex names the same row of this table.
+pub(crate) fn scene_looks(pn: &qymcad_ui_state::Painting) -> Vec<qymcad_ui_state::BodyLook> {
+    let mut looks: Vec<qymcad_ui_state::BodyLook> = Vec::new();
+    for m in qymcad_ui_state::visible_mesh_items(pn) {
+        let state = if m.hot { qymcad_ui_state::LOOK_HOT } else { 0 } | if m.ghost { qymcad_ui_state::LOOK_GHOST } else { 0 };
+        // the body's row, then a row per colour of its faces: the layout `gpu_scene` gives the vertices
+        let (palette, _) = qymcad_ui_state::face_palette(pn.project, m.index, 0);
+        for c in std::iter::once(m.tint).chain(palette) {
+            let b = qymcad_scheme::brighten(c, pn.scheme.pal.body_lighten, pn.scheme.pal.body_saturate);
+            looks.push(qymcad_ui_state::BodyLook { tint: u32::from_le_bytes([b[0], b[1], b[2], 0]), state });
+        }
+    }
+    if pn.section.plane.is_some() {
+        // the caps keep the last row, as they do in `gpu_scene`
+        looks.push(qymcad_ui_state::BodyLook { tint: u32::from_le_bytes([224, 168, 92, 0]), state: qymcad_ui_state::LOOK_CAP });
+    }
+    looks
+}
+
+/// A normal packed into four bytes: one signed byte per axis.
+///
+/// 1/127 of accuracy - far finer than shading can show, and four bytes instead of twelve.
+fn pack_normal(n: [f64; 3]) -> u32 {
+    let b = |v: f64| ((v.clamp(-1.0, 1.0) * 127.0).round() as i8) as u8;
+    u32::from_le_bytes([b(n[0]), b(n[1]), b(n[2]), 0])
+}
+
+/// A BLOCK TAKEN READY-MADE ANSWERS TO THE BODY'S NUMBER OF THIS FRAME.
+///
+/// The number in a vertex is the body's row in the look table, its place in the list of what is shown - and that
+/// list changes with the context: the pin of the reference assembly is the third body at the top and the first
+/// inside its subassembly. A block kept under its old number sent the card to another body's row, or past the end
+/// of the table. Reported behaviour: the parts of a subassembly stepped into stayed drawn lighter, as if selected,
+/// until a tool rebuilt every block. The vertices are renumbered in place, the same pass a move already makes; the
+/// pieces go to the card again anyway, since what is shown is part of the scene's key.
+fn answer_to(block: &mut qymcad_ui_state::SceneBlock, no: u32) {
+    if block.body == no {
+        return;
+    }
+    // the block's rows are its body's and, right after it, one per colour of its faces: they shift together
+    let from = block.body;
+    for part in block.parts.iter_mut() {
+        for v in std::sync::Arc::make_mut(&mut part.verts).iter_mut() {
+            v.body = v.body - from + no;
+        }
+    }
+    block.body = no;
+}
+
+pub(crate) fn gpu_scene(pn: &qymcad_ui_state::Painting) -> qymcad_ui_state::GpuScene {
     let smooth = pn.set.shading == qymcad_ui_state::Shading::Smooth;
     if smooth {
         qymcad_ui_state::ensure_vertex_normals(pn.cache, pn.project, pn.regen);
     }
     let ncache = pn.cache.norm.borrow();
     let items = qymcad_ui_state::visible_mesh_items(pn);
-    let (mut opaque, mut transp) = (Vec::new(), Vec::new());
+    let mut caps_verts: Vec<qymcad_ui_state::GpuVert> = Vec::new();
+    let mut looks: Vec<qymcad_ui_state::BodyLook> = Vec::new();
+    let mut look_of: std::collections::HashMap<usize, u32> = std::collections::HashMap::new();
+    let mut rows_of: std::collections::HashMap<usize, u32> = std::collections::HashMap::new();
     // EVERY BODY IS COMPUTED AS ITS OWN BLOCK AND CACHED.
     //
     // MEASURED ON A REAL ASSEMBLY (138 bodies, 463,878 vertices, a release build): rebuilding the scene
@@ -166,13 +235,37 @@ pub(crate) fn gpu_scene(pn: &qymcad_ui_state::Painting) -> (Vec<qymcad_ui_state:
     for qymcad_ui_state::SceneMesh { index: mi, hot, ghost, tint: base, mesh, world: wt } in items {
         live.insert(mi);
         order.push(mi);
-        // THE KEY IS ABOUT SHAPE AND APPEARANCE ONLY. The position lives separately (`SceneBlock::at`) and
-        // a move does not invalidate the block: see `SceneBlock`.
-        let shape = {
+        // THE LOOK OF THE BODY, gathered every frame and costing nothing: it is two numbers, not vertices.
+        let body_no = looks.len() as u32;
+        looks.push(qymcad_ui_state::BodyLook {
+            tint: {
+                let b = qymcad_scheme::brighten(base, pn.scheme.pal.body_lighten, pn.scheme.pal.body_saturate);
+                u32::from_le_bytes([b[0], b[1], b[2], 0])
+            },
+            state: if hot { qymcad_ui_state::LOOK_HOT } else { 0 } | if ghost { qymcad_ui_state::LOOK_GHOST } else { 0 },
+        });
+        look_of.insert(mi, body_no);
+        // THE COLOURS OF ITS FACES, where a file coloured faces apart: a row each, right after the body's, in the body's
+        // state - the pass is chosen by the body's row, the colour by the vertex's
+        let (palette, per_tri) = qymcad_ui_state::face_palette(pn.project, mi, mesh.tris.len());
+        for c in &palette {
+            let b = qymcad_scheme::brighten(*c, pn.scheme.pal.body_lighten, pn.scheme.pal.body_saturate);
+            looks.push(qymcad_ui_state::BodyLook { tint: u32::from_le_bytes([b[0], b[1], b[2], 0]), state: if hot { qymcad_ui_state::LOOK_HOT } else { 0 } | if ghost { qymcad_ui_state::LOOK_GHOST } else { 0 } });
+        }
+        rows_of.insert(mi, 1 + palette.len() as u32);
+        // THE KEY IS ABOUT SHAPE ALONE. The position lives separately (`SceneBlock::at`) and a move does not
+        // invalidate the block; the LOOK - highlight, ghosting, tint - is not here at all any more. It used
+        // to be, and that is what made stepping into a subassembly rebuild every block of the scene: the look
+        // of every body changes at once. What a body looks like now travels beside the vertices, in a table
+        // of its own.
+        // which triangle names which row is written into the vertices, so it belongs to the block's key
+        let shape = if per_tri.is_empty() {
+            common
+        } else {
             use std::hash::{Hash, Hasher};
             let mut h = std::collections::hash_map::DefaultHasher::new();
             common.hash(&mut h);
-            (hot, ghost, base).hash(&mut h);
+            per_tri.hash(&mut h);
             h.finish()
         };
         // IT MOVED, IT DID NOT CHANGE - ADD THE DIFFERENCE INSTEAD OF BUILDING IT AGAIN.
@@ -187,25 +280,39 @@ pub(crate) fn gpu_scene(pn: &qymcad_ui_state::Painting) -> (Vec<qymcad_ui_state:
         match blocks.get_mut(&mi) {
             Some(b) if b.shape == shape && b.at == wt => {
                 stats[2] += 1;
+                answer_to(b, body_no);
                 continue;
             }
             Some(b) if b.shape == shape && pn.section.plane.is_none() && same_rotation12(&b.at, &wt) => {
                 stats[1] += 1;
                 let d = [(wt[3] - b.at[3]) as f32, (wt[7] - b.at[7]) as f32, (wt[11] - b.at[11]) as f32];
-                for v in b.opaque.iter_mut().chain(b.transp.iter_mut()) {
-                    v.pos[0] += d[0];
-                    v.pos[1] += d[1];
-                    v.pos[2] += d[2];
+                for part in b.parts.iter_mut() {
+                    for v in std::sync::Arc::make_mut(&mut part.verts).iter_mut() {
+                        v.pos[0] += d[0];
+                        v.pos[1] += d[1];
+                        v.pos[2] += d[2];
+                    }
                 }
                 b.at = wt;
+                answer_to(b, body_no);
                 continue;
             }
             _ => {}
         }
-        let (mut opaque, mut transp) = (Vec::new(), Vec::new());
+
         let ident = qymcad_core::feature::is_identity12(&wt);
         // the smoothed local vertex normals of this body (when enabled and present in the cache)
         let vn = if smooth { ncache.value.get(mi) } else { None };
+        // A VERTEX OF THE MESH IS WRITTEN ONCE and pointed at by every triangle that touches it. `of_mesh`
+        // says where a mesh vertex ended up in this part; `u32::MAX` means it has not been written yet.
+        // Measured on a closed mesh: a vertex belongs to about six triangles, and unrolled it was written out
+        // three times over (each triangle its own three).
+        let mut parts: Vec<qymcad_ui_state::BlockPart> = Vec::new();
+        let mut own: Vec<qymcad_ui_state::GpuVert> = Vec::new();
+        let mut idx: Vec<u32> = Vec::new();
+        let mut of_mesh: Vec<u32> = vec![u32::MAX; mesh.verts.len()];
+        let mut row_of: Vec<u32> = vec![body_no; mesh.verts.len()]; // the row the vertex written for a mesh vertex names
+        let mut nrm_of: Vec<u32> = vec![0; mesh.verts.len()]; // and the normal it carries
         for i in 0..mesh.tris.len() {
             let tri = mesh.tris[i];
             let pos_w = |vi: u32| {
@@ -219,46 +326,57 @@ pub(crate) fn gpu_scene(pn: &qymcad_ui_state::Painting) -> (Vec<qymcad_ui_state:
             if !clip.whole && clip.verts.is_empty() {
                 continue; // wholly on the hidden side
             }
-            // the FACE normal (in world) - for backface culling in the fragment shader (the silhouette goes by
-            // the face, not by the smoothed normal, otherwise the culling wanders at an edge)
-            let fn_w = v_norm(v_cross(v_sub(b, a), v_sub(c, a)));
-            let nf = [fn_w[0] as f32, fn_w[1] as f32, fn_w[2] as f32];
-            // the colour AT EVERY vertex: from the smoothed normal (Gouraud) or from the face normal (flat)
-            let col_at = |vi: u32| -> [u8; 4] {
-                let nrm = match vn {
-                    Some(list) => qymcad_ui_state::rotate_normal(&wt, list[vi as usize]),
-                    None => fn_w,
-                };
-                qymcad_pick::shade_tri(&pn.scheme.pal, pn.set.ghost_alpha, hot, ghost, base, nrm, light).to_array()
+            // ONE TRIANGLE ADDS AT MOST 6 VERTICES AND 6 INDICES (a clipped quadrilateral), so the part is
+            // closed while that much still fits: a part must lie inside ONE buffer of the card.
+            if own.len() + 6 > qymcad_ui_state::BLOCK_VERTEX_CAP || idx.len() + 6 > qymcad_ui_state::BLOCK_INDEX_CAP {
+                parts.push(qymcad_ui_state::BlockPart { verts: std::sync::Arc::new(std::mem::take(&mut own)), idx: std::sync::Arc::new(std::mem::take(&mut idx)) });
+                of_mesh.iter_mut().for_each(|v| *v = u32::MAX); // the new part starts with vertices of its own
+            }
+            // THE NORMAL AT EVERY VERTEX, for smooth shading: the vertex normal turned into the world. In flat
+            // shading nothing is stored - the fragment takes the face normal from the derivatives.
+            let nrm_at = |k: usize| -> u32 {
+                match vn {
+                    Some(list) => pack_normal(qymcad_ui_state::rotate_normal(&wt, list.at(i, k, tri[k]))),
+                    None => 0,
+                }
             };
-            let al = if ghost { pn.set.ghost_alpha } else { 255 };
-            let dst = if al < 255 { &mut transp } else { &mut opaque };
-            let cols = [col_at(tri[0]), col_at(tri[1]), col_at(tri[2])];
-            let mut push = |p: [f64; 3], w: [f64; 3]| {
-                let mix = |k: usize| (cols[0][k] as f64 * w[0] + cols[1][k] as f64 * w[1] + cols[2][k] as f64 * w[2]).round().clamp(0.0, 255.0) as u8;
-                dst.push(qymcad_ui_state::GpuVert {
-                    pos: [p[0] as f32, p[1] as f32, p[2] as f32],
-                    nrm: nf,
-                    color: u32::from_le_bytes([mix(0), mix(1), mix(2), cols[0][3]]),
-                    _pad: 0,
-                });
-            };
+            let nrms = [nrm_at(0), nrm_at(1), nrm_at(2)];
+            let row = per_tri.get(i).copied().flatten().map_or(body_no, |k| body_no + 1 + k as u32);
             if clip.whole {
-                for (p, w) in [(a, [1.0, 0.0, 0.0]), (b, [0.0, 1.0, 0.0]), (c, [0.0, 0.0, 1.0])] {
-                    push(p, w);
+                for (k, (p, vi)) in [(a, tri[0]), (b, tri[1]), (c, tri[2])].into_iter().enumerate() {
+                    let mut at = of_mesh[vi as usize];
+                    // a vertex is shared only by triangles of one row - the row is carried flat, from one vertex - and
+                    // of one normal: the corners of a mesh piece across a sharp edge are lit apart
+                    if at == u32::MAX || row_of[vi as usize] != row || nrm_of[vi as usize] != nrms[k] {
+                        at = own.len() as u32;
+                        own.push(qymcad_ui_state::GpuVert { pos: [p[0] as f32, p[1] as f32, p[2] as f32], body: row, nrm: nrms[k] });
+                        of_mesh[vi as usize] = at;
+                        row_of[vi as usize] = row;
+                        nrm_of[vi as usize] = nrms[k];
+                    }
+                    idx.push(at);
                 }
             } else {
-                // a fan over the clipped polygon (3..4 vertices -> 1..2 triangles)
+                // A CLIPPED TRIANGLE BRINGS POINTS OF ITS OWN - they are in no mesh, so they are appended and
+                // indexed in order. A fan over the clipped polygon (3..4 vertices -> 1..2 triangles).
                 for k in 1..clip.verts.len().saturating_sub(1) {
                     for &vi in &[0, k, k + 1] {
                         let cv = clip.verts[vi];
-                        push(cv.pos, cv.w);
+                        // at a clipped vertex the normal of the nearest corner is taken: the weights are
+                        // barycentric, so the largest of them names the corner the point came from
+                        let w = cv.w;
+                        let nk = if w[0] >= w[1] && w[0] >= w[2] { 0 } else if w[1] >= w[2] { 1 } else { 2 };
+                        idx.push(own.len() as u32);
+                        own.push(qymcad_ui_state::GpuVert { pos: [cv.pos[0] as f32, cv.pos[1] as f32, cv.pos[2] as f32], body: row, nrm: nrms[nk] });
                     }
                 }
             }
         }
+        if !own.is_empty() {
+            parts.push(qymcad_ui_state::BlockPart { verts: std::sync::Arc::new(own), idx: std::sync::Arc::new(idx) });
+        }
         stats[0] += 1;
-        blocks.insert(mi, super::SceneBlock { shape, at: wt, opaque, transp });
+        blocks.insert(mi, super::SceneBlock { shape, at: wt, body: body_no, parts });
     }
     pn.cache.scene_stats.set(stats);
     blocks.retain(|mi, _| live.contains(mi)); // bodies that are no longer visible hold no memory
@@ -267,21 +385,22 @@ pub(crate) fn gpu_scene(pn: &qymcad_ui_state::Painting) -> (Vec<qymcad_ui_state:
     // THE SIZE IS KNOWN IN ADVANCE and should be asked for at once. The concatenation runs over 138 pieces
     // into an empty vector, that is, with a dozen and a half reallocations and copies of an ever-growing
     // buffer; at 463,878 vertices that is a noticeable share of the frame's cost, taken for nothing.
-    opaque.reserve(order.iter().filter_map(|mi| blocks.get(mi)).map(|b| b.opaque.len()).sum());
-    transp.reserve(order.iter().filter_map(|mi| blocks.get(mi)).map(|b| b.transp.len()).sum());
+    // THE PIECES ARE COLLECTED, NOT GLUED, and in a STABLE order: the display order of the bodies, whatever
+    // each of them looks like right now. Gluing meant a second full copy of the scene in memory; tying the
+    // order to the look meant re-uploading it whenever a body turned into a ghost.
+    let mut pieces: Vec<qymcad_ui_state::ScenePiece> = Vec::new();
     for mi in &order {
-        if let Some(b) = blocks.get(mi) {
-            opaque.extend_from_slice(&b.opaque);
-            transp.extend_from_slice(&b.transp);
+        if let (Some(b), Some(&no)) = (blocks.get(mi), look_of.get(mi)) {
+            for part in b.parts.iter().filter(|p| !p.idx.is_empty()) {
+                pieces.push(qymcad_ui_state::ScenePiece { verts: part.verts.clone(), idx: part.idx.clone(), body: no, rows: rows_of.get(mi).copied().unwrap_or(1) });
+            }
         }
     }
-    // THE SECTION CAPS: an amber fill, two-sided (the cut is visible from both sides)
+    // THE SECTION CAPS: an amber fill, two-sided (the cut is visible from both sides). They belong to no body,
+    // so they get a look of their own at the end of the table.
     if pn.section.plane.is_some() {
         let caps = section_caps_for_frame(pn);
-        let (col, coln) = (u32::from_le_bytes([224, 168, 92, 255]), u32::from_le_bytes([176, 128, 66, 255]));
         if let Some((_, n)) = qymcad_ui_state::section_eff(pn.section) {
-            let nf = [n[0] as f32, n[1] as f32, n[2] as f32];
-            let nb = [-nf[0], -nf[1], -nf[2]];
             // THE CAP IS NUDGED A HAIR INTO THE CUT-AWAY SIDE (the bodies keep the half-space d <= 0, so
             // at d = +eps NOTHING occludes the cap - there is no material left there). It cannot lie exactly
             // in the plane: the thread turns run almost tangent to the cut, their clipped triangles stand in
@@ -297,25 +416,29 @@ pub(crate) fn gpu_scene(pn: &qymcad_ui_state::Painting) -> (Vec<qymcad_ui_state:
                 .max(1.0)
                 * 1.0e-3;
             let off = [n[0] * eps, n[1] * eps, n[2] * eps];
+            let cap_no = looks.len() as u32;
+            // AMBER, AND NOT SHADED BY THE LIGHT: a cut is a section, not a surface of the part, and it reads
+            // as a fill. The `LOOK_CAP` bit says exactly that to the fragment.
+            looks.push(qymcad_ui_state::BodyLook { tint: u32::from_le_bytes([224, 168, 92, 0]), state: qymcad_ui_state::LOOK_CAP });
             for mesh in caps.iter() {
                 for t in 0..mesh.tris.len() {
                     let tri = mesh.triangle(t).map(|p| qymcad_core::geom::Point3::new(p.x + off[0], p.y + off[1], p.z + off[2]));
-                    for (nrm, color, order) in [(nb, col, [0usize, 1, 2]), (nf, coln, [0, 2, 1])] {
+                    // both sides of the cap: the same triangle wound two ways, so it is seen from either side
+                    for order in [[0usize, 1, 2], [0, 2, 1]] {
                         for &k in &order {
                             let p = tri[k];
-                            opaque.push(qymcad_ui_state::GpuVert {
-                                pos: [p.x as f32, p.y as f32, p.z as f32],
-                                nrm,
-                                color,
-                                _pad: 0,
-                            });
+                            caps_verts.push(qymcad_ui_state::GpuVert { pos: [p.x as f32, p.y as f32, p.z as f32], body: cap_no, nrm: 0 });
                         }
                     }
                 }
             }
+            if !caps_verts.is_empty() {
+                // THE CAPS ARE NOT INDEXED: every triangle of a cut brings its own points (and twice over, for
+                // the two windings), so there is nothing to share - the indices simply run in order.
+                let idx: Vec<u32> = (0..caps_verts.len() as u32).collect();
+                pieces.push(qymcad_ui_state::ScenePiece { verts: std::sync::Arc::new(std::mem::take(&mut caps_verts)), idx: std::sync::Arc::new(idx), body: cap_no, rows: 1 });
+            }
         }
     }
-    let opaque_count = opaque.len() as u32;
-    opaque.append(&mut transp); // [opaque… | transparent…]
-    (opaque, opaque_count)
+    qymcad_ui_state::GpuScene { pieces, looks }
 }

@@ -13,7 +13,7 @@ fn sketch_with_a_dimension(p: &mut Project, name: &str, len: f64) -> (usize, Id,
     let sid = p.add_line_sketch(name, vec![Point2::new(0.0, 0.0), Point2::new(len, 0.0), Point2::new(len, 10.0), Point2::new(0.0, 10.0)], true);
     let si = p.sketch_index(sid).unwrap();
     let pts: Vec<Id> = p.sketches[si].points.iter().map(|q| q.id).collect();
-    p.sketches[si].constraints.push(Constraint::Distance { a: pts[0], b: pts[1], d: len, off: 0.0, expr: String::new(), driven: false, axis: 0 });
+    p.sketches[si].constraints.push(Constraint::Distance { a: pts[0], b: pts[1], d: len, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
     (si, sid, pts)
 }
 

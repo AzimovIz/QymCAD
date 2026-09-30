@@ -32,7 +32,17 @@ impl App {
 ///
 /// An unfinished selection goes with the tool: half of what was pointed at is not a document but
 /// an intention, and it must not survive a cancellation.
-pub(crate) fn drop_assembly_tools(joint: &mut super::JointCommand) {
+pub(crate) fn drop_assembly_tools(jc: &mut qymcad_ui_state::JointCtx) {
+    // a joint just made and not yet kept goes with the tool, as a command cancelled
+    qymcad_assembly::joint_create_finish(jc, false);
+    qymcad_assembly::tangent_finish(jc, false);
+    let joint = &mut *jc.joint;
+    // THE EDIT OF A MATE GOES TOO, unless one of its own picks (axis, anchor re-pick) is what is being put down: its
+    // popup stands over the canvas, and a tool taken after it had its clicks land on the popup's fields.
+    // Reported behaviour: the corner of the third part lay under the first hinge's popup when the second was started.
+    if joint.axis_pick.is_none() && joint.edit_repick.is_none() {
+        joint.edit = None;
+    }
     for t in AssemblyTool::ALL {
         match t {
             AssemblyTool::Mate => {

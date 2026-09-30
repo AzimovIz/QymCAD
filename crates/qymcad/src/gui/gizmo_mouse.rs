@@ -98,7 +98,7 @@ mod tests {
     }
 
     /// AWAY FROM THE HANDLE IS THE CAMERA, NOT THE PART. Otherwise any turn of the view would move
-    /// the model.
+    /// the model. The right button: a left drag from empty space draws a frame.
     #[test]
     fn dragging_away_from_the_handle_turns_the_camera_and_leaves_the_part_alone() {
         let (mut app, ctx, comp) = assembly_with_selected_part();
@@ -108,7 +108,8 @@ mod tests {
         let rect = app.viewing.view_rect;
         let far = egui::pos2(rect.min.x + 12.0, rect.min.y + 12.0); // the corner of the canvas — far from the gizmo
         let _ = ctx.run_ui(frame(vec![egui::Event::PointerMoved(far)]), |c| app.viewport(c));
-        let _ = ctx.run_ui(frame(vec![press(far, true)]), |c| app.viewport(c));
+        let right = |at: egui::Pos2, down: bool| egui::Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed: down, modifiers: Default::default() };
+        let _ = ctx.run_ui(frame(vec![right(far, true)]), |c| app.viewport(c));
         assert!(app.dragged.comp_giz.axis.is_none(), "a click far from the gizmo grabbed a handle — then the view cannot be turned at all");
 
         let to = far + egui::vec2(60.0, 0.0);
@@ -116,7 +117,7 @@ mod tests {
             let p = far + egui::vec2(15.0 * k as f32, 0.0);
             let _ = ctx.run_ui(frame(vec![egui::Event::PointerMoved(p)]), |c| app.viewport(c));
         }
-        let _ = ctx.run_ui(frame(vec![press(to, false)]), |c| app.viewport(c));
+        let _ = ctx.run_ui(frame(vec![right(to, false)]), |c| app.viewport(c));
 
         let after = app.project.component_transform(comp);
         assert_eq!(before, after, "a drag away from the gizmo moved the part — a person would be turning the view and silently breaking the assembly");

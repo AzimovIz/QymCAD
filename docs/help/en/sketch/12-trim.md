@@ -1,6 +1,6 @@
 # Trim
 
-Key **K**. Removes the extra piece of a line — up to the nearest intersections.
+Key **K**. Removes the extra piece of a line, arc or circle — up to the nearest intersections.
 
 ![Before and after: a click on the tail right of the crossing removes exactly that tail.](img/sketch-trim/)
 

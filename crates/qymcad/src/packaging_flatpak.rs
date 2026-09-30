@@ -77,25 +77,31 @@ mod tests {
     /// THE KERNEL IS BUILT FROM SOURCE, WITH A REAL CHECKSUM.
     ///
     /// A source without a checksum, or with an invented one, is the difference between building what was
-    /// meant and building whatever the download turned out to be. Measured: the archive of V7_8_1 is 48 MB
-    /// and hashes to the value below.
+    /// meant and building whatever the download turned out to be. Measured: the archive of V7_9_3, downloaded
+    /// from the tag, hashes to the value below.
     #[test]
     fn the_kernel_arrives_with_a_checksum_that_was_measured() {
         let yml = read(&format!("packaging/flatpak/{ID}.yml"));
-        assert!(yml.contains("7321af48c34dc253bf8aae3f0430e8cb10976961d534d8509e72516978aa82f5"), "the kernel's checksum is not the measured one");
-        assert!(yml.contains("V7_8_1"), "the kernel version changed and the checksum beside it did not");
+        assert!(yml.contains("5ecf094ec6b12d5413dfb851d8c3590c354058aee556e32e408bdfbf8c357d57"), "the kernel's checksum is not the measured one");
+        assert!(yml.contains("V7_9_3"), "the kernel version changed and the checksum beside it did not");
     }
 
-    /// AND THE SOURCE OF THE APPLICATION NAMES A COMMIT, not only a tag.
+    /// AND THE SOURCE OF THE APPLICATION NAMES A COMMIT, and only a commit.
     ///
     /// A tag can be moved. A build that "reproduced a release" would then reproduce something else, and
-    /// nobody would know which.
+    /// nobody would know which. A tag written beside the commit is worse than useless: flatpak-builder
+    /// stops when the two disagree, and they disagree whenever a packaging fix lands after the tag was
+    /// cut - the case this manifest was submitted under.
     #[test]
     fn the_application_source_names_a_commit() {
         let yml = read(&format!("packaging/flatpak/{ID}.yml"));
         let commit = yml.lines().find_map(|l| l.trim().strip_prefix("commit: ")).expect("the source names no commit at all");
         assert_eq!(commit.len(), 40, "\"{commit}\" is not a full commit hash");
         assert!(commit.chars().all(|c| c.is_ascii_hexdigit()), "\"{commit}\" is not hexadecimal");
+        assert!(
+            !yml.lines().any(|l| l.trim().starts_with("tag: ")),
+            "a tag is named beside the commit: the build stops if the two ever disagree"
+        );
     }
 
     /// THE DESKTOP ENTRY AND THE METAINFO POINT AT EACH OTHER.

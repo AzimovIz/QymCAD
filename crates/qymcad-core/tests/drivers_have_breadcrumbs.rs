@@ -35,8 +35,7 @@ fn part_with_driver(p: &mut Project, part: &str, sketch_name: &str, driver: &str
         off: 0.0,
         expr: String::new(),
         driven: false,
-        axis: 0,
-    });
+        axis: 0, at: None });
     assert!(p.add_named_dim(driver.into(), sid, vec![pts[0], pts[1]]), "the dimension is named as a driver");
     (comp, sid)
 }
@@ -135,8 +134,7 @@ fn a_nested_part_shows_the_whole_chain() {
         off: 0.0,
         expr: String::new(),
         driven: false,
-        axis: 0,
-    });
+        axis: 0, at: None });
     assert!(p.add_named_dim("shirina".into(), sid, vec![pts[0], pts[1]]));
 
     let d = p.drivers().into_iter().find(|d| d.name == "shirina").expect("the driver is in the list");
@@ -198,8 +196,7 @@ fn a_sketch_without_a_timeline_node_still_shows_its_name() {
         off: 0.0,
         expr: String::new(),
         driven: false,
-        axis: 0,
-    });
+        axis: 0, at: None });
     assert!(p.add_named_dim("bez_uzla".into(), sid, vec![pts[0], pts[1]]));
 
     let d = p.drivers().into_iter().find(|d| d.name == "bez_uzla").expect("the driver is in the list");

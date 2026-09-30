@@ -28,14 +28,13 @@ Update the same way you installed:
 There is no need to download the file from the release page in these cases: it will not replace the
 package but sit beside it, and you end up with two programs instead of one.
 
-**Inside Flatpak this is absent altogether** — no menu item, no line in the settings. The program has no
-network access there, and that is not an omission: the store updates the package and tells you about new
-versions itself.
+**Inside Flatpak this is absent altogether** — no menu item, no line in the settings. The store updates the
+package and tells you about new versions itself.
 
 ## How often to ask
 
 **Settings -> General -> Check for updates**: at every start, once a day (the default), once a week, once
-a month, or never. The menu item works whichever is chosen, including "never": pressing it is asking.
+a month, or never. The menu item works whichever is chosen, including "never".
 
 ## What goes over the network
 
@@ -52,9 +51,11 @@ To switch it off, choose "never" in the same setting. There are then no requests
 
 ## If it does not work
 
-* **"Could not reach the site"** — there is no network, or the site is not answering. This does NOT mean
-  "no updates": the program says plainly that it did not learn the answer. Try again later.
-* **Nothing appears in the status line** — then there is no newer version. An empty line here means all
-  is well: a line that permanently says "no updates" stops being read.
+* **"Could not reach the site"** — there is no network, or the site is not answering. This does not mean
+  "no updates": the answer is unknown. Try again later.
+* **"No updates found"** in the window — yours is the newest version. An automatic check that finds
+  nothing says nothing: the status line stays empty.
+* **"This version has been declared unfit. Please update."** — the release you have has a known fault; update
+  from the release page.
 * **There is no menu item** — you are either inside Flatpak or running a build you compiled yourself. A
   hand-built copy has nothing to compare against: its version number is the same between releases.

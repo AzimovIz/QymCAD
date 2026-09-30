@@ -8,6 +8,8 @@
 /// The name of the C++ runtime to link, chosen by target - shared with `build.rs`.
 pub mod cxx_runtime;
 pub mod kernel;
+pub mod recognise;
+pub use recognise::{recognise, Recognised};
 pub use kernel::{kernel_gate, OcctKernel};
 
 use std::ffi::CString;
@@ -27,6 +29,13 @@ extern "C" {
     fn qym_occt_revolve(xy: *const c_double, n: usize, axis: i32, angle_deg: c_double, defl: c_double) -> *mut QymDoc;
     fn qym_occt_extrude_bool(base_xy: *const c_double, nb: usize, base_h: c_double, tool_xy: *const c_double, nt: usize, tool_h: c_double, op: i32, defl: c_double) -> *mut QymDoc;
     fn qym_doc_body_count(d: *const QymDoc) -> usize;
+    fn qym_doc_face_count(d: *const QymDoc) -> usize;
+    fn qym_shape_fix_shell(s: *const QymShape) -> *mut QymShape;
+    fn qym_shape_sew(s: *const QymShape, tol: c_double) -> *mut QymShape;
+    fn qym_set_parallel(on: i32);
+    fn qym_set_threads(n: i32);
+    fn qym_doc_unmeshed_faces(d: *const QymDoc) -> usize;
+    fn qym_doc_meshed_faces(d: *const QymDoc) -> usize;
     fn qym_body_vert_count(d: *const QymDoc, i: usize) -> usize;
     fn qym_body_tri_count(d: *const QymDoc, i: usize) -> usize;
     fn qym_body_face_count(d: *const QymDoc, i: usize) -> usize;
@@ -48,6 +57,10 @@ struct QymShape {
 }
 #[repr(C)]
 struct QymShapeList {
+    _private: [u8; 0],
+}
+#[repr(C)]
+struct QymTree {
     _private: [u8; 0],
 }
 #[repr(C)]
@@ -122,6 +135,10 @@ extern "C" {
     fn qym_shape_is_valid(s: *const QymShape) -> i32;
     fn qym_shape_min_round_radius(s: *const QymShape) -> f64;
     fn qym_shape_solid_count(s: *const QymShape) -> i32;
+    fn qym_shape_offset_faces(s: *const QymShape, idx: *const u32, names: *const u32, n: usize, dist: c_double) -> *mut QymShape;
+    fn qym_shape_solids_info(s: *const QymShape, centres: *mut c_double, volumes: *mut c_double, max: i32) -> i32;
+    fn qym_shape_solid_at(s: *const QymShape, index: i32) -> *mut QymShape;
+    fn qym_shape_face_kinds(s: *const QymShape, out: *mut i32) -> i32;
     fn qym_shape_shell_count(s: *const QymShape) -> i32;
     fn qym_shape_heal(s: *const QymShape) -> *mut QymShape;
     fn qym_shape_kind(s: *const QymShape) -> i32;
@@ -136,11 +153,63 @@ extern "C" {
     fn qym_shape_from_brep(data: *const u8, len: usize) -> *mut QymShape;
     fn qym_bytes_free(p: *mut u8);
     fn qym_shape_heal_pinched_faces(s: *mut QymShape) -> i32;
+    fn qym_shape_drop_slivers(s: *mut QymShape) -> i32;
+    fn qym_shape_sliver_count(s: *const QymShape) -> i32;
     fn qym_step_solids(path: *const c_char) -> *mut QymShapeList;
     fn qym_shapelist_count(l: *const QymShapeList) -> usize;
     fn qym_shapelist_get(l: *const QymShapeList, i: usize) -> *mut QymShape;
     fn qym_shapelist_free(l: *mut QymShapeList);
     fn qym_step_write(shapes: *const *const QymShape, mats: *const f64, n: usize, path: *const c_char) -> i32;
+    fn qym_occt_iges_read(path: *const c_char, defl: f64) -> *mut QymDoc;
+    fn qym_shape_from_mesh(verts: *const f64, nv: usize, tris: *const u32, nt: usize) -> *mut QymShape;
+    fn qym_shape_from_faces(
+        ns: usize,
+        skind: *const i32,
+        sparam: *const f64,
+        nv: usize,
+        vxyz: *const f64,
+        ne: usize,
+        ekind: *const i32,
+        eparam: *const f64,
+        eends: *const i64,
+        epstart: *const usize,
+        epts: *const f64,
+        nf: usize,
+        fsurface: *const i32,
+        foutward: *const i32,
+        finside: *const f64,
+        floops: *const usize,
+        lstart: *const usize,
+        litems: *const i64,
+        nloose: usize,
+        loose: *const f64,
+        tol: c_double,
+        out_faces: *mut u32,
+        out_area: *mut f64,
+        out_free: *mut u32,
+        out_free_at: *mut f64,
+        cap_free: usize,
+        out_dropped: *mut u32,
+        faces_only: i32,
+        fpstart: *const usize,
+        fpts: *const f64,
+    ) -> *mut QymShape;
+    fn qym_faces_cache(on: i32);
+    fn qym_exact_read(format: i32, path: *const c_char, defl: f64, doc: *mut *mut QymDoc, solids: *mut *mut QymShapeList) -> i32;
+    fn qym_exact_read_tree(format: i32, path: *const c_char, defl: f64, doc: *mut *mut QymDoc, solids: *mut *mut QymShapeList, tree: *mut *mut QymTree) -> i32;
+    fn qym_tree_count(t: *const QymTree) -> usize;
+    fn qym_tree_parent(t: *const QymTree, i: usize) -> i64;
+    fn qym_tree_name(t: *const QymTree, i: usize) -> *const c_char;
+    fn qym_tree_place(t: *const QymTree, i: usize, out: *mut f64);
+    fn qym_tree_solid(t: *const QymTree, i: usize) -> i64;
+    fn qym_tree_repeat_of(t: *const QymTree, i: usize) -> i64;
+    fn qym_tree_color(t: *const QymTree, i: usize, out: *mut f32) -> i32;
+    fn qym_tree_face_colours(t: *const QymTree, i: usize, ids: *mut u32, rgb: *mut f32, cap: usize) -> usize;
+    fn qym_tree_free(t: *mut QymTree);
+    #[allow(clippy::too_many_arguments)] // the tree goes over as parallel arrays, one per field of a node
+    fn qym_step_write_tree(n: usize, parents: *const i64, names: *const *const c_char, places: *const f64, shapes: *const *const QymShape, same_as: *const i64, rgb: *const f32, has_rgb: *const i32, face_starts: *const usize, face_ids: *const u32, face_rgb: *const f32, path: *const c_char) -> i32;
+    fn qym_iges_solids(path: *const c_char) -> *mut QymShapeList;
+    fn qym_iges_write(shapes: *const *const QymShape, mats: *const f64, n: usize, path: *const c_char, unit: *const c_char) -> i32;
 }
 
 /// One edge of a body as the kernel gives it: a polyline, a persistent id and everything else known about it.
@@ -221,6 +290,17 @@ pub struct ThreadCut {
     pub lead_out: f64,
 }
 
+/// Why a boolean gave no body (see `Shape::boolean_checked`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BoolVerdict {
+    /// The kernel refused; its words are in the refusal channel.
+    Failed,
+    /// The tool does not reach the base.
+    CutRemovedNothing,
+    /// The bodies share no volume: they are apart or only touch.
+    NothingInCommon,
+}
+
 impl Shape {
     /// A live body into bytes, together with the names of its faces and edges; see `qym_shape_to_brep`.
     ///
@@ -252,6 +332,9 @@ impl Drop for Shape {
     }
 }
 
+/// How many numbers describe a surface to the bridge, the most any kind takes: a helix's seventeen.
+const SURFACE_NUMBERS: usize = 20;
+
 /// WHY THE KERNEL REFUSED the last operation on this thread, in the kernel's own words.
 ///
 /// An operation that fails returns `None` and nothing more, and there are 250 places inside the kernel that
@@ -269,6 +352,92 @@ impl Drop for Shape {
 ///
 /// A guard on this side is a refusal like any other to whoever is looking for the cause, and a second channel
 /// for it would be one nobody thinks to read. Always returns `None`, so a guard reads as one line.
+/// A surface a face recognised on a mesh lies on; see [`Shape::from_faces`].
+#[derive(Clone, Debug, PartialEq)]
+pub enum FaceSurface {
+    Plane { point: [f64; 3], normal: [f64; 3] },
+    Cylinder { point: [f64; 3], axis: [f64; 3], radius: f64 },
+    /// `axis` runs from the tip into the cone.
+    Cone { apex: [f64; 3], axis: [f64; 3], half_angle: f64 },
+    Sphere { center: [f64; 3], radius: f64 },
+    Torus { center: [f64; 3], axis: [f64; 3], major: f64, minor: f64 },
+    /// A free form: the face fills its border and runs through its `points`; `normal` is where it faces out.
+    Free { normal: [f64; 3] },
+    /// A bicubic B-spline surface on clamped uniform knots, `nu` x `nv` poles given as the face's `points`, row by row
+    /// (`nu` along u in a row); u x v points out of the body. `frame` lays a point of the face on its parameters: u =
+    /// (q.frame[0..3] - frame[6]) / frame[7], v = (q.frame[3..6] - frame[8]) / frame[9] - its edges are laid so, not
+    /// searched for.
+    Spline { nu: usize, nv: usize, frame: [f64; 10] },
+    /// A straight profile screwed about the axis through `point` along `axis`: a point at distance r, height z and angle
+    /// t from `reference` lies on it where `radial * r + axial * (z - rise * t) = offset`, `axial` positive; its own
+    /// normal points the way (`radial`, `axial`) does. The face lies within the angles `turn` (whole turns counted) and
+    /// the distances `reach`.
+    Helix { point: [f64; 3], axis: [f64; 3], reference: [f64; 3], rise: f64, radial: f64, axial: f64, offset: f64, turn: [f64; 2], reach: [f64; 2] },
+    /// A round wire wound about the axis through `point` along `axis`: its middle runs `radius` from the axis at angle t
+    /// from `reference`, `lift + rise * t` along it, and the surface is every point `wire` from that line; its own normal
+    /// points away from the line. The face lies within the angles `turn` (whole turns counted).
+    Coil { point: [f64; 3], axis: [f64; 3], reference: [f64; 3], rise: f64, radius: f64, lift: f64, wire: f64, turn: [f64; 2] },
+    /// A circle screwed about the axis through `point` along `axis`: a point at distance r, height z and angle t from
+    /// `reference` lies on it where (r, z - rise * t) lies `round` from (`middle`, `height`), whole turns counted; its own
+    /// normal points away from the circle's middle. The face lies within the angles `turn` and the angles round the
+    /// circle `reach`, from the way out from the axis towards the axis's own way.
+    RoundHelix { point: [f64; 3], axis: [f64; 3], reference: [f64; 3], rise: f64, middle: f64, height: f64, round: f64, turn: [f64; 2], reach: [f64; 2] },
+}
+
+/// The curve an edge of such a face runs along.
+#[derive(Clone, Debug, PartialEq)]
+pub enum EdgeCurve {
+    /// `dir` is a unit vector the way the edge's points run.
+    Line { point: [f64; 3], dir: [f64; 3] },
+    Circle { center: [f64; 3], axis: [f64; 3], radius: f64 },
+    /// In the plane through `center` square to `normal`, half-axis `major` along `major_dir` and `minor` across it.
+    Ellipse { center: [f64; 3], normal: [f64; 3], major_dir: [f64; 3], major: f64, minor: f64 },
+    /// A curve through the edge's points: within one tolerance of them where `close`, and within four otherwise.
+    Points { close: bool },
+    /// A polyline through the edge's points as they are: an edge beside a region left as mesh, meeting the sides of its
+    /// triangles.
+    Polyline,
+}
+
+/// An edge of faces recognised on a mesh.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FaceEdge {
+    pub curve: EdgeCurve,
+    /// The corners it runs between, as indices into the corners; `None` for a closed edge.
+    pub ends: Option<[usize; 2]>,
+    /// Its points in order; where it has corners, the first and the last are theirs.
+    pub points: Vec<[f64; 3]>,
+}
+
+/// What came of building a body from faces recognised on a mesh; see [`Shape::from_faces`].
+pub struct BuiltBody {
+    pub shape: Shape,
+    /// For every face, the area it took of its surface; `None` where it could not be built.
+    pub areas: Vec<Option<f64>>,
+    /// How many sides no second face met in the sewing: none means the shell closed.
+    pub free_edges: usize,
+    /// Where those sides are, up to 256 of them: the middle of each.
+    pub free_at: Vec<[f64; 3]>,
+    /// How many triangles of the regions left as mesh made no face: each is a hole of its own size.
+    pub loose_dropped: usize,
+}
+
+/// A face recognised on a mesh, bounded by loops of edges.
+#[derive(Clone, Debug, PartialEq)]
+pub struct BoundedFace {
+    pub surface: FaceSurface,
+    /// Whether the surface's own normal - a plane's `normal`, away from the axis or the centre on the rest - points out
+    /// of the body.
+    pub outward: bool,
+    /// A point amid the face: the seam of a round surface is turned away from it, and a sphere's poles aside.
+    pub inside: [f64; 3],
+    /// Its loops: edges in order, each with whether the loop walks it the way its points run. The face lies on the
+    /// left of every loop seen from outside the body. A face with no loop is its whole surface.
+    pub loops: Vec<Vec<(usize, bool)>>,
+    /// Points a free form runs through, amid its border; empty for the other surfaces.
+    pub points: Vec<[f64; 3]>,
+}
+
 fn refuse(where_: &str, what: &str) -> Option<Shape> {
     let text = std::ffi::CString::new(format!("{where_}: {what}")).unwrap_or_default();
     unsafe { qym_why_set(text.as_ptr()) }
@@ -535,6 +704,21 @@ impl Shape {
     pub fn boolean(&self, other: &Shape, op: u8) -> Option<Shape> {
         unsafe { Self::wrap(qym_shape_boolean(self.ptr, other.ptr, op as i32)) }
     }
+    /// A boolean that must give a body: an intersection of bodies that only touch has no volume, and a cut by a tool
+    /// that does not reach the base removes nothing. Both come back from OCCT as a valid shape (an empty compound, or
+    /// the base unchanged), so the judgement lives here - one place for the rebuild and for the trial the bar makes
+    /// before laying a node.
+    pub fn boolean_checked(&self, other: &Shape, op: u8) -> Result<Shape, BoolVerdict> {
+        let out = self.boolean(other, op).ok_or(BoolVerdict::Failed)?;
+        let v = out.volume();
+        if op == 0 && self.volume() > 1e-9 && v >= self.volume() - 1e-6 {
+            return Err(BoolVerdict::CutRemovedNothing);
+        }
+        if op == 2 && v < 1e-9 {
+            return Err(BoolVerdict::NothingInCommon);
+        }
+        Ok(out)
+    }
     /// One union of every shape at once rather than a chain of pairwise ones: all the arguments are
     /// intersected a single time, sharing vertices and edges. The first shape carries the counter of
     /// positional numbers.
@@ -599,12 +783,30 @@ impl Shape {
     pub fn heal_pinched_faces(&self) -> i32 {
         unsafe { qym_shape_heal_pinched_faces(self.ptr) }
     }
+    /// Take out the faces narrower than 1e-6 - cracks a limiting case leaves, not faces - letting their neighbours
+    /// meet. It returns how many were taken out and edits the shape in place together with the name maps.
+    /// How many faces of the body `drop_slivers` would take for cracks.
+    pub fn sliver_faces(&self) -> i32 {
+        unsafe { qym_shape_sliver_count(self.ptr) }
+    }
+    pub fn drop_slivers(&self) -> i32 {
+        unsafe { qym_shape_drop_slivers(self.ptr) }
+    }
     /// A copy of faces as a separate sheet: `idx` says which to copy and `names` how to name the copies.
     pub fn copy_faces(&self, idx: &[u32], names: &[u32]) -> Option<Shape> {
         if idx.len() != names.len() {
             return refuse("face copy/asked", "there is not one name per face to copy");
         }
         unsafe { Self::wrap_valid(qym_shape_copy_faces(self.ptr, idx.as_ptr(), names.as_ptr(), idx.len())) }
+    }
+
+    /// An offset sheet: the faces `idx` moved `dist` along their normals, outward for the faces of a solid, each named
+    /// by `names` after the one it came from.
+    pub fn offset_faces(&self, idx: &[u32], names: &[u32], dist: f64) -> Option<Shape> {
+        if idx.len() != names.len() {
+            return refuse("offset surface/asked", "there is not one name per face to offset");
+        }
+        unsafe { Self::wrap_valid(qym_shape_offset_faces(self.ptr, idx.as_ptr(), names.as_ptr(), idx.len(), dist)) }
     }
 
     /// A patch: a surface stretched over a chain of edges of the body. `tangent` asks it to meet the edges
@@ -666,6 +868,28 @@ impl Shape {
     /// pieces.
     pub fn solid_count(&self) -> u32 {
         unsafe { qym_shape_solid_count(self.ptr) as u32 }
+    }
+    /// The solids of the shape in the kernel's order: the centre of mass and the volume of each.
+    pub fn solids_info(&self) -> Vec<([f64; 3], f64)> {
+        let mut max = 16usize;
+        loop {
+            let (mut c, mut v) = (vec![0.0f64; 3 * max], vec![0.0f64; max]);
+            let n = unsafe { qym_shape_solids_info(self.ptr, c.as_mut_ptr(), v.as_mut_ptr(), max as i32) }.max(0) as usize;
+            if n <= max {
+                return (0..n).map(|i| ([c[3 * i], c[3 * i + 1], c[3 * i + 2]], v[i])).collect();
+            }
+            max = n;
+        }
+    }
+    /// The solid number `index` of the shape, in the order of `solids_info`, keeping its face and edge ids.
+    pub fn solid_at(&self, index: usize) -> Option<Shape> {
+        unsafe { Self::wrap(qym_shape_solid_at(self.ptr, index as i32)) }
+    }
+    /// The faces by the kind of surface they lie on: plane, cylinder, cone, sphere, torus, free form, any other.
+    /// `None` when the kernel could not read them.
+    pub fn face_kinds(&self) -> Option<[u32; 7]> {
+        let mut out = [0i32; 7];
+        (unsafe { qym_shape_face_kinds(self.ptr, out.as_mut_ptr()) } != 0).then(|| out.map(|n| n as u32))
     }
     /// Repair minor flaws of the shape, through `ShapeFix`. `None` means it did not help.
     pub fn healed(&self) -> Option<Shape> {
@@ -780,6 +1004,14 @@ impl Shape {
     pub fn smooth_edge_ids(&self) -> std::collections::HashSet<u32> {
         let (_, ids, _, sm) = self.edges_full_smooth();
         ids.into_iter().zip(sm).filter(|&(id, s)| s && id != 0).map(|(id, _)| id).collect()
+    }
+    /// The named edges that are neither smooth nor the point of a pole: what a blend of every edge runs along.
+    pub fn sharp_edge_ids(&self) -> Vec<u32> {
+        let (polys, ids, _, sm) = self.edges_full_smooth();
+        let mut out: Vec<u32> = ids.into_iter().zip(sm).zip(polys).filter(|((id, s), p)| !*s && *id != 0 && !p.is_empty()).map(|((id, _), _)| id).collect();
+        out.sort_unstable();
+        out.dedup();
+        out
     }
     /// Fillet the selected edges, by zero-based index, with radius `r`.
     pub fn fillet_edges(&self, r: f64, idx: &[u32]) -> Option<Shape> {
@@ -1129,6 +1361,148 @@ impl Shape {
         let mut v = 0.0f64;
         (unsafe { qym_shape_interference_volume(self.ptr, other.ptr, &mut v) } == 1).then_some(v)
     }
+    /// A TRIANGLE MESH TURNED INTO A BODY a person can cut, drill and sketch on - a polyhedron with the mesh's
+    /// flat neighbours merged into single faces (see `qym_shape_from_mesh`). A closed mesh gives a solid, an open
+    /// one a surface body. `None` for a mesh with no triangle that has an area.
+    pub fn from_mesh(mesh: &qymcad_core::geom::Mesh) -> Option<Shape> {
+        let verts: Vec<f64> = mesh.verts.iter().flat_map(|p| [p.x, p.y, p.z]).collect();
+        let tris: Vec<u32> = mesh.tris.iter().flat_map(|t| *t).collect();
+        Shape::wrap(unsafe { qym_shape_from_mesh(verts.as_ptr(), mesh.verts.len(), tris.as_ptr(), mesh.tris.len()) })
+    }
+
+    /// A BODY FROM FACES RECOGNISED ON A MESH, and the triangles `loose` of regions left as mesh as flat faces: every face on its surface, bounded by its loops, the edges exact lines
+    /// and circles where they are, the faces sewn within ten `tol` and a closed shell made a solid (see
+    /// `qym_shape_from_faces`). Returns the body and, for every face, the area it took of its surface - `None` where it
+    /// could not be built; `None` for all of it where no face was, with the kernel's words in [`last_kernel_refusal`];
+    /// and how many sides no second face met when the faces were sewn - none means the shell closed.
+    pub fn from_faces(corners: &[[f64; 3]], edges: &[FaceEdge], faces: &[BoundedFace], loose: &[[[f64; 3]; 3]], tol: f64) -> Option<BuiltBody> {
+        Self::from_faces_as(corners, edges, faces, loose, tol, false)
+    }
+
+    /// The area each face took of its surface, the faces built as `from_faces` builds them but neither sewn nor made a
+    /// solid: what the rounds that take wrong faces back ask, at a fraction of the cost - sewing and mending the shell
+    /// were 9 s of every 16 on a mesh of 30 636 triangles.
+    pub fn face_areas(corners: &[[f64; 3]], edges: &[FaceEdge], faces: &[BoundedFace], tol: f64) -> Option<Vec<Option<f64>>> {
+        Self::from_faces_as(corners, edges, faces, &[], tol, true).map(|b| b.areas)
+    }
+
+    /// Keep the faces `from_faces` and `face_areas` build, on this thread, until `false`: the rounds of one recognition
+    /// build the same faces again and again.
+    pub fn keep_faces(on: bool) {
+        unsafe { qym_faces_cache(on as i32) }
+    }
+
+    fn from_faces_as(corners: &[[f64; 3]], edges: &[FaceEdge], faces: &[BoundedFace], loose: &[[[f64; 3]; 3]], tol: f64, faces_only: bool) -> Option<BuiltBody> {
+        let (mut skind, mut sparam) = (Vec::with_capacity(faces.len()), Vec::with_capacity(SURFACE_NUMBERS * faces.len()));
+        for f in faces {
+            let (kind, head): (i32, &[f64]) = match f.surface {
+                FaceSurface::Plane { point: o, normal: n } => (0, &[o[0], o[1], o[2], n[0], n[1], n[2]]),
+                FaceSurface::Cylinder { point: o, axis: a, radius } => (1, &[o[0], o[1], o[2], a[0], a[1], a[2], radius]),
+                FaceSurface::Cone { apex: o, axis: a, half_angle } => (2, &[o[0], o[1], o[2], a[0], a[1], a[2], half_angle]),
+                FaceSurface::Sphere { center: o, radius } => (3, &[o[0], o[1], o[2], 0.0, 0.0, 1.0, radius]),
+                FaceSurface::Torus { center: o, axis: a, major, minor } => (4, &[o[0], o[1], o[2], a[0], a[1], a[2], major, minor]),
+                FaceSurface::Free { normal: n } => (5, &[0.0, 0.0, 0.0, n[0], n[1], n[2]]),
+                FaceSurface::Spline { nu, nv, frame: f } => (9, &[nu as f64, nv as f64, f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8], f[9]]),
+                FaceSurface::Helix { point: o, axis: a, reference: x, rise, radial, axial, offset, turn, reach } => {
+                    (6, &[o[0], o[1], o[2], a[0], a[1], a[2], x[0], x[1], x[2], rise, radial, axial, offset, turn[0], turn[1], reach[0], reach[1]])
+                }
+                FaceSurface::RoundHelix { point: o, axis: a, reference: x, rise, middle, height, round, turn, reach } => {
+                    (8, &[o[0], o[1], o[2], a[0], a[1], a[2], x[0], x[1], x[2], rise, middle, height, round, turn[0], turn[1], reach[0], reach[1]])
+                }
+                FaceSurface::Coil { point: o, axis: a, reference: x, rise, radius, lift, wire, turn } => {
+                    (7, &[o[0], o[1], o[2], a[0], a[1], a[2], x[0], x[1], x[2], rise, radius, lift, wire, turn[0], turn[1]])
+                }
+            };
+            let mut p = [0.0; SURFACE_NUMBERS];
+            p[..head.len()].copy_from_slice(head);
+            skind.push(kind);
+            sparam.extend_from_slice(&p);
+        }
+        let vxyz: Vec<f64> = corners.iter().flatten().copied().collect();
+        let (mut ekind, mut eparam, mut eends, mut epstart, mut epts) = (Vec::new(), Vec::new(), Vec::new(), vec![0usize], Vec::new());
+        for e in edges {
+            let (kind, p): (i32, [f64; 11]) = match e.curve {
+                EdgeCurve::Line { point: o, dir: d } => (0, [o[0], o[1], o[2], d[0], d[1], d[2], 0.0, 0.0, 0.0, 0.0, 0.0]),
+                EdgeCurve::Circle { center: o, axis: a, radius } => (1, [o[0], o[1], o[2], a[0], a[1], a[2], radius, 0.0, 0.0, 0.0, 0.0]),
+                EdgeCurve::Points { close } => (2, [if close { 1.0 } else { 4.0 }, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+                EdgeCurve::Polyline => (3, [0.0; 11]),
+                EdgeCurve::Ellipse { center: o, normal: n, major_dir: m, major, minor } => (4, [o[0], o[1], o[2], n[0], n[1], n[2], m[0], m[1], m[2], major, minor]),
+            };
+            ekind.push(kind);
+            eparam.extend_from_slice(&p);
+            match e.ends {
+                Some([a, z]) => eends.extend([a as i64, z as i64]),
+                None => eends.extend([-1i64, -1]),
+            }
+            epts.extend(e.points.iter().flatten().copied());
+            epstart.push(epts.len() / 3);
+        }
+        let fsurface: Vec<i32> = (0..faces.len() as i32).collect();
+        let foutward: Vec<i32> = faces.iter().map(|f| f.outward as i32).collect();
+        let finside: Vec<f64> = faces.iter().flat_map(|f| f.inside).collect();
+        let (mut floops, mut lstart, mut litems) = (vec![0usize], vec![0usize], Vec::new());
+        for f in faces {
+            for l in &f.loops {
+                litems.extend(l.iter().map(|&(e, forward)| if forward { e as i64 + 1 } else { -(e as i64 + 1) }));
+                lstart.push(litems.len());
+            }
+            floops.push(lstart.len() - 1);
+        }
+        let (mut fpstart, mut fpts) = (vec![0usize], Vec::new());
+        for f in faces {
+            fpts.extend(f.points.iter().flatten().copied());
+            fpstart.push(fpts.len() / 3);
+        }
+        let flat_loose: Vec<f64> = loose.iter().flatten().flatten().copied().collect();
+        let mut built = 0u32;
+        let mut free = 0u32;
+        let mut free_at = vec![0.0f64; 3 * 256];
+        let mut dropped = 0u32;
+        let mut areas = vec![-1.0f64; faces.len()];
+        let body = Shape::wrap(unsafe {
+            qym_shape_from_faces(
+                faces.len(),
+                skind.as_ptr(),
+                sparam.as_ptr(),
+                corners.len(),
+                vxyz.as_ptr(),
+                edges.len(),
+                ekind.as_ptr(),
+                eparam.as_ptr(),
+                eends.as_ptr(),
+                epstart.as_ptr(),
+                epts.as_ptr(),
+                faces.len(),
+                fsurface.as_ptr(),
+                foutward.as_ptr(),
+                finside.as_ptr(),
+                floops.as_ptr(),
+                lstart.as_ptr(),
+                litems.as_ptr(),
+                loose.len(),
+                flat_loose.as_ptr(),
+                tol,
+                &mut built,
+                areas.as_mut_ptr(),
+                &mut free,
+                free_at.as_mut_ptr(),
+                256,
+                &mut dropped,
+                faces_only as i32,
+                fpstart.as_ptr(),
+                fpts.as_ptr(),
+            )
+        })?;
+        let places = (free as usize).min(256);
+        Some(BuiltBody {
+            shape: body,
+            areas: areas.into_iter().map(|a| (a >= 0.0).then_some(a)).collect(),
+            free_edges: free as usize,
+            free_at: (0..places).map(|k| [free_at[3 * k], free_at[3 * k + 1], free_at[3 * k + 2]]).collect(),
+            loose_dropped: dropped as usize,
+        })
+    }
+
     /// The bounding box of the body in its own frame, as `[xmin, ymin, zmin, xmax, ymax, zmax]` in mm.
     /// `None` means an empty or broken shape.
     pub fn bbox(&self) -> Option<[f64; 6]> {
@@ -1194,8 +1568,11 @@ impl Shape {
 /// The fraction is 0.15% of the diagonal, about 30 segments around a circle spanning the box, clamped to
 /// `[0.002, 1.0]` mm: from below so that a tiny part does not produce millions of triangles, from above so that
 /// the holes of a huge frame do not degenerate into triangles — the angular deflection in the tessellator keeps
-/// a minimum number of segments in any case. A `diag` of zero or less, the box not having been computed, falls
-/// back to the former 0.5 mm.
+/// a minimum number of segments in any case. The ceiling of 1 mm holds up to a diagonal of 10 m and rises past it
+/// as 1e-4 of the diagonal: a ball's triangles go as the square of the segments around it, and under a fixed 1 mm
+/// a ball of r = 100 m came out 1006106 triangles against 1982 of r = 10 mm - a window past 2 GB and over a
+/// minute to tessellate - while a cylinder of the same radius, its triangles going as the segments alone, did not.
+/// A `diag` of zero or less, the box not having been computed, falls back to the former 0.5 mm.
 ///
 /// `k`, the fraction of the diagonal, is set by the document through `GeomQuality::deflection_k` rather than by
 /// a constant here: the geometric tolerance has to travel with the file, or one project would give two people
@@ -1206,7 +1583,84 @@ pub fn adaptive_deflection(diag: f64, k: f64) -> f64 {
     if !diag.is_finite() || diag <= 0.0 {
         return 0.5;
     }
-    (diag * k).clamp(MIN, MAX)
+    (diag * k).clamp(MIN, MAX.max(diag * 1e-4))
+}
+
+/// WHETHER THE KERNEL'S BOOLEANS RUN ON SEVERAL CORES, and on how many.
+///
+/// Measured on the reference documents: with the flag the scenario document rebuilds in 17.2 s against 20.3 s,
+/// and its threads in 8.5 s against 12.3 s. `threads` of zero or less means "all the cores but one", which
+/// leaves the machine usable while a heavy rebuild runs. The pool is shared with every other parallel pass of
+/// the kernel, so this is the ceiling for all of them together.
+pub fn set_parallel(on: bool, threads: i32) {
+    let want = if !on {
+        1
+    } else if threads > 0 {
+        threads as usize
+    } else {
+        // all the cores but one, so the machine stays usable while a heavy rebuild runs
+        std::thread::available_parallelism().map(|n| n.get()).unwrap_or(2).saturating_sub(1).max(1)
+    };
+    WORKERS.store(want, std::sync::atomic::Ordering::Relaxed);
+    unsafe {
+        qym_set_threads(threads);
+        qym_set_parallel(if on { 1 } else { 0 });
+    }
+}
+
+/// HOW MANY THREADS A REBUILD MAY BE DIVIDED INTO. The same number the booleans inside the kernel are given,
+/// because the pool is one: divided twice over, the threads multiply and the machine stops.
+///
+/// Zero means nobody has said: then it is all the cores but one, which is what the application asks for by
+/// default and what a check gets without saying anything. A setting of one is the single-threaded answer.
+static WORKERS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+pub fn workers() -> usize {
+    match WORKERS.load(std::sync::atomic::Ordering::Relaxed) {
+        0 => std::thread::available_parallelism().map(|n| n.get()).unwrap_or(2).saturating_sub(1).max(1),
+        n => n,
+    }
+}
+
+/// THE FACES SEWN TOGETHER with the given tolerance, and closed into a solid where they close.
+pub fn sew(shape: &Shape, tolerance: f64) -> Option<Shape> {
+    Shape::wrap(unsafe { qym_shape_sew(shape.ptr, tolerance) })
+}
+
+/// THE SHELL PUT RIGHT: the orientation of the faces and of the shell. `None` means the kernel refused.
+pub fn fix_shell(shape: &Shape) -> Option<Shape> {
+    Shape::wrap(unsafe { qym_shape_fix_shell(shape.ptr) })
+}
+
+/// HOW MANY FACES OF THIS SHAPE DO NOT TESSELLATE, out of how many.
+///
+/// A face without a triangulation is skipped when the mesh is assembled and leaves a hole in the shell - the
+/// part is see-through there. The number is meant for a measurement and for a report to the person: an import
+/// that lost faces must say so rather than hand over a body with gaps.
+pub fn unmeshed_faces(shape: &Shape, deflection: f64) -> (usize, usize) {
+    unsafe {
+        let d = qym_shape_tessellate(shape.ptr, deflection);
+        if d.is_null() {
+            return (0, 0);
+        }
+        let out = (qym_doc_unmeshed_faces(d), qym_doc_face_count(d));
+        qym_doc_free(d);
+        out
+    }
+}
+
+/// HOW MANY FACES A TESSELLATION OF `shape` HAS TO MESH - the ones that come to it with no triangulation of their own.
+/// A flat face bounded by straight edges meshes the same at any deflection, so once it has its triangles it keeps them.
+pub fn remeshed_faces(shape: &Shape, deflection: f64) -> usize {
+    unsafe {
+        let d = qym_shape_tessellate(shape.ptr, deflection);
+        if d.is_null() {
+            return 0;
+        }
+        let out = qym_doc_meshed_faces(d);
+        qym_doc_free(d);
+        out
+    }
 }
 
 /// Read a STEP file and return a shape per solid, in parallel with [`import_step`].
@@ -1244,6 +1698,337 @@ pub fn write_step(bodies: &[(&Shape, [f64; 12])], path: &str) -> Result<(), Stri
         Ok(())
     } else {
         Err(format!("cad-step-write-failed#{rc}"))
+    }
+}
+
+/// Read an exact file ONCE into both what is shown and what is built on: the bodies (mesh plus B-rep faces, one per
+/// solid) and the live shapes, in the same order. See `qym_exact_read`: reading twice cost the whole wait twice.
+pub fn read_exact(format: ExactFormat, path: &str, deflection: f64) -> Result<(Vec<Body>, Vec<Shape>), String> {
+    let c = CString::new(path).map_err(|e| e.to_string())?;
+    let defl = if deflection > 0.0 { deflection } else { 0.5 };
+    let code = match format {
+        ExactFormat::Step => 0,
+        ExactFormat::Iges => 1,
+    };
+    let (mut doc, mut list): (*mut QymDoc, *mut QymShapeList) = (std::ptr::null_mut(), std::ptr::null_mut());
+    let rc = unsafe { qym_exact_read(code, c.as_ptr(), defl, &mut doc, &mut list) };
+    // the codes written out whole, so that a search for one finds the place that emits it
+    let (read_failed, empty) = match format {
+        ExactFormat::Step => ("cad-step-read-failed", "cad-step-empty-tessellation"),
+        ExactFormat::Iges => ("cad-iges-read-failed", "cad-iges-empty-tessellation"),
+    };
+    if rc != 0 || doc.is_null() || list.is_null() {
+        unsafe {
+            if !doc.is_null() {
+                qym_doc_free(doc);
+            }
+            if !list.is_null() {
+                qym_shapelist_free(list);
+            }
+        }
+        return Err(read_failed.to_string());
+    }
+    let bodies = unsafe { doc_to_bodies(doc) };
+    let shapes = unsafe {
+        let n = qym_shapelist_count(list);
+        let out: Vec<Shape> = (0..n).filter_map(|i| Shape::wrap(qym_shapelist_get(list, i))).collect();
+        qym_shapelist_free(list);
+        out
+    };
+    if bodies.is_empty() {
+        return Err(empty.to_string());
+    }
+    Ok((bodies, shapes))
+}
+
+/// THE EXACT FORMATS: files that carry faces and edges rather than triangles, read into live solids.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExactFormat {
+    Step,
+    Iges,
+}
+
+/// The unit a file is written in. The model is in millimetres; a file in inches carries converted coordinates
+/// and says so in its header, which is what a reader on the other side goes by.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LengthUnit {
+    Millimetre,
+    Inch,
+}
+
+impl ExactFormat {
+    /// The format of a file by its extension: `igs` and `iges` are IGES, anything else is taken for STEP - which
+    /// is also what a source saved before its extension was kept comes back as.
+    pub fn of_extension(ext: &str) -> ExactFormat {
+        match ext.to_ascii_lowercase().as_str() {
+            "igs" | "iges" => ExactFormat::Iges,
+            _ => ExactFormat::Step,
+        }
+    }
+}
+
+/// Read an exact file into bodies, one per solid, each with its B-rep faces.
+pub fn import_exact(format: ExactFormat, path: &str, deflection: f64) -> Result<Vec<Body>, String> {
+    match format {
+        ExactFormat::Step => import_step(path, deflection),
+        ExactFormat::Iges => import_iges(path, deflection),
+    }
+}
+
+/// Read an exact file into a live shape per solid, in the order [`import_exact`] gives its bodies.
+pub fn exact_solids(format: ExactFormat, path: &str) -> Result<Vec<Shape>, String> {
+    match format {
+        ExactFormat::Step => step_solids(path),
+        ExactFormat::Iges => iges_solids(path),
+    }
+}
+
+/// One node of an imported assembly: a subassembly, or a part carrying a body.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ImportNode {
+    /// The name the file gives it, in UTF-8; empty where it gives none.
+    pub name: String,
+    pub parent: Option<usize>,
+    /// Where it stands in its parent, a 3x4 row-major placement.
+    pub place: [f64; 12],
+    /// The body it carries - an index into the bodies and solids read - or `None` for a subassembly.
+    pub solid: Option<usize>,
+    /// Its colour, sRGB, where the file gives one.
+    pub color: Option<[f32; 3]>,
+    /// For an occurrence of a product met before: the body of its first occurrence, which it repeats - the file
+    /// holds the product once, and so does the reading.
+    pub repeat_of: Option<usize>,
+    /// Colours the file gives single faces of the body, sRGB, by the face's persistent id - the number the body's face
+    /// gets when the body is wrapped (`seeded` in the bridge).
+    pub faces: Vec<(u32, [f32; 3])>,
+}
+
+/// The tree read as the document takes it: the flat list of `read_exact_tree` (each node naming its parent by place
+/// in the list) nested, every body by the id `bodies` gives it in the document. A node the file leaves unnamed -
+/// every one in IGES - is named after the file, `stem`, and numbered by its body when more than one body came in.
+/// A node without a colour of its own takes its parent's: a STEP assembly colours an occurrence for all under it.
+pub fn document_tree(nodes: &[ImportNode], bodies: &[u64], stem: &str) -> Vec<qymcad_core::model::ImportNode> {
+    let mut kids = vec![Vec::new(); nodes.len()];
+    let mut tops = Vec::new();
+    for (i, n) in nodes.iter().enumerate() {
+        match n.parent {
+            Some(p) if p < nodes.len() => kids[p].push(i),
+            _ => tops.push(i),
+        }
+    }
+    fn nest(i: usize, nodes: &[ImportNode], kids: &[Vec<usize>], bodies: &[u64], stem: &str, above: Option<[f32; 3]>) -> qymcad_core::model::ImportNode {
+        let n = &nodes[i];
+        let tint = n.color.or(above);
+        let name = match (n.name.is_empty(), n.solid) {
+            (false, _) => n.name.clone(),
+            (true, Some(k)) if bodies.len() > 1 => format!("{stem} {}", k + 1),
+            _ => stem.to_string(),
+        };
+        let children = kids[i].iter().map(|&c| nest(c, nodes, kids, bodies, stem, tint)).collect();
+        qymcad_core::model::ImportNode { name, place: n.place, body: n.solid.and_then(|k| bodies.get(k).copied()), solid: n.solid.unwrap_or(0) as u32, color: tint.map(|c| c.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8)), face_colors: n.faces.iter().map(|(id, c)| (*id, c.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8))).collect(), tri_colors: Vec::new(), repeat_of: n.repeat_of.map(|k| k as u32), mesh: false, children }
+    }
+    tops.into_iter().map(|i| nest(i, nodes, &kids, bodies, stem, None)).collect()
+}
+
+/// Read an exact file with its structure: the bodies and solids as `read_exact` gives them, and the tree they stand
+/// in.
+///
+/// An IGES file with neither subfigures nor solids standing on their own - surfaces, sewn - comes as a node per solid,
+/// unnamed, where the file puts it.
+pub fn read_exact_tree(format: ExactFormat, path: &str, deflection: f64) -> Result<(Vec<Body>, Vec<Shape>, Vec<ImportNode>), String> {
+    let c = CString::new(path).map_err(|e| e.to_string())?;
+    let defl = if deflection > 0.0 { deflection } else { 0.5 };
+    let code = match format {
+        ExactFormat::Step => 0,
+        ExactFormat::Iges => 1,
+    };
+    let (mut doc, mut list, mut tree): (*mut QymDoc, *mut QymShapeList, *mut QymTree) = (std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut());
+    let rc = unsafe { qym_exact_read_tree(code, c.as_ptr(), defl, &mut doc, &mut list, &mut tree) };
+    let read_failed = match format {
+        ExactFormat::Step => "cad-step-read-failed",
+        ExactFormat::Iges => "cad-iges-read-failed",
+    };
+    if rc != 0 || doc.is_null() || list.is_null() {
+        unsafe {
+            if !doc.is_null() {
+                qym_doc_free(doc);
+            }
+            if !list.is_null() {
+                qym_shapelist_free(list);
+            }
+            if !tree.is_null() {
+                qym_tree_free(tree);
+            }
+        }
+        return Err(read_failed.to_string());
+    }
+    let bodies = unsafe { doc_to_bodies(doc) };
+    let shapes: Vec<Shape> = unsafe {
+        let n = qym_shapelist_count(list);
+        let out = (0..n).filter_map(|i| Shape::wrap(qym_shapelist_get(list, i))).collect();
+        qym_shapelist_free(list);
+        out
+    };
+    let nodes = if tree.is_null() {
+        (0..shapes.len()).map(|i| ImportNode { name: String::new(), parent: None, place: qymcad_core::feature::PLACE_IDENTITY, solid: Some(i), color: None, repeat_of: None, faces: Vec::new() }).collect()
+    } else {
+        unsafe {
+            let n = qym_tree_count(tree);
+            let out = (0..n)
+                .map(|i| {
+                    let mut place = [0.0f64; 12];
+                    qym_tree_place(tree, i, place.as_mut_ptr());
+                    let mut rgb = [0.0f32; 3];
+                    let color = (qym_tree_color(tree, i, rgb.as_mut_ptr()) == 1).then_some(rgb);
+                    let name = std::ffi::CStr::from_ptr(qym_tree_name(tree, i)).to_string_lossy().into_owned();
+                    let parent = usize::try_from(qym_tree_parent(tree, i)).ok();
+                    let solid = usize::try_from(qym_tree_solid(tree, i)).ok();
+                    let repeat_of = usize::try_from(qym_tree_repeat_of(tree, i)).ok();
+                    let n = qym_tree_face_colours(tree, i, std::ptr::null_mut(), std::ptr::null_mut(), 0);
+                    let (mut ids, mut rgb) = (vec![0u32; n], vec![0.0f32; 3 * n]);
+                    qym_tree_face_colours(tree, i, ids.as_mut_ptr(), rgb.as_mut_ptr(), n);
+                    let faces = ids.into_iter().enumerate().map(|(k, id)| (id, [rgb[3 * k], rgb[3 * k + 1], rgb[3 * k + 2]])).collect();
+                    ImportNode { name, parent, place, solid, color, repeat_of, faces }
+                })
+                .collect();
+            qym_tree_free(tree);
+            out
+        }
+    };
+    Ok((bodies, shapes, nodes))
+}
+
+/// Write a tree into a STEP file as its assembly: products, their occurrences, names and colours (see
+/// `ExportNode`). `shapes` gives the live body of every part.
+pub fn write_step_tree(nodes: &[qymcad_core::model::ExportNode], shapes: &[(u64, &Shape)], path: &str) -> Result<(), String> {
+    if nodes.is_empty() {
+        return Err("cad-step-nothing-to-export".into());
+    }
+    let c = CString::new(path).map_err(|e| e.to_string())?;
+    let names: Vec<CString> = nodes.iter().map(|n| CString::new(n.name.replace('\0', "")).unwrap_or_default()).collect();
+    let name_ptrs: Vec<*const c_char> = names.iter().map(|s| s.as_ptr()).collect();
+    let parents: Vec<i64> = nodes.iter().map(|n| n.parent.map_or(-1, |p| p as i64)).collect();
+    let same_as: Vec<i64> = nodes.iter().map(|n| n.same_as.map_or(-1, |p| p as i64)).collect();
+    let places: Vec<f64> = nodes.iter().flat_map(|n| n.place).collect();
+    let by_id: std::collections::HashMap<u64, &Shape> = shapes.iter().copied().collect();
+    let shape_ptrs: Vec<*const QymShape> = nodes.iter().map(|n| n.body.and_then(|b| by_id.get(&b)).map_or(std::ptr::null(), |s| s.ptr as *const QymShape)).collect();
+    let rgb: Vec<f32> = nodes.iter().flat_map(|n| n.color.map_or([0.0; 3], |c| c.map(|v| v as f32 / 255.0))).collect();
+    let has_rgb: Vec<i32> = nodes.iter().map(|n| n.color.is_some() as i32).collect();
+    // the colours of single faces, node after node: where each node's list starts, the faces' persistent ids, their sRGB
+    let mut face_starts: Vec<usize> = Vec::with_capacity(nodes.len() + 1);
+    let (mut face_ids, mut face_rgb): (Vec<u32>, Vec<f32>) = (Vec::new(), Vec::new());
+    for n in nodes {
+        face_starts.push(face_ids.len());
+        for (id, c) in &n.face_colors {
+            face_ids.push(*id);
+            face_rgb.extend(c.map(|v| v as f32 / 255.0));
+        }
+    }
+    face_starts.push(face_ids.len());
+    let rc = unsafe { qym_step_write_tree(nodes.len(), parents.as_ptr(), name_ptrs.as_ptr(), places.as_ptr(), shape_ptrs.as_ptr(), same_as.as_ptr(), rgb.as_ptr(), has_rgb.as_ptr(), face_starts.as_ptr(), face_ids.as_ptr(), face_rgb.as_ptr(), c.as_ptr()) };
+    if rc != 0 {
+        return Err(format!("cad-step-write-failed#{rc}"));
+    }
+    // the writer puts the names down as raw UTF-8; they are spelled over as the format holds them
+    match std::fs::read_to_string(path) {
+        Ok(text) if !text.is_ascii() => std::fs::write(path, step_spelled(&text)).map_err(|e| e.to_string()),
+        _ => Ok(()),
+    }
+}
+
+/// A STEP file's text with everything past ASCII spelled as ISO 10303-21 holds it: a run of characters of the basic
+/// plane as `\X2\` and four hex digits each, one past it as `\X4\` and eight, the run closed by `\X0\`. A string in
+/// the file is ISO 8859-1, and a reader that keeps to the format shows raw UTF-8 as mojibake; the other CAD systems
+/// spell a Cyrillic name so. Only names carry such characters, so the whole text is gone over.
+pub fn step_spelled(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() * 2);
+    let mut run = None; // Some(wide) inside a run of four (false) or eight (true) digits
+    for ch in text.chars() {
+        let want = (!ch.is_ascii()).then_some(ch as u32 > 0xFFFF);
+        if want != run {
+            if run.is_some() {
+                out.push_str("\\X0\\");
+            }
+            if let Some(wide) = want {
+                out.push_str(if wide { "\\X4\\" } else { "\\X2\\" });
+            }
+            run = want;
+        }
+        match want {
+            Some(true) => out.push_str(&format!("{:08X}", ch as u32)),
+            Some(false) => out.push_str(&format!("{:04X}", ch as u32)),
+            None => out.push(ch),
+        }
+    }
+    if run.is_some() {
+        out.push_str("\\X0\\");
+    }
+    out
+}
+
+/// Write bodies into one exact file, in millimetres.
+pub fn write_exact(format: ExactFormat, bodies: &[(&Shape, [f64; 12])], path: &str) -> Result<(), String> {
+    match format {
+        ExactFormat::Step => write_step(bodies, path),
+        ExactFormat::Iges => write_iges(bodies, path, LengthUnit::Millimetre),
+    }
+}
+
+/// Read an IGES file into bodies. Faces that close are sewn into solids (see `iges_shape` in the bridge).
+pub fn import_iges(path: &str, deflection: f64) -> Result<Vec<Body>, String> {
+    let c = CString::new(path).map_err(|e| e.to_string())?;
+    let defl = if deflection > 0.0 { deflection } else { 0.5 };
+    unsafe {
+        let d = qym_occt_iges_read(c.as_ptr(), defl);
+        if d.is_null() {
+            return Err("cad-iges-read-failed".into());
+        }
+        let bodies = doc_to_bodies(d);
+        if bodies.is_empty() {
+            return Err("cad-iges-empty-tessellation".into());
+        }
+        Ok(bodies)
+    }
+}
+
+/// Read an IGES file into a live shape per solid, in parallel with [`import_iges`].
+pub fn iges_solids(path: &str) -> Result<Vec<Shape>, String> {
+    let c = CString::new(path).map_err(|e| e.to_string())?;
+    unsafe {
+        let l = qym_iges_solids(c.as_ptr());
+        if l.is_null() {
+            return Err("cad-iges-no-shapes".into());
+        }
+        let n = qym_shapelist_count(l);
+        let mut out = Vec::with_capacity(n);
+        for i in 0..n {
+            if let Some(s) = Shape::wrap(qym_shapelist_get(l, i)) {
+                out.push(s);
+            }
+        }
+        qym_shapelist_free(l);
+        Ok(out)
+    }
+}
+
+/// Write bodies into one IGES file, each with its own 3x4 world transform, in `unit`.
+pub fn write_iges(bodies: &[(&Shape, [f64; 12])], path: &str, unit: LengthUnit) -> Result<(), String> {
+    if bodies.is_empty() {
+        return Err("cad-iges-nothing-to-export".into());
+    }
+    let c = CString::new(path).map_err(|e| e.to_string())?;
+    let u = CString::new(match unit {
+        LengthUnit::Millimetre => "MM",
+        LengthUnit::Inch => "IN",
+    })
+    .map_err(|e| e.to_string())?;
+    let ptrs: Vec<*const QymShape> = bodies.iter().map(|(s, _)| s.ptr as *const QymShape).collect();
+    let mats: Vec<f64> = bodies.iter().flat_map(|(_, m)| *m).collect();
+    let rc = unsafe { qym_iges_write(ptrs.as_ptr(), mats.as_ptr(), ptrs.len(), c.as_ptr(), u.as_ptr()) };
+    if rc == 0 {
+        Ok(())
+    } else {
+        Err(format!("cad-iges-write-failed#{rc}"))
     }
 }
 

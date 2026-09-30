@@ -69,7 +69,7 @@ mod tests {
         }
         // the way the arrival of a cancelled result does it
         app.finish_regen_checked(crate::gui::io_jobs::regen_doc_stamp(&app.project), app.project.clone(), Vec::new(), Vec::new(), Vec::new(), true);
-        assert!(app.regen.paused, "after a cancellation the rebuild must count as stopped");
+        assert!(app.regen.paused.is_some(), "after a cancellation the rebuild must count as stopped");
         assert!(app.project.timeline.iter().any(|n| n.dirty), "setup: dirty nodes remain after a cancellation — the model really is not rebuilt");
 
         app.regen.wanted = false;
@@ -79,7 +79,47 @@ mod tests {
         // ...but an explicit request from a person ("rebuild everything") clears the mark
         qymcad_ui_state::mark_dirty_for_rebuild(&mut app.rebuild_ctx());
         assert!(app.regen.wanted || app.regen.busy.is_some(), "an explicit request must start the rebuild again");
-        assert!(!app.regen.paused, "after an explicit request the \"stopped\" mark must be cleared");
+        assert!(app.regen.paused.is_none(), "after an explicit request the \"stopped\" mark must be cleared");
+    }
+
+    /// AFTER A CANCELLED REBUILD THE NEXT CHANGE IS COMPUTED. Reported behaviour: once a recognition was cancelled, the
+    /// next one made its node at once and nothing was computed - the mark "stopped" outlived every later edit.
+    #[test]
+    fn a_change_after_a_cancelled_rebuild_is_computed() {
+        let mut app = super::super::screen_keys::tests::plate();
+        app.regen.ui_running = true;
+        for n in app.project.timeline.iter_mut() {
+            n.dirty = true;
+        }
+        app.finish_regen_checked(crate::gui::io_jobs::regen_doc_stamp(&app.project), app.project.clone(), Vec::new(), Vec::new(), Vec::new(), true);
+        // a change that marks its node and asks for nothing more, as a new node does
+        let node = app.project.timeline.iter_mut().rev().find(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::Extrude { .. })).expect("the plate's extrusion");
+        if let qymcad_core::feature::FeatureKind::Extrude { height, .. } = &mut node.kind {
+            *height = 12.0;
+        }
+        node.dirty = true;
+        app.regen.wanted = false;
+        qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
+        assert!(app.regen.wanted, "the document changed after the cancellation and nothing is computed");
+    }
+
+    /// A CANCELLED REBUILD TAKES BACK THE EDIT IT WAS COMPUTING. Reported behaviour: the recognition cancelled, and its
+    /// node stayed in the tree. The plate built, a second extrusion applied and its rebuild stopped: the extrusion is
+    /// gone, the plate is as it was, and Redo holds the extrusion.
+    #[test]
+    fn a_cancelled_rebuild_takes_back_its_edit() {
+        let mut app = super::super::screen_keys::tests::plate();
+        let before = app.project.timeline.len();
+        app.regen.ui_running = true;
+        let si = app.project.sketches.len() - 1;
+        app.chosen.sel = qymcad_ui_state::Sel::Sketch(si);
+        app.start_feat_cmd(1);
+        app.apply_feat_cmd();
+        assert!(app.project.timeline.len() > before, "setup: the second extrusion made no node");
+        assert!(app.regen.wanted, "setup: the second extrusion asked for no rebuild");
+        app.finish_regen_checked(crate::gui::io_jobs::regen_doc_stamp(&app.project), app.project.clone(), Vec::new(), Vec::new(), Vec::new(), true);
+        assert_eq!(app.project.timeline.len(), before, "the cancelled extrusion stayed in the tree; status: {}", app.status);
+        assert!(!app.disk.edits.redo.is_empty(), "the extrusion cannot be brought back by Redo");
     }
 
     /// THE BUTTON AND THE COUNT REACH THE SCREEN. The overlay is drawn by a painter over the input
@@ -131,7 +171,7 @@ mod tests {
         assert!(app.regen.busy.is_some(), "setup: the rebuild is running");
         crate::gui::cancel_regen(&app.regen, &mut app.status);
         app.drain_busy_for_test();
-        assert!(app.regen.paused, "the request to stop did not arrive: the rebuild does not count as stopped; status: {}", app.status.clone());
+        assert!(app.regen.paused.is_some() || app.status.contains(&crate::i18n::tr1("io-rebuild-cancelled-undone", "what", "")[..8]), "the request to stop did not arrive: the rebuild does not count as stopped; status: {}", app.status.clone());
     }
     /// A FAILING NODE DOES NOT MAKE THE PROGRAM COMPUTE WITHOUT STOPPING.
     ///

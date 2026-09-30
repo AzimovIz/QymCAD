@@ -170,10 +170,10 @@ mod tests {
     fn running_a_command_by_code_starts_it() {
         let mut app = super::super::screen_keys::tests::plate();
         app.chosen.sel = super::super::Sel::Sketch(0);
-        app.run_command("part.extrude");
+        app.run_command("part.extrude", &egui::Context::default());
         assert_eq!(app.tools.armed.cmd_kind(), 1, "\"part.extrude\" did not open the extrude");
         app.cancel_all_tools();
-        app.run_command("part.hole");
+        app.run_command("part.hole", &egui::Context::default());
         assert_eq!(app.tools.armed.cmd_kind(), 7, "\"part.hole\" did not open the hole");
     }
 }
