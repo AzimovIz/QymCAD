@@ -1003,22 +1003,27 @@ pub(crate) fn settings_window(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Cont
                     }
                 }
             });
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                ui.label(egui::RichText::new(crate::i18n::tr(cur.key())).strong());
-                ui.separator();
-                settings_section_body(wc, ui, ctx, cur, "");
-                ui.separator();
-                if ui.button(format!("{}  {}", ph::ARROW_COUNTER_CLOCKWISE, crate::i18n::tr("settings-reset-section"))).clicked() {
-                    cur.reset(&mut *wc.set);
-                    // the language and the scheme are not merely values: they have to be APPLIED, otherwise a
-                    // reset shows only after a restart
-                    crate::gui::apply_language(&*wc.set);
-                    crate::gui::apply_theme(&mut *wc.scheme, &*wc.set, ctx);
-                    wc.scheme.note = crate::i18n::tr1("settings-reset-done", "name", &crate::i18n::tr(cur.key()));
-                }
-                if !wc.scheme.note.is_empty() {
-                    ui.label(egui::RichText::new(&wc.scheme.note).small().color(wc.scheme.pal.hint()));
-                }
+            // THE SECTION GOES INTO A PANEL OF ITS OWN, as in the parts library. A panel inside a window leaves
+            // the cursor exactly on its divider, and a bare scroll after it pressed the text against the line
+            // (issue #16); the central panel brings the margin that the side panel keeps on its own side.
+            egui::CentralPanel::default().show(ui, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    ui.label(egui::RichText::new(crate::i18n::tr(cur.key())).strong());
+                    ui.separator();
+                    settings_section_body(wc, ui, ctx, cur, "");
+                    ui.separator();
+                    if ui.button(format!("{}  {}", ph::ARROW_COUNTER_CLOCKWISE, crate::i18n::tr("settings-reset-section"))).clicked() {
+                        cur.reset(&mut *wc.set);
+                        // the language and the scheme are not merely values: they have to be APPLIED, otherwise a
+                        // reset shows only after a restart
+                        crate::gui::apply_language(&*wc.set);
+                        crate::gui::apply_theme(&mut *wc.scheme, &*wc.set, ctx);
+                        wc.scheme.note = crate::i18n::tr1("settings-reset-done", "name", &crate::i18n::tr(cur.key()));
+                    }
+                    if !wc.scheme.note.is_empty() {
+                        ui.label(egui::RichText::new(&wc.scheme.note).small().color(wc.scheme.pal.hint()));
+                    }
+                });
             });
         }
     });
