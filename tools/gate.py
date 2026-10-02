@@ -168,7 +168,7 @@ def main():
         # THE MARK OF A WHOLE FULL RUN, for the hook before a commit: the tree it ran on, and whether it passed
         os.makedirs(os.path.dirname(FULL_MARK), exist_ok=True)
         with open(FULL_MARK, "w", encoding="utf-8") as f:
-            json.dump({"tree": tree_of_working_copy(), "passed": passed, "new": new}, f, ensure_ascii=False, indent=1)
+            json.dump({"tree": tree_of_working_copy(), "passed": passed, "red": all_red}, f, ensure_ascii=False, indent=1)
     return 0 if passed else 1
 
 
