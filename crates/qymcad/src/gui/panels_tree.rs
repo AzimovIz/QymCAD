@@ -1210,7 +1210,40 @@ pub(crate) fn build_tree(tc: &mut qymcad_ui_state::TreeCtx, ui: &mut egui::Ui) {
         }
     }
     if !children.is_empty() {
-        egui::CollapsingHeader::new(format!("{} {}", ph::STACK, crate::i18n::tr("tree-components"))).id_salt(("comps", ctx)).default_open(true).show(ui, |ui| {
+        let mut fold = false;
+        let listed: Vec<(Id, bool)> = rows.iter().filter_map(|row| match row { TreeCompRow::Comp(ci, cid, _, _) => Some((*cid, tc.project.components[*ci].visible)), _ => None }).collect();
+
+        let listed_count = listed.len();
+        let shown_count = listed.iter().filter(|(_, vis)| *vis).count();
+
+        let mut all_checked = shown_count == listed_count;
+        let mixed = shown_count != 0 && !all_checked;
+
+        let state = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), ui.make_persistent_id(("comps", ctx)), true);
+
+        let mut header = state.show_header(ui, |ui| {
+            let toggle_all_checkbox = egui::Checkbox::without_text(&mut all_checked).indeterminate(mixed);
+            let toggle_all = ui.add(toggle_all_checkbox).on_hover_text(crate::i18n::tr("tree-components-all-hint"));
+
+            if toggle_all.changed() {
+                for &(cid, _) in &listed {
+                    crate::gui::set_component_visible(&mut *tc.project, &mut *tc.regen, cid, all_checked);
+                }
+            }
+
+            let heading_text = egui::RichText::new(format!("{} {}", ph::STACK, crate::i18n::tr("tree-components"))).text_style(egui::TextStyle::Button);
+            fold = ui.add(egui::Label::new(heading_text).selectable(false).sense(egui::Sense::click())).clicked();
+
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.weak(crate::i18n::tr2("tree-components-count", "shown", &shown_count.to_string(), "n", &listed_count.to_string()));
+            });
+        });
+
+        if fold {
+            header.toggle();
+        }
+
+        header.body(|ui| {
             for row in rows {
                 let (ci, cid, name, indented) = match row {
                     TreeCompRow::Pattern(ti) => {

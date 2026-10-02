@@ -217,6 +217,67 @@ probe! {
 
 
 probe! {
+    /// ONE TICK IN THE HEADING: the tick before the word "Components" clears every part of the assembly in one
+    /// click, and the next click brings every one of them back; the count at the right edge of the heading says
+    /// how many are on screen of how many there are. The word itself still folds the branch.
+    ///
+    /// Reported behaviour: with many parts in an assembly, hiding them all meant a click on every row.
+    fn one_tick_hides_every_part_and_the_next_shows_them_all() {
+        let mut s = a_first_start();
+        a_second_part_with_a_block(&mut s);
+        let names: Vec<String> = parts(&mut s).into_iter().filter(|p| !p.assembly).map(|p| p.name).collect();
+        assert!(names.len() >= 2, "the setup stands two parts in the assembly and the document holds {names:?}");
+        let heading = s.word("tree-components");
+        // The tick stands on the heading's line, to the left of the word, where the rows under it carry theirs.
+        let tick = |s: &mut Session| {
+            let at = s.find(&heading, qymcad::pos2(0.0, 300.0)).unwrap_or_else(|| panic!("the heading {heading:?} is not in the tree; on screen: {:?}", s.words()));
+            s.widgets()
+                .into_iter()
+                .filter(|w| w.kind == qymcad::Kind::CheckBox && w.rect.center().y > at.min.y && w.rect.center().y < at.max.y && w.rect.max.x <= at.min.x + 1.0)
+                .max_by(|a, b| a.rect.max.x.total_cmp(&b.rect.max.x))
+                .unwrap_or_else(|| panic!("the heading {heading:?} has no tick beside it; on screen: {:?}", s.words()))
+                .rect
+                .center()
+        };
+        // The count: the words on the heading's line to the right of the word, in the tree's column.
+        let count = |s: &mut Session| -> Vec<String> {
+            let at = s.find(&heading, qymcad::pos2(0.0, 300.0)).unwrap_or_else(|| panic!("the heading {heading:?} is not in the tree; on screen: {:?}", s.words()));
+            s.words_at()
+                .into_iter()
+                .filter(|(_, r)| r.center().y > at.min.y && r.center().y < at.max.y && r.min.x >= at.max.x - 1.0 && r.max.x < 500.0)
+                .flat_map(|(w, _)| w.split_whitespace().map(str::to_string).collect::<Vec<_>>())
+                .collect()
+        };
+        let n = names.len().to_string();
+        let at = tick(&mut s);
+        s.click(at);
+        let shown: Vec<String> = parts(&mut s).into_iter().filter(|p| names.contains(&p.name) && p.visible).map(|p| p.name).collect();
+        assert!(shown.is_empty(), "the tick above the rows was cleared and {shown:?} are still shown");
+        let said = count(&mut s);
+        assert!(said.contains(&"0".to_string()) && said.contains(&n), "every part is hidden and the heading counts {said:?} rather than 0 of {n}");
+        let at = tick(&mut s);
+        s.click(at);
+        let hidden: Vec<String> = parts(&mut s).into_iter().filter(|p| names.contains(&p.name) && !p.visible).map(|p| p.name).collect();
+        assert!(hidden.is_empty(), "the tick above the rows was set again and {hidden:?} are still hidden");
+        let said = count(&mut s);
+        assert!(said.iter().filter(|t| **t == n).count() == 2, "every part is shown and the heading counts {said:?} rather than {n} of {n}");
+        // THE WORD STILL FOLDS THE BRANCH: the heading was assembled by hand to take the tick, and that must not
+        // have cost it the fold by a click that every other heading of the tree answers. The part is looked for
+        // in the tree's own column, under the heading: the joints panel names the parts too, and a fold of the
+        // tree does not touch it.
+        let part = names[1].clone();
+        let in_tree = |s: &mut Session| {
+            let at = s.find(&heading, qymcad::pos2(0.0, 300.0)).unwrap_or_else(|| panic!("the heading {heading:?} is not in the tree; on screen: {:?}", s.words()));
+            s.words_at().into_iter().any(|(w, r)| w.contains(part.as_str()) && r.min.y > at.max.y - 1.0 && r.max.x < 500.0)
+        };
+        s.press_word_near(&heading, qymcad::pos2(0.0, 300.0));
+        assert!(!in_tree(&mut s), "the branch of the components was folded by its heading and {part:?} is still in the tree; on screen: {:?}", s.words());
+        s.press_word_near(&heading, qymcad::pos2(0.0, 300.0));
+        assert!(in_tree(&mut s), "the branch of the components was unfolded and {part:?} did not come back; on screen: {:?}", s.words());
+    }
+}
+
+probe! {
     /// A HIDDEN PART HIDES ITS SKETCHES: in the assembly, with "Sketch contours" on, the part's tick cleared takes its
     /// sketch off the canvas with its body - the canvas is then the one "Sketch contours" off would give.
     ///
