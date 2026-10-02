@@ -1,0 +1,132 @@
+# The checks of every pull request and of every push to `main`.
+#
+# THE SAME LEVEL A DEVELOPER RUNS, NOT A COPY OF IT. The steps are `tools/gate.py fast` - the build with no
+# warning, the rules of the code, the words of the interface, the help, the acceptance probes without heavy
+# geometry - and one step of the full level, every crate's own checks. A step added to the gate is run here
+# by itself; a list of commands written out in this file would drift away from it.
+#
+# Linux only. The kernel is the same OCCT 7.9.3 the release builds, compiled from source once and taken from
+# the cache afterwards; the other two systems are built by `release.yml`, by the button.
+name: checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A newer push to the same pull request makes the run in progress worthless: it is cancelled rather than left
+# to finish. Pushes to `main` are each run to the end - every commit there is checked.
+concurrency:
+  group: checks-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: never
+  # THE DEBUG INFORMATION IS OFF HERE. Locally the target directory of this workspace takes tens of gigabytes,
+  # most of it debug information of some 130 test programs; a runner has a fraction of that disk, and nobody
+  # attaches a debugger to a run in CI.
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
+  OCCT_INCLUDE_DIR: /home/runner/occt/include/opencascade
+  OCCT_LIB_DIR: /home/runner/occt/lib
+  LD_LIBRARY_PATH: /home/runner/occt/lib
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      # The whole history, for the search of the commit messages below.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # NOTHING PERSONAL GOES IN. The general shapes only - a home path, a mail address, a reference to a
+      # closed document; a personal list of words is not available to a run of somebody else's pull request.
+      # Cheap, so it runs before anything is built.
+      - name: The search for anything personal catches what it is for
+        run: python3 tools/frisk.py --self-test
+      - name: Nothing personal in the files and in the messages of the commits
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            range="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+          else
+            range="${{ github.event.before }}..${{ github.sha }}"
+          fi
+          echo "commits: $range"
+          python3 tools/frisk.py --commits "$range"
+
+      # The headers the window crates look for at build time; the drawing in the checks is the software
+      # rasteriser, so no graphics driver is needed.
+      - name: System packages
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends \
+            libgl1-mesa-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev libxkbcommon-dev libwayland-dev pkg-config
+
+      - name: Restore the kernel build
+        id: occt
+        uses: actions/cache/restore@v6
+        with:
+          path: /home/runner/occt
+          key: occt-7.9.3-ubuntu-24.04-v1
+
+      # The same configuration as the macOS job of the release; see the comments there.
+      - name: Build OCCT 7.9.3 (only when the cache missed)
+        if: steps.occt.outputs.cache-hit != 'true'
+        run: |
+          curl -sSL -o occt.tar.gz https://github.com/Open-Cascade-SAS/OCCT/archive/refs/tags/V7_9_3.tar.gz
+          tar xf occt.tar.gz
+          src=$(ls -d OCCT-* | head -1)
+          echo ">>> sources at $src"
+          cmake -S "$src" -B occt-build \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_LIBRARY_TYPE=Shared \
+            -DINSTALL_DIR=/home/runner/occt \
+            -DINSTALL_DIR_LAYOUT=Unix \
+            -DBUILD_MODULE_Draw=OFF \
+            -DBUILD_MODULE_Visualization=OFF \
+            -DBUILD_DOC_Overview=OFF \
+            -DUSE_FREETYPE=OFF -DUSE_TK=OFF -DUSE_FREEIMAGE=OFF \
+            -DUSE_RAPIDJSON=OFF -DUSE_DRACO=OFF -DUSE_OPENGL=OFF -DUSE_GLES2=OFF
+          cmake --build occt-build --target install -j"$(nproc)"
+          rm -rf occt-build OCCT-* occt.tar.gz
+
+      # Saved before our own code is built: a red check must not throw the kernel away.
+      - name: Save the kernel build
+        if: steps.occt.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: /home/runner/occt
+          key: occt-7.9.3-ubuntu-24.04-v1
+
+      # THE COMPILED DEPENDENCIES ARE SAVED FROM `main` ONLY. The cache of a repository is limited, and the
+      # oldest entries are evicted first: caches of every pull request would push out the kernels the release
+      # builds need. A pull request reads what `main` saved.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: The fast level of the gate
+        run: python3 tools/gate.py fast
+
+      - name: Every crate's own checks
+        if: success() || failure()
+        run: python3 tools/gate.py full --step "every crate"
+
+      # The gate prints the names of the red checks; what each of them said is in its log, kept for a fortnight.
+      - name: The words of the gate
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gate-logs
+          path: target/gate-*.log
+          retention-days: 14
+
+      - name: Disk left
+        if: always()
+        run: df -h / && du -sh target || true
