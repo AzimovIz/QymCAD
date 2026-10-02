@@ -5,6 +5,10 @@
 # geometry - and one step of the full level, every crate's own checks. A step added to the gate is run here
 # by itself; a list of commands written out in this file would drift away from it.
 #
+# THE ACCEPTANCE PROBES ARE SPLIT OVER FOUR MACHINES (`gate.py --shard K/4`). On one machine of the developer
+# the fast level took 1627 s, 1493 of them the acceptance probes; a runner has four cores, and the whole run on
+# one would wait well over an hour on every push to a pull request.
+#
 # Linux only. The kernel is the same OCCT 7.9.3 the release builds, compiled from source once and taken from
 # the cache afterwards; the other two systems are built by `release.yml`, by the button.
 name: checks
@@ -35,18 +39,17 @@ env:
   LD_LIBRARY_PATH: /home/runner/occt/lib
 
 jobs:
-  checks:
+  # NOTHING PERSONAL GOES IN, and the kernel is in the cache before the five jobs below start: five jobs missing it
+  # together would build it five times. The general shapes only - a home path, a mail address, a reference to a
+  # closed document; a personal list of words is not available to a run of somebody else's pull request.
+  kernel:
     runs-on: ubuntu-24.04
-    timeout-minutes: 150
+    timeout-minutes: 60
     steps:
-      # The whole history, for the search of the commit messages below.
+      # The whole history, for the search of the commit messages.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-
-      # NOTHING PERSONAL GOES IN. The general shapes only - a home path, a mail address, a reference to a
-      # closed document; a personal list of words is not available to a run of somebody else's pull request.
-      # Cheap, so it runs before anything is built.
       - name: The search for anything personal catches what it is for
         run: python3 tools/frisk.py --self-test
       - name: Nothing personal in the files and in the messages of the commits
@@ -58,75 +61,67 @@ jobs:
           fi
           echo "commits: $range"
           python3 tools/frisk.py --commits "$range"
-
-      # The headers the window crates look for at build time; the drawing in the checks is the software
-      # rasteriser, so no graphics driver is needed.
-      - name: System packages
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q --no-install-recommends \
-            libgl1-mesa-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev libxkbcommon-dev libwayland-dev pkg-config
-
       - name: Restore the kernel build
         id: occt
         uses: actions/cache/restore@v6
         with:
           path: /home/runner/occt
           key: occt-7.9.3-ubuntu-24.04-v1
-
-      # The same configuration as the macOS job of the release; see the comments there.
-      - name: Build OCCT 7.9.3 (only when the cache missed)
+          lookup-only: true
+      - name: Build the kernel when the cache missed
         if: steps.occt.outputs.cache-hit != 'true'
-        run: |
-          curl -sSL -o occt.tar.gz https://github.com/Open-Cascade-SAS/OCCT/archive/refs/tags/V7_9_3.tar.gz
-          tar xf occt.tar.gz
-          src=$(ls -d OCCT-* | head -1)
-          echo ">>> sources at $src"
-          cmake -S "$src" -B occt-build \
-            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_LIBRARY_TYPE=Shared \
-            -DINSTALL_DIR=/home/runner/occt \
-            -DINSTALL_DIR_LAYOUT=Unix \
-            -DBUILD_MODULE_Draw=OFF \
-            -DBUILD_MODULE_Visualization=OFF \
-            -DBUILD_DOC_Overview=OFF \
-            -DUSE_FREETYPE=OFF -DUSE_TK=OFF -DUSE_FREEIMAGE=OFF \
-            -DUSE_RAPIDJSON=OFF -DUSE_DRACO=OFF -DUSE_OPENGL=OFF -DUSE_GLES2=OFF
-          cmake --build occt-build --target install -j"$(nproc)"
-          rm -rf occt-build OCCT-* occt.tar.gz
-
-      # Saved before our own code is built: a red check must not throw the kernel away.
-      - name: Save the kernel build
-        if: steps.occt.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
+        uses: ./.github/actions/setup
         with:
-          path: /home/runner/occt
-          key: occt-7.9.3-ubuntu-24.04-v1
+          cargo: "false"
 
-      # THE COMPILED DEPENDENCIES ARE SAVED FROM `main` ONLY. The cache of a repository is limited, and the
-      # oldest entries are evicted first: caches of every pull request would push out the kernels the release
-      # builds need. A pull request reads what `main` saved.
-      - uses: Swatinem/rust-cache@v2
+  # The fast level but its acceptance probes, then every crate's own checks.
+  rules-and-crates:
+    needs: kernel
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
         with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-
-      - name: The fast level of the gate
-        run: python3 tools/gate.py fast
-
+          save-cargo: "true"
+      - name: The fast level, the acceptance probes left to the shares
+        run: python3 tools/gate.py fast --except "the acceptance"
       - name: Every crate's own checks
         if: success() || failure()
         run: python3 tools/gate.py full --step "every crate"
-
       # The gate prints the names of the red checks; what each of them said is in its log, kept for a fortnight.
       - name: The words of the gate
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: gate-logs
+          name: gate-logs-rules-and-crates
           path: target/gate-*.log
           retention-days: 14
+      - name: Disk left
+        if: always()
+        run: df -h / && du -sh target || true
 
+  acceptance:
+    needs: kernel
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      # one red share does not stop the others: every red probe is reported in one run
+      fail-fast: false
+      matrix:
+        share: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - name: The acceptance probes without heavy geometry, share ${{ matrix.share }} of 4
+        run: python3 tools/gate.py fast --step "the acceptance" --shard ${{ matrix.share }}/4
+      - name: The words of the gate
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gate-logs-acceptance-${{ matrix.share }}
+          path: target/gate-*.log
+          retention-days: 14
       - name: Disk left
         if: always()
         run: df -h / && du -sh target || true

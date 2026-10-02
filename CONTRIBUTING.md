@@ -76,6 +76,6 @@ By making a contribution to this project, I certify that:
 - **Every pull request is checked on Linux** by the same gate a developer runs: `python3 tools/gate.py
   fast` (the build, the rules of the code, the interface words, the help, the light acceptance probes) and
   every crate's own tests. Running the fast level before sending saves a round trip. When a check goes
-  red, the job lists its name; what it said is in the `gate-logs` artifact of the run.
+  red, the job lists its name; what it said is in the `gate-logs-…` artifacts of the run.
 
 Building from source and packaging are described in [`packaging/README.md`](packaging/README.md).

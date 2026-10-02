@@ -10,6 +10,8 @@
                             `target/gate-release.json` - the commit, whether the tree was clean, whether it passed - and
                             `tools/publish.py` refuses without that mark for the commit it publishes
     tools/gate.py L --step NAME     only the step of the level whose name begins with NAME (and no mark)
+    tools/gate.py L --except NAME   every step of the level but that one (and no mark)
+    tools/gate.py L --shard K/N     the acceptance probes of the level split in N shares, only the K-th run (and no mark)
 
 EVERY RED STOPS THE GATE: a red probe is a trouble to mend before the commit, not a row to keep beside it.
 
@@ -128,15 +130,43 @@ def run_step(name, cmd, env):
     return time.time() - began, passed, sorted(set(red)), broken, said
 
 
+def shard_of(cmd, env, k, n):
+    """THE K-TH OF N SHARES of an acceptance run: its probes listed (the skips of the level applied), every N-th taken
+    from the K-th on, and named exactly. Round the list rather than cut it in blocks: the probes of one module stand
+    together and cost alike, so a block would put the slow modules on one machine."""
+    listed = subprocess.run(CAP + cmd + ["--list", "--format", "terse"], cwd=ROOT, capture_output=True, text=True, env={**os.environ, **env})
+    if listed.returncode != 0:
+        # the build failed; the step itself runs the same build and reports it
+        return cmd
+    names = sorted(l[: -len(": test")] for l in listed.stdout.splitlines() if l.endswith(": test"))
+    mine = names[k - 1 :: n]
+    print(f"share {k}/{n}: {len(mine)} of {len(names)} acceptance probes")
+    return ACCEPTANCE + ["--exact"] + mine
+
+
 def main():
     ap = argparse.ArgumentParser(description="Run a level of the checks and report it.")
     ap.add_argument("level", choices=sorted(LEVELS))
     ap.add_argument("--step", help="run only the step whose name begins with this")
+    ap.add_argument("--except", dest="skip", help="run every step but the one whose name begins with this")
+    ap.add_argument("--shard", help="K/N: of the acceptance probes, run only the K-th of N shares (1-based)")
     args = ap.parse_args()
-    steps = [s for s in LEVELS[args.level] if args.step is None or s[0].startswith(args.step)]
+    steps = [
+        s for s in LEVELS[args.level]
+        if (args.step is None or s[0].startswith(args.step)) and (args.skip is None or not s[0].startswith(args.skip))
+    ]
     if not steps:
-        print(f"the {args.level} level has no step beginning with {args.step!r}: " + "; ".join(s[0] for s in LEVELS[args.level]))
+        print(f"the {args.level} level has no such step: " + "; ".join(s[0] for s in LEVELS[args.level]))
         return 2
+    if args.shard:
+        try:
+            k, n = (int(x) for x in args.shard.split("/"))
+            assert 1 <= k <= n
+        except (ValueError, AssertionError):
+            print(f"--shard takes K/N with 1 <= K <= N, not {args.shard!r}")
+            return 2
+        steps = [(name, shard_of(cmd, env, k, n), env) if cmd[:len(ACCEPTANCE)] == ACCEPTANCE else (name, cmd, env) for name, cmd, env in steps]
+    whole = args.step is None and args.skip is None and args.shard is None
     total_began = time.time()
     all_red, broken_steps = [], []
     for name, cmd, env in steps:
@@ -157,7 +187,7 @@ def main():
     for r in all_red:
         print(f"  red: {r}")
     passed = not all_red and not broken_steps
-    if args.level == "release" and args.step is None:
+    if args.level == "release" and whole:
         # THE MARK OF A WHOLE RELEASE RUN, for `tools/publish.py`: the commit it ran on, and whether the tree held
         # nothing uncommitted - a run over uncommitted changes vouches for no commit at all
         head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
@@ -166,7 +196,7 @@ def main():
         with open(RELEASE_MARK, "w", encoding="utf-8") as f:
             json.dump({"commit": head, "clean": clean, "passed": passed, "red": all_red, "seconds": round(time.time() - total_began)}, f, ensure_ascii=False, indent=1)
         print(f"the mark of the release level is left in {RELEASE_MARK}: {'passed' if passed else 'not passed'}, commit {head[:9]}, tree {'clean' if clean else 'with uncommitted changes'}")
-    if args.level == "full" and args.step is None:
+    if args.level == "full" and whole:
         # THE MARK OF A WHOLE FULL RUN, for the hook before a commit: the tree it ran on, and whether it passed
         os.makedirs(os.path.dirname(FULL_MARK), exist_ok=True)
         with open(FULL_MARK, "w", encoding="utf-8") as f:
