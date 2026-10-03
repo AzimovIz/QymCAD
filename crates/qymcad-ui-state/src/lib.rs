@@ -7417,16 +7417,47 @@ pub fn point_in_tri(p: Pos2, a: Pos2, b: Pos2, c: Pos2) -> bool {
 /// small triangle of the inner one, so the wrong face won and a sketch landed on the inner wall seemingly
 /// at random.
 pub fn tri_depth_at(p: Pos2, a: Pos2, da: f64, b: Pos2, db: f64, c: Pos2, dc: f64) -> f64 {
+    let (wa, wb, wc) = tri_weights(p, a, b, c);
+    da * wa + db * wb + dc * wc
+}
+
+/// A CORNER OF A TRIANGLE AS THE VIEW DRAWS IT: where it lies on the screen, where it is in space, and the perspective
+/// factor it is drawn with - `Screen::at`'s `1 / (1 + depth / d_eye)`, 1 in an orthographic view.
+#[derive(Clone, Copy, Debug)]
+pub struct TriCorner {
+    pub screen: Pos2,
+    pub world: [f64; 3],
+    pub persp: f64,
+}
+
+/// THE POINT OF THE TRIANGLE `corners` UNDER SCREEN `p`. The centre of the triangle stood here before, and it is
+/// not the point pointed at: a click near the corner of a large facet looked at, measured from and trimmed at the
+/// middle of the facet - measured, 50 points away on screen on a 60 x 40 block.
+///
+/// Weights taken on the screen are not weights in space once the view has perspective: the nearer corner is drawn
+/// larger, and a point interpolated by the screen weights alone lay 12 points off the pointer on the top of a block
+/// seen at three quarters. Each corner's weight is scaled by its perspective factor, as a perspective interpolation is.
+pub fn tri_world_at(p: Pos2, corners: [TriCorner; 3]) -> [f64; 3] {
+    let [a, b, c] = corners;
+    let (la, lb, lc) = tri_weights(p, a.screen, b.screen, c.screen);
+    let (ka, kb, kc) = (la * a.persp, lb * b.persp, lc * c.persp);
+    let sum = ka + kb + kc;
+    let (ka, kb, kc) = if sum.abs() > 1e-12 { (ka / sum, kb / sum, kc / sum) } else { (la, lb, lc) };
+    std::array::from_fn(|i| a.world[i] * ka + b.world[i] * kb + c.world[i] * kc)
+}
+
+/// The weights of the corners of the screen triangle `a, b, c` at `p`; a third each when it is seen edge-on.
+fn tri_weights(p: Pos2, a: Pos2, b: Pos2, c: Pos2) -> (f64, f64, f64) {
     let (v0x, v0y) = ((b.x - a.x) as f64, (b.y - a.y) as f64);
     let (v1x, v1y) = ((c.x - a.x) as f64, (c.y - a.y) as f64);
     let (v2x, v2y) = ((p.x - a.x) as f64, (p.y - a.y) as f64);
     let den = v0x * v1y - v1x * v0y;
     if den.abs() < 1e-12 {
-        return (da + db + dc) / 3.0; // degenerate (edge-on to the camera): fall back to the average
+        return (1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0); // degenerate (edge-on to the camera): fall back to the average
     }
     let u = (v2x * v1y - v1x * v2y) / den;
     let v = (v0x * v2y - v2x * v0y) / den;
-    da * (1.0 - u - v) + db * u + dc * v
+    (1.0 - u - v, u, v)
 }
 
 pub fn dist_point_seg(p: Point2, a: Point2, b: Point2) -> f64 {

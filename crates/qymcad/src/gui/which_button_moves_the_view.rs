@@ -394,6 +394,36 @@ mod tests {
         assert!(wrong.is_empty(), "a click does not take as the layout's program does ({}):\n{}", wrong.len(), wrong.join("\n"));
     }
 
+    /// THE POINT OF THE MODEL UNDER THE POINTER IS WHERE THE POINTER IS: put back on the screen, it lands on the spot
+    /// that was pointed at, wherever on a face that is. The centre of the triangle hit is not that point - a click
+    /// near the corner of a large facet looked at, measured from and trimmed at the middle of the facet.
+    #[test]
+    fn the_point_under_the_pointer_lands_back_under_it() {
+        let mut wrong = Vec::new();
+        let mut taken = 0;
+        for projection in [qymcad_ui_state::Projection::Ortho, qymcad_ui_state::Projection::Perspective] {
+            let (mut app, _) = a_part_in_view(MouseNav::QymCad);
+            app.set.projection = projection;
+            let basis = app.viewing.cam.basis();
+            let screen = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: app.viewing.view_rect, basis: &basis };
+            let mid = on_the_body(&app);
+            // the top and, below it, the faces of the sides the view looks at, slanted to the line of sight
+            for dy in [-15.0, 0.0, 12.0, 30.0, 45.0, 60.0] {
+                for dx in [-60.0, -30.0, 0.0, 25.0, 50.0] {
+                    let at = mid + egui::vec2(dx, dy);
+                    let Some((_, _, hit)) = qymcad_pick::pick_face_ray(&app.painting(), app.viewing.view_rect, at) else { continue };
+                    taken += 1;
+                    let back = screen.at(hit).0;
+                    if back.distance(at) > 0.5 {
+                        wrong.push(format!("{projection:?}: pointed at {at:?}, the point {hit:?} lies at {back:?} on screen"));
+                    }
+                }
+            }
+        }
+        assert!(taken > 20, "setup: the pointer found the body {taken} times");
+        assert!(wrong.is_empty(), "the point taken under the pointer is not under it:\n{}", wrong.join("\n"));
+    }
+
     /// A SHORT CLICK OF THE MIDDLE BUTTON LOOKS AT THE POINT OF THE MODEL UNDER IT where the layout's program does so
     /// - the view's centre, the point it turns about, goes there - and moves nothing under the other layouts.
     #[test]

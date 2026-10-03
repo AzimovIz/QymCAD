@@ -1006,7 +1006,11 @@ pub fn pick_face_ray(pn: &Painting, rect: Rect, screen: Pos2) -> Option<(qymcad_
             if point_in_tri(screen, pa, pb, pc) {
                 let depth = tri_depth_at(screen, pa, da, pb, db, pc, dc);
                 if best.is_none_or(|(bd, _, _, _)| depth < bd) {
-                    let hit = [(wa[0] + wb[0] + wc[0]) / 3.0, (wa[1] + wb[1] + wc[1]) / 3.0, (wa[2] + wb[2] + wc[2]) / 3.0];
+                    // the perspective factor of each corner, as `Screen::at` draws it
+                    let inv = persp_inv_d_eye(&pn.cam, pn.set, rect.height() * 0.5);
+                    let f = |d: f64| 1.0 / (1.0 + d * inv).max(0.05);
+                    let corner = |screen, world, depth| TriCorner { screen, world, persp: f(depth) };
+                    let hit = tri_world_at(screen, [corner(pa, wa, da), corner(pb, wb, db), corner(pc, wc, dc)]);
                     best = Some((depth, mi, ti, hit));
                 }
             }
