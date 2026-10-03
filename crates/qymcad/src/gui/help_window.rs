@@ -327,7 +327,7 @@ pub(crate) fn markdown(pal: &crate::palette::Palette, ui: &mut egui::Ui, md: &st
                     3 => 15.0,
                     _ => 14.0,
                 };
-                line(pal, ui, &spans, LineStyle { size: size, heading: true, col: pal.text_strong(), indent: 0.0 }, &mut clicked);
+                line(pal, ui, &spans, LineStyle { size, heading: true, col: pal.text_strong(), indent: 0.0 }, &mut clicked);
                 if level <= 2 {
                     ui.separator();
                 }

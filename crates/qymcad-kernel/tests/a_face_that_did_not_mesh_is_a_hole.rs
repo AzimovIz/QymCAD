@@ -160,7 +160,7 @@ fn points_outwards(m: &qymcad_core::geom::Mesh, tri: [u32; 3]) -> Option<bool> {
             hits += 1;
         }
     }
-    Some(hits % 2 == 0)
+    Some(hits.is_multiple_of(2))
 }
 
 #[test]

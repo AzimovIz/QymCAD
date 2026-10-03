@@ -92,7 +92,7 @@ fn cut_vs_profile(edges: &[ProfEdge], r0: f64, len: f64, lead: f64) -> (f64, f64
             radius: r0,
             profile: &encode_edges(edges),
             length: len,
-            lead: lead,
+            lead,
             starts: 1,
             hand: qymcad_kernel::Hand::Right,
             kind: qymcad_kernel::Helix::Groove,

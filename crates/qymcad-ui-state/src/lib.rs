@@ -4738,7 +4738,7 @@ pub fn to_world(view: &View2d, rect: Rect, s: Pos2) -> Point2 {
 pub fn note_at(project: &Project, view: &View2d, rect: Rect, pos: Pos2, si: usize) -> Option<usize> {
     let s = project.sketches.get(si)?;
     for (i, n) in s.notes.iter().enumerate() {
-        let sp = (Sheet { view: *view, rect: rect }).at(Point2::new(n.x, n.y));
+        let sp = (Sheet { view: *view, rect }).at(Point2::new(n.x, n.y));
         let w = (n.text.chars().count().max(1) as f32) * 8.0;
         let bb = Rect::from_min_max(sp + egui::vec2(-2.0, -17.0), sp + egui::vec2(w, 3.0));
         if bb.contains(pos) {
@@ -4752,7 +4752,7 @@ pub fn note_at(project: &Project, view: &View2d, rect: Rect, pos: Pos2, si: usiz
 /// circle, when the cursor is close to that "rim". A circle counts as a rim when vertices hang on it
 /// (PointOnCircle towards its centre). Returns the Id of the centre (so the radius can be retyped).
 pub fn polygon_under(project: &Project, view: &View2d, rect: Rect, pos: Pos2, si: usize) -> Option<Id> {
-    let sh = Sheet { view: *view, rect: rect };
+    let sh = Sheet { view: *view, rect };
     use qymcad_core::model::{Constraint, EntityKind};
     let s = project.sketches.get(si)?;
     for e in &s.entities {
@@ -4780,7 +4780,7 @@ pub fn polygon_under(project: &Project, view: &View2d, rect: Rect, pos: Pos2, si
 /// from THE MODEL (by projecting a far point of the line); otherwise a dimension to an axis comes
 /// out mangled, because its perpendicular degenerates.
 pub fn line_screen_dir(project: &Project, view: &View2d, si: usize, a: Id, b: Id, rect: Rect) -> Option<egui::Vec2> {
-    let sh = Sheet { view: *view, rect: rect };
+    let sh = Sheet { view: *view, rect };
     let (pa, pb) = (sketch_pt(project, si, a)?, sketch_pt(project, si, b)?);
     let sa = sh.at(pa);
     let v = sh.at(pb) - sa;
@@ -4810,7 +4810,7 @@ pub fn sel_circle_centers(project: &Project, sel_sk: &SketchSelection, si: usize
 
 /// The text object under a screen point (by the bounding box of its glyphs). For selecting, moving and editing.
 pub fn text_at(project: &Project, view: &View2d, rect: Rect, pos: Pos2, si: usize) -> Option<usize> {
-    let sh = Sheet { view: *view, rect: rect };
+    let sh = Sheet { view: *view, rect };
     let s = project.sketches.get(si)?;
     for i in 0..s.texts.len() {
         if let Some((minx, miny, maxx, maxy)) = project.sketch_text_bbox(si, i) {
@@ -8936,7 +8936,7 @@ pub fn joint_endpoints(dc: &DrawCtx, j: &qymcad_core::feature::Joint, rect: Rect
         let conn = dc.project.connector(cid)?;
         let fr = dc.project.connector_frame(conn)?;
         let w = qymcad_core::feature::apply12(&dc.project.relative_transform(conn.owner, ctx), fr.origin);
-        Some(Screen { cam: dc.cam, set: dc.set, rect: rect, basis: basis }.at(w).0)
+        Some(Screen { cam: dc.cam, set: dc.set, rect, basis }.at(w).0)
     };
     Some((pt(j.a)?, pt(j.b)?))
 }
@@ -11585,7 +11585,7 @@ pub fn installed_fonts_in(dirs: &[std::path::PathBuf]) -> Vec<FontFace> {
             }
         }
     }
-    out.sort_by(|a, b| (a.family.to_lowercase(), a.style.to_lowercase()).cmp(&(b.family.to_lowercase(), b.style.to_lowercase())));
+    out.sort_by_key(|a| (a.family.to_lowercase(), a.style.to_lowercase()));
     // NAMESAKES ARE GIVEN THEIR FILE NAME. Only namesakes: putting the file beside every row would drown the
     // name a person is actually looking for.
     let mut namesakes: std::collections::HashMap<(String, String), usize> = std::collections::HashMap::new();
@@ -11856,7 +11856,7 @@ pub fn text_obj_editor(ed: Editing, font_cache: &mut FontCache, tc: &mut TextCtx
         end_text_edit(tc);
         return;
     };
-    let at = (Sheet { view: *ed.view, rect: rect }).at(Point2::new(bx, maxy));
+    let at = (Sheet { view: *ed.view, rect }).at(Point2::new(bx, maxy));
     let (mut apply, mut close) = (false, false);
     egui::Area::new(egui::Id::new(("textedit", si, ti))).fixed_pos(clamp_popup(at, rect) + egui::vec2(0.0, -34.0)).order(egui::Order::Foreground).show(ctx, |ui| {
         egui::Frame::popup(ui.style()).show(ui, |ui| {
@@ -12203,7 +12203,7 @@ pub fn contour_under_2d(project: &Project, view: &View2d, rect: Rect, screen: Po
     let mut best: Option<(f64, Id)> = None;
     for cid in sketch_closed_contours(project, si) {
         let ci = project.contour_index(cid)?;
-        let pts: Vec<Pos2> = project.contours[ci].points.iter().map(|p| (Sheet { view: *view, rect: rect }).at(*p)).collect();
+        let pts: Vec<Pos2> = project.contours[ci].points.iter().map(|p| (Sheet { view: *view, rect }).at(*p)).collect();
         if pts.len() >= 3 && point_in_poly(screen, &pts) {
             let area = poly_area(&pts);
             if best.is_none_or(|(ba, _)| area < ba) {
@@ -12286,7 +12286,7 @@ pub fn active_edges(dc: &DrawCtx, si: usize) -> ActiveEdges {
 /// a circle or an arc the distance to the rim.
 pub fn entity_near(pick: &PickCtx, rect: Rect, pos: Pos2, si: usize) -> Option<Id> {
     let s = pick.project.sketches.get(si)?;
-    let scr = |id: Id| s.points.iter().find(|q| q.id == id).map(|q| (Sheet { view: *pick.view, rect: rect }).at(Point2::new(q.x, q.y)));
+    let scr = |id: Id| s.points.iter().find(|q| q.id == id).map(|q| (Sheet { view: *pick.view, rect }).at(Point2::new(q.x, q.y)));
     let seg_d = |p: Pos2, a: Pos2, b: Pos2| -> f32 {
         let (vx, vy) = (b.x - a.x, b.y - a.y);
         let l2 = vx * vx + vy * vy;
@@ -12477,7 +12477,7 @@ fn segment_crosses_box(p: Pos2, q: Pos2, x0: f32, x1: f32, y0: f32, y1: f32) -> 
 /// A rubber-band selection of sketch entities: left to right means enclosure (wholly inside), right to
 /// left means crossing (merely touched) — the usual CAD convention.
 pub fn box_select_sketch(ed: Editing, sel_sk: &mut SketchSelection, rect: Rect, a: Pos2, b: Pos2, si: usize) {
-    let sh = Sheet { view: *ed.view, rect: rect };
+    let sh = Sheet { view: *ed.view, rect };
     let crossing = b.x < a.x;
     let (x0, x1) = (a.x.min(b.x), a.x.max(b.x));
     let (y0, y1) = (a.y.min(b.y), a.y.max(b.y));
@@ -12546,7 +12546,7 @@ pub fn slot_contour_under_2d(pick: &PickCtx, rect: Rect, screen: Pos2, cands: &[
         if c.points.len() < 2 {
             continue;
         }
-        let pts: Vec<Pos2> = c.points.iter().map(|p| (Sheet { view: *pick.view, rect: rect }).at(*p)).collect();
+        let pts: Vec<Pos2> = c.points.iter().map(|p| (Sheet { view: *pick.view, rect }).at(*p)).collect();
         if c.closed && pts.len() >= 3 && point_in_poly(screen, &pts) {
             let area = poly_area(&pts);
             if inside.is_none_or(|(ba, _)| area < ba) {
@@ -13125,7 +13125,7 @@ pub fn body_side_anchor(dc: &DrawCtx, b: Id, rect: Rect, basis: &([f64; 3], [f64
     for &x in &[bb.min.x, bb.max.x] {
         for &y in &[bb.min.y, bb.max.y] {
             for &z in &[bb.min.z, bb.max.z] {
-                body.extend_with(Screen { cam: dc.cam, set: dc.set, rect: rect, basis: basis }.at(qymcad_core::feature::apply12(&wt, [x, y, z])).0);
+                body.extend_with(Screen { cam: dc.cam, set: dc.set, rect, basis }.at(qymcad_core::feature::apply12(&wt, [x, y, z])).0);
             }
         }
     }

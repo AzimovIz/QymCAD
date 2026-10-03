@@ -38,7 +38,7 @@ mod tests {
         let basis = app.viewing.cam.basis();
         let mut bb: Option<Rect> = None;
         for v in &app.project.bodies[mi].mesh.verts {
-            let p = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: rect, basis: &basis }.at([v.x, v.y, v.z]).0;
+            let p = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect, basis: &basis }.at([v.x, v.y, v.z]).0;
             bb = Some(bb.map_or(Rect::from_min_max(p, p), |r| r.union(Rect::from_min_max(p, p))));
         }
         bb.expect("the body is visible on screen")

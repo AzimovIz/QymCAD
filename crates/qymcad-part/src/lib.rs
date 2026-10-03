@@ -575,7 +575,7 @@ pub fn apply_hole_cmd(cmd: &qymcad_ui_state::FeatCommand, hole: qymcad_ui_state:
         let body = project.add_hole_from_sketch(
             src,
             sid,
-            qymcad_core::model::HoleTool { kind: hole.kind, diameter: qymcad_ui_state::cmd_val(cmd, "diameter"), depth: qymcad_ui_state::cmd_val(cmd, "depth"), dia2: dia2, depth2: depth2 },
+            qymcad_core::model::HoleTool { kind: hole.kind, diameter: qymcad_ui_state::cmd_val(cmd, "diameter"), depth: qymcad_ui_state::cmd_val(cmd, "depth"), dia2, depth2 },
             hole.flip,
         );
         store_cmd_exprs(cmd, project, body);
@@ -594,7 +594,7 @@ pub fn apply_hole_cmd(cmd: &qymcad_ui_state::FeatCommand, hole: qymcad_ui_state:
         src,
         key,
         at,
-        qymcad_core::model::HoleTool { kind: hole.kind, diameter: qymcad_ui_state::cmd_val(cmd, "diameter"), depth: qymcad_ui_state::cmd_val(cmd, "depth"), dia2: dia2, depth2: depth2 },
+        qymcad_core::model::HoleTool { kind: hole.kind, diameter: qymcad_ui_state::cmd_val(cmd, "diameter"), depth: qymcad_ui_state::cmd_val(cmd, "depth"), dia2, depth2 },
     );
     store_cmd_exprs(cmd, project, body);
     Some(body)
@@ -1397,7 +1397,7 @@ pub fn cmd_ready(pc: &mut qymcad_ui_state::PartCtx) -> bool {
 
 pub fn cmd_anchor_screen(pc: &mut qymcad_ui_state::PartCtx, rect: Rect) -> Option<Pos2> {
     let basis = pc.cam.basis();
-    let scr = qymcad_ui_state::Screen { cam: pc.cam, set: pc.set, rect: rect, basis: &basis };
+    let scr = qymcad_ui_state::Screen { cam: pc.cam, set: pc.set, rect, basis: &basis };
     match pc.armed.cmd_kind() {
         1 | 3 => {
             let (base, dir, h) = qymcad_ui_state::feat_cmd_axis(pc.cmd, pc.gsel, pc.project)?;
@@ -2047,13 +2047,7 @@ pub fn apply_sketch_cmd(pc: &mut qymcad_ui_state::PartCtx, cmd: u8) -> Option<Id
                 3 => 2,
                 _ => 1,
             };
-            pc.project.add_combine_multi_op(
-                part,
-                sid,
-                targets.clone(),
-                qymcad_core::model::CombineSpan { height: h, down: down, extent: qymcad_core::feature::Extent { through, reach }, fill: &fill },
-                occt,
-            )
+            pc.project.add_combine_multi_op(part, sid, targets.clone(), qymcad_core::model::CombineSpan { height: h, down, extent: qymcad_core::feature::Extent { through, reach }, fill: &fill }, occt)
         };
         if last != 0 {
             store_cmd_exprs(pc.cmd, pc.project, last); // the dimensions (the height) go onto the node of the operation
@@ -3955,7 +3949,7 @@ pub fn feat_cmd_popup(pc: &mut qymcad_ui_state::PartCtx, ctx: &egui::Context, re
     let basis = pc.cam.basis();
     for (i, p) in params.iter_mut().enumerate() {
         let Some(w) = p.at else { continue };
-        let at = qymcad_ui_state::clamp_popup(qymcad_ui_state::Screen { cam: &*pc.cam, set: pc.set, rect: rect, basis: &basis }.at(w).0, rect);
+        let at = qymcad_ui_state::clamp_popup(qymcad_ui_state::Screen { cam: &*pc.cam, set: pc.set, rect, basis: &basis }.at(w).0, rect);
         egui::Area::new(egui::Id::new(("feat_cmd_at", i))).fixed_pos(at + egui::vec2(8.0, -8.0)).order(egui::Order::Foreground).show(ctx, |ui| {
             egui::Frame::popup(ui.style()).show(ui, |ui| {
                 ui.horizontal(|ui| {
@@ -4081,7 +4075,7 @@ pub fn body_num_popup(pc: &mut qymcad_ui_state::PartCtx, ctx: &egui::Context, re
         qymcad_ui_state::GizmoOf::Body(mi) => qymcad_ui_state::body_gizmo_geometry(&*pc.body_giz, *pc.cam, &*pc.project, pc.set, mi),
         qymcad_ui_state::GizmoOf::Part(comp) => qymcad_ui_state::gizmo_geometry(*pc.cam, *pc.comp_giz, &*pc.project, comp),
     };
-    let at = qymcad_ui_state::clamp_popup(qymcad_ui_state::Screen { cam: &*pc.cam, set: pc.set, rect: rect, basis: basis }.at(o).0, rect);
+    let at = qymcad_ui_state::clamp_popup(qymcad_ui_state::Screen { cam: &*pc.cam, set: pc.set, rect, basis }.at(o).0, rect);
     let axn = ["X", "Y", "Z"][(ax as usize).min(2)];
     let label = if rot { qymcad_i18n::tr1("cmd-rotation-axis", "axis", axn) } else { qymcad_i18n::tr1("cmd-offset-axis", "axis", axn) };
     let preview = pc.project.eval_expr(&pc.body_giz.num_buf); // the preview lags by one frame - the buffer changes inside the field
@@ -5914,7 +5908,7 @@ pub fn wb_toolbar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
                     // "Finish" lives in the breadcrumbs (one place for it); here there are only sketch tools
                     // --- Creation ---
                     cat(ui, &qymcad_i18n::tr("tb-group-create"));
-                    if qymcad_ui_state::icon_tool(ui, ph::CURSOR, &qymcad_i18n::tr("tb-select-hint"), qymcad_ui_state::in_select_mode(&bc.armed)) {
+                    if qymcad_ui_state::icon_tool(ui, ph::CURSOR, &qymcad_i18n::tr("tb-select-hint"), qymcad_ui_state::in_select_mode(bc.armed)) {
                         bc.ask.push(qymcad_ui_state::BarAsk::SketchSelectMode);
                     }
                     if qymcad_ui_state::icon_tool(ui, ph::DOT, &qymcad_i18n::tr("tb-point-hint"), bc.armed.draw_kind() == 5) {
@@ -6069,18 +6063,18 @@ pub fn wb_toolbar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
                     create_panel_common(bc, ui);
                     // --- From a sketch ---
                     cat(ui, &qymcad_i18n::tr("tb-group-sketch3d"));
-                    if qymcad_ui_state::icon_tool(ui, ph::CUBE, &qymcad_i18n::tr("tb-extrude-hint"), tool_is_taken(&bc, 1)) {
+                    if qymcad_ui_state::icon_tool(ui, ph::CUBE, &qymcad_i18n::tr("tb-extrude-hint"), tool_is_taken(bc, 1)) {
                         bc.feat.op = 0;
-                        bc.ask.push(qymcad_ui_state::take_or_drop(tool_is_taken(&bc, 1), qymcad_ui_state::BarAsk::FeatCmd(1)));
+                        bc.ask.push(qymcad_ui_state::take_or_drop(tool_is_taken(bc, 1), qymcad_ui_state::BarAsk::FeatCmd(1)));
                     }
-                    if qymcad_ui_state::icon_tool(ui, ph::ARROWS_CLOCKWISE, &qymcad_i18n::tr("tb-revolve-hint"), tool_is_taken(&bc, 3)) {
-                        bc.ask.push(qymcad_ui_state::take_or_drop(tool_is_taken(&bc, 3), qymcad_ui_state::BarAsk::FeatCmd(3)));
+                    if qymcad_ui_state::icon_tool(ui, ph::ARROWS_CLOCKWISE, &qymcad_i18n::tr("tb-revolve-hint"), tool_is_taken(bc, 3)) {
+                        bc.ask.push(qymcad_ui_state::take_or_drop(tool_is_taken(bc, 3), qymcad_ui_state::BarAsk::FeatCmd(3)));
                     }
-                    if qymcad_ui_state::icon_tool(ui, ph::PATH, &qymcad_i18n::tr("tb-sweep-hint"), tool_is_taken(&bc, 8)) {
-                        bc.ask.push(qymcad_ui_state::take_or_drop(tool_is_taken(&bc, 8), qymcad_ui_state::BarAsk::FeatCmd(8)));
+                    if qymcad_ui_state::icon_tool(ui, ph::PATH, &qymcad_i18n::tr("tb-sweep-hint"), tool_is_taken(bc, 8)) {
+                        bc.ask.push(qymcad_ui_state::take_or_drop(tool_is_taken(bc, 8), qymcad_ui_state::BarAsk::FeatCmd(8)));
                     }
-                    if qymcad_ui_state::icon_tool(ui, ph::STACK, &qymcad_i18n::tr("tb-loft-hint"), tool_is_taken(&bc, 9)) {
-                        bc.ask.push(qymcad_ui_state::take_or_drop(tool_is_taken(&bc, 9), qymcad_ui_state::BarAsk::FeatCmd(9)));
+                    if qymcad_ui_state::icon_tool(ui, ph::STACK, &qymcad_i18n::tr("tb-loft-hint"), tool_is_taken(bc, 9)) {
+                        bc.ask.push(qymcad_ui_state::take_or_drop(tool_is_taken(bc, 9), qymcad_ui_state::BarAsk::FeatCmd(9)));
                     }
                     // --- The 3D primitives (a command: sizes at the geometry + a preview + Enter/Esc) ---
                     cat(ui, &qymcad_i18n::tr("tb-group-prim"));

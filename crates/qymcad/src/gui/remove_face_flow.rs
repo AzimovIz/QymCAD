@@ -53,7 +53,7 @@ mod tests {
             .find(|f| f.normal[2].abs() < 0.3 && (f.centroid.x - 10.0).abs() < 4.0 && (f.centroid.y - 10.0).abs() < 4.0)
             .map(|f| (f.id, [f.centroid.x, f.centroid.y, f.centroid.z]))
             .expect("the face of the hole");
-        let at = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: rect, basis: &basis }.at(bore.1).0;
+        let at = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect, basis: &basis }.at(bore.1).0;
         app.pick_face_3d(rect, at);
         if !app.tools.gsel.faces.contains(&bore.0) {
             // the face may be hidden by the body from this angle — then it is picked directly, but

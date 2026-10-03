@@ -103,7 +103,7 @@ fn each_impossible_helix_says_which_of_its_conditions_failed() {
             radius: 5.0,
             profile: prof,
             length: 10.0,
-            lead: lead,
+            lead,
             starts: 1,
             hand: qymcad_kernel::Hand::Right,
             kind: qymcad_kernel::Helix::Groove,

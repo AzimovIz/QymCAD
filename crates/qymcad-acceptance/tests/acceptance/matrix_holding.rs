@@ -56,7 +56,7 @@ fn run(cases: Vec<(String, Box<dyn Fn()>)>) {
     let failed: Vec<String> = cases
         .into_iter()
         .filter_map(|(what, c)| {
-            let problem = qymcad_acceptance::refusal(|| c());
+            let problem = qymcad_acceptance::refusal(&c);
             (!problem.is_empty()).then(|| format!("{what}: {problem}"))
         })
         .collect();

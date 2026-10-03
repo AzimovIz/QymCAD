@@ -262,7 +262,7 @@ mod exporting_over_a_rebuild {
             qymcad_ui_state::editing_of!(app),
             &mut app.live,
             std::path::Path::new("/tmp/qym-never-written.stl"),
-            &crate::gui::io_jobs::MeshJob { format: qymcad_ui_state::MeshFormat::Stl, bodies: (&[]).to_vec(), note: ("").to_string(), deflection: 0.1, tree: Vec::new() },
+            &crate::gui::io_jobs::MeshJob { format: qymcad_ui_state::MeshFormat::Stl, bodies: [].to_vec(), note: ("").to_string(), deflection: 0.1, tree: Vec::new() },
         );
         assert!(matches!(&app.regen.busy, Some(b) if b.kind == qymcad_ui_state::BgKind::Regen));
         assert_eq!(app.status, crate::i18n::tr("io-export-busy"));

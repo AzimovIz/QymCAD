@@ -119,7 +119,7 @@ fn a_thread_longer_than_its_cylinder_is_refused() {
     let edge = p.regen_edges.get(&body).and_then(|es| es.iter().find(|x| x.id == e).cloned()).expect("the rim");
     let rim_at = (edge.center, edge.axis, edge.radius);
     let spec = ThreadSpec { standard: ThreadStandard::MetricIso, nominal_d: 30.0, ..Default::default() };
-    let long = p.thread_refusal(body, rim_at, spec.clone(), 40.0);
+    let long = p.thread_refusal(body, rim_at, spec, 40.0);
     assert!(matches!(long, Some(qymcad_core::errors::CoreError::ThreadLongerThanFace { .. })), "a thread of 40 on a shaft 30 long is not refused: {long:?}");
     let fits = p.thread_refusal(body, rim_at, spec, 30.0);
     assert!(fits.is_none(), "a thread of 30 on a shaft 30 long is refused: {fits:?}");

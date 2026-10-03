@@ -107,7 +107,7 @@ fn a_shaft_standing_on_its_end_is_laid_down() {
 
     // the shaft STANDS (axis along Z, the same as the plane normal)
     p.move_component(cs, [20.0, 20.0, 40.0]);
-    p.add_tangent(cp, AnchorRef::FaceCenter(bp, plane), cs, AnchorRef::FaceCenter(bs, cyl.clone()));
+    p.add_tangent(cp, AnchorRef::FaceCenter(bp, plane), cs, AnchorRef::FaceCenter(bs, cyl));
     p.solve_joints();
 
     let (o, ax, _) = p.face_cylinder(bs, &cyl).expect("the side of the shaft");

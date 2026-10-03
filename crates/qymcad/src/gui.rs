@@ -1755,7 +1755,6 @@ impl App {
             let mut asks = Vec::new();
             crate::gui::panels_windows::apply_param_edit(&mut self.win_ctx(&mut asks));
             self.do_win_asks(asks, &egui::Context::default());
-            ()
         };
     }
 
@@ -2162,7 +2161,7 @@ impl App {
         let l = 60.0 / self.viewing.cam.scale as f64;
         let mut tip = origin;
         tip[ax as usize] += l;
-        let scr = qymcad_ui_state::Screen { cam: &self.viewing.cam, set: &self.set, rect: rect, basis: basis };
+        let scr = qymcad_ui_state::Screen { cam: &self.viewing.cam, set: &self.set, rect, basis };
         let s0 = scr.at(origin).0;
         let s1 = scr.at(tip).0;
         let pd = s1 - s0;
@@ -2190,7 +2189,7 @@ impl App {
     /// composed with the start, with snapping). Unified with the body gizmo.
     fn drag_component_ring(&mut self, _comp: Id, ax: u8, cursor: Pos2, d: egui::Vec2, rect: Rect, basis: &([f64; 3], [f64; 3], [f64; 3])) {
         let Some((_, _, origin, _)) = self.dragged.comp_giz.drag else { return };
-        let center = qymcad_ui_state::Screen { cam: &self.viewing.cam, set: &self.set, rect: rect, basis: basis }.at(origin).0;
+        let center = qymcad_ui_state::Screen { cam: &self.viewing.cam, set: &self.set, rect, basis }.at(origin).0;
         let radial = cursor - center;
         let r2 = (radial.x * radial.x + radial.y * radial.y) as f64;
         if r2 < 4.0 {
@@ -2246,7 +2245,7 @@ impl App {
     pub(super) fn face_arrow_drag_to(&mut self, d: egui::Vec2, rect: Rect, basis: &([f64; 3], [f64; 3], [f64; 3])) {
         let Some((o, _, n)) = self.face_arrow_geometry() else { return };
         let l = 60.0 / self.viewing.cam.scale as f64;
-        let scr = qymcad_ui_state::Screen { cam: &self.viewing.cam, set: &self.set, rect: rect, basis: basis };
+        let scr = qymcad_ui_state::Screen { cam: &self.viewing.cam, set: &self.set, rect, basis };
         let s0 = scr.at(o).0;
         let s1 = scr.at([o[0] + n[0] * l, o[1] + n[1] * l, o[2] + n[2] * l]).0;
         let pd = s1 - s0;
@@ -3220,7 +3219,7 @@ pub(crate) fn gizmo_click_hit(pn: &qymcad_ui_state::Painting, rect: Rect, pos: P
 }
 
 pub(crate) fn gizmo_axis_hit_at(dc: &qymcad_ui_state::DrawCtx, o: [f64; 3], l: f64, rect: Rect, basis: &([f64; 3], [f64; 3], [f64; 3]), pp: Pos2) -> Option<u8> {
-    let scr = qymcad_ui_state::Screen { cam: dc.cam, set: dc.set, rect: rect, basis: basis };
+    let scr = qymcad_ui_state::Screen { cam: dc.cam, set: dc.set, rect, basis };
     let s0 = scr.at(o).0;
     let mut best: Option<(f32, u8)> = None;
     for ax in 0..3u8 {
@@ -3246,7 +3245,7 @@ pub(crate) fn gizmo_ring_hit_at(dc: &qymcad_ui_state::DrawCtx, o: [f64; 3], l: f
         for k in 0..=48 {
             let a = k as f64 / 48.0 * std::f64::consts::TAU;
             let p = [o[0] + l * (u[0] * a.cos() + v[0] * a.sin()), o[1] + l * (u[1] * a.cos() + v[1] * a.sin()), o[2] + l * (u[2] * a.cos() + v[2] * a.sin())];
-            let s = qymcad_ui_state::Screen { cam: dc.cam, set: dc.set, rect: rect, basis: basis }.at(p).0;
+            let s = qymcad_ui_state::Screen { cam: dc.cam, set: dc.set, rect, basis }.at(p).0;
             if let Some(pr) = prev {
                 dmin = dmin.min(screen_dist_seg(pp, pr, s));
             }
@@ -4169,7 +4168,7 @@ mod the_card_holds_its_words;
 /// Is the cursor on the face arrow? The threshold matches the body gizmo's, in pixels along the segment.
 pub(crate) fn face_arrow_hit(pn: &qymcad_ui_state::Painting, rect: Rect, pos: Pos2, basis: &([f64; 3], [f64; 3], [f64; 3])) -> bool {
     let Some((o, tip, _)) = face_arrow_geometry(pn) else { return false };
-    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: basis };
+    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis };
     let (a, b) = (scr.at(o).0, scr.at(tip).0);
     screen_dist_seg(pos, a, b) <= 9.0
 }

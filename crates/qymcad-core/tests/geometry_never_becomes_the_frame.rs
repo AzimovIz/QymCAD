@@ -133,7 +133,7 @@ fn no_tool_started_at_zero_welds_its_drawing_to_the_frame() {
         p.regen_sketch(si);
 
         let sys = p.sketches[si].system_ids();
-        let mine: Vec<u64> = p.sketches[si].entities.iter().flat_map(|e| qymcad_core::model::entity_points(e)).collect();
+        let mine: Vec<u64> = p.sketches[si].entities.iter().flat_map(qymcad_core::model::entity_points).collect();
         for id in &mine {
             if sys.contains(id) {
                 sins.push(format!("{name}: the drawing stands on the point {id} of the frame - it cannot be dragged"));

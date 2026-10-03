@@ -192,7 +192,7 @@ probe! {
         let tool = s.word("tb-mirror-part-hint");
         s.press_hint(&tool);
         let wait = s.word("tb-mirror-pick-part");
-        assert!(s.words().iter().any(|w| *w == wait), "the tool taken with nothing picked shows no bar asking for a part; on screen: {:?}", s.words());
+        assert!(s.words().contains(&wait), "the tool taken with nothing picked shows no bar asking for a part; on screen: {:?}", s.words());
         let body = s.face_at([20.0, 15.0, 10.0]);
         s.click(body); // the part
         let front = s.face_at([20.0, 0.0, 5.0]);

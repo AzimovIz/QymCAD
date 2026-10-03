@@ -159,7 +159,7 @@ impl App {
         // chosen by the click: click near the end you want and the thread runs from there.
         let eids = self.live.shapes.get(&body).map(|s| s.face_edge_ids(fid)).unwrap_or_default();
         let basis = self.viewing.cam.basis();
-        let scr = qymcad_ui_state::Screen { cam: &self.viewing.cam, set: &self.set, rect: rect, basis: &basis };
+        let scr = qymcad_ui_state::Screen { cam: &self.viewing.cam, set: &self.set, rect, basis: &basis };
         let wt = self.project.body_display_transform(body, qymcad_ui_state::current_ctx_id(&self.active_path, &self.project));
         // THE RADIUS IS TAKEN FROM THE FACE ITSELF rather than from the nearest rim. If a chamfer has been
         // cut at the end, the edges of a cylindrical face include rims of DIFFERENT radii, and "the nearest
@@ -225,7 +225,7 @@ impl App {
 
     pub(super) fn pick_face_3d(&mut self, rect: Rect, screen: Pos2) {
         let basis = self.viewing.cam.basis();
-        let scr = qymcad_ui_state::Screen { cam: &self.viewing.cam, set: &self.set, rect: rect, basis: &basis };
+        let scr = qymcad_ui_state::Screen { cam: &self.viewing.cam, set: &self.set, rect, basis: &basis };
         let ctx = qymcad_ui_state::current_ctx_id(&self.active_path, &self.project);
         // ONLY WHAT IS DRAWN gets picked: bodies consumed by modifiers (the hidden old extrusion under the
         // final one) and the result of the feature being edited are NOT picked, otherwise a click lands in

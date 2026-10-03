@@ -2437,7 +2437,7 @@ mod tests {
                     let basis = app.viewing.cam.basis();
                     let top = [(bb.min.x + bb.max.x) * 0.5, (bb.min.y + bb.max.y) * 0.5, bb.max.z];
                     let rect = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(900.0, 700.0));
-                    let at = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: rect, basis: &basis }.at(top).0;
+                    let at = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect, basis: &basis }.at(top).0;
                     app.viewport_3d_click_at(at, rect, &basis);
                 }
             }

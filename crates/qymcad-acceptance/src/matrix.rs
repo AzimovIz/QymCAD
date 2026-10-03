@@ -174,7 +174,7 @@ const MESH: f64 = 0.05;
 
 /// The body the tools of the part work on, with its place among the bodies: the last solid that is its own.
 pub fn working(s: &mut Session) -> Option<(usize, Solid)> {
-    s.document().bodies.into_iter().enumerate().filter(|(_, b)| !b.consumed && !b.sheet).last()
+    s.document().bodies.into_iter().enumerate().rfind(|(_, b)| !b.consumed && !b.sheet)
 }
 
 /// BRING `spot` INTO VIEW as a person does, and answer the point of it to click: one of its two points the eye
@@ -443,7 +443,7 @@ pub fn take_steps(s: &mut Session, tool: &PartTool, steps: &[Pick]) -> Option<St
         }
         // the status line counts what is picked, as the person reads it
         let status = s.status();
-        let counted = status.split(|c: char| !c.is_ascii_digit()).filter(|w| !w.is_empty()).last().and_then(|w| w.parse::<usize>().ok());
+        let counted = status.split(|c: char| !c.is_ascii_digit()).rfind(|w| !w.is_empty()).and_then(|w| w.parse::<usize>().ok());
         clicks += 1;
         if counted != Some(clicks) {
             return Some(format!("the click on {pick:?} did not add it: the status line says {status:?}"));

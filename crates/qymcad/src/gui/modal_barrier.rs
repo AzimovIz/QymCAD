@@ -204,7 +204,7 @@ mod tests {
 
         // ...and a launch of the program WITH IT, the way `launch` does it
         let mut app = App::default();
-        app.disk.io.startup = Some((&path).to_string());
+        app.disk.io.startup = Some(path.to_string());
         let ctx = egui::Context::default();
         super::super::install_fonts(&ctx);
         let screen = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(1200.0, 800.0));

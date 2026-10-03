@@ -400,7 +400,7 @@ fn matrix_revolve_direction_and_symmetry() {
         p.add_rect_entity(si, 10.0, 0.0, 20.0, 30.0, qymcad_core::feature::Purpose::Real);
         p.regen_sketch(si);
         let cid = p.sketches[si].contour_ids.iter().copied().find(|c| p.contour_profile_xy(*c).is_some()).unwrap();
-        let body = p.add_revolve_axis_ex(sid, vec![cid], qymcad_core::model::RevolveAxis { axis: 1, datum: 0, line: 0 }, qymcad_core::model::RevolveTurn { angle: 180.0, reach: reach });
+        let body = p.add_revolve_axis_ex(sid, vec![cid], qymcad_core::model::RevolveAxis { axis: 1, datum: 0, line: 0 }, qymcad_core::model::RevolveTurn { angle: 180.0, reach });
         let last = p.finish_base_body(body, 1);
         let (report, shapes) = qymcad_testkit::regenerate(&mut p);
         for (id, e) in &report.errors {

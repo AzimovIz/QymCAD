@@ -507,7 +507,7 @@ fn matches(s: &mut Session, want: &Outcome) -> Result<(), String> {
         Outcome::Shade { dark } => {
             let pic = s.snapshot();
             let (mut sum, mut n) = (0u64, 0u64);
-            for px in pic.rgba.chunks_exact(4) {
+            for px in pic.rgba.as_chunks::<4>().0 {
                 sum += (u64::from(px[0]) * 299 + u64::from(px[1]) * 587 + u64::from(px[2]) * 114) / 1000;
                 n += 1;
             }

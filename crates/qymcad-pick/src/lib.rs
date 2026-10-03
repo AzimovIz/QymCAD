@@ -55,7 +55,7 @@ pub fn nearest_sketch_point(pick: &PickCtx, rect: Rect, screen: Pos2, si: usize)
         if is(s.frame, p.id) || s.axis_pts.iter().any(|g| is(*g, p.id)) {
             continue; // the anchor and the guides are the frame, not the drawing
         }
-        let d = (qymcad_ui_state::Sheet { view: *pick.view, rect: rect }).at(Point2::new(p.x, p.y)).distance(screen);
+        let d = (qymcad_ui_state::Sheet { view: *pick.view, rect }).at(Point2::new(p.x, p.y)).distance(screen);
         if d > grab(pick.set, Grab::Point) {
             continue;
         }
@@ -74,7 +74,7 @@ pub fn nearest_sketch_point(pick: &PickCtx, rect: Rect, screen: Pos2, si: usize)
 /// lines, there was never a match, and the half-sketcher opened while not one line could be
 /// selected.
 pub fn nearest_line_id(pick: &PickCtx, rect: Rect, pos: Pos2, si: usize, only: &[Id]) -> Option<Id> {
-    let sh = qymcad_ui_state::Sheet { view: *pick.view, rect: rect };
+    let sh = qymcad_ui_state::Sheet { view: *pick.view, rect };
     use qymcad_core::model::EntityKind;
     let s = pick.project.sketches.get(si)?;
     let mut best: Option<(f32, Id)> = None;
@@ -96,7 +96,7 @@ pub fn nearest_line_id(pick: &PickCtx, rect: Rect, pos: Pos2, si: usize, only: &
 
 /// The line entity nearest to a screen point -> its ends (a, b).
 pub fn nearest_line_entity(pick: &PickCtx, rect: Rect, pos: Pos2, si: usize) -> Option<(Id, Id)> {
-    let sh = qymcad_ui_state::Sheet { view: *pick.view, rect: rect };
+    let sh = qymcad_ui_state::Sheet { view: *pick.view, rect };
     use qymcad_core::model::EntityKind;
     let s = pick.project.sketches.get(si)?;
     // the hierarchy: an ordinary line outranks a construction one (for dimensions and constraints)
@@ -128,7 +128,7 @@ pub fn nearest_vertex(pick: &PickCtx, rect: Rect, pos: Pos2, si: usize) -> Optio
 
 /// The nearest line entity -> the Id of the entity (for trimming).
 pub fn nearest_line_eid(pick: &PickCtx, rect: Rect, pos: Pos2, si: usize) -> Option<Id> {
-    let sh = qymcad_ui_state::Sheet { view: *pick.view, rect: rect };
+    let sh = qymcad_ui_state::Sheet { view: *pick.view, rect };
     use qymcad_core::model::EntityKind;
     let s = pick.project.sketches.get(si)?;
     let mut best: Option<(f32, Id)> = None;
@@ -167,7 +167,7 @@ pub fn arc_screen_dist(sh: &qymcad_ui_state::Sheet, pos: Pos2, c: Point2, pa: Po
 /// The circle or arc entity nearest to a screen point -> its Id. It catches both the outline and the
 /// diameter or radius label (the position of the label is where `draw_sketch_dims` draws it).
 pub fn nearest_circle_entity(pick: &PickCtx, rect: Rect, pos: Pos2, si: usize) -> Option<Id> {
-    let sh = qymcad_ui_state::Sheet { view: *pick.view, rect: rect };
+    let sh = qymcad_ui_state::Sheet { view: *pick.view, rect };
     use qymcad_core::model::EntityKind;
     let s = pick.project.sketches.get(si)?;
     let mut best: Option<(f32, Id)> = None;
@@ -356,7 +356,7 @@ pub fn body_bbox_hit(pn: &Painting, body: qymcad_core::model::Id, rect: Rect, po
     };
     let (mut lo, mut hi) = (Pos2::new(f32::MAX, f32::MAX), Pos2::new(f32::MIN, f32::MIN));
     for w in corners {
-        let p = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: basis }.at(w).0;
+        let p = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis }.at(w).0;
         lo = Pos2::new(lo.x.min(p.x), lo.y.min(p.y));
         hi = Pos2::new(hi.x.max(p.x), hi.y.max(p.y));
     }
@@ -481,7 +481,7 @@ pub fn edge_at(active_path: &[Id], cam: Cam3, edges: &EdgeCache, project: &Proje
     // is available where it is ALONE. Both are reachable.
     let mut best: Option<(f32, f32, usize)> = None; // (the least distance, the screen length, the index)
     for (i, poly) in edges.polys.iter().enumerate() {
-        let pts: Vec<Pos2> = poly.iter().map(|p| qymcad_ui_state::Screen { cam: &cam, set: set, rect: rect, basis: &basis }.at(tp(p)).0).collect();
+        let pts: Vec<Pos2> = poly.iter().map(|p| qymcad_ui_state::Screen { cam: &cam, set, rect, basis: &basis }.at(tp(p)).0).collect();
         let (mut d, mut slen) = (f32::MAX, 0.0f32);
         for k in 0..pts.len().saturating_sub(1) {
             d = d.min(screen_dist_seg(screen, pts[k], pts[k + 1]));
@@ -587,7 +587,7 @@ pub fn pick_sketch_plane_at(pn: &Painting, rect: Rect, screen: Pos2) -> Option<q
     let mut plane_best: Option<(f64, SketchPlane)> = None;
     for (sp, fr) in sketch_plane_candidates(pn) {
         let corners = [fr.lift(Point2::new(-h, -h)), fr.lift(Point2::new(h, -h)), fr.lift(Point2::new(h, h)), fr.lift(Point2::new(-h, h))];
-        let pr: Vec<(Pos2, f64)> = corners.iter().map(|p| qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis }.at([p.x, p.y, p.z])).collect();
+        let pr: Vec<(Pos2, f64)> = corners.iter().map(|p| qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis }.at([p.x, p.y, p.z])).collect();
         if point_in_tri(screen, pr[0].0, pr[1].0, pr[2].0) || point_in_tri(screen, pr[0].0, pr[2].0, pr[3].0) {
             let depth = pr.iter().map(|(_, d)| *d).sum::<f64>() / 4.0;
             if plane_best.is_none_or(|(bd, _)| depth < bd) {
@@ -609,7 +609,7 @@ pub fn pick_sketch_plane_at(pn: &Painting, rect: Rect, screen: Pos2) -> Option<q
 pub fn pick_axis_at(pn: &Painting, rect: Rect, screen: Pos2) -> Option<AxisHit> {
     use qymcad_core::feature::apply12;
     let basis = pn.cam.basis();
-    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
+    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis };
     let ctx = current_ctx_id(pn.active_path, pn.project);
     let mut best: Option<(f32, AxisHit)> = None;
     // 1) the datum axes that exist
@@ -652,7 +652,7 @@ pub fn pick_datum_point_at(pn: &Painting, rect: Rect, pos: Pos2) -> Option<(Id, 
     for d in &pn.project.datum_points {
         let Some(wt) = datum_render_transform(pn, d.id) else { continue };
         let w = apply12(&wt, d.at);
-        let dist = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis }.at(w).0.distance(pos);
+        let dist = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis }.at(w).0.distance(pos);
         if best.is_none_or(|(bd, _, _)| dist < bd) {
             best = Some((dist, d.id, w));
         }
@@ -697,7 +697,7 @@ pub fn pick_vertex_pos(pn: &Painting, rect: Rect, pos: Pos2) -> Option<[f64; 3]>
             }
             for vert in [&poly[0], &poly[poly.len() - 1]] {
                 let w = tp(vert);
-                let d = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis }.at(w).0.distance(pos);
+                let d = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis }.at(w).0.distance(pos);
                 if best.is_none_or(|(bd, _)| d < bd) {
                     best = Some((d, w));
                 }
@@ -713,7 +713,7 @@ pub fn pick_vertex_pos(pn: &Painting, rect: Rect, pos: Pos2) -> Option<[f64; 3]>
 pub fn pick_edge_point(pn: &Painting, rect: Rect, pos: Pos2) -> Option<[f64; 3]> {
     use qymcad_core::feature::{apply12, is_identity12};
     let basis = pn.cam.basis();
-    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
+    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis };
     let ctx = current_ctx_id(pn.active_path, pn.project);
     let mut best: Option<(f32, [f64; 3])> = None;
     for (_mi, body) in qymcad_ui_state::shown_bodies(pn) {
@@ -776,7 +776,7 @@ pub fn pick_part_face_at(pn: &Painting, rect: Rect, screen: Pos2) -> Option<(qym
 pub fn face_under_cursor(pn: &Painting, rect: Rect, screen: Pos2) -> Option<(f64, qymcad_core::model::Id, qymcad_core::feature::FaceKey)> {
     use qymcad_core::feature::FaceKey;
     let basis = pn.cam.basis();
-    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
+    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis };
     let ctx = current_ctx_id(pn.active_path, pn.project);
     // ONLY WHAT IS DRAWN gets picked: the consumed bodies are skipped (except the source of an edit)
     // along with the result of the feature being edited — otherwise stale geometry is caught (the faces
@@ -844,7 +844,7 @@ pub fn face_under_cursor(pn: &Painting, rect: Rect, screen: Pos2) -> Option<(f64
 pub fn pick_cyl_face_axis_at(pn: &Painting, rect: Rect, screen: Pos2) -> Option<AxisHit> {
     use qymcad_core::feature::{apply12, is_identity12};
     let basis = pn.cam.basis();
-    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
+    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis };
     let ctx = current_ctx_id(pn.active_path, pn.project);
     let consumed = consumed_bodies(pn.project);
     let edit_hide = edit_hidden_bodies(pn.cmd, pn.project);
@@ -892,7 +892,7 @@ pub fn pick_cyl_face_axis_at(pn: &Painting, rect: Rect, screen: Pos2) -> Option<
 /// edges meet: the seam of a closed rim and a smooth junction are not corners.
 pub fn edge_or_corner_under(pn: &Painting, rect: Rect, pos: Pos2) -> Option<Sel> {
     let basis = pn.cam.basis();
-    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
+    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis };
     let ctx = current_ctx_id(pn.active_path, pn.project);
     let mut corner: Option<(f32, Sel, [f64; 3])> = None;
     let mut edge: Option<(f32, Sel, [f64; 3])> = None;
@@ -969,7 +969,7 @@ pub fn pick_edge_any(pn: &Painting, rect: Rect, pos: Pos2) -> Option<(Id, u32)> 
             if id == 0 {
                 continue;
             }
-            let sp: Vec<Pos2> = poly.iter().map(|p| qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis }.at(tp(p)).0).collect();
+            let sp: Vec<Pos2> = poly.iter().map(|p| qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis }.at(tp(p)).0).collect();
             for k in 0..sp.len().saturating_sub(1) {
                 let d = screen_dist_seg(pos, sp[k], sp[k + 1]);
                 if best.is_none_or(|(bd, _, _)| d < bd) {
@@ -989,7 +989,7 @@ pub fn pick_edge_any(pn: &Painting, rect: Rect, pos: Pos2) -> Option<(Id, u32)> 
 /// nearer than the corner (0, 0, 10) of a block in plain sight, which was taken as its face.
 pub fn point_not_hidden(pn: &Painting, rect: Rect, w: [f64; 3]) -> bool {
     let basis = pn.cam.basis();
-    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
+    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis };
     let (at, d) = scr.at(w);
     // the depth of the face drawn at that very pixel, not of a point standing for its triangle
     face_under_cursor(pn, rect, at).is_none_or(|(fd, _, _)| d <= fd + 0.5)
@@ -1000,7 +1000,7 @@ pub fn point_not_hidden(pn: &Painting, rect: Rect, w: [f64; 3]) -> bool {
 /// need none of that and are harmed by it - measure a gap and lose the selection of the part.
 pub fn pick_face_ray(pn: &Painting, rect: Rect, screen: Pos2) -> Option<(qymcad_core::model::Id, u32, [f64; 3])> {
     let basis = pn.cam.basis();
-    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
+    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis };
     let ctx = current_ctx_id(pn.active_path, pn.project);
     let consumed = consumed_bodies(pn.project);
     let mut best: Option<(f64, usize, usize, [f64; 3])> = None;
@@ -1050,7 +1050,7 @@ pub fn pick_face_ray(pn: &Painting, rect: Rect, screen: Pos2) -> Option<(qymcad_
 /// miss, or that the triangle has no face.
 pub fn pick_face_persist_id(pn: &Painting, rect: Rect, screen: Pos2) -> Option<u32> {
     let basis = pn.cam.basis();
-    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
+    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis };
     let ctx = current_ctx_id(pn.active_path, pn.project);
     let consumed = consumed_bodies(pn.project);
     let edit_hide = edit_hidden_bodies(pn.cmd, pn.project);
@@ -1096,7 +1096,7 @@ pub fn pick_face_persist_id(pn: &Painting, rect: Rect, screen: Pos2) -> Option<u
 /// `pick_face_3d`.
 pub fn pick_body_at(pn: &Painting, rect: Rect, screen: Pos2) -> Option<usize> {
     let basis = pn.cam.basis();
-    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
+    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis };
     let ctx = current_ctx_id(pn.active_path, pn.project);
     let consumed = consumed_bodies(pn.project);
     let mut best: Option<(f64, usize)> = None;
@@ -1202,7 +1202,7 @@ pub fn pick_vertex_any(pn: &Painting, rect: Rect, pos: Pos2) -> Option<(Id, u32,
                 continue;
             }
             for (end, vert) in [(false, &poly[0]), (true, &poly[poly.len() - 1])] {
-                let d = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis }.at(tp(vert)).0.distance(pos);
+                let d = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis }.at(tp(vert)).0.distance(pos);
                 if best.is_none_or(|(bd, _, _, _)| d < bd) {
                     best = Some((d, body, id, end));
                 }
@@ -1483,7 +1483,7 @@ pub fn sketch_origin_snap(pn: &Painting, rect: Rect, pos: Pos2, sp: &qymcad_core
 /// The positions of the constraint glyphs: (the index of the constraint, the screen point, the symbol).
 /// One source for both drawing and hit testing (deleting by click).
 pub fn constraint_glyphs(pick: &PickCtx, rect: Rect, si: usize) -> Vec<(usize, Pos2, Gly)> {
-    let sh = qymcad_ui_state::Sheet { view: *pick.view, rect: rect };
+    let sh = qymcad_ui_state::Sheet { view: *pick.view, rect };
     use qymcad_core::model::Constraint;
     let Some(s) = pick.project.sketches.get(si) else { return Vec::new() };
     let pt = |id: Id| s.points.iter().find(|p| p.id == id).map(|p| Point2::new(p.x, p.y));
@@ -1614,7 +1614,7 @@ pub fn infer_mate_anchor(pn: &qymcad_ui_state::Painting, rect: Rect, pos: Pos2) 
         }
     };
     let basis = pn.cam.basis();
-    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
+    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis };
     let ctx = qymcad_ui_state::current_ctx_id(pn.active_path, pn.project);
     // THE CENTRE OF THE FACE UNDER THE CURSOR is as much a snap point as a vertex and takes part
     // on equal terms.

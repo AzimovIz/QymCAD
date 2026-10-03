@@ -246,7 +246,7 @@ pub(in crate::gui) mod tests {
 
         // A COUNTER-CLOCKWISE DRAG on screen: the cursor at twelve o'clock relative to the centre, moving
         // left. On screen y grows DOWNWARDS, so twelve o'clock is minus y.
-        let center = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: rect, basis: &basis }.at([0.0; 3]).0;
+        let center = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect, basis: &basis }.at([0.0; 3]).0;
         let cursor = center + egui::vec2(0.0, -80.0);
         qymcad_assembly::joint_giz_drag_to(&mut app.joint_ctx(), cursor, egui::vec2(-6.0, 0.0), rect, &basis);
 

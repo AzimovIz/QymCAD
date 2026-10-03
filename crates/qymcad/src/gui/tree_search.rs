@@ -70,7 +70,7 @@ mod tests {
         // a word from the label is taken — that is how people type
         let word = label.split_whitespace().find(|w| w.chars().any(|c| c.is_alphabetic())).expect("a word in the label").to_string();
 
-        app.tree.search = (&word).to_string();
+        app.tree.search = word.to_string();
         let got = matching(&app);
         assert!(got.contains(&sample), "the feature \"{label}\" was not found by the word \"{word}\" from its own label");
     }
@@ -84,7 +84,7 @@ mod tests {
         let label = crate::gui::panels_tree::feature_row_label(&app.project, sample);
         let word = label.split_whitespace().find(|w| w.chars().any(|c| c.is_alphabetic())).expect("a word").to_string();
 
-        app.tree.search = (&word.to_uppercase()).to_string();
+        app.tree.search = word.to_uppercase().to_string();
         assert!(matching(&app).contains(&sample), "the search for \"{}\" did not find \"{label}\" — case must not get in the way", word.to_uppercase());
     }
 
@@ -172,7 +172,7 @@ mod tests {
         for ch in "extrusion".chars() {
             let mut q = app.tree.search.clone();
             q.push(ch);
-            app.tree.search = (&q).to_string();
+            app.tree.search = q.to_string();
             let w = width(&mut app);
             assert!(w <= base + 1.0, "the tree panel has drifted: it was {base}, it became {w} after \"{q}\" — the width of the field must not depend on the width of the panel");
         }

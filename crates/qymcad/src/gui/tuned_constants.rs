@@ -115,7 +115,7 @@ mod tests {
             qymcad_ui_state::commit_edit(&mut app.rebuild_ctx());
         }
         assert!(app.disk.edits.undo.len() <= 3, "{} undo steps with a limit of 3 — the setting has no effect", app.disk.edits.undo.len());
-        assert!(app.disk.edits.undo.len() > 0, "the limit ate the WHOLE history — there will be nothing left to undo");
+        assert!(!app.disk.edits.undo.is_empty(), "the limit ate the WHOLE history — there will be nothing left to undo");
     }
 
     /// THE FIELD OF VIEW CHANGES THE PROJECTION rather than only a number in a window.

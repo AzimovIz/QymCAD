@@ -318,7 +318,7 @@ probe! {
         // the name is asked beside the cursor: the part it came from with "piece" after it, to keep or retype
         let from = s.document().parts.iter().find(|p| !p.assembly).map(|p| p.name.clone()).unwrap_or_default();
         let offered = s.word("piece-part-name-offered").replace("{$name}", &from);
-        assert!(s.words().iter().any(|w| *w == offered), "the name {offered:?} is not offered; on screen: {:?}", s.words());
+        assert!(s.words().contains(&offered), "the name {offered:?} is not offered; on screen: {:?}", s.words());
         s.key(Key::Enter);
         let doc = s.document();
         assert!(doc.parts.iter().any(|p| p.name == offered), "no part is named {offered:?}: {:?}", doc.parts.iter().map(|p| &p.name).collect::<Vec<_>>());

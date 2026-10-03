@@ -147,7 +147,7 @@ pub fn joint_ring_screen_dist(dc: &qymcad_ui_state::DrawCtx, o: [f64; 3], dir: [
     for k in 0..=48 {
         let a = k as f64 / 48.0 * std::f64::consts::TAU;
         let p = [o[0] + l * (u[0] * a.cos() + v[0] * a.sin()), o[1] + l * (u[1] * a.cos() + v[1] * a.sin()), o[2] + l * (u[2] * a.cos() + v[2] * a.sin())];
-        let s = qymcad_ui_state::Screen { cam: dc.cam, set: dc.set, rect: rect, basis: basis }.at(p).0;
+        let s = qymcad_ui_state::Screen { cam: dc.cam, set: dc.set, rect, basis }.at(p).0;
         if let Some(pr) = prev {
             dmin = dmin.min(qymcad_ui_state::screen_dist_seg(pp, pr, s));
         }
@@ -474,7 +474,7 @@ pub fn joint_handle_hit(jc: &mut qymcad_ui_state::JointCtx, jid: Id, rect: Rect,
     // the translation arrows first
     for &qymcad_ui_state::JointHandle { slot, ring, dir } in hs.iter().filter(|h| !h.ring) {
         let _ = ring;
-        let scr = qymcad_ui_state::Screen { cam: jc.cam, set: jc.set, rect: rect, basis: basis };
+        let scr = qymcad_ui_state::Screen { cam: jc.cam, set: jc.set, rect, basis };
         let s0 = scr.at(o).0;
         let s1 = scr.at([o[0] + dir[0] * l, o[1] + dir[1] * l, o[2] + dir[2] * l]).0;
         if qymcad_ui_state::screen_dist_seg(pp, s0, s1) <= 13.0 {
@@ -1558,7 +1558,7 @@ pub fn joint_grab_part(jc: &mut qymcad_ui_state::JointCtx, body: Id, rect: Rect,
         return false; // no freedoms left - there is nothing to drive
     }
     // THE AXIS OF A DEGREE ON SCREEN, compared with the direction of the pull.
-    let scr = qymcad_ui_state::Screen { cam: jc.cam, set: jc.set, rect: rect, basis: basis };
+    let scr = qymcad_ui_state::Screen { cam: jc.cam, set: jc.set, rect, basis };
     let centre = scr.at(o).0;
     let len = 60.0 / jc.cam.scale as f64;
     let mut best: Option<(f64, u8, bool)> = None;

@@ -87,7 +87,7 @@ probe! {
         s.answer_file(&path);
         let now = parts(&mut s);
         assert!(now.len() > before, "the file brought in no component: the assembly holds {:?}", now.iter().map(|p| p.name.clone()).collect::<Vec<_>>());
-        let brought = s.document().bodies.into_iter().filter(|b| !b.consumed && !b.sheet).last().expect("the body that came in");
+        let brought = s.document().bodies.into_iter().filter(|b| !b.consumed && !b.sheet).next_back().expect("the body that came in");
         assert!((brought.volume - 12000.0).abs() < 1.0, "the block that came in holds 12000, and it holds {}", brought.volume);
     }
 }

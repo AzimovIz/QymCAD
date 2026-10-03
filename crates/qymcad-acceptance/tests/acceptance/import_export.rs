@@ -151,7 +151,7 @@ probe! {
         s.press_word_near(&cm, qymcad::pos2(1200.0, 600.0));
         let go = s.word("import-scale-import");
         s.press_word_near(&go, qymcad::pos2(1200.0, 700.0));
-        let body = s.document().bodies.into_iter().filter(|b| !b.consumed && !b.sheet).next_back().expect("the body that came in");
+        let body = s.document().bodies.into_iter().rfind(|b| !b.consumed && !b.sheet).expect("the body that came in");
         let across = body.max[0] - body.min[0];
         assert!((across - 400.0).abs() < 0.1, "a block of 40 read as centimetres is 400 across, and it is {across}");
     }
@@ -365,7 +365,7 @@ probe! {
         s.fill(&factor, "2");
         let go = s.word("import-scale-import");
         s.press_word_near(&go, qymcad::pos2(1200.0, 700.0));
-        let body = s.document().bodies.into_iter().filter(|b| !b.consumed && !b.sheet).next_back().expect("the body that came in");
+        let body = s.document().bodies.into_iter().rfind(|b| !b.consumed && !b.sheet).expect("the body that came in");
         let across = body.max[0] - body.min[0];
         assert!((across - 80.0).abs() < 0.1, "a block of 40 taken at twice its size is 80 across, and it is {across}");
     }

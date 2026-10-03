@@ -3495,7 +3495,7 @@ impl Project {
 
     /// Operation using the first closed contour of a sketch against body `src`.
     pub fn add_combine(&mut self, src: Id, sketch: Id, height: f64, op: u8) -> Id {
-        self.add_combine_on(src, sketch, 0, crate::model::CombineSpan { height: height, down: 0.0, extent: crate::feature::Extent::default(), fill: &[] }, op)
+        self.add_combine_on(src, sketch, 0, crate::model::CombineSpan { height, down: 0.0, extent: crate::feature::Extent::default(), fill: &[] }, op)
     }
 
     /// Capture geometric snapshots of faces `faces` of body `src` and attach them to feature `fid`, the way
@@ -3771,7 +3771,7 @@ impl Project {
     pub fn add_linear_array_grid(&mut self, src: Id, a: ArrayAxis, b: ArrayAxis) -> Id {
         let ([dx, dy, dz], count) = (a.d, a.count);
         let ([dx2, dy2, dz2], count2) = (b.d, b.count);
-        self.add_linear_array_grid3(src, [ArrayAxis { d: [dx, dy, dz], count: count }, ArrayAxis { d: [dx2, dy2, dz2], count: count2 }, ArrayAxis::none()])
+        self.add_linear_array_grid3(src, [ArrayAxis { d: [dx, dy, dz], count }, ArrayAxis { d: [dx2, dy2, dz2], count: count2 }, ArrayAxis::none()])
     }
 
     /// Add a circular pattern of body `src`: `count` copies over `angle` degrees. `axis` is a datum axis id,
@@ -3916,7 +3916,7 @@ impl Project {
     /// resolved from that face on every rebuild, so the hole travels with the face. The stored
     /// `face.centroid` and `face.normal` are kept as a fallback fingerprint.
     pub fn add_hole(&mut self, src: Id, face: crate::feature::FaceKey, diameter: f64, depth: f64) -> Id {
-        self.add_hole_typed(src, face, HoleTool { kind: 0, diameter: diameter, depth: depth, dia2: 0.0, depth2: 0.0 })
+        self.add_hole_typed(src, face, HoleTool { kind: 0, diameter, depth, dia2: 0.0, depth2: 0.0 })
     }
 
     /// Copy of the project without the bytes of the embedded sources. The `sources` records themselves stay,

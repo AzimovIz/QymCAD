@@ -213,9 +213,9 @@ probe! {
         let after_first = s.document().sketches[0].lines;
         assert!(after_first == 2, "the first Esc did not break off the chain and left {after_first} line(s)");
         let tool = s.word("tool-line");
-        assert!(s.in_hand().iter().any(|w| *w == tool), "the first Esc put the tool down as well: the bar says {:?}", s.in_hand());
+        assert!(s.in_hand().contains(&tool), "the first Esc put the tool down as well: the bar says {:?}", s.in_hand());
         s.key(Key::Escape);
-        assert!(!s.in_hand().iter().any(|w| *w == tool), "the second Esc did not put the tool down: the bar says {:?}", s.in_hand());
+        assert!(!s.in_hand().contains(&tool), "the second Esc did not put the tool down: the bar says {:?}", s.in_hand());
         build::pick(&mut s, 10.0, 0.0, false);
         assert!(picked(&mut s) == 1, "the line was not picked");
         s.key(Key::Escape);

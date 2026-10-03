@@ -399,7 +399,7 @@ pub const MAX_SKETCH_LENGTH: f64 = 10000.0;
 pub fn sketch_hit(pick: &qymcad_ui_state::PickCtx, rect: Rect, pos: Pos2, si: usize) -> Option<(u8, Id)> {
     // a system id of 0 means "not materialised yet" and must not match a real point
     let p_eq = |sys: Id, id: Id| sys != 0 && sys == id;
-    let sh = qymcad_ui_state::Sheet { view: *pick.view, rect: rect };
+    let sh = qymcad_ui_state::Sheet { view: *pick.view, rect };
     use qymcad_core::model::EntityKind;
     let s = pick.project.sketches.get(si)?;
     let pt = |id: Id| s.points.iter().find(|p| p.id == id).map(|p| Point2::new(p.x, p.y));
@@ -652,7 +652,7 @@ pub fn ellipse_input_popup(pl: &mut qymcad_ui_state::PlaceCtx, ctx: &egui::Conte
         let cur = pl.project.ellipse_axes(si, handle);
         if let Some((rx, ry)) = cur {
             let (w0, h0) = (2.0 * rx, 2.0 * ry);
-            let at = (qymcad_ui_state::Sheet { view: *pl.view, rect: rect }).at(Point2::new(click.x + rx, click.y + ry));
+            let at = (qymcad_ui_state::Sheet { view: *pl.view, rect }).at(Point2::new(click.x + rx, click.y + ry));
             let want_focus = std::mem::take(&mut pl.place.focus);
             if want_focus {
                 pl.place.buf[0] = format!("{}", (w0 * 1000.0).round() / 1000.0);
@@ -707,7 +707,7 @@ pub fn rect_input_popup(pl: &mut qymcad_ui_state::PlaceCtx, ctx: &egui::Context,
     if let Some((a, b, ids)) = pl.place.rect() {
         let (w0, h0) = ((b.x - a.x).abs(), (b.y - a.y).abs());
         let (sx, sy) = ((b.x - a.x).signum(), (b.y - a.y).signum());
-        let at = (qymcad_ui_state::Sheet { view: *pl.view, rect: rect }).at(Point2::new(a.x.max(b.x), a.y.max(b.y)));
+        let at = (qymcad_ui_state::Sheet { view: *pl.view, rect }).at(Point2::new(a.x.max(b.x), a.y.max(b.y)));
         let want_focus = std::mem::take(&mut pl.place.focus);
         if want_focus {
             pl.place.buf[0] = format!("{}", (w0 * 1000.0).round() / 1000.0);
@@ -761,7 +761,7 @@ pub fn poly_input_popup(pl: &mut qymcad_ui_state::PlaceCtx, ctx: &egui::Context,
     // a polygon: the radius of the construction circle plus the rotation angle (it is rebuilt)
     if let Some(cid) = pl.place.poly() {
         if let (Some((cx, cy, r)), Some(ang)) = (pl.project.polygon_circle(si, cid), pl.project.polygon_angle(si, cid)) {
-            let at = (qymcad_ui_state::Sheet { view: *pl.view, rect: rect }).at(Point2::new(cx + r, cy));
+            let at = (qymcad_ui_state::Sheet { view: *pl.view, rect }).at(Point2::new(cx + r, cy));
             let want_focus = std::mem::take(&mut pl.place.focus);
             if want_focus {
                 pl.place.buf[0] = format!("{}", (r * 1000.0).round() / 1000.0);
@@ -1019,7 +1019,7 @@ pub fn sketch_rotate_popup(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Cont
         return;
     }
     let rot = &mut *sk.rot;
-    let at = (qymcad_ui_state::Sheet { view: *sk.view, rect: rect }).at(base);
+    let at = (qymcad_ui_state::Sheet { view: *sk.view, rect }).at(base);
     let want_focus = std::mem::take(&mut rot.focus);
     let enter = ctx.input(|i| i.key_pressed(egui::Key::Enter));
     let (mut chg, mut apply, mut got_focus) = (false, false, false);
@@ -1322,7 +1322,7 @@ pub fn sketch_status(sk: &mut qymcad_ui_state::SketchCtx, si: usize) -> ((i32, i
 /// The underlay edge under the cursor (the name of the edge plus the body), by distance in SCREEN pixels,
 /// as with every other sketch pick: in world millimetres the threshold would depend on the zoom.
 pub fn nearest_ref_edge(sk: &mut qymcad_ui_state::SketchCtx, si: usize, rect: Rect, pos: Pos2) -> Option<(Id, u32)> {
-    let sh = qymcad_ui_state::Sheet { view: *sk.view, rect: rect };
+    let sh = qymcad_ui_state::Sheet { view: *sk.view, rect };
     let (body, edges) = sketch_ref_edges_2d_ids(sk, si);
     if body == 0 {
         return None;
@@ -1395,7 +1395,7 @@ pub fn sketch_ref_edges_2d_ids(sk: &mut qymcad_ui_state::SketchCtx, si: usize) -
 
 /// The index of the dimension (a distance or an angle) whose caption is nearest to a screen point.
 pub fn dim_at(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos2, si: usize) -> Option<usize> {
-    let sh = qymcad_ui_state::Sheet { view: *sk.view, rect: rect };
+    let sh = qymcad_ui_state::Sheet { view: *sk.view, rect };
     use qymcad_core::model::Constraint;
     // THE CONSTRAINTS ARE COPIED OUT FIRST. The loop calls back into the context (`dim_label_pos`), and a
     // reference into the document held across that call borrows the same record twice.
@@ -1430,7 +1430,7 @@ pub fn dim_label_pos(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, si: usize,
 /// WHERE THE TEXT OF A DIMENSION STANDS AND HOW MUCH ROOM IT TAKES - its middle, its size and its turn - from the same
 /// geometry the drawing uses, so the text is taken where the eye sees it.
 pub fn dim_label_box(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, si: usize, ci: usize) -> Option<(Pos2, egui::Vec2, f32)> {
-    let sh = qymcad_ui_state::Sheet { view: *sk.view, rect: rect };
+    let sh = qymcad_ui_state::Sheet { view: *sk.view, rect };
     use qymcad_core::model::Constraint;
     let c = sk.project.sketches.get(si)?.constraints.get(ci)?.clone();
     let size = qymcad_ui_state::dim_text_size(&qymcad_ui_state::dim_caption(sk.project, si, &c, sk.set)?, sk.set.dim_font);
@@ -1524,7 +1524,7 @@ fn put_angle_label(project: &mut Project, si: usize, ci: usize, (r, t): (f64, Op
 
 /// While the dimension follows the cursor, its offset (`off`) is updated to match.
 pub fn update_placing_dim(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect) {
-    let sh = qymcad_ui_state::Sheet { view: *sk.view, rect: rect };
+    let sh = qymcad_ui_state::Sheet { view: *sk.view, rect };
     use qymcad_core::model::Constraint;
     let Some(ci) = sk.place.dim else { return };
     let qymcad_ui_state::Sel::Sketch(si) = *sk.sel else {
@@ -1690,7 +1690,7 @@ pub fn dim_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos
                 .filter(|p| *p != la && *p != lb)
                 .map(qymcad_ui_state::DimRef::Point)
                 .or_else(|| {
-                    let o = (qymcad_ui_state::Sheet { view: *sk.view, rect: rect }).at(Point2::new(0.0, 0.0));
+                    let o = (qymcad_ui_state::Sheet { view: *sk.view, rect }).at(Point2::new(0.0, 0.0));
                     if (pos.y - o.y).abs() <= qymcad_ui_state::grab::grab(&*sk.set, Grab::Guide) {
                         let (a, b) = sk.project.ensure_axis(si, 0);
                         Some(qymcad_ui_state::DimRef::Line(a, b))
@@ -1912,7 +1912,7 @@ pub fn tool_for_action(action: &str) -> Option<u8> {
 }
 
 pub fn sketch_select_click(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos2, additive: bool) {
-    let sh = qymcad_ui_state::Sheet { view: *sk.view, rect: rect };
+    let sh = qymcad_ui_state::Sheet { view: *sk.view, rect };
     let qymcad_ui_state::Sel::Sketch(si) = *sk.sel else { return };
     // a click on a text object picks it (Del removes it, a double click edits the string or the height,
     // dragging moves it)
@@ -2037,7 +2037,7 @@ pub fn dim_editor(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context, rect
             _ => None,
         });
         if let (Some((_center, r, is_arc)), Some(cp)) = (info, info.and_then(|(c, ..)| qymcad_ui_state::sketch_pt(&*sk.project, si, c))) {
-            let at = (qymcad_ui_state::Sheet { view: *sk.view, rect: rect }).at(Point2::new(cp.x + r, cp.y));
+            let at = (qymcad_ui_state::Sheet { view: *sk.view, rect }).at(Point2::new(cp.x + r, cp.y));
             let mut rr = r;
             let (mut chg, mut close) = (false, false);
             let want_focus = sk.dim.focus;
@@ -2800,7 +2800,7 @@ pub fn sketch_drag_start(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Contex
     if qymcad_ui_state::Gesture::chord_held(ctx) {
         return;
     }
-    let sh = qymcad_ui_state::Sheet { view: *sk.view, rect: rect };
+    let sh = qymcad_ui_state::Sheet { view: *sk.view, rect };
     if resp.drag_started() && ctx.input(|i| i.pointer.button_down(egui::PointerButton::Primary)) {
         // WHAT IS TAKEN IS WHAT WAS PRESSED ON. egui decides that a press is a drag once the pointer is
         // 6 px away from it, and a point is taken within 8 px: looked for under the pointer at that
@@ -3057,7 +3057,7 @@ pub fn translate_selected(sk: &mut qymcad_ui_state::SketchCtx, dx: f64, dy: f64)
 /// The reference object under the cursor: a point or centre > the midpoint of a line > the origin.
 /// Used for dimensions and constraints between any geometry.
 pub fn resolve_sketch_ref(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos2, si: usize) -> Option<qymcad_ui_state::SketchRef> {
-    let sh = qymcad_ui_state::Sheet { view: *sk.view, rect: rect };
+    let sh = qymcad_ui_state::Sheet { view: *sk.view, rect };
     use qymcad_core::model::EntityKind;
     // 1) the nearest point (the centres of circles and arcs are points too)
     if let Some(id) = qymcad_pick::nearest_sketch_point(&sk.pick(), rect, pos, si) {
@@ -3115,7 +3115,7 @@ pub fn resolve_dim_ref(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos
         }
     }
     // 3) a coordinate axis
-    let o = (qymcad_ui_state::Sheet { view: *sk.view, rect: rect }).at(Point2::new(0.0, 0.0));
+    let o = (qymcad_ui_state::Sheet { view: *sk.view, rect }).at(Point2::new(0.0, 0.0));
     if (pos.y - o.y).abs() <= qymcad_ui_state::grab::grab(sk.set, Grab::Guide) {
         let (a, b) = sk.project.ensure_axis(si, 0);
         return Some(qymcad_ui_state::DimRef::Line(a, b));
@@ -3156,7 +3156,7 @@ pub fn ref_edge_at(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos2, s
 /// an arc gives a radius (diam = false). A circle's label sits in the off=0 style (to the right,
 /// beyond the rim); an arc's sits by the middle of the arc, where the passive leader draws it.
 pub fn passive_radius_label_at(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos2, si: usize) -> Option<(Id, bool)> {
-    let sh = qymcad_ui_state::Sheet { view: *sk.view, rect: rect };
+    let sh = qymcad_ui_state::Sheet { view: *sk.view, rect };
     use qymcad_core::model::{Constraint, EntityKind};
     let s = sk.project.sketches.get(si)?;
     for e in &s.entities {
@@ -3213,7 +3213,7 @@ pub fn power_trim_path_test_continue(sk: &mut qymcad_ui_state::SketchCtx, rect: 
 }
 
 pub fn sketch_drag_update(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context, resp: &egui::Response, rect: Rect) {
-    let sh = qymcad_ui_state::Sheet { view: *sk.view, rect: rect };
+    let sh = qymcad_ui_state::Sheet { view: *sk.view, rect };
     if let Some(ti) = sk.drag.text() {
         // moving a text object (it shifts the parameters, the baked glyphs and the contours)
         if resp.dragged() {
@@ -3314,7 +3314,7 @@ pub fn sketch_drag_update(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Conte
                     let dadd = dadd / sk.view.scale as f64; // a screen delta becomes WORLD units, so the offset scales with the zoom
                                                             // THE TEXT GOES ALONG THE LINE TOO: the part of the move along the dimension line carries the text
                                                             // there, past an arrow onto a shelf, while the part across it moves the line
-                    let led = qymcad_ui_state::linear_text_led(&*sk.project, si, ci, &sh, &*sk.set, dl);
+                    let led = qymcad_ui_state::linear_text_led(&*sk.project, si, ci, &sh, sk.set, dl);
                     if let Some(Constraint::Distance { off, at, .. }) | Some(Constraint::DistancePL { off, at, .. }) | Some(Constraint::EdgeDistance { off, at, .. }) =
                         sk.project.sketches[si].constraints.get_mut(ci)
                     {

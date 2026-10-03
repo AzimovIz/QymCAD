@@ -601,14 +601,7 @@ impl Project {
     /// the id of a sketch centreline (zero means none) and takes priority over the datum and the sketch axes.
     /// The axis has to lie in the sketch plane.
     pub fn add_revolve_axis(&mut self, sketch: Id, profiles: Vec<Id>, axis: u8, angle: f64, axis_datum: Id, axis_line: Id) -> Id {
-        self.add_revolve_multi_op(
-            sketch,
-            profiles,
-            super::RevolveAxis { axis: axis, datum: axis_datum, line: axis_line },
-            super::RevolveTurn { angle: angle, reach: crate::feature::Reach::default() },
-            0,
-            1,
-        )
+        self.add_revolve_multi_op(sketch, profiles, super::RevolveAxis { axis, datum: axis_datum, line: axis_line }, super::RevolveTurn { angle, reach: crate::feature::Reach::default() }, 0, 1)
     }
 
     /// Revolve every contour and apply the boolean against body `src` within one node.
@@ -637,7 +630,7 @@ impl Project {
     /// Revolve with the direction the angle is swept in: forwards, back, or half each way.
     pub fn add_revolve_axis_ex(&mut self, sketch: Id, profiles: Vec<Id>, ax: super::RevolveAxis, turn: super::RevolveTurn) -> Id {
         let (super::RevolveAxis { axis, datum: axis_datum, line: axis_line }, super::RevolveTurn { angle, reach }) = (ax, turn);
-        self.add_revolve_multi_op(sketch, profiles, super::RevolveAxis { axis: axis, datum: axis_datum, line: axis_line }, super::RevolveTurn { angle: angle, reach: reach }, 0, 1)
+        self.add_revolve_multi_op(sketch, profiles, super::RevolveAxis { axis, datum: axis_datum, line: axis_line }, super::RevolveTurn { angle, reach }, 0, 1)
     }
 
     /// Sweep: a profile (`sketch`, `profile`) along a path (`path_sketch`, `path`). A zero `profile` or `path`

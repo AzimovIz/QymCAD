@@ -465,7 +465,7 @@ fn long_thread_builds_via_segmentation() {
             axis: qymcad_core::feature::AxisLine { origin: [0.0, 0.0, 0.0], dir: [0.0, 0.0, 1.0] },
             radius: 5.0,
             length: len,
-            pitch: pitch,
+            pitch,
             angle_deg: 60.0,
             depth: 0.6,
             starts: 1,

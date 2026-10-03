@@ -126,7 +126,7 @@ fn matrix_holes() {
             None => fails.push(format!("{label}: top face not found")),
             Some(f) => {
                 let key = qymcad_core::feature::FaceKey { index: 0, centroid: [f.centroid.x, f.centroid.y, f.centroid.z], normal: f.normal, id: f.id };
-                let h = p.add_hole_typed(cube, key, qymcad_core::model::HoleTool { kind: kind, diameter: dia, depth: depth, dia2: dia2, depth2: depth2 });
+                let h = p.add_hole_typed(cube, key, qymcad_core::model::HoleTool { kind, diameter: dia, depth, dia2, depth2 });
                 let label = format!("hole {label}");
                 let v = regen_v(&mut p, h, &mut fails, &label);
                 check(&mut fails, &label, v, 8000.0 - cut, 0.01);

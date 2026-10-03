@@ -22,7 +22,7 @@ fn a_directory_with_a_font() -> (std::path::PathBuf, Vec<u8>) {
 #[test]
 fn the_walk_finds_a_font_by_its_own_name_and_ignores_what_is_not_one() {
     let (dir, _) = a_directory_with_a_font();
-    let found = qymcad_ui_state::installed_fonts_in(&[dir.clone()]);
+    let found = qymcad_ui_state::installed_fonts_in(std::slice::from_ref(&dir));
     let _ = std::fs::remove_dir_all(&dir);
 
     assert_eq!(found.len(), 1, "one font lies there, and the walk found {}: {found:?}", found.len());
@@ -125,7 +125,7 @@ fn two_files_with_the_same_name_are_told_apart_in_the_list() {
     other.extend_from_slice(&[0u8; 16]);
     std::fs::write(root.join("Second edition.ttf"), &other).expect("written");
 
-    let found = qymcad_ui_state::installed_fonts_in(&[root.clone()]);
+    let found = qymcad_ui_state::installed_fonts_in(std::slice::from_ref(&root));
     let _ = std::fs::remove_dir_all(&root);
     assert_eq!(found.len(), 2, "two different files came out as {} rows", found.len());
     let lines: Vec<String> = found.iter().map(qymcad_ui_state::font_row_text).collect();

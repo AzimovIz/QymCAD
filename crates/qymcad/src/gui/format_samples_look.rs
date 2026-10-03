@@ -453,7 +453,7 @@ mod tests {
         let only = std::env::var("QYM_SAMPLE").ok();
         let mut files: Vec<std::path::PathBuf> =
             std::fs::read_dir(&dir).expect("the folder reads").flatten().map(|e| e.path()).filter(|p| p.is_file() && qymcad_io::Format::of_path(&p.to_string_lossy()).is_some()).collect();
-        if let Some(sub) = std::fs::read_dir(&dir).ok() {
+        if let Ok(sub) = std::fs::read_dir(&dir) {
             for e in sub.flatten().filter(|e| e.path().is_dir() && e.file_name() != "shots") {
                 files.extend(std::fs::read_dir(e.path()).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| qymcad_io::Format::of_path(&p.to_string_lossy()).is_some()));
             }

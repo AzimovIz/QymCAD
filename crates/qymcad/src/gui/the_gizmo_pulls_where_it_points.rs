@@ -71,7 +71,7 @@ mod tests {
         let rect = viewport();
         let basis = app.viewing.cam.basis();
         let l = 60.0 / app.viewing.cam.scale as f64;
-        let scr = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: rect, basis: &basis };
+        let scr = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect, basis: &basis };
         let s0 = scr.at(o).0;
         let s1 = scr.at([o[0] + dir[0] * l, o[1] + dir[1] * l, o[2] + dir[2] * l]).0;
         let along = (s1 - s0).normalized();
@@ -105,7 +105,7 @@ mod tests {
         let rect = viewport();
         let basis = app.viewing.cam.basis();
         let l = 60.0 / app.viewing.cam.scale as f64;
-        let scr = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: rect, basis: &basis };
+        let scr = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect, basis: &basis };
         let s0 = scr.at(o).0;
         let s1 = scr.at([o[0] + dir[0] * l, o[1] + dir[1] * l, o[2] + dir[2] * l]).0;
         let along = (s1 - s0).normalized();

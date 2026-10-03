@@ -1435,15 +1435,15 @@ impl Project {
         // hand-picked set is checked this way: for a descriptive query the number of descriptors
         // says nothing about the result.
         let asked_faces = if faces.query.is_pick_list() { faces.query.picked_descs().len() } else { 0 };
-        let job = match self.faces_by_ref(p.node, src, faces, "ref-what-shell-faces") {
+
+        match self.faces_by_ref(p.node, src, faces, "ref-what-shell-faces") {
             Err(_) => crate::feature::KernelJob::refused(crate::errors::CoreError::FacesNotFound),
             Ok(ids) if asked_faces > 0 && ids.len() < asked_faces => crate::feature::KernelJob::refused(crate::errors::CoreError::FacesNotFound),
             Ok(ids) => match side {
                 crate::feature::ShellSide::Centred => crate::feature::KernelJob::new(vec![src], move |k| k.shell_center(body, src, thickness, &ids)),
                 side => crate::feature::KernelJob::new(vec![src], move |k| k.shell_named(body, src, thickness, side == crate::feature::ShellSide::Outward, &ids, &walls)),
             },
-        };
-        job
+        }
     }
 
     fn prep_removeface(&mut self, p: &Pass, src: Id, faces: &crate::refs::Ref, body: Id) -> crate::feature::KernelJob {
@@ -1558,7 +1558,8 @@ impl Project {
         // then a recorded merge, then the single face of a sheet, then a place snapshot.
         let face = self.resolve_face_id(p.node, src, face).unwrap_or(face);
         let alive = self.regen_faces.get(&src).is_some_and(|fs| fs.iter().any(|f| f.id == face));
-        let job = if face == 0 || !alive {
+
+        if face == 0 || !alive {
             crate::feature::KernelJob::refused(crate::errors::CoreError::FaceNotFound)
         } else if t.abs() < 1e-9 {
             crate::feature::KernelJob::refused(crate::errors::CoreError::ZeroThickness)
@@ -1570,8 +1571,7 @@ impl Project {
             let (face_names, edge_names) = self.thicken_names(p.node, src, p.kernel);
             let inputs = if join != 0 { vec![src, join] } else { vec![src] };
             crate::feature::KernelJob::new(inputs, move |k| k.thicken_face(body, src, face, t, join, crate::feature::NameMaps { faces: &face_names, edges: &edge_names }))
-        };
-        job
+        }
     }
 
     /// SplitFace: one branch of the timeline rebuild. Returns whether the node's error record may
@@ -1581,7 +1581,8 @@ impl Project {
         let lost = at.is_none();
         let (o0, n) = at.unwrap_or(([0.0; 3], [0.0, 0.0, 1.0]));
         let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
-        let job = if lost {
+
+        if lost {
             crate::feature::KernelJob::refused(crate::errors::CoreError::SplitPlaneDeleted)
         } else if len < 1e-9 {
             crate::feature::KernelJob::refused(crate::errors::CoreError::ZeroNormal)
@@ -1590,8 +1591,7 @@ impl Project {
             let u = [n[0] / len, n[1] / len, n[2] / len];
             let at = [o0[0] + u[0] * d, o0[1] + u[1] * d, o0[2] + u[2] * d];
             crate::feature::KernelJob::new(vec![src], move |k| k.split_faces(body, src, at, u))
-        };
-        job
+        }
     }
 
     /// Draft: one branch of the timeline rebuild. Returns whether the node's error record may
@@ -1773,7 +1773,8 @@ impl Project {
         // sections produce a body. A zero `src` makes a separate body; otherwise the lofted solid is
         // combined with body `src` as a lofted cut or boss.
         let caps = self.cap_names(p.node);
-        let job = match self.loft_encoded_named(p.node, &sketches, &contours) {
+
+        match self.loft_encoded_named(p.node, &sketches, &contours) {
             // A surface is the same loft, not closed into a solid. It admits no boolean: there is
             // nothing to combine a surface with a body by until it has been given a thickness.
             Some((data, offsets, places)) if src == 0 => crate::feature::KernelJob::new(Vec::new(), move |k| {
@@ -1782,8 +1783,7 @@ impl Project {
             }),
             Some((data, offsets, places)) => crate::feature::KernelJob::new(vec![src], move |k| k.loft_combine(BodyOp { src, op, body }, &data, &offsets, &places, walls(ruled), caps)),
             None => crate::feature::KernelJob::refused(crate::errors::CoreError::LoftNeedsTwoSections),
-        };
-        job
+        }
     }
 
     /// Import: one branch of the timeline rebuild. Returns whether the node's error record may
@@ -1935,7 +1935,8 @@ impl Project {
         let length = p.dim("length", length);
         let lead_in = p.dim("lead_in", lead_in);
         let lead_out = p.dim("lead_out", lead_out);
-        let job = match self.helical_axis(p.kernel, src, edge) {
+
+        match self.helical_axis(p.kernel, src, edge) {
             Some((c, ax, r)) => {
                 match self.thread_verdict(src, (c, ax, r), &mut spec, length) {
                     Err(e) => crate::feature::KernelJob::refused(e),
@@ -1986,8 +1987,7 @@ impl Project {
                 }
             }
             None => crate::feature::KernelJob::refused(crate::errors::CoreError::ThreadRimNotFound),
-        };
-        job
+        }
     }
 
     /// Auger: one branch of the timeline rebuild. Returns whether the node's error record may
@@ -2415,7 +2415,7 @@ impl Project {
             }
             FeatureKind::Thread { src, edge, spec, length, lead_in, lead_out, body } => {
                 let run = HelixRun { src: *src, edge: *edge, length: *length, lead_in: *lead_in, lead_out: *lead_out, body: *body };
-                (*body, self.prep_thread(p, run, spec.clone()))
+                (*body, self.prep_thread(p, run, *spec))
             }
             _ => return None,
         };
@@ -2477,14 +2477,14 @@ impl Project {
         }
         // Encode every contour and extrude them in one node (`combine_region_multi`; a zero `src`
         // makes a new body).
-        let job = match self.encode_profiles_fill(p.node, sketch, profiles, fill) {
+
+        match self.encode_profiles_fill(p.node, sketch, profiles, fill) {
             None => crate::feature::KernelJob::refused(crate::errors::CoreError::ProfileNotFound),
             Some(profs) => {
                 let caps = self.region_cap_names(p.node, &profs);
                 crate::feature::KernelJob::new(Vec::new(), move |k| k.combine_region_multi(BodyOp { src: 0, op: 1, body }, &profs, total, pl, &caps))
             }
-        };
-        job
+        }
     }
 
     /// Revolve: one branch of the timeline rebuild. Returns whether the node's error record may
@@ -2512,7 +2512,8 @@ impl Project {
                 crate::feature::compose12(&pl, &crate::feature::rot12_axis(o, d, theta0))
             }
         };
-        let job = match self.encode_profiles_role(p.node, sketch, profiles, &[], crate::names::Role::Revolved) {
+
+        match self.encode_profiles_role(p.node, sketch, profiles, &[], crate::names::Role::Revolved) {
             None => crate::feature::KernelJob::refused(crate::errors::CoreError::ProfileNotFound),
             Some(profs) => (|| {
                 let caps = self.region_cap_names(p.node, &profs);
@@ -2540,8 +2541,7 @@ impl Project {
                 let inputs = if src != 0 { vec![src] } else { Vec::new() };
                 crate::feature::KernelJob::new(inputs, move |k| k.revolve_region_multi(BodyOp { src, op, body }, &profs, about, angle, place, &caps))
             })(),
-        };
-        job
+        }
     }
 
     /// Sweep: one branch of the timeline rebuild. Returns whether the node's error record may
@@ -2553,7 +2553,8 @@ impl Project {
         let prof_pl = self.sketch_place(sketch);
         let path_pl = self.sketch_place(path_sketch);
         let pth = self.sweep_path_encoded(path_sketch, path);
-        let job = match (self.encode_profiles_role(p.node, sketch, profiles, &[], crate::names::Role::Swept), pth) {
+
+        match (self.encode_profiles_role(p.node, sketch, profiles, &[], crate::names::Role::Swept), pth) {
             (Some(profs), Some(pth)) => {
                 let caps = self.region_cap_names(p.node, &profs);
                 let inputs = if src != 0 { vec![src] } else { Vec::new() };
@@ -2561,8 +2562,7 @@ impl Project {
             }
             (None, _) => crate::feature::KernelJob::refused(crate::errors::CoreError::SweepProfileMissing),
             (_, None) => crate::feature::KernelJob::refused(crate::errors::CoreError::SweepPathMissing),
-        };
-        job
+        }
     }
 
     /// Combine: one branch of the timeline rebuild. Returns whether the node's error record may
@@ -2583,15 +2583,15 @@ impl Project {
         }
         // Encode every tool contour and apply them with a single boolean
         // (`combine_region_multi`).
-        let job = match self.encode_profiles_fill(p.node, sketch, profiles, fill) {
+
+        match self.encode_profiles_fill(p.node, sketch, profiles, fill) {
             None => crate::feature::KernelJob::refused(crate::errors::CoreError::ProfileNotFound),
             Some(profs) => {
                 let caps = self.region_cap_names(p.node, &profs);
                 let inputs = if src != 0 { vec![src] } else { Vec::new() };
                 crate::feature::KernelJob::new(inputs, move |k| k.combine_region_multi(BodyOp { src, op, body }, &profs, h, pl, &caps))
             }
-        };
-        job
+        }
     }
 
     fn live_fillet_edges(&mut self, node_id: Id, src: Id, r: &crate::refs::Ref, emap: &EdgeRenames, kernel: &dyn crate::feature::Kernel) -> Vec<u32> {

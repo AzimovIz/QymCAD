@@ -16,7 +16,7 @@ fn a_block() -> Session {
 
 /// The body of the part, measured: the last one made, which is the one the tools work on.
 fn body(s: &mut Session) -> qymcad::Solid {
-    s.document().bodies.iter().filter(|b| !b.consumed && !b.sheet).last().cloned().unwrap_or_else(|| panic!("the part holds no body"))
+    s.document().bodies.iter().filter(|b| !b.consumed && !b.sheet).next_back().cloned().unwrap_or_else(|| panic!("the part holds no body"))
 }
 
 /// The block with a hole 10 across and 5 deep bored in the middle of its top face.

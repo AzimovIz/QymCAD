@@ -574,7 +574,7 @@ impl Session {
 
     /// HOLD `modifiers` DOWN until [`Session::let_go`], across every gesture in between.
     pub fn hold(&mut self, modifiers: Modifiers) -> &mut Self {
-        self.held = self.held | modifiers;
+        self.held |= modifiers;
         self
     }
 
@@ -1349,7 +1349,7 @@ impl Session {
                     part: comp_name(p.sketch_owner(sk.id)),
                     points: sk.points.iter().filter(|q| !system.contains(&q.id)).count(),
                     places: sk.points.iter().filter(|q| !system.contains(&q.id)).map(|q| [q.x, q.y]).collect(),
-                    picked: if qymcad_ui_state::edit_si(&p, &self.app.sketch_ses) == Some(si) { self.app.tools.sel_sk.items.len() } else { 0 },
+                    picked: if qymcad_ui_state::edit_si(p, &self.app.sketch_ses) == Some(si) { self.app.tools.sel_sk.items.len() } else { 0 },
                     seat: {
                         use qymcad_core::feature::{BasePlane, SketchPlane};
                         match sk.plane {

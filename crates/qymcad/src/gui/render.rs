@@ -110,7 +110,7 @@ pub(crate) fn draw_3d_gpu(pn: &qymcad_ui_state::Painting, painter: &egui::Painte
 
 pub(crate) fn draw_3d(pn: &Painting, painter: &egui::Painter, rect: Rect) {
     let basis = pn.cam.basis();
-    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
+    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis };
     let p3 = |p: [f64; 3]| scr.at(p).0;
 
     // THE FLOOR GRID at Z=0 is the bearing in the 3D view (NOT the machine table: that one sits under

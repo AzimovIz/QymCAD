@@ -170,7 +170,7 @@ impl App {
                         &self.tools.gsel,
                         &self.project,
                         self.feat.flip,
-                        &qymcad_ui_state::Screen { cam: &self.viewing.cam, set: &self.set, rect: rect, basis: basis3 },
+                        &qymcad_ui_state::Screen { cam: &self.viewing.cam, set: &self.set, rect, basis: basis3 },
                         pp,
                     );
                 }
@@ -181,7 +181,7 @@ impl App {
             // the moment of the grab)
             if self.tools.cmd.drag.is_none() && self.side.section.plane.is_some() {
                 if let (Some(qymcad_ui_state::SectionGizmo { tip, .. }), Some(pp)) = (self.section_gizmo_geom(), resp.interact_pointer_pos()) {
-                    if (qymcad_ui_state::Screen { cam: &self.viewing.cam, set: &self.set, rect: rect, basis: basis3 }).at(tip).0.distance(pp) <= 14.0 {
+                    if (qymcad_ui_state::Screen { cam: &self.viewing.cam, set: &self.set, rect, basis: basis3 }).at(tip).0.distance(pp) <= 14.0 {
                         self.side.section.drag = true;
                         self.side.section.drag_anchor = Some((self.side.section.offset, pp));
                     }
@@ -274,8 +274,8 @@ impl App {
                     (self.side.section.drag_anchor, self.side.section.plane, qymcad_ui_state::section_eff(&self.side.section), resp.interact_pointer_pos())
                 {
                     let base = [o0[0], o0[1], o0[2]];
-                    let s0 = qymcad_ui_state::Screen { cam: &self.viewing.cam, set: &self.set, rect: rect, basis: basis3 }.at(base).0;
-                    let s1 = qymcad_ui_state::Screen { cam: &self.viewing.cam, set: &self.set, rect: rect, basis: basis3 }.at([base[0] + n_eff[0], base[1] + n_eff[1], base[2] + n_eff[2]]).0;
+                    let s0 = qymcad_ui_state::Screen { cam: &self.viewing.cam, set: &self.set, rect, basis: basis3 }.at(base).0;
+                    let s1 = qymcad_ui_state::Screen { cam: &self.viewing.cam, set: &self.set, rect, basis: basis3 }.at([base[0] + n_eff[0], base[1] + n_eff[1], base[2] + n_eff[2]]).0;
                     if let Some(new_off) = section_drag_delta_offset(off0, p0, s0, s1, cur) {
                         self.side.section.offset = new_off;
                         qymcad_ui_state::invalidate(&mut self.regen);
@@ -294,7 +294,7 @@ impl App {
                     &self.tools.gsel,
                     &self.project,
                     &mut self.feat,
-                    &qymcad_ui_state::Screen { cam: &self.viewing.cam, set: &self.set, rect: rect, basis: basis3 },
+                    &qymcad_ui_state::Screen { cam: &self.viewing.cam, set: &self.set, rect, basis: basis3 },
                     cur,
                 );
             }

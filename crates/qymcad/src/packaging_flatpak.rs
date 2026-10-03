@@ -152,7 +152,7 @@ mod tests {
                     continue;
                 }
                 let want = format!("{name}-{v}");
-                if !declared.iter().any(|d| *d == want) {
+                if !declared.contains(&want) {
                     missing.push(want);
                 }
             }

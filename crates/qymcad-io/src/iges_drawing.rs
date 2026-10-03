@@ -168,7 +168,7 @@ impl File {
                 _ => {}
             }
         }
-        if d.is_empty() || d.len() % 2 != 0 {
+        if d.is_empty() || !d.len().is_multiple_of(2) {
             return None;
         }
         // the delimiters: a global section may redefine them in its first two fields

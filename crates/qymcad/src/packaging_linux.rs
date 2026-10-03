@@ -135,11 +135,11 @@ mod tests {
     #[test]
     fn the_system_s_own_libraries_are_left_to_the_system() {
         let carried = array("DLOPENED");
-        let packed: Vec<&&str> = HOST_S_OWN.iter().filter(|l| carried.iter().any(|c| &c == *l)).collect();
+        let packed: Vec<&&str> = HOST_S_OWN.iter().filter(|l| carried.iter().any(|c| c == *l)).collect();
         assert!(packed.is_empty(), "the package asks for libraries that have to be the host's own, and breaks the machines that have them: {packed:?}");
 
         let refused = array("NEVER_CARRY");
-        let unguarded: Vec<&&str> = HOST_S_OWN.iter().filter(|l| !refused.iter().any(|r| &r == *l)).collect();
+        let unguarded: Vec<&&str> = HOST_S_OWN.iter().filter(|l| !refused.iter().any(|r| r == *l)).collect();
         assert!(unguarded.is_empty(), "the build script would let these through without a word: {unguarded:?}");
 
         let sh = script();

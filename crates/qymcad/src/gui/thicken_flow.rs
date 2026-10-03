@@ -53,7 +53,7 @@ mod tests {
         let top = app.project.bodies[mi].faces.iter().filter(|f| f.normal[2] > 0.9).max_by(|a, b| a.centroid.z.partial_cmp(&b.centroid.z).unwrap()).expect("the top face");
         let (fid, c) = (top.id, [top.centroid.x, top.centroid.y, top.centroid.z]);
         let basis = app.viewing.cam.basis();
-        app.pick_face_3d(rect, qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: rect, basis: &basis }.at(c).0);
+        app.pick_face_3d(rect, qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect, basis: &basis }.at(c).0);
         assert!(app.tools.gsel.faces.contains(&fid), "the click must SELECT the face: what is selected is {:?}", app.tools.gsel.faces);
 
         if let Some(p) = app.tools.cmd.params.iter_mut().find(|p| p.key == "thickness") {
@@ -191,14 +191,14 @@ mod tests {
         let top = app.project.bodies[mi].faces.iter().filter(|f| f.normal[2] > 0.9).max_by(|a, b| a.centroid.z.partial_cmp(&b.centroid.z).unwrap()).expect("the top face");
         let (fid, c) = (top.id, [top.centroid.x, top.centroid.y, top.centroid.z]);
         let basis = app.viewing.cam.basis();
-        app.pick_face_3d(rect, qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: rect, basis: &basis }.at(c).0);
+        app.pick_face_3d(rect, qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect, basis: &basis }.at(c).0);
         assert!(app.tools.gsel.faces.contains(&fid), "the face must get selected by a click");
 
         let anchor =
             crate::gui::commands::cmd_anchor_screen(&mut app.part_ctx(), rect).expect("the command must have an anchor for the popup — otherwise there is nowhere to show the thickness field");
         assert!(rect.contains(anchor), "the anchor must be inside the viewport, and it is {anchor:?}");
         // and it is at THE FACE ITSELF rather than in some random corner
-        let face = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: rect, basis: &basis }.at(c).0;
+        let face = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect, basis: &basis }.at(c).0;
         assert!(anchor.distance(face) < 200.0, "the anchor must stand at the selected face: it is {:.0} px away", anchor.distance(face));
     }
 
@@ -224,7 +224,7 @@ mod tests {
         let basis = app.viewing.cam.basis();
 
         let (_, tip, _) = app.face_arrow_geometry().expect("the selected face must have a handle");
-        let at = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: rect, basis: &basis }.at(tip).0;
+        let at = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect, basis: &basis }.at(tip).0;
         assert!(app.face_arrow_hit(rect, at, &basis), "a cursor at the tip of the arrow must grab it");
         assert!(!app.face_arrow_hit(rect, at + egui::vec2(200.0, 200.0), &basis), "far from the arrow there must be no grab");
 
@@ -265,7 +265,7 @@ mod tests {
             let mut bbox: Option<egui::Rect> = None;
             for &ti in &face.triangles {
                 for v in mesh.triangle(ti as usize) {
-                    let p = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: rect, basis: &basis }.at([v.x, v.y, v.z]).0;
+                    let p = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect, basis: &basis }.at([v.x, v.y, v.z]).0;
                     bbox = Some(bbox.map_or(egui::Rect::from_min_max(p, p), |r| r.union(egui::Rect::from_min_max(p, p))));
                 }
             }

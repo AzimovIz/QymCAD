@@ -63,7 +63,7 @@ mod tests {
             let Some(id) = app.project.mesh_id(i) else { continue };
             let wt = app.project.body_world_transform(id);
             for v in &b.mesh.verts {
-                pts.push(qymcad_core::feature::apply12(&wt, [v.x as f64, v.y as f64, v.z as f64]));
+                pts.push(qymcad_core::feature::apply12(&wt, [v.x, v.y, v.z]));
             }
         }
         assert!(!pts.is_empty(), "setup: there is nothing to look at");

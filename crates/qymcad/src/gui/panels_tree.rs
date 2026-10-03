@@ -1558,7 +1558,7 @@ pub(crate) fn build_tree(tc: &mut qymcad_ui_state::TreeCtx, ui: &mut egui::Ui) {
 /// node of the timeline (its tool is opened again with its values on Ctrl+V).
 pub(super) fn tree_copy(chosen: &qymcad_ui_state::Chosen, project: &Project, clip: &mut qymcad_ui_state::Clipboard, status: &mut String, cut: bool) {
     // With several components selected, the whole set goes into the bulk clipboard (the root excepted).
-    if crate::gui::is_multi(&project, chosen.sel, &chosen.tree_sel) {
+    if crate::gui::is_multi(project, chosen.sel, &chosen.tree_sel) {
         let root = project.root;
         let ids: Vec<Id> = chosen.tree_sel.multi.iter().copied().filter(|&id| id != root).collect();
         if ids.is_empty() {

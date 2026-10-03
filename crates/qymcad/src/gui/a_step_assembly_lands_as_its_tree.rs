@@ -197,7 +197,7 @@ mod tests {
         answer(&mut app, &ctx, Want::Anything, concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/step-export/door-out.glb"));
         settle(&mut app, &ctx);
         calm(&mut app, &ctx);
-        let top = app.project.components.iter().filter(|c| c.parent == Some(app.project.root)).map(|c| c.id).last().expect("the file came in");
+        let top = app.project.components.iter().filter(|c| c.parent == Some(app.project.root)).map(|c| c.id).next_back().expect("the file came in");
         // brought back beside the same parts, they come in numbered "(2)"; the tree is checked by the names without it
         let bare = |n: &str| n.rsplit_once(" (").filter(|(_, k)| k.ends_with(')') && k[..k.len() - 1].chars().all(|c| c.is_ascii_digit())).map_or(n.to_string(), |(b, _)| b.to_string());
         let tree: Vec<(String, ComponentKind)> = under(&app, top).into_iter().map(|(n, k)| (bare(&n), k)).collect();
@@ -207,7 +207,7 @@ mod tests {
             "the file comes in as {tree:?} under {:?}",
             app.project.components.iter().find(|c| c.id == top).map(|c| &c.name)
         );
-        let unit = app.project.components.iter().filter(|c| c.parent == Some(top)).map(|c| c.id).last().expect("the unit");
+        let unit = app.project.components.iter().filter(|c| c.parent == Some(top)).map(|c| c.id).next_back().expect("the unit");
         let pin: Vec<(String, ComponentKind)> = under(&app, unit).into_iter().map(|(n, k)| (bare(&n), k)).collect();
         assert_eq!(pin, [(name(3).to_string(), ComponentKind::Part)]);
         let plates: Vec<[f64; 3]> = app.project.components.iter().filter(|c| c.parent == Some(top) && c.kind == ComponentKind::Part).map(|c| body_at(&app, c.id).1).collect();

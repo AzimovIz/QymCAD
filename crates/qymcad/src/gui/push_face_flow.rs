@@ -37,7 +37,7 @@ mod tests {
         app.viewing.cam.target = [10.0, 10.0, 5.0];
         let basis = app.viewing.cam.basis();
         let c = app.project.bodies[mi].faces.iter().find(|f| f.id == top).map(|f| [f.centroid.x, f.centroid.y, f.centroid.z]).expect("the centre of the top face");
-        let at = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: rect, basis: &basis }.at(c).0;
+        let at = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect, basis: &basis }.at(c).0;
         app.pick_face_3d(rect, at);
         assert!(app.tools.gsel.faces.contains(&top), "a click on a face must SELECT it: what is selected is {:?}", app.tools.gsel.faces);
 
@@ -217,7 +217,7 @@ mod tests {
             p.txt = "0".into();
         }
         let (o, tip, _) = app.face_arrow_geometry().expect("the selected face must have a handle");
-        let scr = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: rect, basis: &basis };
+        let scr = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect, basis: &basis };
         let at = scr.at(tip).0;
         assert!(app.face_arrow_hit(rect, at, &basis), "a cursor at the tip of the arrow must grab it");
         let far = scr.at([o[0] + 500.0, o[1] + 500.0, o[2]]).0;

@@ -354,14 +354,14 @@ mod command_flow_tests {
         app.viewing.view.center = Vec2::ZERO;
         app.viewing.view.scale = 8.0;
         for (want, x) in [(l1, -10.0_f64), (l2, 40.0)] {
-            let pos = (qymcad_ui_state::Sheet { view: app.viewing.view, rect: rect }).at(Point2::new(x, 5.0));
+            let pos = (qymcad_ui_state::Sheet { view: app.viewing.view, rect }).at(Point2::new(x, 5.0));
             let got = crate::gui::pick::nearest_line_id(&app.pick_ctx(), rect, pos, si, &cands);
             assert_eq!(got, Some(want), "a click on the line at x={x} picks THAT line (got {got:?})");
             assert!(cands.contains(&got.unwrap()), "what was picked is a LINE from the candidates, not one of its ends");
         }
         // a click into empty space picks nothing (otherwise the axis would jump on a miss)
         assert_eq!(
-            crate::gui::pick::nearest_line_id(&app.pick_ctx(), rect, (qymcad_ui_state::Sheet { view: app.viewing.view, rect: rect }).at(Point2::new(150.0, 150.0)), si, &cands),
+            crate::gui::pick::nearest_line_id(&app.pick_ctx(), rect, (qymcad_ui_state::Sheet { view: app.viewing.view, rect }).at(Point2::new(150.0, 150.0)), si, &cands),
             None,
             "a miss picks no line"
         );
@@ -374,7 +374,7 @@ mod command_flow_tests {
         assert!(qymcad_ui_state::datum_render_transform(&app.painting(), ax).is_some(), "the datum axis is visible in its own context - otherwise there is nothing to click");
         let basis = app.viewing.cam.basis();
         let (s3, e3) = super::axis_segment([0.0, 0.0, 0.0], [0.0, 0.0, 1.0], 45.0);
-        let scr = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: rect, basis: &basis };
+        let scr = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect, basis: &basis };
         let (sa, sb) = (scr.at(s3).0, scr.at(e3).0);
         assert!(sa.distance(sb) > 20.0, "the axis projects into a segment rather than a point - there is something to hit");
         let mid = Pos2::new(0.5 * (sa.x + sb.x), 0.5 * (sa.y + sb.y));
@@ -424,7 +424,7 @@ mod command_flow_tests {
         let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(800.0, 600.0));
         let basis = app.viewing.cam.basis();
         let (s3, e3) = super::axis_segment([0.0, 0.0, 0.0], [0.0, 0.0, 1.0], 45.0);
-        let scr = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: rect, basis: &basis };
+        let scr = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect, basis: &basis };
         let (sa, sb) = (scr.at(s3).0, scr.at(e3).0);
         let mid = Pos2::new(0.5 * (sa.x + sb.x), 0.5 * (sa.y + sb.y));
         assert!(matches!(crate::gui::pick::pick_axis_at(&app.painting(), rect, mid), Some(super::AxisHit::Datum(id)) if id == ax), "the part's axis is caught by a click inside it");

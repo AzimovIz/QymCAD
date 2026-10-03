@@ -63,7 +63,7 @@ mod tests {
         let sc = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: RECT, basis: &basis };
         let (mut mn, mut mx) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
         for v in &b.mesh.verts {
-            let p = qymcad_core::feature::apply12(&wt, [v.x as f64, v.y as f64, v.z as f64]);
+            let p = qymcad_core::feature::apply12(&wt, [v.x, v.y, v.z]);
             for a in 0..3 {
                 mn[a] = mn[a].min(p[a]);
                 mx[a] = mx[a].max(p[a]);
@@ -105,7 +105,7 @@ mod tests {
         let sc = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: RECT, basis: &basis };
         let (mut mn, mut mx) = (egui::pos2(f32::MAX, f32::MAX), egui::pos2(f32::MIN, f32::MIN));
         for v in &b.mesh.verts {
-            let p = sc.at(qymcad_core::feature::apply12(&wt, [v.x as f64, v.y as f64, v.z as f64])).0;
+            let p = sc.at(qymcad_core::feature::apply12(&wt, [v.x, v.y, v.z])).0;
             mn = egui::pos2(mn.x.min(p.x), mn.y.min(p.y));
             mx = egui::pos2(mx.x.max(p.x), mx.y.max(p.y));
         }
@@ -127,7 +127,7 @@ mod tests {
         for body in &bodies {
             let wt = app.project.body_world_transform(*body);
             for v in &app.project.bodies.iter().find(|b| b.id == *body).expect("the body").mesh.verts {
-                let p = sc.at(qymcad_core::feature::apply12(&wt, [v.x as f64, v.y as f64, v.z as f64])).0;
+                let p = sc.at(qymcad_core::feature::apply12(&wt, [v.x, v.y, v.z])).0;
                 mn = egui::pos2(mn.x.min(p.x), mn.y.min(p.y));
                 mx = egui::pos2(mx.x.max(p.x), mx.y.max(p.y));
             }

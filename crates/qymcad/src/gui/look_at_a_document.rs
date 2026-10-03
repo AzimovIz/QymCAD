@@ -27,7 +27,7 @@ mod tests {
             }
             let wt = app.project.body_world_transform(id);
             for v in &b.mesh.verts {
-                let q = apply12(&wt, [v.x as f64, v.y as f64, v.z as f64]);
+                let q = apply12(&wt, [v.x, v.y, v.z]);
                 for k in 0..3 {
                     lo[k] = lo[k].min(q[k]);
                     hi[k] = hi[k].max(q[k]);

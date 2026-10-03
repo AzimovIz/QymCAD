@@ -85,7 +85,7 @@ mod tests {
             let (a, b) = (poly[0], poly[poly.len() - 1]);
             qymcad_core::geom::Point2::new((a.x + b.x) * 0.5, (a.y + b.y) * 0.5)
         };
-        let at = (qymcad_ui_state::Sheet { view: app.viewing.view, rect: rect }).at(mid);
+        let at = (qymcad_ui_state::Sheet { view: app.viewing.view, rect }).at(mid);
         crate::gui::sketching::project_clicked_edge(&mut app.sketch_ctx(), si, rect, at);
 
         assert_eq!(app.project.sketches[si].projections.len(), 1, "a click on an edge must project it; status: {}", app.status);

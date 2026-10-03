@@ -75,7 +75,7 @@ probe! {
         let said = s.status();
         assert!(said == s.word("in-measure-cancelled") || said == s.word("in-measure-off"), "nothing says the measure is left: the status line says {said:?}");
         let arrow = s.word("tool-select");
-        assert!(s.in_hand().iter().any(|w| *w == arrow), "the measure is still in hand: the bar says {:?}", s.in_hand());
+        assert!(s.in_hand().contains(&arrow), "the measure is still in hand: the bar says {:?}", s.in_hand());
     }
 }
 

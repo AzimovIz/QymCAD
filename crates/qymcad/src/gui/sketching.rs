@@ -293,7 +293,7 @@ impl App {
     /// the input were mixed together, and "showing" easily turned into "deciding".
     #[allow(clippy::too_many_arguments)]
     pub(super) fn draw_sketch_viewport(&mut self, ctx: &egui::Context, resp: &egui::Response, painter: &egui::Painter, rect: Rect, handle: Option<qymcad_core::geom::Point2>) {
-        let sh = qymcad_ui_state::Sheet { view: self.viewing.view, rect: rect };
+        let sh = qymcad_ui_state::Sheet { view: self.viewing.view, rect };
         qymcad_render::draw_axes(&self.painting(), painter, rect);
         self.draw_mesh(painter, rect);
         self.draw_sketch_face_edges(painter, rect); // the edges of the host face (an outside one too) as a reference

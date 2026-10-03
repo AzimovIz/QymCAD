@@ -213,7 +213,7 @@ fn primitive(doc: &Value, buffers: &[Vec<u8>], prim: &Value, m: &M4, mesh: &mut 
     let tri = |a: u32, b: u32, c: u32| [base + a, base + b, base + c];
     let first = mesh.tris.len();
     match mode {
-        4 => mesh.tris.extend(idx.chunks_exact(3).map(|t| tri(t[0], t[1], t[2]))),
+        4 => mesh.tris.extend(idx.as_chunks::<3>().0.iter().map(|t| tri(t[0], t[1], t[2]))),
         5 => mesh.tris.extend((2..idx.len()).map(|k| if k % 2 == 0 { tri(idx[k - 2], idx[k - 1], idx[k]) } else { tri(idx[k - 1], idx[k - 2], idx[k]) })),
         _ => mesh.tris.extend((2..idx.len()).map(|k| tri(idx[0], idx[k - 1], idx[k]))),
     }
@@ -479,7 +479,7 @@ impl Out {
         while json.len() % 4 != 0 {
             json.push(b' ');
         }
-        while self.bin.len() % 4 != 0 {
+        while !self.bin.len().is_multiple_of(4) {
             self.bin.push(0);
         }
         let total = 12 + 8 + json.len() + 8 + self.bin.len();

@@ -369,7 +369,7 @@ mod tests {
                     .sketch_constraint_points(case.si, ci)
                     .iter()
                     .filter_map(|id| s.points.iter().find(|p| p.id == *id))
-                    .map(|p| (qymcad_ui_state::Sheet { view: app.viewing.view, rect: rect }).at(qymcad_core::geom::Point2::new(p.x, p.y)))
+                    .map(|p| (qymcad_ui_state::Sheet { view: app.viewing.view, rect }).at(qymcad_core::geom::Point2::new(p.x, p.y)))
                     .collect();
                 if on.is_empty() {
                     continue;
@@ -435,7 +435,7 @@ mod tests {
                 let box_ = egui::Rect::from_center_size(at, egui::vec2(44.0, 16.0));
                 let s = &app.project.sketches[case.si];
                 for p in &s.points {
-                    let q = (qymcad_ui_state::Sheet { view: app.viewing.view, rect: rect }).at(qymcad_core::geom::Point2::new(p.x, p.y));
+                    let q = (qymcad_ui_state::Sheet { view: app.viewing.view, rect }).at(qymcad_core::geom::Point2::new(p.x, p.y));
                     if box_.contains(q) {
                         bad.push(format!("{name}: the label of dimension no. {ci} covers a point of the sketch"));
                         break;

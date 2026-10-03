@@ -58,7 +58,7 @@ mod tests {
         let (o, l) = qymcad_ui_state::gizmo_geometry(app.viewing.cam, app.dragged.comp_giz, &app.project, comp);
         let mut tip = o;
         tip[0] += l;
-        let scr = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: rect, basis: &basis };
+        let scr = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect, basis: &basis };
         let at_origin = scr.at(o).0;
         let at_tip = scr.at(tip).0;
         let grab = at_origin + (at_tip - at_origin) * 0.75; // along the arrow, not right at its tip

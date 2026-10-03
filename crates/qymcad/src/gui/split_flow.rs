@@ -52,7 +52,7 @@ mod tests {
             .map(|f| [f.centroid.x, f.centroid.y, f.centroid.z])
             .expect("the top face is there");
         let basis = app.viewing.cam.basis();
-        let at = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: rect, basis: &basis }.at(top).0;
+        let at = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect, basis: &basis }.at(top).0;
         let sp = crate::gui::pick::pick_sketch_plane_at(&app.painting(), rect, at).expect("a click on a face must give a plane");
         app.params.split.plane = Some(sp);
 

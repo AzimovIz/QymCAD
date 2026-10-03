@@ -94,7 +94,7 @@ mod tests {
         assert!(app.project.sketches[si].points.iter().any(|p| p.x.abs() < 1e-9 && p.y.abs() < 1e-9), "setup: there is no point at the origin");
 
         let rect = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(800.0, 600.0));
-        let at = (qymcad_ui_state::Sheet { view: app.viewing.view, rect: rect }).at(qymcad_core::geom::Point2::new(0.0, 0.0));
+        let at = (qymcad_ui_state::Sheet { view: app.viewing.view, rect }).at(qymcad_core::geom::Point2::new(0.0, 0.0));
         // 12 px past: precise gives 7, coarse gives 15
         let miss = egui::pos2(at.x + 12.0, at.y);
 

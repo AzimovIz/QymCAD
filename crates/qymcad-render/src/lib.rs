@@ -726,7 +726,7 @@ pub fn draw_dim_overlay(scheme: &SchemeUi, ctx: &egui::Context, label: &str) -> 
 pub fn joint_limits(dc: &DrawCtx, painter: &egui::Painter, rect: Rect, jid: Id, o: [f64; 3], l: f64, hs: &[qymcad_ui_state::JointHandle]) {
     let Some(j) = dc.project.joints.iter().find(|x| x.id == jid) else { return };
     let basis = dc.cam.basis();
-    let scr = qymcad_ui_state::Screen { cam: dc.cam, set: dc.set, rect: rect, basis: &basis };
+    let scr = qymcad_ui_state::Screen { cam: dc.cam, set: dc.set, rect, basis: &basis };
     let col = dc.scheme.pal.hint();
     for &qymcad_ui_state::JointHandle { slot, ring, dir } in hs {
         let (lo, hi) = (j.limit_min[slot as usize], j.limit_max[slot as usize]);
@@ -786,7 +786,7 @@ pub fn joint_axis_refs(dc: &DrawCtx, painter: &egui::Painter, rect: Rect, jid: I
     let Some(j) = dc.project.joints.iter().find(|x| x.id == jid) else { return };
     let ctx = qymcad_ui_state::current_ctx_id(dc.active_path, dc.project);
     let basis = dc.cam.basis();
-    let scr = qymcad_ui_state::Screen { cam: dc.cam, set: dc.set, rect: rect, basis: &basis };
+    let scr = qymcad_ui_state::Screen { cam: dc.cam, set: dc.set, rect, basis: &basis };
     let col = dc.scheme.pal.active();
     for cid in [j.a, j.b] {
         let Some(c) = dc.project.connector(cid) else { continue };
@@ -818,7 +818,7 @@ pub fn joint_axis_refs(dc: &DrawCtx, painter: &egui::Painter, rect: Rect, jid: I
 /// The shared renderer for the COMPONENT gizmo (Assembly) and the BODY gizmo (Part).
 pub fn gizmo_at(dc: &DrawCtx, painter: &egui::Painter, rect: Rect, o: [f64; 3], l: f64, hot_axis: Option<u8>, hot_ring: Option<u8>) {
     let basis = dc.cam.basis();
-    let scr = qymcad_ui_state::Screen { cam: dc.cam, set: dc.set, rect: rect, basis: &basis };
+    let scr = qymcad_ui_state::Screen { cam: dc.cam, set: dc.set, rect, basis: &basis };
     let s0 = scr.at(o).0;
     let cols = [dc.scheme.pal.axis(0), dc.scheme.pal.axis(1), dc.scheme.pal.axis(2)];
     // the rotation rings (under the arrows). THE INDEX IS AN AXIS NUMBER: it picks the ring's plane and
@@ -850,7 +850,7 @@ pub fn gizmo_at(dc: &DrawCtx, painter: &egui::Painter, rect: Rect, o: [f64; 3], 
 /// Draw a ghost of entity `eid`, transforming its points with the function `f` (world -> world). Shared by
 /// the move/copy preview (the selected entities shifted by cursor minus base) and by the pattern preview.
 pub fn draw_entity_xform(pick: &PickCtx, painter: &egui::Painter, rect: Rect, si: usize, eid: Id, f: &dyn Fn(f64, f64) -> (f64, f64), stroke: Stroke) {
-    let sh = qymcad_ui_state::Sheet { view: *pick.view, rect: rect };
+    let sh = qymcad_ui_state::Sheet { view: *pick.view, rect };
     use qymcad_core::model::EntityKind;
     let Some(s) = pick.project.sketches.get(si) else { return };
     let Some(kind) = s.entities.iter().find(|e| e.id == eid).map(|e| e.kind) else { return };
@@ -935,7 +935,7 @@ pub fn draw_curve_trim_span(pick: &PickCtx, painter: &egui::Painter, rect: Rect,
         let pts: Vec<Pos2> = (0..=n)
             .map(|k| {
                 let g = g0 + (g1 - g0) * k as f64 / n as f64;
-                (qymcad_ui_state::Sheet { view: *pick.view, rect: rect }).at(Point2::new(c.x + r * g.cos(), c.y + r * g.sin()))
+                (qymcad_ui_state::Sheet { view: *pick.view, rect }).at(Point2::new(c.x + r * g.cos(), c.y + r * g.sin()))
             })
             .collect();
         painter.add(egui::Shape::line(pts, Stroke::new(3.0, col)));
@@ -1169,7 +1169,7 @@ pub fn draw_projection_overlay(project: &Project, scheme: &SchemeUi, sel: Sel, v
 /// Outside a sketch it is a thin grey cross. Inside a sketch it is the X (red) and Y (green) axes at full
 /// length, the selected axis in orange, plus the origin marker.
 pub fn draw_axes(pn: &Painting, painter: &egui::Painter, rect: Rect) {
-    let sh = qymcad_ui_state::Sheet { view: pn.view, rect: rect };
+    let sh = qymcad_ui_state::Sheet { view: pn.view, rect };
     let o = sh.at(Point2::new(0.0, 0.0));
     let editing = matches!(pn.sel, Sel::Sketch(si) if qymcad_ui_state::edit_si(pn.project, &pn.sketch_ses) == Some(si));
     if !editing {
@@ -1207,7 +1207,7 @@ pub fn draw_grounded_glyphs(pn: &Painting, painter: &egui::Painter, rect: Rect) 
             continue;
         }
         let o = qymcad_core::feature::apply12(&pn.project.relative_transform(c, ctx), [0.0, 0.0, 0.0]);
-        let at = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis }.at(o).0;
+        let at = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis }.at(o).0;
         let col = pn.scheme.pal.grounded();
         painter.circle_filled(at, 8.0, qymcad_scheme::a(pn.scheme.pal.glyph_backing(), 225));
         painter.circle_stroke(at, 8.0, Stroke::new(1.4, col));
@@ -1233,7 +1233,7 @@ pub fn draw_array_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
     let base: [[f64; 3]; 8] = [[mn.x, mn.y, mn.z], [mx.x, mn.y, mn.z], [mx.x, mx.y, mn.z], [mn.x, mx.y, mn.z], [mn.x, mn.y, mx.z], [mx.x, mn.y, mx.z], [mx.x, mx.y, mx.z], [mn.x, mx.y, mx.z]];
     const EDGES: [(usize, usize); 12] = [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7)];
     let draw_box = |wc: [[f64; 3]; 8]| {
-        let pts: [Pos2; 8] = std::array::from_fn(|i| qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis }.at(wc[i]).0);
+        let pts: [Pos2; 8] = std::array::from_fn(|i| qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis }.at(wc[i]).0);
         for (a, b) in EDGES {
             painter.line_segment([pts[a], pts[b]], st);
         }
@@ -1297,7 +1297,7 @@ pub fn draw_prim_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
             Some(m) => qymcad_core::feature::apply12(&m, q),
             None => q,
         };
-        qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis }.at(w).0
+        qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis }.at(w).0
     };
     let ring_xy = |r: f64, z: f64, n: usize| -> Vec<Pos2> {
         (0..=n)
@@ -1402,7 +1402,7 @@ pub fn draw_body_edges(pn: &Painting, painter: &egui::Painter, rect: Rect) {
         let poly = &pn.edges.polys[i];
         let sel = picked.get(i).copied().unwrap_or(false);
         let (col, w) = if sel { (pn.scheme.pal.selected(), 2.6) } else { (pn.scheme.pal.edge_idle(), 1.0) };
-        let pts: Vec<Pos2> = poly.iter().map(|p| qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis }.at(tp(p)).0).collect();
+        let pts: Vec<Pos2> = poly.iter().map(|p| qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis }.at(tp(p)).0).collect();
         for k in 0..pts.len().saturating_sub(1) {
             painter.line_segment([pts[k], pts[k + 1]], Stroke::new(w, col));
         }
@@ -1463,7 +1463,7 @@ pub fn draw_edge_blend_preview(pn: &Painting, painter: &egui::Painter, rect: Rec
     };
     let wt = pn.project.body_display_transform(body, qymcad_ui_state::current_ctx_id(pn.active_path, pn.project));
     let basis = pn.cam.basis();
-    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
+    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis };
     let col = qymcad_scheme::a(pn.scheme.pal.preview(), 220);
     for (i, poly) in pn.edges.polys.iter().enumerate() {
         if !pn.edges.ids.get(i).is_some_and(|id| *id != 0 && pn.gsel.edges.contains(id)) {
@@ -1492,7 +1492,7 @@ pub fn draw_hole_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
         vec![qymcad_core::feature::compose12(&wt, &pl)]
     };
     let basis = pn.cam.basis();
-    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
+    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis };
     let col = qymcad_scheme::a(pn.scheme.pal.preview(), 220);
     for pl in &frames {
         for line in qymcad_ui_state::hole_outline(pl, tool) {
@@ -1520,7 +1520,7 @@ fn draft_preview_lines(pn: &Painting) -> Vec<Vec<[f64; 3]>> {
 
 pub fn draw_draft_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
     let basis = pn.cam.basis();
-    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
+    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis };
     let col = qymcad_scheme::a(pn.scheme.pal.preview(), 220);
     for line in draft_preview_lines(pn) {
         painter.add(egui::Shape::line(line.iter().map(|p| scr.at(*p).0).collect(), Stroke::new(1.5, col)));
@@ -1547,7 +1547,7 @@ pub fn draw_thread_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
     let u = qymcad_ui_state::v_norm(qymcad_ui_state::v_sub(refx, scale(ax, qymcad_ui_state::v_dot(refx, ax)))); // the radial basis, perpendicular to the axis
     let v = qymcad_ui_state::v_cross(ax, u);
     let basis = pn.cam.basis();
-    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
+    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis };
     let wt = pn.project.body_display_transform(src, qymcad_ui_state::current_ctx_id(pn.active_path, pn.project));
     let turns = length / lead;
     let n = ((turns * 24.0).ceil() as usize).clamp(8, 4000);
@@ -1576,7 +1576,7 @@ pub fn draw_loft_preview(cam: Cam3, loft: &LoftParams, project: &Project, scheme
         return;
     }
     let basis = cam.basis();
-    let sp = |p: [f64; 3]| qymcad_ui_state::Screen { cam: &cam, set: set, rect: rect, basis: &basis }.at(p).0;
+    let sp = |p: [f64; 3]| qymcad_ui_state::Screen { cam: &cam, set, rect, basis: &basis }.at(p).0;
     let scol = qymcad_scheme::a(scheme.pal.preview(), 220);
     for sec in &sections {
         let m = sec.len();
@@ -1637,7 +1637,7 @@ pub fn draw_contours(pn: &Painting, painter: &egui::Painter, rect: Rect) {
             None if cid.is_some_and(|id| foreign_cids.contains(&id)) => continue, // another component
             _ => {}
         }
-        let mut pts: Vec<Pos2> = c.points.iter().map(|p| (qymcad_ui_state::Sheet { view: pn.view, rect: rect }).at(*p)).collect();
+        let mut pts: Vec<Pos2> = c.points.iter().map(|p| (qymcad_ui_state::Sheet { view: pn.view, rect }).at(*p)).collect();
         if c.closed {
             pts.push(pts[0]);
         }
@@ -1666,7 +1666,7 @@ pub fn draw_sketch_face_edges(pn: &Painting, painter: &egui::Painter, rect: Rect
     let Some(si) = qymcad_ui_state::edit_si(pn.project, &pn.sketch_ses) else { return };
     let col = qymcad_scheme::a(pn.scheme.pal.sketch_face_edge(), 140);
     for poly in qymcad_pick::sketch_ref_edges_2d(pn.cache, pn.cmd, pn.live, pn.project, pn.regen, si) {
-        let pts: Vec<Pos2> = poly.iter().map(|p| (qymcad_ui_state::Sheet { view: pn.view, rect: rect }).at(*p)).collect();
+        let pts: Vec<Pos2> = poly.iter().map(|p| (qymcad_ui_state::Sheet { view: pn.view, rect }).at(*p)).collect();
         for k in 0..pts.len().saturating_sub(1) {
             painter.line_segment([pts[k], pts[k + 1]], Stroke::new(1.0, col));
         }
@@ -1675,7 +1675,7 @@ pub fn draw_sketch_face_edges(pn: &Painting, painter: &egui::Painter, rect: Rect
 
 /// Highlighting the selected entities + the glyphs of the geometric constraints.
 pub fn draw_sketch_constraints(pn: &Painting, painter: &egui::Painter, rect: Rect, si: usize) {
-    let sh = qymcad_ui_state::Sheet { view: pn.view, rect: rect };
+    let sh = qymcad_ui_state::Sheet { view: pn.view, rect };
     use qymcad_core::model::EntityKind;
     let Some(s) = pn.project.sketches.get(si) else { return };
     let pt = |id: Id| s.points.iter().find(|p| p.id == id).map(|p| Point2::new(p.x, p.y));
@@ -1804,7 +1804,7 @@ pub fn draw_sketch_constraints(pn: &Painting, painter: &egui::Painter, rect: Rec
 }
 
 pub fn draw_sketch_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
-    let sh = qymcad_ui_state::Sheet { view: pn.view, rect: rect };
+    let sh = qymcad_ui_state::Sheet { view: pn.view, rect };
     if pn.armed.draw_kind() == 0 {
         return;
     }
@@ -2033,7 +2033,7 @@ pub fn draw_sketch_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
 /// clicked. Trim lights the span that will be removed in red; break puts a marker at the point; extend
 /// lights in green the end that will be pulled.
 pub fn draw_trim_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
-    let sh = qymcad_ui_state::Sheet { view: pn.view, rect: rect };
+    let sh = qymcad_ui_state::Sheet { view: pn.view, rect };
     use qymcad_core::model::EntityKind;
     if pn.armed.click_op() == 0 {
         return;
@@ -2167,7 +2167,7 @@ pub fn draw_pattern_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) 
     let stroke = Stroke::new(1.2, pn.scheme.pal.highlight());
     // the centre of rotation of a circular pattern as a cross (so that what it is built around is visible)
     if let qymcad_core::model::PatternKind::Circular { cx, cy, .. } = kind {
-        let c = (qymcad_ui_state::Sheet { view: pn.view, rect: rect }).at(Point2::new(cx, cy));
+        let c = (qymcad_ui_state::Sheet { view: pn.view, rect }).at(Point2::new(cx, cy));
         let m = pn.scheme.pal.pattern_center();
         painter.line_segment([c + egui::vec2(-7.0, 0.0), c + egui::vec2(7.0, 0.0)], Stroke::new(1.5, m));
         painter.line_segment([c + egui::vec2(0.0, -7.0), c + egui::vec2(0.0, 7.0)], Stroke::new(1.5, m));
@@ -2218,7 +2218,7 @@ pub fn draw_measure_3d(pn: &Painting, painter: &egui::Painter, rect: Rect) {
     }
     let basis = pn.cam.basis();
     let col = pn.scheme.pal.measure();
-    let pts: Vec<Pos2> = pn.m3.picks.iter().map(|p| qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis }.at(p.at).0).collect();
+    let pts: Vec<Pos2> = pn.m3.picks.iter().map(|p| qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis }.at(p.at).0).collect();
     for sp in &pts {
         painter.circle_stroke(*sp, 6.0, Stroke::new(2.0, col));
         painter.circle_filled(*sp, 2.5, col);
@@ -2267,7 +2267,7 @@ pub fn draw_comp_array_preview(pn: &Painting, painter: &egui::Painter, rect: Rec
     const EDGES: [(usize, usize); 12] = [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7)];
     // GHOSTS ONLY FOR THE COPIES (i from 1): instance zero is the source itself, which is on screen anyway
     for m in comp_array_ghosts(pn, &pre, &base, already) {
-        let pts: Vec<Pos2> = corners.iter().map(|c| qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis }.at(apply12(&m, *c)).0).collect();
+        let pts: Vec<Pos2> = corners.iter().map(|c| qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis }.at(apply12(&m, *c)).0).collect();
         for (a, b) in EDGES {
             painter.line_segment([pts[a], pts[b]], st);
         }
@@ -2303,7 +2303,7 @@ pub fn draw_clip_pending(pn: &Painting, painter: &egui::Painter, rect: Rect) {
         draw_entity_xform(&PickCtx { project: pn.project, set: pn.set, view: &pn.view }, painter, rect, si, id, &f, stroke);
     }
     if let Some(cur) = pn.cursor {
-        let c = (qymcad_ui_state::Sheet { view: pn.view, rect: rect }).at(cur);
+        let c = (qymcad_ui_state::Sheet { view: pn.view, rect }).at(cur);
         let arm = 9.0;
         painter.line_segment([c + egui::vec2(-arm, 0.0), c + egui::vec2(arm, 0.0)], Stroke::new(1.6, col));
         painter.line_segment([c + egui::vec2(0.0, -arm), c + egui::vec2(0.0, arm)], Stroke::new(1.6, col));
@@ -2312,7 +2312,7 @@ pub fn draw_clip_pending(pn: &Painting, painter: &egui::Painter, rect: Rect) {
 }
 
 pub fn draw_move_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
-    let sh = qymcad_ui_state::Sheet { view: pn.view, rect: rect };
+    let sh = qymcad_ui_state::Sheet { view: pn.view, rect };
     if pn.armed.move_op() == 0 {
         return;
     }
@@ -2350,7 +2350,7 @@ pub fn draw_move_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
 
 /// Draw the associative dimensions and constraints of the selected sketch in the viewport.
 pub fn draw_sketch_dims(pn: &Painting, painter: &egui::Painter, rect: Rect, si: usize) {
-    let sh = qymcad_ui_state::Sheet { view: pn.view, rect: rect };
+    let sh = qymcad_ui_state::Sheet { view: pn.view, rect };
     use qymcad_core::model::{Constraint, EntityKind};
     let Some(s) = pn.project.sketches.get(si) else { return };
     let dim_col = pn.scheme.pal.dimension();
@@ -2647,7 +2647,7 @@ pub fn draw_sketch_dims(pn: &Painting, painter: &egui::Painter, rect: Rect, si: 
 }
 
 pub fn draw_mesh(pn: &Painting, painter: &egui::Painter, rect: Rect) {
-    let sh = qymcad_ui_state::Sheet { view: pn.view, rect: rect };
+    let sh = qymcad_ui_state::Sheet { view: pn.view, rect };
     // a top view (or IN THE PLANE of the active sketch when editing on a face or a datum - so that the
     // body lines up with the sketch's coordinates instead of hanging above it). Shading goes by depth
     // along the normal.
@@ -2734,7 +2734,7 @@ pub fn draw_mesh(pn: &Painting, painter: &egui::Painter, rect: Rect) {
         for mesh in caps.iter() {
             for t in 0..mesh.tris.len() {
                 let tri = mesh.triangle(t);
-                let pr = |p: qymcad_core::geom::Point3| qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis }.at([p.x, p.y, p.z]);
+                let pr = |p: qymcad_core::geom::Point3| qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis }.at([p.x, p.y, p.z]);
                 let (a, da) = pr(tri[0]);
                 let (b, db) = pr(tri[1]);
                 let (c, dc) = pr(tri[2]);
@@ -2821,7 +2821,7 @@ pub fn rasterize_3d(pn: &Painting, rect: Rect, basis: &([f64; 3], [f64; 3], [f64
                 qymcad_pick::shade_tri(&pn.scheme.pal, pn.set.ghost_alpha, hot, ghost, tint, nrm, light)
             };
             let cols = [col_at(0), col_at(1), col_at(2)];
-            let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: basis };
+            let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis };
             let (pa, da) = scr.at(a);
             let (pb, db) = scr.at(b);
             let (pc, dc) = scr.at(c);
@@ -2979,7 +2979,7 @@ pub fn draw_sketch_plane_picker(pn: &Painting, painter: &egui::Painter, rect: Re
                     .zip(qymcad_ui_state::world_frame_of_plane(&DrawCtx { cam: &pn.cam, set: pn.set, scheme: pn.scheme, project: pn.project, active_path: pn.active_path }, sp))
                 {
                     let w = fr.lift(uv);
-                    let s = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis }.at([w.x, w.y, w.z]).0;
+                    let s = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis }.at([w.x, w.y, w.z]).0;
                     painter.circle_filled(s, 4.0, pn.scheme.pal.snap_point());
                     painter.circle_stroke(s, 6.5, egui::Stroke::new(1.5, pn.scheme.pal.emphasis()));
                 }
@@ -3051,7 +3051,7 @@ pub fn draw_joint_pick_highlight(pn: &Painting, painter: &egui::Painter, rect: R
         return;
     }
     let basis = pn.cam.basis();
-    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
+    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis };
     let ctx = qymcad_ui_state::current_ctx_id(pn.active_path, pn.project);
     use qymcad_core::feature::AnchorRef;
     let hl = |body: Id, fi: usize, col: Color32| {
@@ -3225,7 +3225,7 @@ pub fn draw_body_gizmo(pn: &Painting, painter: &egui::Painter, rect: Rect) {
     let (o, l) = qymcad_ui_state::body_gizmo_geometry(pn.body_giz, pn.cam, pn.project, pn.set, mi);
     gizmo_at(&DrawCtx { cam: &pn.cam, set: pn.set, scheme: pn.scheme, project: pn.project, active_path: pn.active_path }, painter, rect, o, l, pn.body_giz.axis, pn.body_giz.ring);
     if let Some(text) = qymcad_ui_state::body_giz_readout(pn.body_giz, pn.set, pn.body_giz.snap) {
-        let s = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &pn.cam.basis() }.at(o).0;
+        let s = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &pn.cam.basis() }.at(o).0;
         let suffix = if pn.body_giz.snap { "  snap" } else { "" };
         painter.text(s + egui::vec2(14.0, -14.0), egui::Align2::LEFT_BOTTOM, format!("{text}{suffix}"), egui::FontId::proportional(13.0), pn.scheme.pal.gizmo_label());
     }
@@ -3237,7 +3237,7 @@ pub fn draw_datum_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
         return;
     }
     let basis = pn.cam.basis();
-    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
+    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis };
     let st = Stroke::new(1.6, qymcad_scheme::a(pn.scheme.pal.preview_datum(), 205));
     match pn.armed.cmd_kind() {
         20 => {
@@ -3344,7 +3344,7 @@ pub fn draw_axis_picker(pn: &Painting, painter: &egui::Painter, rect: Rect) {
         return;
     }
     let basis = pn.cam.basis();
-    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
+    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis };
     let ctx = qymcad_ui_state::current_ctx_id(pn.active_path, pn.project);
     let hovered = painter.ctx().pointer_hover_pos().and_then(|p| qymcad_pick::pick_axis_at(pn, rect, p));
     for d in &pn.project.datum_axes {
@@ -3436,7 +3436,7 @@ pub fn draw_mirror_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
         let d = (pw[0] - o[0]) * nn[0] + (pw[1] - o[1]) * nn[1] + (pw[2] - o[2]) * nn[2];
         [pw[0] - 2.0 * d * nn[0], pw[1] - 2.0 * d * nn[1], pw[2] - 2.0 * d * nn[2]]
     };
-    let pts: [Pos2; 8] = std::array::from_fn(|i| qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis }.at(reflect(base[i])).0);
+    let pts: [Pos2; 8] = std::array::from_fn(|i| qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis }.at(reflect(base[i])).0);
     for (a, b) in EDGES {
         painter.line_segment([pts[a], pts[b]], st);
     }
@@ -3480,7 +3480,7 @@ pub fn draw_split_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
     let uu = normd(cross(up, u3));
     let vv = cross(u3, uu);
     let corner = |su: f64, sv: f64| [c[0] + uu[0] * su * half + vv[0] * sv * half, c[1] + uu[1] * su * half + vv[1] * sv * half, c[2] + uu[2] * su * half + vv[2] * sv * half];
-    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
+    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis };
     let poly: Vec<Pos2> = [corner(-1.0, -1.0), corner(1.0, -1.0), corner(1.0, 1.0), corner(-1.0, 1.0)].iter().map(|p| scr.at(*p).0).collect();
     let st = Stroke::new(1.6, qymcad_scheme::a(pn.scheme.pal.modify(), 220));
     painter.add(egui::Shape::convex_polygon(poly, qymcad_scheme::a(pn.scheme.pal.modify(), 40), st));
@@ -3522,7 +3522,7 @@ pub fn draw_joint_gizmo(pn: &Painting, painter: &egui::Painter, rect: Rect, jid:
     };
     let basis = pn.cam.basis();
     let l = 60.0 / pn.cam.scale as f64;
-    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
+    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis };
     let s0 = scr.at(o).0;
     let hot = pn.joint.giz_handle;
     let col_ring = pn.scheme.pal.active(); // yellow means "a joint freedom" (matching the selected joint)
@@ -3591,7 +3591,7 @@ pub fn draw_component_gizmo(pn: &Painting, painter: &egui::Painter, rect: Rect) 
             gizmo_at(&DrawCtx { cam: &pn.cam, set: pn.set, scheme: pn.scheme, project: pn.project, active_path: pn.active_path }, painter, rect, o, l, pn.comp_giz.axis, pn.comp_giz.ring);
             // the readout of the translation/rotation at the gizmo during a drag (as for a body)
             if let Some(text) = qymcad_ui_state::comp_giz_readout(&pn.comp_giz, pn.set, pn.comp_giz.snap) {
-                let s = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &pn.cam.basis() }.at(o).0;
+                let s = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &pn.cam.basis() }.at(o).0;
                 let suffix = if pn.comp_giz.snap { "  snap" } else { "" };
                 painter.text(s + egui::vec2(14.0, -14.0), egui::Align2::LEFT_BOTTOM, format!("{text}{suffix}"), egui::FontId::proportional(13.0), pn.scheme.pal.gizmo_label());
             }
@@ -3603,7 +3603,7 @@ pub fn draw_component_gizmo(pn: &Painting, painter: &egui::Painter, rect: Rect) 
 pub fn draw_section_gizmo(pn: &Painting, painter: &egui::Painter, rect: Rect) {
     let Some(qymcad_ui_state::SectionGizmo { centre: cp, u, v, half, tip }) = qymcad_ui_state::section_gizmo_geom(pn) else { return };
     let basis = pn.cam.basis();
-    let pr = |p: [f64; 3]| qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis }.at(p).0;
+    let pr = |p: [f64; 3]| qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis }.at(p).0;
     let corners = [
         [cp[0] + (u[0] + v[0]) * half, cp[1] + (u[1] + v[1]) * half, cp[2] + (u[2] + v[2]) * half],
         [cp[0] + (u[0] - v[0]) * half, cp[1] + (u[1] - v[1]) * half, cp[2] + (u[2] - v[2]) * half],
@@ -3646,7 +3646,7 @@ pub fn draw_fillet_vertices(pn: &Painting, painter: &egui::Painter, rect: Rect) 
         }
         // THE NAME IS ASKED FOR, NOT CREATED: drawing has no business adding to the document's table.
         let own = pn.project.names.vertex_desc(&qymcad_core::names::VertexName::new(ids)).is_some_and(|d| pn.cmd.params.iter().any(|p| p.key == format!("at{d}")));
-        let sc = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis }.at(pt).0;
+        let sc = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis }.at(pt).0;
         let (r, col) = if own { (4.5, pn.scheme.pal.active()) } else { (3.0, pn.scheme.pal.handle_face()) };
         painter.circle_filled(sc, r, col);
     }
@@ -3660,7 +3660,7 @@ pub fn draw_fillet_vertices(pn: &Painting, painter: &egui::Painter, rect: Rect) 
 /// what it actually drags is decided by `face_arrow_key`.
 pub fn draw_face_arrow(pn: &Painting, painter: &egui::Painter, rect: Rect, basis: &([f64; 3], [f64; 3], [f64; 3])) {
     let Some((o, tip, _)) = qymcad_ui_state::face_arrow_geometry(pn) else { return };
-    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: basis };
+    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis };
     let (a, b) = (scr.at(o).0, scr.at(tip).0);
     let hot = pn.face_arrow_drag.is_some();
     let col = if hot { pn.scheme.pal.highlight() } else { pn.scheme.pal.handle_face() };
@@ -3673,7 +3673,7 @@ pub fn draw_face_arrow(pn: &Painting, painter: &egui::Painter, rect: Rect, basis
 fn draw_trial_faces(pn: &Painting, painter: &egui::Painter, rect: Rect) {
     let Some(faces) = qymcad_ui_state::trial_faces(painter.ctx()) else { return };
     let basis = pn.cam.basis();
-    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
+    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis };
     let col = qymcad_scheme::a(pn.scheme.pal.add(), 110);
     let mut hm = egui::Mesh::default();
     for t in faces.iter() {
@@ -3720,7 +3720,7 @@ pub fn draw_feat_cmd_preview(pn: &Painting, painter: &egui::Painter, rect: Rect)
         if let (Some(si), false) = (pn.cmd.sketch, pn.gsel.profiles.is_empty()) {
             if let Some(f) = pn.project.sketch_frame(si) {
                 let basis = pn.cam.basis();
-                let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
+                let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis };
                 let col = pn.scheme.pal.preview();
                 // THE TURN FOLLOWS THE ANGLE: every corner of the profile traces its arc about the same axis the
                 // rebuild turns about, from the same start (symmetric -> -angle/2, flipped -> -angle), and the profile
@@ -3771,7 +3771,7 @@ pub fn draw_feat_cmd_preview(pn: &Painting, painter: &egui::Painter, rect: Rect)
     let Some(si) = pn.cmd.sketch else { return };
     let Some(f) = pn.project.sketch_frame(si) else { return };
     let basis = pn.cam.basis();
-    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
+    let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis };
     let n = f.normal();
     let h = qymcad_ui_state::cmd_val(pn.cmd, "height");
     // the preview extent is EXACTLY the one the rebuild uses: direction/flip/symmetry/two sides. The
@@ -3816,7 +3816,7 @@ pub fn draw_feat_cmd_preview(pn: &Painting, painter: &egui::Painter, rect: Rect)
 pub fn draw_sweep_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
     let Some(qymcad_ui_state::SweepPreview { path, sections }) = qymcad_ui_state::sweep_preview(pn.project, pn.sweep) else { return };
     let basis = pn.cam.basis();
-    let sp = |p: [f64; 3]| qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis }.at(p).0;
+    let sp = |p: [f64; 3]| qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis }.at(p).0;
     // the path is a bright line
     let pcol = pn.scheme.pal.active();
     for w in path.windows(2) {
