@@ -15,7 +15,7 @@ fn an_empty_part() -> Session {
 
 /// The body of the part.
 fn body(s: &mut Session) -> qymcad::Solid {
-    s.document().bodies.iter().filter(|b| !b.consumed && !b.sheet).next_back().cloned().unwrap_or_else(|| panic!("the part holds no body"))
+    s.document().bodies.iter().rfind(|b| !b.consumed && !b.sheet).cloned().unwrap_or_else(|| panic!("the part holds no body"))
 }
 
 /// Take the tool whose hint is `hint`, type the sizes under their captions and apply.

@@ -401,10 +401,7 @@ pub fn pick_contour(project: &Project, sel: &mut Sel, set: &Settings, view: View
             best = Some((i, d));
         }
     }
-    let empty = match best {
-        Some((_, d)) if d * view.scale as f64 <= grab(set, Grab::Curve) as f64 => false,
-        _ => true,
-    };
+    let empty = !matches!(best, Some((_, d)) if d * view.scale as f64 <= grab(set, Grab::Curve) as f64);
     if empty {
         // a click into emptiness clears the selection of an object (if a contour is selected)
         if matches!(sel, Sel::Contour(..)) {

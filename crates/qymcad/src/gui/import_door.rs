@@ -433,7 +433,7 @@ pub(crate) mod tests {
     /// Measured on three bodies placed apart in one file: every mesh import was lowered so its
     /// top sat at Z=0 - a habit of the machining program this one grew from, where zero is the top of the stock
     /// - while STEP and IGES keep the file's coordinates. And the name a 3MF, glTF or AMF gives an object was
-    /// dropped on the way into the document.
+    ///   dropped on the way into the document.
     #[test]
     fn a_mesh_comes_in_where_the_file_puts_it_under_its_name() {
         let dir = std::path::PathBuf::from(format!("{}/../../target/import-door", env!("CARGO_MANIFEST_DIR")));

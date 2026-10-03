@@ -113,7 +113,7 @@ fn renaming_a_sketch_driver_updates_references() {
     assert_eq!(p.named_dims[0].name, "dlina");
     assert_eq!(p.parameters[0].expr, "dlina/4");
     assert_eq!(p.param_map().get("dlina"), Some(&20.0), "the driver dropped out of scope");
-    assert!(p.param_map().get("len").is_none(), "the old name is still reachable");
+    assert!(!p.param_map().contains_key("len"), "the old name is still reachable");
 }
 
 /// A rename onto a taken name is refused, and the document is left untouched by the refusal.

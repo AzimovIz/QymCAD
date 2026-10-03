@@ -805,11 +805,10 @@ pub fn stitch_segments(segs: Vec<(Point2, Point2)>, tol: f64) -> Vec<Contour> {
     let mut chains: Vec<Vec<Point2>> = segs.into_iter().map(|(a, b)| vec![a, b]).collect();
     let mut out: Vec<Contour> = Vec::new();
     while let Some(mut chain) = chains.pop() {
-        loop {
-            // A chain is non-empty by construction, since each one is born from a segment of two points, but that
-            // invariant must not be enforced by a panic: a CAD core has no business dying on data. If it is
-            // violated, leave the chain rather than take the application down along with unsaved work.
-            let (Some(&head), Some(&tail)) = (chain.first(), chain.last()) else { break };
+        // A chain is non-empty by construction, since each one is born from a segment of two points, but that
+        // invariant must not be enforced by a panic: a CAD core has no business dying on data. If it is
+        // violated, leave the chain rather than take the application down along with unsaved work.
+        while let (Some(&head), Some(&tail)) = (chain.first(), chain.last()) {
             let mut matched = None;
             for (i, s) in chains.iter().enumerate() {
                 let (Some(&a), Some(&b)) = (s.first(), s.last()) else { continue };

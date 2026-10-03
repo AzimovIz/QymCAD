@@ -189,7 +189,7 @@ mod tests {
             return; // a published copy of the tree: nothing here to measure
         }
         let mut deps = collect();
-        deps.sort_by(|a, b| gap(&b.declared, &b.latest).cmp(&gap(&a.declared, &a.latest)));
+        deps.sort_by_key(|a| std::cmp::Reverse(gap(&a.declared, &a.latest)));
         let total: usize = deps.iter().map(|d| gap(&d.declared, &d.latest)).sum();
 
         let table: String = deps

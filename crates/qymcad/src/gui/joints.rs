@@ -137,7 +137,7 @@ impl App {
     /// THE TEST FACADES. A test must walk the same path a person does - through the command and its picks
     /// - rather than poking at fields directly, or it only ever checks an invention of its own.
     #[cfg(test)]
-    /// Take up the joint tool through the same door the button or the `J` key uses.
+    ///   Take up the joint tool through the same door the button or the `J` key uses.
     #[cfg(test)]
     pub(crate) fn arm_joint_pick_for_test(&mut self) {
         if !self.side.joint.pick_faces {

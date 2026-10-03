@@ -316,8 +316,7 @@ fn how_many_faces_go_missing_and_at_which_accuracy() {
             }
             let (mut len, mut prev, mut cur) = (0.0_f64, a, b);
             len += (pos[a as usize].x - pos[b as usize].x).hypot(pos[a as usize].y - pos[b as usize].y).hypot(pos[a as usize].z - pos[b as usize].z);
-            loop {
-                let Some(step) = next.get(&cur).and_then(|v| v.iter().copied().find(|&n| n != prev && walked.insert((cur.min(n), cur.max(n))))) else { break };
+            while let Some(step) = next.get(&cur).and_then(|v| v.iter().copied().find(|&n| n != prev && walked.insert((cur.min(n), cur.max(n))))) {
                 len += (pos[cur as usize].x - pos[step as usize].x).hypot(pos[cur as usize].y - pos[step as usize].y).hypot(pos[cur as usize].z - pos[step as usize].z);
                 prev = cur;
                 cur = step;

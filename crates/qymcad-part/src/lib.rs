@@ -4827,8 +4827,8 @@ pub fn sync_comp_array_params(arr: qymcad_ui_state::ArrayParams, cmd: &mut qymca
 
 /// THE VALUES OF A PATTERN OF COMPONENTS - the step of a linear one, the angle of a circular one short of a full turn
 /// - as expression fields, the same ones the popup of every tool has; drawn at the geometry and in the bar (`place`
-/// keeps the two apart). Gives whether Enter was pressed in a field whose value can be taken. Reported behaviour: the
-/// step of a linear pattern of parts could not be set - it stood in the command with no field to type it into.
+///   keeps the two apart). Gives whether Enter was pressed in a field whose value can be taken. Reported behaviour: the
+///   step of a linear pattern of parts could not be set - it stood in the command with no field to type it into.
 fn comp_array_fields(pc: &mut qymcad_ui_state::PartCtx, ui: &mut egui::Ui, place: &str) -> bool {
     let vars = pc.project.param_map();
     let mut enter = false;

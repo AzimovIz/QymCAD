@@ -137,7 +137,7 @@ mod tests {
 
     /// THE REGIONS EACH MESH SPLITS INTO, SEEN: the 24 widest in colours of their own, the rest by what they lie on
     /// - planes light grey, cylinders mid grey, spheres dark grey - and a region of one triangle red.
-    /// `<folder>/shots/<file>.regions.png`.
+    ///   `<folder>/shots/<file>.regions.png`.
     #[test]
     #[ignore = "files on this machine"]
     fn every_mesh_shows_its_regions() {

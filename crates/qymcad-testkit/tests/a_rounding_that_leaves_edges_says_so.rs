@@ -40,6 +40,6 @@ fn the_rounding_of_the_vacuum_cleaner_takes_all_eight_edges() {
     // of the rounding before it beside them
     for node in [177u64, 252] {
         assert!(!report.errors.iter().any(|(id, _)| *id == node), "the rounding {node} went red: {:?}", report.errors);
-        assert!(p.regen_warnings.get(&node).is_none(), "the rounding {node} still leaves edges out: {:?}", p.regen_warnings.get(&node));
+        assert!(!p.regen_warnings.contains_key(&node), "the rounding {node} still leaves edges out: {:?}", p.regen_warnings.get(&node));
     }
 }

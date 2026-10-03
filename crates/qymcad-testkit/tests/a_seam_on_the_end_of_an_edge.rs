@@ -31,7 +31,7 @@ fn an_upright_edge_under_the_seam_of_a_cylinder_takes_a_rounding() {
     let round = p.add_fillet(cut, 1.0, vec![edge]);
     let (report, shapes) = qymcad_testkit::regenerate(&mut p);
     assert!(report.errors.is_empty(), "the rounding under the seam was refused: {:?}", report.errors);
-    assert!(p.regen_warnings.get(&round).is_none(), "the rounding left its edge out: {:?}", p.regen_warnings.get(&round));
+    assert!(!p.regen_warnings.contains_key(&round), "the rounding left its edge out: {:?}", p.regen_warnings.get(&round));
     let after = shapes.get(&round).map(|s| s.volume()).unwrap_or(before);
     assert!((after - before).abs() > 0.1, "the rounding under the seam changed nothing: {before:.2} -> {after:.2}");
 }

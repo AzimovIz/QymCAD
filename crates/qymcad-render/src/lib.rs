@@ -926,7 +926,7 @@ pub struct TrimArc {
     pub span: Option<(f64, f64, bool)>,
 }
 
-pub fn draw_curve_trim_span(pick: &PickCtx, painter: &egui::Painter, rect: Rect, arc: TrimArc, angs: &mut Vec<f64>, cur: Point2, col: Color32) {
+pub fn draw_curve_trim_span(pick: &PickCtx, painter: &egui::Painter, rect: Rect, arc: TrimArc, angs: &mut [f64], cur: Point2, col: Color32) {
     let TrimArc { c, r, span } = arc;
     use std::f64::consts::TAU;
     let click_ang = (cur.y - c.y).atan2(cur.x - c.x);

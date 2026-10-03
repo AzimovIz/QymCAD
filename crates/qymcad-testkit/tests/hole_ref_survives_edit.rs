@@ -41,7 +41,7 @@ fn a_hole_follows_its_face_when_the_plate_grows() {
     let (mut p, plate, hole) = plate_with_hole(10.0);
     let v_before = p.regen_faces[&plate].len();
     assert!(v_before > 0, "the plate built");
-    assert!(p.regen_errors.get(&hole).is_none(), "the hole built without errors");
+    assert!(!p.regen_errors.contains_key(&hole), "the hole built without errors");
 
     // AN EDIT HIGHER UP THE TIMELINE: the plate became twice as thick
     for n in &mut p.timeline {

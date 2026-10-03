@@ -46,7 +46,7 @@ fn points_along(dir: [f64; 3], want: [f64; 3]) -> bool {
 /// WHERE THE ROUND SIDE OF A SHAFT CAN BE CLICKED: only the facets turned towards the eye can be, so the places round
 /// it are tried in turn.
 fn the_side_of_a_shaft(s: &mut Session, r: f64, z: f64) -> qymcad::Pos2 {
-    let middle = s.document().bodies.iter().filter(|b| !b.consumed && !b.sheet).next_back().map(|b| [(b.min[0] + b.max[0]) / 2.0, (b.min[1] + b.max[1]) / 2.0]).unwrap_or([0.0, 0.0]);
+    let middle = s.document().bodies.iter().rfind(|b| !b.consumed && !b.sheet).map(|b| [(b.min[0] + b.max[0]) / 2.0, (b.min[1] + b.max[1]) / 2.0]).unwrap_or([0.0, 0.0]);
     for k in 0..(72 * 3) {
         let a = (k % 72) as f64 * std::f64::consts::TAU / 72.0;
         let r = r - 0.05 * (k / 72) as f64;
@@ -183,7 +183,7 @@ probe! {
         let place = s.in_space([25.0, 0.0, 0.0]);
         s.click(place);
         s.key(Key::Enter);
-        let cylinder = s.document().bodies.iter().filter(|b| !b.consumed && !b.sheet).next_back().cloned().unwrap_or_else(|| panic!("no cylinder was made"));
+        let cylinder = s.document().bodies.iter().rfind(|b| !b.consumed && !b.sheet).cloned().unwrap_or_else(|| panic!("no cylinder was made"));
         assert!((cylinder.min[0] - 15.0).abs() < 0.1, "the cylinder was not put on the point at 25: it runs from {:?}", cylinder.min);
         take(&mut s, "g-datum-axis-hint");
         let side = the_side_of_a_shaft(&mut s, 10.0, 10.0);

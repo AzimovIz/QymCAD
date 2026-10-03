@@ -321,7 +321,7 @@ fn the_owners_head_is_measured_against_its_step() {
         }
         rows.push((p.mesh.tris.len(), part, faces, found.len(), single, kinds, off));
     }
-    rows.sort_by(|a, b| b.0.cmp(&a.0));
+    rows.sort_by_key(|a| std::cmp::Reverse(a.0));
     println!("{:>7} {:>6} {:>7} {:>7} {:>6}  {:<34} kinds p/c/k/s/t/none, box off", "tris", "faces", "regions", "x faces", "ones", "part");
     for (tris, part, faces, found, single, k, off) in &rows {
         println!(

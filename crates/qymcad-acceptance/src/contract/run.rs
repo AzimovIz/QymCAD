@@ -604,16 +604,16 @@ fn matches(s: &mut Session, want: &Outcome) -> Result<(), String> {
             let mut wrong = Vec::new();
             for (x, y, what) in under {
                 let there = s.sketch_under(*x, *y);
-                let is = match (&there, what) {
-                    (None, Under::Nothing) => true,
-                    (Some(qymcad::SketchPick::Point { .. }), Under::Point) => true,
-                    (Some(qymcad::SketchPick::Line { .. }), Under::Line) => true,
-                    (Some(qymcad::SketchPick::Arc { .. }), Under::Arc) => true,
-                    (Some(qymcad::SketchPick::Circle { .. }), Under::Circle) => true,
-                    (Some(qymcad::SketchPick::Ellipse { .. }), Under::Ellipse) => true,
-                    (Some(qymcad::SketchPick::Spline { .. }), Under::Spline) => true,
-                    _ => false,
-                };
+                let is = matches!(
+                    (&there, what),
+                    (None, Under::Nothing)
+                        | (Some(qymcad::SketchPick::Point { .. }), Under::Point)
+                        | (Some(qymcad::SketchPick::Line { .. }), Under::Line)
+                        | (Some(qymcad::SketchPick::Arc { .. }), Under::Arc)
+                        | (Some(qymcad::SketchPick::Circle { .. }), Under::Circle)
+                        | (Some(qymcad::SketchPick::Ellipse { .. }), Under::Ellipse)
+                        | (Some(qymcad::SketchPick::Spline { .. }), Under::Spline)
+                );
                 if !is {
                     wrong.push(format!("at ({x}, {y}) lies {there:?}, it should be {what:?}"));
                 }
@@ -683,7 +683,7 @@ fn row_of(s: &mut Session, tool: &Tool, node: &Node) -> Pos2 {
 const PRESS_MOVES_ON: &[&str] = &["sketch.mirror"];
 
 /// 1. EVERY WAY IN TAKES THE TOOL; its button a second time puts it down; taken over another tool, it puts that one
-/// down.
+///    down.
 fn entry(tool: &Tool) {
     let mut problems = Vec::new();
     for e in tool.entries {
@@ -760,7 +760,7 @@ fn describe(e: &Entry) -> String {
 }
 
 /// 2. EVERY MODE OF THE BAR MAKES WHAT IT IS DESCRIBED TO MAKE - or refuses in words - and going through a group
-/// and back leaves no mode hanging.
+///    and back leaves no mode hanging.
 fn bar(tool: &Tool) {
     let mut problems = Vec::new();
     for mode in tool.modes.iter().flat_map(|g| g.iter()) {
@@ -1139,7 +1139,7 @@ fn valid_values(tool: &Tool) {
 }
 
 /// 6. A REFUSED VALUE STOPS THE TOOL: Apply cannot be pressed, the reason is in words, the document is untouched and
-/// what was typed stays in the field.
+///    what was typed stays in the field.
 fn invalid_values(tool: &Tool) {
     let mut problems = Vec::new();
     for w in tool.words {
@@ -1501,7 +1501,7 @@ fn save_open(tool: &Tool) {
 }
 
 /// 13. A DOUBLE CLICK ON THE NODE OPENS THE TOOL WITH ITS VALUES; a changed value moves the body; Esc leaves it as it
-/// was.
+///     was.
 fn reopen(tool: &Tool) {
     // made with a value of its own, not the one the tool starts with: a field that only shows its default would pass.
     // One more than the ordinary, or one less when the ordinary is already the most the tool takes - a revolution

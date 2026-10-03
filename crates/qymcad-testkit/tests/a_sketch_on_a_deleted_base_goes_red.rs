@@ -26,7 +26,7 @@ fn a_sketch_on_a_face_of_a_deleted_extrude_goes_red() {
     p.sketches[s2].plane = SketchPlane::Face(cube, key);
     let node = p.add_sketch_node(sid2, "on top");
     let _ = qymcad_testkit::regenerate(&mut p);
-    assert!(p.regen_errors.get(&node).is_none(), "setup: the sketch on the top is red before anything is deleted: {:?}", p.regen_errors);
+    assert!(!p.regen_errors.contains_key(&node), "setup: the sketch on the top is red before anything is deleted: {:?}", p.regen_errors);
     let extrude = p.timeline.iter().find(|n| n.kind.bodies().contains(&cube)).map(|n| n.id).expect("the extrude's node");
     p.delete_feature_op(extrude);
     // the window rebuilds only when something is marked: a sketch left unmarked is never visited, and stays clean

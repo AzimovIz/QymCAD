@@ -10314,7 +10314,7 @@ impl Drop for Edit<'_> {
 /// map is filled by THE POST-PASS of a rebuild. Opening a file does not rebuild: the bundle holds
 /// meshes and faces but no edges. A click still HITS an edge - the pick takes them from the live B-rep
 /// - and the joint was born dead: "anchor lost", travel 0.000 mm, no axis of travel. Measured on a real
-/// document: 138 bodies, faces on all 138, EDGES ON TWO, live B-rep on all 138.
+///   document: 138 bodies, faces on all 138, EDGES ON TWO, live B-rep on all 138.
 ///
 /// The two sources of edges are reconciled here, at the point where the anchor is created: the core is
 /// asked through the same call a rebuild uses to fill them.

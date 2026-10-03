@@ -2661,7 +2661,7 @@ fn a_mirror_follows_the_source_when_its_active_body_is_replaced() {
     let mirror_dirty = p.timeline.iter().find(|n| n.kind.bodies().contains(&mirror_body)).map(|n| n.dirty);
     p.regenerate(&k);
     assert!(
-        p.regen_errors.get(&mirror_body).is_none(),
+        !p.regen_errors.contains_key(&mirror_body),
         "the mirror failed after the active body of the source was replaced: {:?} (its dirty flag was {mirror_dirty:?})",
         p.regen_errors.get(&mirror_body)
     );

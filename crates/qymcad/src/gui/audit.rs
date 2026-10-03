@@ -181,8 +181,8 @@ mod live_session {
     ///   `feat_flip`, `feat_extent` and so on), so the order in which they are set matters more than their
     ///   values. In grown-up CAD a command is ONE record of parameters, and the derived things (the
     ///   direction) are computed at the moment of applying rather than at the moment of opening;
-    /// THE FIRST IS CLOSED: the direction is computed on APPLYING (`smart_flip`) rather than on opening.
-    /// The second (a silently empty result) is not yet.
+    ///   THE FIRST IS CLOSED: the direction is computed on APPLYING (`smart_flip`) rather than on opening.
+    ///   The second (a silently empty result) is not yet.
     #[test]
     fn switching_the_operation_after_the_command_started_keeps_the_direction() {
         let mut app = App::default();

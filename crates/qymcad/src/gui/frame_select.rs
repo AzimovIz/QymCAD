@@ -55,7 +55,7 @@ fn may_start(pn: &Painting, rect: Rect, pos: Pos2, on_the_model: bool) -> bool {
 pub(crate) fn frame(pn: &Painting, ctx: &egui::Context, resp: &Response, painter: &egui::Painter, rect: Rect) -> Option<Frame> {
     // THE LAYOUT'S OWN GESTURE OF THE FRAME, its modifiers exactly: a chord or another modified drag belongs to the
     // layout's movements
-    let Some((gesture, on_the_model)) = pn.set.mouse_nav.frames() else { return None };
+    let (gesture, on_the_model) = pn.set.mouse_nav.frames()?;
     let held = ctx.input(|i| {
         i.modifiers.shift == gesture.shift && (i.modifiers.ctrl || i.modifiers.command) == gesture.ctrl && i.modifiers.alt == gesture.alt && !i.pointer.middle_down() && !i.pointer.secondary_down()
     });

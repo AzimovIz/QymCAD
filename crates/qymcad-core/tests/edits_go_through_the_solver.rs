@@ -170,16 +170,13 @@ fn no_editing_tool_leaves_a_constraint_unsatisfied() {
         let (mut p, si, mover, mb, sa) = build();
         act(&mut p, si, mover);
         let at = |id: u64| p.sketches[si].points.iter().find(|q| q.id == id).map(|q| (q.x, q.y));
-        match (at(mb), at(sa)) {
-            (Some(u), Some(v)) => {
-                let gap = (u.0 - v.0).hypot(u.1 - v.1);
-                if gap > 1e-6 {
-                    sins.push(format!("{name}: the tie was torn - {u:?} against {v:?}, a gap of {gap:.3} mm"));
-                }
+        // A point may legitimately disappear (a break replaces the line with two halves); a tie whose end is gone
+        // is not a broken tie.
+        if let (Some(u), Some(v)) = (at(mb), at(sa)) {
+            let gap = (u.0 - v.0).hypot(u.1 - v.1);
+            if gap > 1e-6 {
+                sins.push(format!("{name}: the tie was torn - {u:?} against {v:?}, a gap of {gap:.3} mm"));
             }
-            // A point may legitimately disappear (a break replaces the line with two halves); a tie whose end
-            // is gone is not a broken tie.
-            _ => {}
         }
     }
     assert!(sins.is_empty(), "edits that left their constraints unsatisfied:\n{}", sins.join("\n"));

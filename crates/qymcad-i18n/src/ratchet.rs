@@ -186,7 +186,7 @@ pub mod tests {
                 }
             }
         }
-        per.sort_by(|a, b| b.1.cmp(&a.1));
+        per.sort_by_key(|a| std::cmp::Reverse(a.1));
         (total, per)
     }
 

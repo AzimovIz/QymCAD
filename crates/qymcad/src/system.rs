@@ -40,7 +40,7 @@ thread_local! {
 /// A SESSION OF THIS THREAD STANDS IN FOR THE SYSTEM (`true`), or has ended (`false`). The stand-in lives while any
 /// session of the thread does: a check that opens a second session inside the first - a copy saved and opened again
 /// - must not, by closing it, hand the first one the real system. Measured: it did, and the next chooser of the first
-/// session came up as a real dialog on the desktop of whoever was running the checks.
+///   session came up as a real dialog on the desktop of whoever was running the checks.
 pub(crate) fn stand_in(on: bool) {
     if on {
         CHECKED.store(true, std::sync::atomic::Ordering::Relaxed);
