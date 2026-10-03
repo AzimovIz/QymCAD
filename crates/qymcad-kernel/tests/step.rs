@@ -44,8 +44,8 @@ fn imports_sample_step() {
     }
     let bodies = import_step(path, 0.5).expect("the STEP file imports");
     assert!(!bodies.is_empty(), "there is at least one body");
-    let tris: usize = bodies.iter().map(|(m, _)| m.tris.len()).sum();
-    let faces: usize = bodies.iter().map(|(_, f)| f.len()).sum();
+    let tris: usize = bodies.iter().map(|qymcad_core::geom::Built { mesh: m, .. }| m.tris.len()).sum();
+    let faces: usize = bodies.iter().map(|qymcad_core::geom::Built { faces: f, .. }| f.len()).sum();
     assert!(tris > 100, "a real part has many triangles, found {tris}");
     assert!(faces > 0, "the faces of the B-rep topology are extracted");
     eprintln!("STEP: {} bodies, {tris} triangles, {faces} B-rep faces", bodies.len());
@@ -57,7 +57,7 @@ fn extrude_square_makes_box() {
     let xy = [0.0, 0.0, 10.0, 0.0, 10.0, 10.0, 0.0, 10.0];
     let bodies = extrude(&xy, 5.0, 0.5).expect("the extrusion succeeded");
     assert_eq!(bodies.len(), 1, "one body");
-    let (m, faces) = &bodies[0];
+    let qymcad_core::geom::Built { mesh: m, faces } = &bodies[0];
     assert!(m.tris.len() >= 12, "a cuboid has at least 12 triangles, found {}", m.tris.len());
     let b = m.bounds().expect("the bounding box");
     assert!((b.max.z - 5.0).abs() < 1e-6, "the height is 5, max.z={}", b.max.z);
@@ -84,7 +84,7 @@ fn step_write_roundtrips_via_step_read() {
     // and as meshes: the transform survived, so the combined extent along X is about [0, 40]
     let bodies = import_step(&p, 0.5).expect("the STEP file as meshes");
     let (mut xmin, mut xmax) = (f64::MAX, f64::MIN);
-    for (m, _) in &bodies {
+    for qymcad_core::geom::Built { mesh: m, .. } in &bodies {
         let bb = m.bounds().unwrap();
         xmin = xmin.min(bb.min.x);
         xmax = xmax.max(bb.max.x);
@@ -104,7 +104,7 @@ fn revolve_makes_solid() {
     let xy = [0.0, 2.0, 10.0, 2.0, 10.0, 5.0, 0.0, 5.0];
     let bodies = qymcad_kernel::revolve(&xy, 0, 360.0, 0.5).expect("the revolve succeeded");
     assert_eq!(bodies.len(), 1);
-    let (m, _faces) = &bodies[0];
+    let qymcad_core::geom::Built { mesh: m, .. } = &bodies[0];
     assert!(m.tris.len() > 50, "a body of revolution, {} triangles", m.tris.len());
     let b = m.bounds().unwrap();
     assert!((b.max.x - 10.0).abs() < 1e-3, "the length along X is 10");
@@ -120,11 +120,11 @@ fn shell_center_builds_and_grows_bbox() {
         let d = enc::prof(&[&[enc::line(0.0, 0.0, 10.0, 0.0), enc::line(10.0, 0.0, 10.0, 10.0), enc::line(10.0, 10.0, 0.0, 10.0), enc::line(0.0, 10.0, 0.0, 0.0)]]);
         Shape::extrude_profile(&d, h).expect("the cube")
     };
-    let faces = sq(10.0).tessellate(0.5).remove(0).1;
+    let faces = sq(10.0).tessellate(0.5).remove(0).faces;
     // the top face, whose normal is +Z
     let top = faces.iter().find(|f| f.normal[2] > 0.9).map(|f| f.id).expect("the top face");
     let shape = sq(10.0).shell_center(2.0, &[top]).expect("the centred shell built");
-    let b = shape.tessellate(0.3).remove(0).0.bounds().expect("bbox");
+    let b = shape.tessellate(0.3).remove(0).mesh.bounds().expect("bbox");
     // t = 2 centred gives +1 on each side, so X goes from [0, 10] to about [-1, 11]
     assert!(b.max.x - b.min.x > 11.5, "the bounding box grew by about t, the centred wall reaching outward: {:?}", (b.min.x, b.max.x));
     assert!(b.min.x < -0.5, "the wall passed outside the original face: min.x={}", b.min.x);
@@ -138,14 +138,14 @@ fn hole_stepped_counterbore_countersink_cut() {
         let d = enc::prof(&[&[enc::line(0.0, 0.0, 10.0, 0.0), enc::line(10.0, 0.0, 10.0, 10.0), enc::line(10.0, 10.0, 0.0, 10.0), enc::line(0.0, 10.0, 0.0, 0.0)]]);
         Shape::extrude_profile(&d, h).expect("the cube")
     };
-    let base = box20(20.0).tessellate(0.4)[0].1.len(); // six faces
-                                                       // the frame sits at the centre of the top face with Z pointing outward, and the tool goes down into the
-                                                       // body
+    let base = box20(20.0).tessellate(0.4)[0].faces.len(); // six faces
+                                                           // the frame sits at the centre of the top face with Z pointing outward, and the tool goes down into the
+                                                           // body
     let pl = [1.0, 0.0, 0.0, 5.0, 0.0, 1.0, 0.0, 5.0, 0.0, 0.0, 1.0, 20.0];
     let cb = box20(20.0).hole_stepped(qymcad_core::model::HoleTool { kind: 1, diameter: 4.0, depth: 15.0, dia2: 8.0, depth2: 5.0 }, pl, &[]).expect("the counterbore");
-    assert!(cb.tessellate(0.4)[0].1.len() > base, "the counterbore added faces");
+    assert!(cb.tessellate(0.4)[0].faces.len() > base, "the counterbore added faces");
     let cs = box20(20.0).hole_stepped(qymcad_core::model::HoleTool { kind: 2, diameter: 4.0, depth: 15.0, dia2: 8.0, depth2: 3.0 }, pl, &[]).expect("the countersink");
-    assert!(cs.tessellate(0.4)[0].1.len() > base, "the countersink added faces");
+    assert!(cs.tessellate(0.4)[0].faces.len() > base, "the countersink added faces");
     assert!(box20(20.0).hole_stepped(qymcad_core::model::HoleTool { kind: 0, diameter: 4.0, depth: 15.0, dia2: 0.0, depth2: 0.0 }, pl, &[]).is_some(), "a plain hole cuts");
 }
 
@@ -157,10 +157,10 @@ fn revolve_around_offset_axis_makes_ring() {
     let d = enc::prof(&[&[enc::line(2.0, 0.0, 6.0, 0.0), enc::line(6.0, 0.0, 6.0, 4.0), enc::line(6.0, 4.0, 2.0, 4.0), enc::line(2.0, 4.0, 2.0, 0.0)]]);
     // about the world Y through the origin: a valid body
     let a = Shape::revolve_profile_axis(&d, [0.0, 0.0, 0.0], [0.0, 1.0, 0.0], 360.0).expect("the revolve about Y");
-    assert!(a.tessellate(0.3)[0].0.tris.len() > 20, "the ring is built");
+    assert!(a.tessellate(0.3)[0].mesh.tris.len() > 20, "the ring is built");
     // about a parallel axis offset to x = -2: also a valid body, a ring of larger radius
     let b = Shape::revolve_profile_axis(&d, [-2.0, 0.0, 0.0], [0.0, 1.0, 0.0], 360.0).expect("the revolve about the offset axis");
-    assert!(b.tessellate(0.3)[0].0.tris.len() > 20, "an offset axis gives a body");
+    assert!(b.tessellate(0.3)[0].mesh.tris.len() > 20, "an offset axis gives a body");
 }
 
 #[test]
@@ -176,7 +176,7 @@ fn sweep_square_along_z_makes_prism() {
                                                                               // the placement of the path sends the local Y to the world +Z, so the segment runs up along Z
     let path_tf = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
     let s = Shape::sweep_profile(&prof, &ident, &path, &path_tf).expect("the sweep built");
-    let (m, _f) = s.tessellate(0.3).remove(0);
+    let qymcad_core::geom::Built { mesh: m, .. } = s.tessellate(0.3).remove(0);
     let b = m.bounds().expect("bbox");
     assert!((b.max.x - b.min.x - 4.0).abs() < 1e-2, "the section along X is 4: {:?}", (b.min.x, b.max.x));
     assert!((b.max.y - b.min.y - 4.0).abs() < 1e-2, "the section along Y is 4: {:?}", (b.min.y, b.max.y));
@@ -196,7 +196,7 @@ fn sweep_auto_transports_profile_to_path_start() {
     let path = enc::prof(&[&[enc::line(0.0, 0.0, 30.0, 0.0)]]);
     let ident = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0];
     let s = Shape::sweep_profile(&prof, &ident, &path, &ident).expect("the sweep with automatic orientation built");
-    let (m, _f) = s.tessellate(0.3).remove(0);
+    let qymcad_core::geom::Built { mesh: m, .. } = s.tessellate(0.3).remove(0);
     let b = m.bounds().expect("bbox");
     // along the path, X, the length is 30; across it the section is 4 by 4, the profile having turned
     // perpendicular to the path
@@ -225,7 +225,7 @@ fn loft_two_squares_makes_frustum() {
     let mut places = vec![1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0];
     places.extend_from_slice(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 20.0]);
     let s = Shape::loft_sections(&data, &offsets, &places, LoftWalls::Smooth, LoftBody::Solid).expect("the loft built");
-    let (m, _f) = s.tessellate(0.3).remove(0);
+    let qymcad_core::geom::Built { mesh: m, .. } = s.tessellate(0.3).remove(0);
     let b = m.bounds().expect("bbox");
     assert!(m.tris.len() > 8, "a truncated pyramid has faces: {}", m.tris.len());
     assert!((b.max.x - b.min.x - 10.0).abs() < 1e-1, "the bottom along X is 10: {:?}", (b.min.x, b.max.x));
@@ -246,7 +246,7 @@ fn boolean_cut_makes_hole() {
     }
     let res = qymcad_kernel::extrude_bool(&base, 5.0, &tool, 9.0, 0, 0.5).expect("the cut succeeded");
     assert_eq!(res.len(), 1);
-    let (m, _f) = &res[0];
+    let qymcad_core::geom::Built { mesh: m, .. } = &res[0];
     assert!(m.tris.len() > 12, "a plate with a hole has more triangles than a whole one: {}", m.tris.len());
 }
 
@@ -263,7 +263,7 @@ fn shape_boolean_cuts() {
     let tool = Shape::extrude(&tool, 9.0).expect("tool");
     let cut = base.boolean(&tool, 0).expect("cut");
     let bodies = cut.tessellate(0.5);
-    assert!(!bodies.is_empty() && bodies[0].0.tris.len() > 12, "a body with a hole");
+    assert!(!bodies.is_empty() && bodies[0].mesh.tris.len() > 12, "a body with a hole");
 }
 
 #[test]
@@ -276,7 +276,7 @@ fn exact_circle_extrudes_to_true_cylinder() {
     let s = Shape::extrude_profile(&data, 10.0).expect("the extrusion of the exact profile");
     let bodies = s.tessellate(0.1);
     assert_eq!(bodies.len(), 1, "one body");
-    let (m, faces) = &bodies[0];
+    let qymcad_core::geom::Built { mesh: m, faces } = &bodies[0];
     assert_eq!(faces.len(), 3, "an exact cylinder is three B-rep faces — bottom, top and side — not a faceted one: {}", faces.len());
     let b = m.bounds().expect("the bounding box");
     assert!((b.max.x - b.min.x - 2.0 * r).abs() < 0.2, "the diameter is about 10: {}", b.max.x - b.min.x);
@@ -291,7 +291,7 @@ fn exact_square_extrudes_to_six_faced_box() {
     let data = enc::prof(&[&[enc::line(0.0, 0.0, 10.0, 0.0), enc::line(10.0, 0.0, 10.0, 10.0), enc::line(10.0, 10.0, 0.0, 10.0), enc::line(0.0, 10.0, 0.0, 0.0)]]);
     let s = Shape::extrude_profile(&data, 5.0).expect("the extrusion of the square");
     let bodies = s.tessellate(0.5);
-    assert_eq!(bodies[0].1.len(), 6, "a cuboid is six faces: {}", bodies[0].1.len());
+    assert_eq!(bodies[0].faces.len(), 6, "a cuboid is six faces: {}", bodies[0].faces.len());
 }
 
 #[test]
@@ -302,7 +302,7 @@ fn exact_ring_extrudes_with_cylindrical_hole() {
     let data = enc::prof(&[&[enc::circle(0.0, 0.0, 10.0)], &[enc::circle(0.0, 0.0, 4.0)]]);
     let s = Shape::extrude_profile(&data, 8.0).expect("the tube");
     let bodies = s.tessellate(0.1);
-    assert_eq!(bodies[0].1.len(), 4, "a tube is four exact faces — two annular ends and the outer and inner cylinders: {}", bodies[0].1.len());
+    assert_eq!(bodies[0].faces.len(), 4, "a tube is four exact faces — two annular ends and the outer and inner cylinders: {}", bodies[0].faces.len());
 }
 
 #[test]
@@ -310,16 +310,16 @@ fn exact_primitives_have_true_brep_faces() {
     use qymcad_kernel::Shape;
     // a Ø10 by 20 cylinder is three faces: bottom, top and side
     let cyl = Shape::cylinder(5.0, 20.0).expect("the cylinder").tessellate(0.1);
-    assert_eq!(cyl[0].1.len(), 3, "a cylinder is three faces: {}", cyl[0].1.len());
+    assert_eq!(cyl[0].faces.len(), 3, "a cylinder is three faces: {}", cyl[0].faces.len());
     // a sphere is one face
     let sph = Shape::sphere(7.0).expect("the sphere").tessellate(0.1);
-    assert_eq!(sph[0].1.len(), 1, "a sphere is one face: {}", sph[0].1.len());
+    assert_eq!(sph[0].faces.len(), 1, "a sphere is one face: {}", sph[0].faces.len());
     // a truncated cone is three faces: bottom, top and side
     let cone = Shape::cone(6.0, 3.0, 10.0).expect("the cone").tessellate(0.1);
-    assert_eq!(cone[0].1.len(), 3, "a truncated cone is three faces: {}", cone[0].1.len());
+    assert_eq!(cone[0].faces.len(), 3, "a truncated cone is three faces: {}", cone[0].faces.len());
     // a torus is one face
     let tor = Shape::torus(10.0, 3.0).expect("the torus").tessellate(0.2);
-    assert_eq!(tor[0].1.len(), 1, "a torus is one face: {}", tor[0].1.len());
+    assert_eq!(tor[0].faces.len(), 1, "a torus is one face: {}", tor[0].faces.len());
 }
 
 #[test]
@@ -331,17 +331,17 @@ fn persistent_face_ids_survive_boolean_and_param_change() {
         Shape::extrude_profile(&d, h).expect("the cube")
     };
     // the base face ids of the cuboid are non-zero, six of them
-    let base_ids: HashSet<u32> = sq(10.0).tessellate(0.5).remove(0).1.iter().map(|f| f.id).collect();
+    let base_ids: HashSet<u32> = sq(10.0).tessellate(0.5).remove(0).faces.iter().map(|f| f.id).collect();
     assert_eq!(base_ids.len(), 6, "six faces with unique ids: {base_ids:?}");
     assert!(!base_ids.contains(&0), "every id is non-zero, coming from the B-rep: {base_ids:?}");
     // stability under a change of parameter: a different height gives the same set of ids
-    let base_ids2: HashSet<u32> = sq(20.0).tessellate(0.5).remove(0).1.iter().map(|f| f.id).collect();
+    let base_ids2: HashSet<u32> = sq(20.0).tessellate(0.5).remove(0).faces.iter().map(|f| f.id).collect();
     assert_eq!(base_ids, base_ids2, "the face ids are stable under a change of height");
     // cutting a hole: the base faces keep their ids and a new wall face appears
     let circ = [1.0, 1.0, 2.0, 2.0, 0.0, 0.0, 0.0, 5.0, 5.0, 0.0]; // a circle of R = 2 at the centre
     let tool = Shape::extrude_profile(&circ, 10.0).expect("the tool");
     let cut = sq(10.0).boolean(&tool, 0).expect("the cut");
-    let cut_ids: HashSet<u32> = cut.tessellate(0.2).remove(0).1.iter().map(|f| f.id).collect();
+    let cut_ids: HashSet<u32> = cut.tessellate(0.2).remove(0).faces.iter().map(|f| f.id).collect();
     assert!(base_ids.iter().all(|id| cut_ids.contains(id)), "the faces of the cuboid kept their ids after the cut: {base_ids:?} before, {cut_ids:?} after");
     assert!(cut_ids.len() > base_ids.len(), "a new wall face of the hole appeared with a new id: {cut_ids:?}");
 }
@@ -362,10 +362,10 @@ fn persistent_edge_ids_and_fillet_by_id() {
     // filleting an edge by id gives a new face: the id survives the selection
     let some = *e10.iter().next().unwrap();
     let filleted = sq(10.0).fillet_edges(1.0, &[some]).expect("the fillet of the edge by id");
-    assert!(filleted.tessellate(0.2)[0].1.len() > 6, "filleting the edge added faces");
+    assert!(filleted.tessellate(0.2)[0].faces.len() > 6, "filleting the edge added faces");
     // a variable fillet from r1 to r2 on the same edge builds, the radius changing along it
     let var = sq(10.0).fillet_var(0.5, 3.0, &[some]).expect("the variable fillet from 0.5 to 3");
-    assert!(var.tessellate(0.2)[0].1.len() > 6, "the variable fillet added faces");
+    assert!(var.tessellate(0.2)[0].faces.len() > 6, "the variable fillet added faces");
     assert!(sq(10.0).fillet_var(1.0, 1.0, &[999999]).is_none(), "a non-existent edge gives None");
 }
 
@@ -382,7 +382,7 @@ fn merged_tessellation_keeps_all_disjoint_solids() {
     // the union of two disjoint cuboids, over x in [0, 10] and x in [30, 40]
     let two = sq(0.0).boolean(&sq(30.0), 1).expect("union");
     // one solid is six faces, so the merged tessellation has to give twelve, both cuboids
-    let (_mesh, faces) = two.tessellate_merged(0.5).expect("merged");
+    let qymcad_core::geom::Built { faces, .. } = two.tessellate_merged(0.5).expect("merged");
     assert_eq!(faces.len(), 12, "both disjoint cuboids are in the merged mesh: {} faces", faces.len());
     // the naive first-solid version would have given six
     assert_eq!(two.tessellate(0.5).len(), 2, "the compound really holds two solids");
@@ -398,7 +398,7 @@ fn mirror_about_arbitrary_plane() {
     };
     // mirrored about the plane x = 20, whose normal is +X and origin [20, 0, 0]
     let m = sq(10.0).mirrored_plane([20.0, 0.0, 0.0], [1.0, 0.0, 0.0]).expect("the mirror about the arbitrary plane");
-    assert_eq!(m.tessellate(0.5).remove(0).1.len(), 6, "the mirror of a cuboid has six faces");
+    assert_eq!(m.tessellate(0.5).remove(0).faces.len(), 6, "the mirror of a cuboid has six faces");
 }
 
 #[test]
@@ -409,7 +409,7 @@ fn shell_by_face_id_and_direction() {
         let d = enc::prof(&[&[enc::line(0.0, 0.0, 10.0, 0.0), enc::line(10.0, 0.0, 10.0, 10.0), enc::line(10.0, 10.0, 0.0, 10.0), enc::line(0.0, 10.0, 0.0, 0.0)]]);
         Shape::extrude_profile(&d, h).expect("the cube")
     };
-    let faces = sq(10.0).tessellate(0.5).remove(0).1;
+    let faces = sq(10.0).tessellate(0.5).remove(0).faces;
     let valid_id = faces.iter().map(|f| f.id).max().expect("there are faces");
     assert_ne!(valid_id, 0, "the face has a non-zero persistent id");
     // inward, a negative offset, by a valid face id: a hollow body builds
@@ -431,13 +431,13 @@ fn draft_tilts_side_face_about_neutral_plane() {
         Shape::extrude_profile(&d, h).expect("the cube")
     };
     // find the face whose normal is about +X, tilt that one and measure the span along X
-    let faces = sq(10.0).tessellate(0.5).remove(0).1;
+    let faces = sq(10.0).tessellate(0.5).remove(0).faces;
     let side = faces.iter().find(|f| f.id != 0 && f.normal[0] > 0.9).map(|f| f.id).expect("there is a +X face");
     let pull = [0.0, 0.0, 1.0];
     let np_o = [0.0, 0.0, 0.0];
     let np_n = [0.0, 0.0, 1.0];
     let s = sq(10.0).draft_faces(&[side], 10.0, pull, np_o, np_n, &[]).expect("the draft built");
-    let (m, f2) = s.tessellate(0.3).remove(0);
+    let qymcad_core::geom::Built { mesh: m, faces: f2 } = s.tessellate(0.3).remove(0);
     assert!(f2.len() >= 6, "the body stayed closed, with at least six faces: {}", f2.len());
     // the width of the section along X at the bottom, z near 0, and at the top, z near 10, has to differ by
     // about 10·tan(10°)
@@ -467,7 +467,7 @@ fn face_axis_of_cylinder_is_z() {
     // Planar ends have no axis.
     use qymcad_kernel::Shape;
     let cyl = Shape::cylinder(5.0, 20.0).expect("the cylinder");
-    let faces = cyl.tessellate(0.2).remove(0).1;
+    let faces = cyl.tessellate(0.2).remove(0).faces;
     let mut lateral = None;
     for f in &faces {
         if f.id != 0 {

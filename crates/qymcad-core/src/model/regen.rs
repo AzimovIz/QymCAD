@@ -797,8 +797,7 @@ impl Project {
         // can be built at the same time. The document itself stays on this thread: a worker is given the bodies
         // its node needs and nothing else, and what it built comes home before anything is written down.
         let hands = kernel.workers();
-        let mut computed: std::collections::HashMap<Id, (Id, Result<(crate::geom::Mesh, Vec<crate::geom::MeshFace>), crate::errors::CoreError>, Option<Box<dyn crate::feature::KernelWorker>>)> =
-            std::collections::HashMap::new();
+        let mut computed: std::collections::HashMap<Id, (Id, Result<crate::geom::Built, crate::errors::CoreError>, Option<Box<dyn crate::feature::KernelWorker>>)> = std::collections::HashMap::new();
         let mut work = 0usize;
         // THE ORDER OF THE WALK: the timeline, except that a batch just computed is written down straight away.
         //
@@ -1026,7 +1025,7 @@ impl Project {
                             let lane = n % lanes.len();
                             lanes[lane].push(parcel);
                         }
-                        let mut back: Vec<(Id, Id, Result<(crate::geom::Mesh, Vec<crate::geom::MeshFace>), crate::errors::CoreError>, Box<dyn crate::feature::KernelWorker>)> = Vec::new();
+                        let mut back: Vec<(Id, Id, Result<crate::geom::Built, crate::errors::CoreError>, Box<dyn crate::feature::KernelWorker>)> = Vec::new();
                         std::thread::scope(|scope| {
                             let mut running = Vec::new();
                             for lane in lanes {
@@ -1217,7 +1216,7 @@ impl Project {
             let several = out_bodies.len() > 1;
             if !clear && !several {
                 if let (Some(src), Some(b)) = (consumed_src.filter(|s| !unbuilt.contains(s)), out_body) {
-                    if let Ok((mesh, faces)) = kernel.transform_body(b, src, crate::feature::PLACE_IDENTITY) {
+                    if let Ok(crate::geom::Built { mesh, faces }) = kernel.transform_body(b, src, crate::feature::PLACE_IDENTITY) {
                         self.set_body_mesh(b, mesh);
                         // the copy is what the source was, a sheet or a solid: a sheet passed through a red trim
                         // counted as a solid of one face, a second body of the part
@@ -1792,7 +1791,7 @@ impl Project {
         // An external STEP solid has no recipe, so this only re-tessellates the shape from the kernel
         // cache. Without a shape in the kernel (a mock, or before restoration from the source) the
         // already loaded mesh is kept.
-        if let Some((mesh, faces)) = p.kernel.tessellate(body) {
+        if let Some(crate::geom::Built { mesh, faces }) = p.kernel.tessellate(body) {
             self.set_body_mesh(body, mesh);
             p.dirty.insert(body);
             self.regen_faces.insert(body, faces.clone());
@@ -1969,17 +1968,17 @@ impl Project {
                                 rnames: &rnames,
                                 crest_relief: relief,
                             })
-                            .and_then(|(m, f)| {
+                            .and_then(|built| {
                                 // The result is checked, not only the input: a thread that removed
                                 // nothing is a refusal rather than a success, or a smooth part is
                                 // reported as done. The groove side already came from the geometry, so
                                 // what is caught here is the rest: too fine a pitch, a degenerate
                                 // profile, a miss against the face.
-                                let got = src_v - m.volume();
+                                let got = src_v - built.mesh.volume();
                                 if src_v > 0.0 && got < 1e-6 * src_v {
-                                    Err(crate::errors::CoreError::ThreadRemovedNothing { before: src_v, after: m.volume() })
+                                    Err(crate::errors::CoreError::ThreadRemovedNothing { before: src_v, after: built.mesh.volume() })
                                 } else {
-                                    Ok((m, f))
+                                    Ok(built)
                                 }
                             })
                         })
@@ -2033,15 +2032,15 @@ impl Project {
                             rnames: &rnames,
                             crest_relief: 0.0,
                         })
-                        .and_then(|(m, f)| {
+                        .and_then(|built| {
                             // An auger flight is welded on, so the volume has to grow. If it did
                             // not, the flight landed beside the shaft, and reporting success would
                             // mean a smooth shaft.
                             let src_v = self.mesh_index(src).map(|i| self.bodies[i].mesh.volume()).unwrap_or(0.0);
-                            if src_v > 0.0 && m.volume() <= src_v * 1.001 {
-                                Err(crate::errors::CoreError::AugerAddedNothing { before: src_v, after: m.volume() })
+                            if src_v > 0.0 && built.mesh.volume() <= src_v * 1.001 {
+                                Err(crate::errors::CoreError::AugerAddedNothing { before: src_v, after: built.mesh.volume() })
                             } else {
-                                Ok((m, f))
+                                Ok(built)
                             }
                         })
                 }
@@ -2981,10 +2980,10 @@ impl Project {
         (start, total)
     }
 
-    fn apply_regen(&mut self, l: Landing, body: Id, res: Result<(crate::geom::Mesh, Vec<crate::geom::MeshFace>), crate::errors::CoreError>) -> bool {
+    fn apply_regen(&mut self, l: Landing, body: Id, res: Result<crate::geom::Built, crate::errors::CoreError>) -> bool {
         let Landing { node: node_id, dirty, report, kernel, emap } = l;
         match res {
-            Ok((mesh, faces)) => {
+            Ok(crate::geom::Built { mesh, faces }) => {
                 self.set_body_mesh(body, mesh);
                 dirty.insert(body);
                 self.regen_faces.insert(body, faces); // Faces into the model, for resolving references by id.

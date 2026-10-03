@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 
 use qymcad_core::feature::{apply12, AnchorRef, BasePlane, FaceKey, JointKind, Kernel, SketchPlane, PLACE_IDENTITY};
-use qymcad_core::geom::{Mesh, MeshFace, Point2, Point3};
+use qymcad_core::geom::{Built, Mesh, MeshFace, Point2, Point3};
 use qymcad_core::model::{ElemSnapshot, Id, Project};
 use qymcad_core::model::ArrayAxis;
 
@@ -33,9 +33,9 @@ struct MockKernel {
     no_faces: bool,
 }
 impl MockKernel {
-    fn placed(x: f64, m: [f64; 12]) -> (Mesh, Vec<MeshFace>) {
+    fn placed(x: f64, m: [f64; 12]) -> Built {
         let v = Point3::new(m[0] * x + m[3], m[4] * x + m[7], m[8] * x + m[11]);
-        (Mesh { verts: vec![v], tris: vec![] }, Vec::new())
+        Built { mesh: Mesh { verts: vec![v], tris: vec![] }, faces: Vec::new() }
     }
     fn count(&self) -> usize {
         self.calls.borrow().len()
@@ -49,25 +49,25 @@ impl MockKernel {
     }
 }
 impl Kernel for MockKernel {
-    fn extrude(&self, body: Id, _p: &[f64], height: f64, place: [f64; 12]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn extrude(&self, body: Id, _p: &[f64], height: f64, place: [f64; 12]) -> Result<Built, qymcad_core::errors::CoreError> {
         self.calls.borrow_mut().push(format!("extrude h={height}"));
         if self.fail {
             return Err(qymcad_core::errors::CoreError::EmptyResult);
         }
         self.shapes.borrow_mut().insert(body);
-        let (mesh, mut faces) = Self::placed(height, place);
+        let Built { mesh, mut faces } = Self::placed(height, place);
         if !self.no_faces {
             let c = mesh.verts.first().copied().unwrap_or(Point3::new(0.0, 0.0, 0.0));
             faces.push(MeshFace { triangles: vec![], normal: [0.0, 0.0, 1.0], centroid: c, area: 1.0, id: 1 });
         }
-        Ok((mesh, faces))
+        Ok(Built { mesh, faces })
     }
-    fn revolve(&self, body: Id, _p: &[f64], _axis: u8, angle: f64, place: [f64; 12]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn revolve(&self, body: Id, _p: &[f64], _axis: u8, angle: f64, place: [f64; 12]) -> Result<Built, qymcad_core::errors::CoreError> {
         self.calls.borrow_mut().push(format!("revolve a={angle}"));
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(angle, place))
     }
-    fn sweep(&self, body: Id, profile: &[f64], _pp: [f64; 12], path: &[f64], path_place: [f64; 12], _caps: [u32; 2]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn sweep(&self, body: Id, profile: &[f64], _pp: [f64; 12], path: &[f64], path_place: [f64; 12], _caps: [u32; 2]) -> Result<Built, qymcad_core::errors::CoreError> {
         // The lengths of the profile and path encodings are logged; no kernel geometry is built here.
         self.calls.borrow_mut().push(format!("sweep prof={} path={}", profile.len(), path.len()));
         if self.fail {
@@ -83,7 +83,7 @@ impl Kernel for MockKernel {
         walls: qymcad_core::feature::LoftWalls,
         _kind: qymcad_core::feature::LoftBody,
         _caps: [u32; 2],
-    ) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    ) -> Result<Built, qymcad_core::errors::CoreError> {
         let qymcad_core::feature::LoftSections { data: sections, offsets, places } = sections;
         // The number of sections (`offsets.len() - 1`) and the lengths of the data and placements are logged.
         // The log keeps the old word: what is checked is the value that reached the kernel, not its spelling.
@@ -103,7 +103,7 @@ impl Kernel for MockKernel {
         _places: &[f64],
         walls: qymcad_core::feature::LoftWalls,
         _caps: [u32; 2],
-    ) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    ) -> Result<Built, qymcad_core::errors::CoreError> {
         let qymcad_core::model::BodyOp { src, op, body } = bo;
         // Lofted boolean: the number of sections and the operation are logged, and the target body `src` is
         // required to exist.
@@ -122,7 +122,7 @@ impl Kernel for MockKernel {
         pull: qymcad_core::feature::DraftPull,
         neutral: qymcad_core::feature::PlaneAt,
         _sides: &[u32],
-    ) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    ) -> Result<Built, qymcad_core::errors::CoreError> {
         let qymcad_core::feature::DraftPull { angle, dir: pull } = pull;
         let qymcad_core::feature::PlaneAt { origin: np_origin, normal: _np_normal } = neutral;
         // The face count, the angle, the pull direction and the neutral origin are logged.
@@ -131,25 +131,18 @@ impl Kernel for MockKernel {
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(angle, PLACE_IDENTITY))
     }
-    fn boolean(
-        &self,
-        body: Id,
-        _base: qymcad_core::feature::Extruded,
-        _tool: qymcad_core::feature::Extruded,
-        op: u8,
-        place: [f64; 12],
-    ) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn boolean(&self, body: Id, _base: qymcad_core::feature::Extruded, _tool: qymcad_core::feature::Extruded, op: u8, place: [f64; 12]) -> Result<Built, qymcad_core::errors::CoreError> {
         self.calls.borrow_mut().push(format!("boolean op={op}"));
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(op as f64, place))
     }
-    fn combine(&self, body: Id, src: Id, _p: &[f64], height: f64, op: u8, place: [f64; 12]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn combine(&self, body: Id, src: Id, _p: &[f64], height: f64, op: u8, place: [f64; 12]) -> Result<Built, qymcad_core::errors::CoreError> {
         self.calls.borrow_mut().push(format!("combine op={op}"));
         self.need_src(src)?;
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(height, place))
     }
-    fn extrude_region(&self, body: Id, _profile: &[f64], height: f64, place: [f64; 12]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn extrude_region(&self, body: Id, _profile: &[f64], height: f64, place: [f64; 12]) -> Result<Built, qymcad_core::errors::CoreError> {
         self.calls.borrow_mut().push(format!("extrude h={height}"));
         if self.fail {
             return Err(qymcad_core::errors::CoreError::EmptyResult);
@@ -157,72 +150,57 @@ impl Kernel for MockKernel {
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(height, place))
     }
-    fn revolve_region(&self, body: Id, _profile: &[f64], _axis: u8, angle: f64, place: [f64; 12], _caps: [u32; 2]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn revolve_region(&self, body: Id, _profile: &[f64], _axis: u8, angle: f64, place: [f64; 12], _caps: [u32; 2]) -> Result<Built, qymcad_core::errors::CoreError> {
         self.calls.borrow_mut().push(format!("revolve a={angle}"));
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(angle, place))
     }
-    fn revolve_region_axis(
-        &self,
-        body: Id,
-        _profile: &[f64],
-        line: qymcad_core::feature::AxisLine,
-        angle: f64,
-        place: [f64; 12],
-        _caps: [u32; 2],
-    ) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn revolve_region_axis(&self, body: Id, _profile: &[f64], line: qymcad_core::feature::AxisLine, angle: f64, place: [f64; 12], _caps: [u32; 2]) -> Result<Built, qymcad_core::errors::CoreError> {
         self.calls.borrow_mut().push(format!("revolve_axis o={:?} d={:?} a={angle}", line.origin, line.dir));
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(angle, place))
     }
-    fn hole(&self, body: Id, src: Id, tool: qymcad_core::model::HoleTool, place: [f64; 12], _bore: u32, _extra: &[u32]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn hole(&self, body: Id, src: Id, tool: qymcad_core::model::HoleTool, place: [f64; 12], _bore: u32, _extra: &[u32]) -> Result<Built, qymcad_core::errors::CoreError> {
         let qymcad_core::model::HoleTool { kind, diameter, depth, dia2, depth2 } = tool;
         self.calls.borrow_mut().push(format!("hole k={kind} dia={diameter} depth={depth} dia2={dia2} depth2={depth2}"));
         self.need_src(src)?;
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(diameter, place))
     }
-    fn holes(&self, body: Id, src: Id, tool: qymcad_core::model::HoleTool, pls: &[[f64; 12]], _bores: &[u32], _extra: &[u32]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn holes(&self, body: Id, src: Id, tool: qymcad_core::model::HoleTool, pls: &[[f64; 12]], _bores: &[u32], _extra: &[u32]) -> Result<Built, qymcad_core::errors::CoreError> {
         let qymcad_core::model::HoleTool { kind, diameter, depth, dia2, depth2 } = tool;
         self.calls.borrow_mut().push(format!("holes k={kind} n={} dia={diameter} depth={depth} dia2={dia2} depth2={depth2}", pls.len()));
         self.need_src(src)?;
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(diameter, pls.first().copied().unwrap_or(PLACE_IDENTITY)))
     }
-    fn cylinder(&self, body: Id, _r: f64, h: f64, _names: [u32; 3]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn cylinder(&self, body: Id, _r: f64, h: f64, _names: [u32; 3]) -> Result<Built, qymcad_core::errors::CoreError> {
         self.calls.borrow_mut().push("cylinder".into());
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(h, PLACE_IDENTITY))
     }
-    fn sphere(&self, body: Id, r: f64, _names: [u32; 3]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn sphere(&self, body: Id, r: f64, _names: [u32; 3]) -> Result<Built, qymcad_core::errors::CoreError> {
         self.calls.borrow_mut().push("sphere".into());
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(r, PLACE_IDENTITY))
     }
-    fn cone(&self, body: Id, r1: f64, _r2: f64, _h: f64, _names: [u32; 3]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn cone(&self, body: Id, r1: f64, _r2: f64, _h: f64, _names: [u32; 3]) -> Result<Built, qymcad_core::errors::CoreError> {
         self.calls.borrow_mut().push("cone".into());
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(r1, PLACE_IDENTITY))
     }
-    fn torus(&self, body: Id, major: f64, _minor: f64, _names: [u32; 3]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn torus(&self, body: Id, major: f64, _minor: f64, _names: [u32; 3]) -> Result<Built, qymcad_core::errors::CoreError> {
         self.calls.borrow_mut().push("torus".into());
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(major, PLACE_IDENTITY))
     }
-    fn combine_region(&self, body: Id, src: Id, _profile: &[f64], height: f64, op: u8, place: [f64; 12]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn combine_region(&self, body: Id, src: Id, _profile: &[f64], height: f64, op: u8, place: [f64; 12]) -> Result<Built, qymcad_core::errors::CoreError> {
         self.calls.borrow_mut().push(format!("combine op={op}"));
         self.need_src(src)?;
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(height, place))
     }
-    fn combine_region_multi(
-        &self,
-        bo: qymcad_core::model::BodyOp,
-        profiles: &[Vec<f64>],
-        height: f64,
-        place: [f64; 12],
-        _caps: &[u32],
-    ) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn combine_region_multi(&self, bo: qymcad_core::model::BodyOp, profiles: &[Vec<f64>], height: f64, place: [f64; 12], _caps: &[u32]) -> Result<Built, qymcad_core::errors::CoreError> {
         let qymcad_core::model::BodyOp { src, op, body } = bo;
         self.calls.borrow_mut().push(format!("combine_multi n={} op={op} src={src} h={height}", profiles.len()));
         if self.fail {
@@ -234,13 +212,13 @@ impl Kernel for MockKernel {
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(height, place))
     }
-    fn fillet(&self, body: Id, src: Id, radius: f64, edges: &[u32], _names: qymcad_core::feature::BlendNames) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn fillet(&self, body: Id, src: Id, radius: f64, edges: &[u32], _names: qymcad_core::feature::BlendNames) -> Result<Built, qymcad_core::errors::CoreError> {
         self.calls.borrow_mut().push(format!("fillet r={radius} n={}", edges.len()));
         self.need_src(src)?;
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(radius, PLACE_IDENTITY))
     }
-    fn helical(&self, h: qymcad_core::feature::Helical<'_>) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn helical(&self, h: qymcad_core::feature::Helical<'_>) -> Result<Built, qymcad_core::errors::CoreError> {
         // The axis and radius resolved from the edge are logged, which is what makes the associativity
         // checkable; the mock builds no geometry.
         self.calls.borrow_mut().push(format!("helical r={} oz={} lead={} L={} starts={} fuse={} prof={}", h.radius, h.origin[2], h.lead, h.length, h.starts, h.fuse, h.profile.len()));
@@ -248,26 +226,26 @@ impl Kernel for MockKernel {
         self.shapes.borrow_mut().insert(h.body);
         Ok(Self::placed(h.radius, PLACE_IDENTITY))
     }
-    fn chamfer(&self, body: Id, src: Id, dist: f64, edges: &[u32], _names: qymcad_core::feature::BlendNames) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn chamfer(&self, body: Id, src: Id, dist: f64, edges: &[u32], _names: qymcad_core::feature::BlendNames) -> Result<Built, qymcad_core::errors::CoreError> {
         self.calls.borrow_mut().push(format!("chamfer d={dist} n={}", edges.len()));
         self.need_src(src)?;
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(dist, PLACE_IDENTITY))
     }
-    fn chamfer_ex(&self, body: Id, src: Id, d1: f64, shape: qymcad_core::model::ChamferShape, edges: &[u32]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn chamfer_ex(&self, body: Id, src: Id, d1: f64, shape: qymcad_core::model::ChamferShape, edges: &[u32]) -> Result<Built, qymcad_core::errors::CoreError> {
         let qymcad_core::model::ChamferShape { mode, d2, flip, ref_face } = shape;
         self.calls.borrow_mut().push(format!("chamfer_ex d1={d1} d2={d2} mode={mode:?} flip={flip} rf={ref_face} n={}", edges.len()));
         self.need_src(src)?;
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(d1, PLACE_IDENTITY))
     }
-    fn shell(&self, body: Id, src: Id, thickness: f64, outward: bool, faces: &[u32]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn shell(&self, body: Id, src: Id, thickness: f64, outward: bool, faces: &[u32]) -> Result<Built, qymcad_core::errors::CoreError> {
         self.calls.borrow_mut().push(format!("shell t={thickness} out={outward} n={}", faces.len()));
         self.need_src(src)?;
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(thickness, PLACE_IDENTITY))
     }
-    fn pattern(&self, body: Id, src: Id, transforms: &[[f64; 12]]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn pattern(&self, body: Id, src: Id, transforms: &[[f64; 12]]) -> Result<Built, qymcad_core::errors::CoreError> {
         // The translations of each instance are recorded too, so a test can check the parametric step and
         // angle.
         let txs: Vec<String> = transforms.iter().map(|m| format!("({:.1},{:.1},{:.1})", m[3], m[7], m[11])).collect();
@@ -276,25 +254,25 @@ impl Kernel for MockKernel {
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(transforms.len() as f64, PLACE_IDENTITY))
     }
-    fn mirror(&self, body: Id, src: Id, plane: u8, keep: bool) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn mirror(&self, body: Id, src: Id, plane: u8, keep: bool) -> Result<Built, qymcad_core::errors::CoreError> {
         self.calls.borrow_mut().push(format!("mirror p={plane} keep={keep}"));
         self.need_src(src)?;
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(plane as f64, PLACE_IDENTITY))
     }
-    fn mirror_plane(&self, body: Id, src: Id, origin: [f64; 3], normal: [f64; 3], keep: bool) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn mirror_plane(&self, body: Id, src: Id, origin: [f64; 3], normal: [f64; 3], keep: bool) -> Result<Built, qymcad_core::errors::CoreError> {
         self.calls.borrow_mut().push(format!("mirror_plane o={origin:?} n={normal:?} keep={keep}"));
         self.need_src(src)?;
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(1.0, PLACE_IDENTITY))
     }
-    fn transform_body(&self, body: Id, src: Id, mat: [f64; 12]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn transform_body(&self, body: Id, src: Id, mat: [f64; 12]) -> Result<Built, qymcad_core::errors::CoreError> {
         self.calls.borrow_mut().push("move".into());
         self.need_src(src)?;
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(1.0, mat))
     }
-    fn body_boolean(&self, body: Id, a: Id, b: Id, _op: u8) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn body_boolean(&self, body: Id, a: Id, b: Id, _op: u8) -> Result<Built, qymcad_core::errors::CoreError> {
         self.calls.borrow_mut().push("body_boolean".into());
         self.need_src(a)?;
         self.need_src(b)?;
@@ -644,11 +622,11 @@ fn place_body_lifts_only_when_non_identity() {
     // XY is the identity, so nothing changes.
     let xy = BasePlane::XY.frame();
     assert!(xy.is_identity());
-    let (m0, _) = xy.place_body(mesh.clone(), vec![]);
+    let Built { mesh: m0, .. } = xy.place_body(mesh.clone(), vec![]);
     assert_eq!((m0.verts[0].x, m0.verts[0].y, m0.verts[0].z), (1.0, 2.0, 3.0));
     // A datum offset along +X moves the vertex by +10 along X.
     let d = PlaneFrame::from_origin_normal([10.0, 0.0, 0.0], [0.0, 0.0, 1.0], 0.0);
-    let (m1, _) = d.place_body(mesh, vec![]);
+    let Built { mesh: m1, .. } = d.place_body(mesh, vec![]);
     assert_eq!((m1.verts[0].x, m1.verts[0].y, m1.verts[0].z), (11.0, 2.0, 3.0));
 }
 

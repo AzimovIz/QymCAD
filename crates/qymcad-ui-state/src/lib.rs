@@ -2865,7 +2865,7 @@ pub type MeshPiece = (String, qymcad_core::geom::Mesh, Vec<qymcad_core::geom::Me
 pub enum JobResult {
     /// An exact file (STEP, IGES) was imported: the bodies (mesh plus B-rep faces) + the solids' live shapes +
     /// the file's path and format.
-    ExactImported { path: String, format: qymcad_kernel::ExactFormat, bodies: Vec<qymcad_kernel::Body>, shapes: Vec<qymcad_kernel::Shape>, nodes: Vec<qymcad_kernel::ImportNode> },
+    ExactImported { path: String, format: qymcad_kernel::ExactFormat, bodies: Vec<qymcad_core::geom::Built>, shapes: Vec<qymcad_kernel::Shape>, nodes: Vec<qymcad_kernel::ImportNode> },
     /// An IGES with no surfaces, read as a drawing: the curves go into a sketch the way DXF does, and `note` is
     /// what the status adds (a library's cells are shown, entities were not drawn).
     DrawingRead { path: String, curves: Vec<qymcad_core::geom::ProfEdge>, note: String },

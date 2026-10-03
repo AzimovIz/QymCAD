@@ -75,7 +75,7 @@ fn a_slanted_plane_cuts_too() {
 /// The persistent ids of every face of a body, obtained through tessellation: names have no other way out.
 fn face_ids(s: &Shape) -> Vec<u32> {
     let bodies = s.tessellate_auto(qymcad_core::model::GeomQuality::Normal.deflection_k());
-    let mut ids: Vec<u32> = bodies.first().map(|(_, f)| f.iter().map(|f| f.id).collect()).unwrap_or_default();
+    let mut ids: Vec<u32> = bodies.first().map(|qymcad_core::geom::Built { faces: f, .. }| f.iter().map(|f| f.id).collect()).unwrap_or_default();
     ids.sort_unstable();
     ids.dedup();
     ids
@@ -84,6 +84,6 @@ fn face_ids(s: &Shape) -> Vec<u32> {
 /// The id of the face whose normal matches the one given.
 fn face_by_normal(s: &Shape, n: [f64; 3]) -> Option<u32> {
     let bodies = s.tessellate_auto(qymcad_core::model::GeomQuality::Normal.deflection_k());
-    let (_, faces) = bodies.first()?;
+    let qymcad_core::geom::Built { faces, .. } = bodies.first()?;
     faces.iter().find(|f| f.normal[0] * n[0] + f.normal[1] * n[1] + f.normal[2] * n[2] > 0.9).map(|f| f.id)
 }

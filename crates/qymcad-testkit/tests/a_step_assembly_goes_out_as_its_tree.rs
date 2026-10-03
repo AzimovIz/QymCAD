@@ -39,7 +39,7 @@ fn a_step_assembly_goes_out_as_its_tree() {
     let mut p = Project::default();
     p.new_empty_document();
     let source = p.add_source("assembly.step", std::fs::read(STEP).expect("the file reads"));
-    let ids: Vec<u64> = bodies.into_iter().map(|(m, _)| p.add_mesh(m)).collect();
+    let ids: Vec<u64> = bodies.into_iter().map(|qymcad_core::geom::Built { mesh: m, .. }| p.add_mesh(m)).collect();
     let root = p.import_tree_as_parts(document_tree(&nodes, &ids, "assembly"), source, "assembly").expect("it came in");
     // the live bodies: the ones read, and the clone's, built by a rebuild from its original's
     let (_, live) = qymcad_testkit::regenerate_with_shapes(&mut p, ids.iter().copied().zip(shapes).collect());

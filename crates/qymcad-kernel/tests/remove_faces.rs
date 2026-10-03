@@ -57,7 +57,7 @@ fn removing_a_through_hole_in_a_plate() {
     let ids: Vec<u32> = drilled
         .tessellate_auto(qymcad_core::model::GeomQuality::Normal.deflection_k())
         .first()
-        .map(|(_, fs)| fs.iter().filter(|f| f.normal[2].abs() < 0.3 && (f.centroid.x - 10.0).abs() < 4.0).map(|f| f.id).collect())
+        .map(|qymcad_core::geom::Built { faces: fs, .. }| fs.iter().filter(|f| f.normal[2].abs() < 0.3 && (f.centroid.x - 10.0).abs() < 4.0).map(|f| f.id).collect())
         .unwrap_or_default();
 
     let healed = drilled.remove_faces(&ids).expect("a through hole in a plate has to be removable");

@@ -47,7 +47,7 @@ fn the_side_of_a_cylinder_is_offset() {
 /// The persistent id of the top face: the planar one whose centre has the greatest Z.
 fn top_face_id(s: &qymcad_kernel::Shape) -> Option<u32> {
     let bodies = s.tessellate_auto(qymcad_core::model::GeomQuality::Normal.deflection_k());
-    let (_, faces) = bodies.first()?;
+    let qymcad_core::geom::Built { faces, .. } = bodies.first()?;
     let mut best: Option<(f64, u32)> = None;
     for f in faces {
         if f.normal[2] > 0.9 {

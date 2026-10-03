@@ -46,7 +46,7 @@ fn reopens(format: ExactFormat, file: &str, stem: &str) {
     let mut p = Project::default();
     p.new_empty_document();
     let source = p.add_source(stem, std::fs::read(file).expect("the file reads"));
-    let ids: Vec<u64> = bodies.into_iter().map(|(m, _)| p.add_mesh(m)).collect();
+    let ids: Vec<u64> = bodies.into_iter().map(|qymcad_core::geom::Built { mesh: m, .. }| p.add_mesh(m)).collect();
     p.import_tree_as_parts(document_tree(&nodes, &ids, "assembly"), source, "assembly").expect("it came in");
     let boxes: Vec<[f64; 6]> = ids.iter().map(|&b| p.bodies[p.mesh_index(b).expect("a body")].mesh.bounds().expect("a mesh")).map(|b| [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z]).collect();
 

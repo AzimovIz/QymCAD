@@ -175,7 +175,7 @@ fn how_many_faces_go_missing_and_at_which_accuracy() {
     // the same solid after the kernel's own repair: if the holes are an orientation of the shell, they close
     let fixed = qymcad_kernel::fix_shell(&shape);
     if let Some(f) = &fixed {
-        let (mesh, faces) = f.tessellate(0.5).into_iter().next().expect("the repaired solid tessellates");
+        let qymcad_core::geom::Built { mesh, faces } = f.tessellate(0.5).into_iter().next().expect("the repaired solid tessellates");
         let (open, longest) = open_edges(&mesh);
         let (against, shared) = wound_against_a_neighbour(&mesh);
         let flipped = faces_against_their_own_normal(&mesh, &faces);
@@ -193,7 +193,7 @@ fn how_many_faces_go_missing_and_at_which_accuracy() {
     for tol in [0.01_f64, 0.1, 0.5] {
         match qymcad_kernel::sew(&shape, tol) {
             Some(f) => {
-                let (mesh, faces) = f.tessellate(0.5).into_iter().next().expect("the sewn solid tessellates");
+                let qymcad_core::geom::Built { mesh, faces } = f.tessellate(0.5).into_iter().next().expect("the sewn solid tessellates");
                 let (open, longest) = open_edges(&mesh);
                 eprintln!("  sewn with {tol} mm: {} faces, open edges {open} (the longest {longest:.3} mm); the kernel calls it {}", faces.len(), if f.is_valid() { "sound" } else { "NOT sound" });
             }
@@ -203,7 +203,7 @@ fn how_many_faces_go_missing_and_at_which_accuracy() {
     // HOW MANY CONNECTED PIECES the shell breaks into once the vertices are welded: a piece that stands
     // apart cannot be oriented by its neighbours, and if it is not closed the volume cannot decide either.
     {
-        let (mesh, _) = shape.tessellate(0.5).into_iter().next().expect("the solid tessellates");
+        let qymcad_core::geom::Built { mesh, .. } = shape.tessellate(0.5).into_iter().next().expect("the solid tessellates");
         let grid = 1.0e-4;
         let key = |v: qymcad_core::geom::Point3| [(v.x / grid).round() as i64, (v.y / grid).round() as i64, (v.z / grid).round() as i64];
         let mut at: std::collections::HashMap<[i64; 3], u32> = std::collections::HashMap::new();
@@ -281,7 +281,7 @@ fn how_many_faces_go_missing_and_at_which_accuracy() {
     // WHAT THE OPEN EDGES BOUND: gathered into loops, with the perimeter of each. A loop of a few microns is
     // a seam that failed to weld; a loop of hundreds of millimetres is a piece of surface that is not there.
     {
-        let (mesh, _) = shape.tessellate(0.5).into_iter().next().expect("the solid tessellates");
+        let qymcad_core::geom::Built { mesh, .. } = shape.tessellate(0.5).into_iter().next().expect("the solid tessellates");
         let grid = 1.0e-4;
         let key = |v: qymcad_core::geom::Point3| [(v.x / grid).round() as i64, (v.y / grid).round() as i64, (v.z / grid).round() as i64];
         let mut at: std::collections::HashMap<[i64; 3], u32> = std::collections::HashMap::new();
@@ -331,7 +331,7 @@ fn how_many_faces_go_missing_and_at_which_accuracy() {
     }
     // THE GROUND TRUTH over a sample of faces: does the mesh really face outwards where it says it does
     {
-        let (mesh, faces) = shape.tessellate(0.5).into_iter().next().expect("the solid tessellates");
+        let qymcad_core::geom::Built { mesh, faces } = shape.tessellate(0.5).into_iter().next().expect("the solid tessellates");
         let flipped: std::collections::HashSet<u32> = faces_against_their_own_normal(&mesh, &faces).into_iter().map(|(id, _)| id).collect();
         let (mut inward, mut asked, mut agreed) = (0usize, 0usize, 0usize);
         for f in faces.iter().step_by((faces.len() / 60).max(1)) {
@@ -352,7 +352,7 @@ fn how_many_faces_go_missing_and_at_which_accuracy() {
         let bodies = shape.tessellate(defl);
         let took = t0.elapsed();
         match bodies.first() {
-            Some((mesh, faces)) => {
+            Some(qymcad_core::geom::Built { mesh, faces }) => {
                 let (open, longest) = open_edges(mesh);
                 let (against, shared) = wound_against_a_neighbour(mesh);
                 let (unmeshed, all_faces) = qymcad_kernel::unmeshed_faces(&shape, defl);

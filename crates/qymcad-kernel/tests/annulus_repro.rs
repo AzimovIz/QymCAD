@@ -16,7 +16,7 @@ fn annulus_extrudes_to_tube() {
     let bodies = s.tessellate(0.2);
     eprintln!("bodies: {}", bodies.len());
     assert_eq!(bodies.len(), 1, "one body");
-    let (mesh, faces) = &bodies[0];
+    let qymcad_core::geom::Built { mesh, faces } = &bodies[0];
     eprintln!("vertices: {}, triangles: {}, faces: {}", mesh.verts.len(), mesh.tris.len(), faces.len());
     for (i, f) in faces.iter().enumerate() {
         eprintln!("  face {i}: id={} triangles={}", f.id, f.triangles.len());

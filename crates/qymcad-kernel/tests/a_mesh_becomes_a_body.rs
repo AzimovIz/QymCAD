@@ -51,7 +51,7 @@ fn a_triangle_with_no_area_does_not_spoil_the_rest() {
 fn a_big_mesh_becomes_a_body_in_time() {
     let sphere = Shape::sphere(20.0).expect("a sphere");
     for defl in [0.05, 0.005, 0.001] {
-        let (mesh, _) = sphere.tessellate(defl).into_iter().next().expect("a mesh");
+        let qymcad_core::geom::Built { mesh, .. } = sphere.tessellate(defl).into_iter().next().expect("a mesh");
         let held: f64 = mesh
             .tris
             .iter()
@@ -70,7 +70,7 @@ fn a_big_mesh_becomes_a_body_in_time() {
 
 /// The faces of `s`, as its tessellation counts them.
 fn faces(s: &Shape) -> usize {
-    s.tessellate(0.1).into_iter().next().map(|(_, f)| f.len()).unwrap_or(0)
+    s.tessellate(0.1).into_iter().next().map(|qymcad_core::geom::Built { faces: f, .. }| f.len()).unwrap_or(0)
 }
 
 /// A PLATE WITH A SQUARE HOLE THROUGH IT comes back the same plate: its top and its bottom each one face with the hole in
@@ -80,7 +80,7 @@ fn a_plate_with_a_hole_keeps_its_faces() {
     let plate = Shape::extrude(&[0.0, 0.0, 40.0, 0.0, 40.0, 40.0, 0.0, 40.0], 5.0).expect("a plate");
     let hole = Shape::extrude(&[10.0, 10.0, 30.0, 10.0, 30.0, 30.0, 10.0, 30.0], 5.0).expect("a hole");
     let holed = plate.boolean(&hole, 0).expect("the plate with its hole");
-    let (mesh, _) = holed.tessellate(0.1).into_iter().next().expect("a mesh");
+    let qymcad_core::geom::Built { mesh, .. } = holed.tessellate(0.1).into_iter().next().expect("a mesh");
     let s = Shape::from_mesh(&mesh).expect("the mesh becomes a body");
     assert!(s.is_valid(), "the body is broken");
     assert_eq!(s.solid_count(), 1, "one solid");
@@ -92,7 +92,7 @@ fn a_plate_with_a_hole_keeps_its_faces() {
 /// valid, and holding the mesh's volume.
 #[test]
 fn a_cylinder_mesh_keeps_its_caps_whole() {
-    let (mesh, _) = Shape::cylinder(10.0, 20.0).expect("a cylinder").tessellate(0.05).into_iter().next().expect("a mesh");
+    let qymcad_core::geom::Built { mesh, .. } = Shape::cylinder(10.0, 20.0).expect("a cylinder").tessellate(0.05).into_iter().next().expect("a mesh");
     let s = Shape::from_mesh(&mesh).expect("the mesh becomes a body");
     assert!(s.is_valid(), "the body is broken");
     assert_eq!(s.solid_count(), 1, "one solid");

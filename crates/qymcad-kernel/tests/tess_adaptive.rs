@@ -68,7 +68,7 @@ fn tri_count(s: &Shape, defl: Option<f64>) -> usize {
         Some(d) => s.tessellate(d),
         None => s.tessellate_auto(qymcad_core::model::GeomQuality::Normal.deflection_k()),
     };
-    bodies.iter().map(|(m, _)| m.tris.len()).sum()
+    bodies.iter().map(|qymcad_core::geom::Built { mesh: m, .. }| m.tris.len()).sum()
 }
 
 /// The largest angular step, in radians, between vertices around the Z axis: a direct measure of how faceted a
@@ -76,7 +76,8 @@ fn tri_count(s: &Shape, defl: Option<f64>) -> usize {
 /// which reads as smooth. The measure is dimensionless and therefore comparable between a 2 mm part and a 4 m
 /// frame.
 fn max_angle_step(s: &Shape) -> f64 {
-    let mut angs: Vec<f64> = s.tessellate_auto(qymcad_core::model::GeomQuality::Normal.deflection_k()).iter().flat_map(|(m, _)| m.verts.iter().map(|v| v.y.atan2(v.x))).collect();
+    let mut angs: Vec<f64> =
+        s.tessellate_auto(qymcad_core::model::GeomQuality::Normal.deflection_k()).iter().flat_map(|qymcad_core::geom::Built { mesh: m, .. }| m.verts.iter().map(|v| v.y.atan2(v.x))).collect();
     angs.sort_by(|a, b| a.partial_cmp(b).unwrap());
     angs.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
     assert!(angs.len() > 3, "the tessellation gave {} angles; is the body round at all?", angs.len());

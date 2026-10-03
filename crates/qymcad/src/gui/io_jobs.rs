@@ -729,7 +729,7 @@ pub(crate) fn write_mesh_to(ed: qymcad_ui_state::Editing, live: &mut LiveGeom, p
         let mut own: Vec<(Id, qymcad_core::geom::Mesh, [f64; 12], Vec<Option<[u8; 3]>>)> = Vec::new();
         let mut failed = 0usize; // a body whose tessellation failed is NOT dropped silently but reported
         for (id, s, m) in &moved {
-            if let Some((mesh, faces)) = s.tessellate_merged(deflection) {
+            if let Some(qymcad_core::geom::Built { mesh, faces }) = s.tessellate_merged(deflection) {
                 let tri = tri_colours(&tree, *id, &mesh, &faces);
                 own.push((*id, mesh, *m, tri));
             } else {

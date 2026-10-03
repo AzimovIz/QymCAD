@@ -22,7 +22,7 @@ fn named_faces(s: &Shape) -> Vec<(u32, [i64; 3], [i64; 3])> {
     let bodies = s.tessellate_auto(qymcad_core::model::GeomQuality::Normal.deflection_k());
     let mut out: Vec<(u32, [i64; 3], [i64; 3])> = bodies
         .first()
-        .map(|(_, faces)| {
+        .map(|qymcad_core::geom::Built { faces, .. }| {
             faces
                 .iter()
                 .map(|f| {

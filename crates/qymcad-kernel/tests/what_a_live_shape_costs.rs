@@ -50,7 +50,8 @@ fn what_a_live_shape_costs() {
     // HOW MANY FACES THE SOLIDS CARRY - the number that scales to another file. A kernel shape is a tree of
     // faces, edges and curves, so the memory follows the faces rather than the count of solids: a bolt and an
     // engine block are both one solid.
-    let faces: usize = warm.iter().map(|s| s.tessellate_auto(qymcad_core::model::GeomQuality::Normal.deflection_k()).first().map(|(_, f)| f.len()).unwrap_or(0)).sum();
+    let faces: usize =
+        warm.iter().map(|s| s.tessellate_auto(qymcad_core::model::GeomQuality::Normal.deflection_k()).first().map(|qymcad_core::geom::Built { faces: f, .. }| f.len()).unwrap_or(0)).sum();
     let one = rss();
 
     let t0 = std::time::Instant::now();

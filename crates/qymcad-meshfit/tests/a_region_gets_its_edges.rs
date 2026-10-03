@@ -7,7 +7,7 @@ use qymcad_kernel::Shape;
 use qymcad_meshfit::{boundaries, prepare, regions, weld_tolerance, Boundaries, Prepared, Region, Surface, Tolerance};
 
 fn edges_of(shape: &Shape, deflection: f64) -> (Boundaries, Vec<Region>, Tolerance, Prepared) {
-    let (mesh, _) = shape.tessellate(deflection).into_iter().next().expect("a body");
+    let qymcad_core::geom::Built { mesh, .. } = shape.tessellate(deflection).into_iter().next().expect("a body");
     let p = prepare(&mesh, weld_tolerance(&mesh));
     let tol = Tolerance::for_mesh(&p);
     let found = regions(&p, &tol);

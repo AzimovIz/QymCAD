@@ -11,7 +11,7 @@ fn cube() -> qymcad_kernel::Shape {
 /// The id of the top face.
 fn top_face(s: &qymcad_kernel::Shape) -> Option<u32> {
     let bodies = s.tessellate_auto(qymcad_core::model::GeomQuality::Normal.deflection_k());
-    let (_, faces) = bodies.first()?;
+    let qymcad_core::geom::Built { faces, .. } = bodies.first()?;
     faces.iter().filter(|f| f.normal[2] > 0.9).max_by(|a, b| a.centroid.z.partial_cmp(&b.centroid.z).unwrap()).map(|f| f.id)
 }
 
@@ -57,7 +57,7 @@ fn a_missing_face_is_refused() {
 fn a_curved_face_can_be_thickened_too() {
     let cyl = qymcad_kernel::Shape::cylinder(10.0, 20.0).expect("the cylinder");
     let bodies = cyl.tessellate_auto(qymcad_core::model::GeomQuality::Normal.deflection_k());
-    let (_, faces) = bodies.first().expect("the body");
+    let qymcad_core::geom::Built { faces, .. } = bodies.first().expect("the body");
     // the side wall, whose normal lies in the XY plane
     let side = faces.iter().find(|f| f.normal[2].abs() < 0.1).map(|f| f.id).expect("the side face");
     let shell = cyl.thicken_face(side, 2.0, &[], &[]).expect("the shell was built");

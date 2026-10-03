@@ -8,7 +8,7 @@ use qymcad_meshfit::{prepare, regions, weld_tolerance, Surface, Tolerance};
 /// face. Returns how many planes, cylinders and spheres were found.
 fn split_as_faces(name: &str, shape: &Shape, deflection: f64) -> [usize; 3] {
     let bodies = shape.tessellate(deflection);
-    let (mesh, faces) = bodies.into_iter().next().expect("a body");
+    let qymcad_core::geom::Built { mesh, faces } = bodies.into_iter().next().expect("a body");
     let mut face_of = vec![u32::MAX; mesh.tris.len()];
     for (k, f) in faces.iter().enumerate() {
         for &t in &f.triangles {
@@ -125,7 +125,7 @@ fn a_wall_cut_by_a_boolean_is_one_region() {
     let up = [1.0, 0.0, 0.0, 0.1, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 30.0];
     let knob = Shape::sphere(10.5).expect("a sphere").transformed(&up).expect("the sphere on the top");
     let both = Shape::fuse_many(&[&post, &knob]).expect("the knob on the post");
-    let (mesh, _) = both.tessellate(0.02).into_iter().next().expect("a body");
+    let qymcad_core::geom::Built { mesh, .. } = both.tessellate(0.02).into_iter().next().expect("a body");
     let p = prepare(&mesh, weld_tolerance(&mesh));
     let tol = Tolerance::for_mesh(&p);
     let found = regions(&p, &tol);

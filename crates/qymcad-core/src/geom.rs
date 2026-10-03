@@ -718,6 +718,14 @@ pub struct MeshFace {
     pub id: u32,
 }
 
+/// WHAT THE KERNEL GIVES BACK FOR ONE NODE: the triangles of the body and the faces they are grouped into, each
+/// face carrying its persistent id.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Built {
+    pub mesh: Mesh,
+    pub faces: Vec<MeshFace>,
+}
+
 /// An edge of a body from the B-rep: a persistent id together with a midpoint and a tangent, which an axis
 /// connector anchors to. Like `MeshFace` it is derived from the kernel and is not stored; a regenerate restores it.
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]

@@ -8,7 +8,7 @@ fn how_long_a_big_iges_takes() {
     let t = std::time::Instant::now();
     match qymcad_kernel::read_exact(qymcad_kernel::ExactFormat::Iges, &path, 0.5) {
         Ok((bodies, shapes)) => {
-            let tris: usize = bodies.iter().map(|(m, _)| m.tris.len()).sum();
+            let tris: usize = bodies.iter().map(|qymcad_core::geom::Built { mesh: m, .. }| m.tris.len()).sum();
             eprintln!("PROBE read_exact: {} bodies, {} live solids, {tris} triangles in {:.1} s", bodies.len(), shapes.len(), t.elapsed().as_secs_f64());
         }
         Err(e) => eprintln!("PROBE read_exact: {e} after {:.1} s", t.elapsed().as_secs_f64()),

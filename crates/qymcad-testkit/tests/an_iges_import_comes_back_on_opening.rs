@@ -18,7 +18,7 @@ fn an_iges_part_gets_its_live_body_back() {
     let mut p = Project::default();
     p.new_document();
     let source = p.add_source("cube.igs", std::fs::read(&path).expect("the file reads"));
-    let (mesh, _) = import_iges(&path.to_string_lossy(), 0.5).expect("the IGES imports").remove(0);
+    let qymcad_core::geom::Built { mesh, .. } = import_iges(&path.to_string_lossy(), 0.5).expect("the IGES imports").remove(0);
     let body = p.add_mesh(mesh);
     p.import_tree_as_parts(vec![qymcad_core::model::ImportNode { name: "cube".into(), body: Some(body), ..Default::default() }], source, "cube");
 

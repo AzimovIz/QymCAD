@@ -11,7 +11,7 @@ fn angles_across_and_inside_the_faces_of_a_filleted_bar() {
         // a shape of its own for each: the kernel keeps the first tessellation of a shape and hands it back
         let bar = Shape::extrude(&[0.0, 0.0, 40.0, 0.0, 40.0, 20.0, 0.0, 20.0], 10.0).expect("a bar").fillet_all(2.0).expect("filleted");
         let bodies = bar.tessellate(defl);
-        let (mesh, faces) = &bodies[0];
+        let qymcad_core::geom::Built { mesh, faces } = &bodies[0];
         let mut face_of = vec![u32::MAX; mesh.tris.len()];
         for (k, f) in faces.iter().enumerate() {
             for &t in &f.triangles {
@@ -47,7 +47,7 @@ fn angles_across_and_inside_the_faces_of_a_filleted_bar() {
 fn regions_of_a_filleted_bar_against_its_faces() {
     for defl in [0.1, 0.01] {
         let bar = Shape::extrude(&[0.0, 0.0, 40.0, 0.0, 40.0, 20.0, 0.0, 20.0], 10.0).expect("a bar").fillet_all(2.0).expect("filleted");
-        let (mesh, faces) = bar.tessellate(defl).into_iter().next().expect("a body");
+        let qymcad_core::geom::Built { mesh, faces } = bar.tessellate(defl).into_iter().next().expect("a body");
         let mut face_of = vec![u32::MAX; mesh.tris.len()];
         for (k, f) in faces.iter().enumerate() {
             for &t in &f.triangles {

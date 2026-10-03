@@ -14,7 +14,7 @@ pub use kernel::{kernel_gate, OcctKernel};
 use std::ffi::CString;
 use std::os::raw::{c_char, c_double};
 
-use qymcad_core::geom::{Mesh, MeshFace, Point3};
+use qymcad_core::geom::{Built, Mesh, Point3};
 
 #[repr(C)]
 struct QymDoc {
@@ -46,9 +46,6 @@ extern "C" {
     fn qym_body_copy_face_anchors(d: *const QymDoc, i: usize, out: *mut f64);
     fn qym_doc_free(d: *mut QymDoc);
 }
-
-/// One body: a mesh plus the faces of the B-rep topology.
-pub type Body = (Mesh, Vec<MeshFace>);
 
 #[repr(C)]
 struct QymShape {
@@ -381,6 +378,10 @@ pub enum BoolVerdict {
     /// The bodies share no volume: they are apart or only touch.
     NothingInCommon,
 }
+
+/// A stitch that joined no edge: the sheets do not touch each other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NothingJoined;
 
 impl Shape {
     /// A live body into bytes, together with the names of its faces and edges; see `qym_shape_to_brep`.
@@ -991,11 +992,11 @@ impl Shape {
 
     /// Stitch sheets into one surface. If it closes, a body comes back; if not, a sheet.
     ///
-    /// `Err(())` means no edge joined: the sheets do not touch each other, and a stitch would give the same
-    /// two islands under one name.
-    pub fn stitch(parts: &[&Shape], tol: f64) -> Result<Shape, ()> {
+    /// `Err(NothingJoined)` means no edge joined: the sheets do not touch each other, and a stitch would give
+    /// the same two islands under one name.
+    pub fn stitch(parts: &[&Shape], tol: f64) -> Result<Shape, NothingJoined> {
         if parts.len() < 2 {
-            return Err(());
+            return Err(NothingJoined);
         }
         let ptrs: Vec<*const QymShape> = parts.iter().map(|p| p.ptr as *const QymShape).collect();
         // The bridge counts the stitched and free edges itself and reports "nothing joined" as a zero, which
@@ -1003,7 +1004,7 @@ impl Shape {
         // body arrived; if not, a sheet.
         let (mut free, mut joined) = (0u32, 0u32);
         let out = unsafe { Self::wrap_valid(qym_shape_stitch(ptrs.as_ptr(), ptrs.len(), tol, &mut free, &mut joined)) };
-        out.ok_or(())
+        out.ok_or(NothingJoined)
     }
 
     /// Replace faces of a body with a surface: the node where the design layer joins the timeline.
@@ -1679,31 +1680,31 @@ impl Shape {
     }
 
     /// Tessellate into bodies, for drawing and for machining.
-    pub fn tessellate(&self, deflection: f64) -> Vec<Body> {
+    pub fn tessellate(&self, deflection: f64) -> Vec<Built> {
         let defl = if deflection > 0.0 { deflection } else { 0.5 };
         unsafe { doc_to_bodies(qym_shape_tessellate(self.ptr, defl)) }
     }
 
     /// Tessellation with a deflection adapted to the size of the body; see [`adaptive_deflection`].
-    pub fn tessellate_auto(&self, k: f64) -> Vec<Body> {
+    pub fn tessellate_auto(&self, k: f64) -> Vec<Built> {
         self.tessellate(adaptive_deflection(self.bbox_diag(), k))
     }
 
     /// [`Shape::tessellate_merged`] with an adaptive deflection: the working path for drawing.
-    pub fn tessellate_merged_auto(&self, k: f64) -> Option<Body> {
+    pub fn tessellate_merged_auto(&self, k: f64) -> Option<Built> {
         self.tessellate_merged(adaptive_deflection(self.bbox_diag(), k))
     }
 
     /// Tessellation of the whole shape into one mesh: the solids of a compound are merged — a pattern, a
     /// mirror together with its original, a cut that fell into pieces. Otherwise one body node would show only
     /// the first solid. `None` means empty.
-    pub fn tessellate_merged(&self, deflection: f64) -> Option<Body> {
+    pub fn tessellate_merged(&self, deflection: f64) -> Option<Built> {
         let bodies = self.tessellate(deflection);
         if bodies.is_empty() {
             return None;
         }
         let (mut verts, mut tris, mut faces) = (Vec::new(), Vec::new(), Vec::new());
-        for (m, fs) in bodies {
+        for Built { mesh: m, faces: fs } in bodies {
             let voff = verts.len() as u32;
             let toff = tris.len() as u32;
             verts.extend(m.verts);
@@ -1713,7 +1714,7 @@ impl Shape {
                 faces.push(f);
             }
         }
-        Some((qymcad_core::geom::Mesh { verts, tris }, faces))
+        Some(Built { mesh: qymcad_core::geom::Mesh { verts, tris }, faces })
     }
 }
 
@@ -1862,7 +1863,7 @@ pub fn write_step(bodies: &[(&Shape, [f64; 12])], path: &str) -> Result<(), Stri
 
 /// Read an exact file ONCE into both what is shown and what is built on: the bodies (mesh plus B-rep faces, one per
 /// solid) and the live shapes, in the same order. See `qym_exact_read`: reading twice cost the whole wait twice.
-pub fn read_exact(format: ExactFormat, path: &str, deflection: f64) -> Result<(Vec<Body>, Vec<Shape>), String> {
+pub fn read_exact(format: ExactFormat, path: &str, deflection: f64) -> Result<(Vec<Built>, Vec<Shape>), String> {
     if let Some(said) = missing_file(path) {
         return Err(said);
     }
@@ -1937,7 +1938,7 @@ impl ExactFormat {
 }
 
 /// Read an exact file into bodies, one per solid, each with its B-rep faces.
-pub fn import_exact(format: ExactFormat, path: &str, deflection: f64) -> Result<Vec<Body>, String> {
+pub fn import_exact(format: ExactFormat, path: &str, deflection: f64) -> Result<Vec<Built>, String> {
     match format {
         ExactFormat::Step => import_step(path, deflection),
         ExactFormat::Iges => import_iges(path, deflection),
@@ -2015,7 +2016,7 @@ pub fn document_tree(nodes: &[ImportNode], bodies: &[u64], stem: &str) -> Vec<qy
 ///
 /// An IGES file with neither subfigures nor solids standing on their own - surfaces, sewn - comes as a node per solid,
 /// unnamed, where the file puts it.
-pub fn read_exact_tree(format: ExactFormat, path: &str, deflection: f64) -> Result<(Vec<Body>, Vec<Shape>, Vec<ImportNode>), String> {
+pub fn read_exact_tree(format: ExactFormat, path: &str, deflection: f64) -> Result<(Vec<Built>, Vec<Shape>, Vec<ImportNode>), String> {
     if let Some(said) = missing_file(path) {
         return Err(said);
     }
@@ -2175,7 +2176,7 @@ pub fn write_exact(format: ExactFormat, bodies: &[(&Shape, [f64; 12])], path: &s
 }
 
 /// Read an IGES file into bodies. Faces that close are sewn into solids (see `iges_shape` in the bridge).
-pub fn import_iges(path: &str, deflection: f64) -> Result<Vec<Body>, String> {
+pub fn import_iges(path: &str, deflection: f64) -> Result<Vec<Built>, String> {
     let c = CString::new(path).map_err(|e| e.to_string())?;
     let defl = if deflection > 0.0 { deflection } else { 0.5 };
     unsafe {
@@ -2236,7 +2237,7 @@ pub fn write_iges(bodies: &[(&Shape, [f64; 12])], path: &str, unit: LengthUnit) 
 ///
 /// # Safety
 /// `d` is a valid non-null pointer from `qym_occt_*` and is not used afterwards.
-unsafe fn doc_to_bodies(d: *mut QymDoc) -> Vec<Body> {
+unsafe fn doc_to_bodies(d: *mut QymDoc) -> Vec<Built> {
     let nb = qym_doc_body_count(d);
     let mut out = Vec::with_capacity(nb);
     for i in 0..nb {
@@ -2296,7 +2297,7 @@ unsafe fn doc_to_bodies(d: *mut QymDoc) -> Vec<Body> {
             })
             .collect();
 
-        out.push((mesh, faces));
+        out.push(Built { mesh, faces });
     }
     qym_doc_free(d);
     out
@@ -2304,7 +2305,7 @@ unsafe fn doc_to_bodies(d: *mut QymDoc) -> Vec<Body> {
 
 /// Import a STEP file into bodies, one per solid, each with its B-rep faces. `deflection` is the linear
 /// tessellation deflection in mm.
-pub fn import_step(path: &str, deflection: f64) -> Result<Vec<Body>, String> {
+pub fn import_step(path: &str, deflection: f64) -> Result<Vec<Built>, String> {
     let c = CString::new(path).map_err(|e| e.to_string())?;
     let defl = if deflection > 0.0 { deflection } else { 0.5 };
     unsafe {
@@ -2322,7 +2323,7 @@ pub fn import_step(path: &str, deflection: f64) -> Result<Vec<Body>, String> {
 
 /// Extrude a closed profile — XY points at z = 0 — to a height of `height`, giving bodies. `xy` holds the
 /// coordinates in pairs, as `[x0, y0, x1, y1, ...]`.
-pub fn extrude(xy: &[f64], height: f64, deflection: f64) -> Result<Vec<Body>, String> {
+pub fn extrude(xy: &[f64], height: f64, deflection: f64) -> Result<Vec<Built>, String> {
     let n = xy.len() / 2;
     if n < 3 {
         return Err("cad-extrude-needs-3-points".into());
@@ -2342,7 +2343,7 @@ pub fn extrude(xy: &[f64], height: f64, deflection: f64) -> Result<Vec<Body>, St
 }
 
 /// Revolve a closed profile about an axis — `axis` 0 for X, 1 for Y — through `angle_deg`, giving bodies.
-pub fn revolve(xy: &[f64], axis: u8, angle_deg: f64, deflection: f64) -> Result<Vec<Body>, String> {
+pub fn revolve(xy: &[f64], axis: u8, angle_deg: f64, deflection: f64) -> Result<Vec<Built>, String> {
     let n = xy.len() / 2;
     if n < 3 {
         return Err("cad-revolve-needs-3-points".into());
@@ -2364,7 +2365,7 @@ pub fn revolve(xy: &[f64], axis: u8, angle_deg: f64, deflection: f64) -> Result<
 
 /// A boolean over two extruded profiles. `op` is 0 to subtract the tool from the base, 1 to unite and 2 to
 /// intersect.
-pub fn extrude_bool(base: &[f64], base_h: f64, tool: &[f64], tool_h: f64, op: u8, deflection: f64) -> Result<Vec<Body>, String> {
+pub fn extrude_bool(base: &[f64], base_h: f64, tool: &[f64], tool_h: f64, op: u8, deflection: f64) -> Result<Vec<Built>, String> {
     if base.len() / 2 < 3 || tool.len() / 2 < 3 {
         return Err("cad-boolean-needs-3-points".into());
     }
@@ -2391,6 +2392,6 @@ pub fn box_mesh(dx: f64, dy: f64, dz: f64, deflection: f64) -> Mesh {
         if bodies.is_empty() {
             return Mesh { verts: Vec::new(), tris: Vec::new() };
         }
-        bodies.remove(0).0
+        bodies.remove(0).mesh
     }
 }

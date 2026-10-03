@@ -8,7 +8,7 @@
 //! imported.
 
 use super::ph;
-use qymcad_core::geom::{Mesh, MeshFace, Point3};
+use qymcad_core::geom::{Built, Mesh, MeshFace, Point3};
 use qymcad_core::model::Id;
 use qymcad_io::FileUnit;
 use qymcad_ui_state::{ImportScale, MeshFormat, WinCtx};
@@ -32,7 +32,7 @@ pub(crate) fn land_mesh(wc: &mut WinCtx, path: String, format: MeshFormat, piece
     *wc.dxf_path = Some(path.clone()); // the next file chooser opens where this file was
     let said = super::io_jobs::mesh_added(format, &pieces);
     let span = span_of(pieces.iter().map(|(_, m, ..)| m));
-    let read: Vec<(Mesh, Vec<MeshFace>)> = pieces.iter().map(|(_, m, f, ..)| (m.clone(), f.clone())).collect();
+    let read: Vec<Built> = pieces.iter().map(|(_, m, f, ..)| Built { mesh: m.clone(), faces: f.clone() }).collect();
     let first = wc.project.bodies.len();
     qymcad_ui_state::begin_edit(wc.edits, wc.project, crate::i18n::tr1("io-import-mesh", "format", super::mesh_entry(format).name())); // an EDIT of the document: bodies are added to the current one
     let source = super::embed_source(wc.project, &path).unwrap_or(0);
@@ -80,7 +80,7 @@ pub(crate) fn land_mesh(wc: &mut WinCtx, path: String, format: MeshFormat, piece
     wc.view.initialized = false;
     wc.cam.init = false;
     *wc.status = said;
-    let meshes = (first..wc.project.bodies.len()).filter_map(|i| wc.project.mesh_id(i)).zip(read).map(|(id, (m, f))| (id, m, f)).collect();
+    let meshes = (first..wc.project.bodies.len()).filter_map(|i| wc.project.mesh_id(i)).zip(read).map(|(id, Built { mesh: m, faces: f })| (id, m, f)).collect();
     let unitless = matches!(format, MeshFormat::Stl | MeshFormat::Obj | MeshFormat::Ply);
     let ask =
         ImportScale { file: super::file_name(&path), format: super::mesh_entry(format).name().to_string(), unitless, factor: 1.0, applied: 1.0, span, meshes, solids: Vec::new(), places, again: None };
@@ -129,14 +129,14 @@ pub(crate) fn land_exact(
     wc: &mut WinCtx,
     path: String,
     format: qymcad_kernel::ExactFormat,
-    bodies: Vec<qymcad_kernel::Body>,
+    bodies: Vec<qymcad_core::geom::Built>,
     shapes: Vec<qymcad_kernel::Shape>,
     nodes: Vec<qymcad_kernel::ImportNode>,
 ) {
     keep_pending(wc);
     *wc.dxf_path = Some(path.clone()); // the next file chooser opens where this file was
     let nbodies = bodies.len();
-    let tris: usize = bodies.iter().map(|(m, _)| m.tris.len()).sum();
+    let tris: usize = bodies.iter().map(|Built { mesh: m, .. }| m.tris.len()).sum();
     let named = qymcad_io::Format::of_path(&path).map(|f| f.name()).unwrap_or_default();
     qymcad_ui_state::begin_edit(wc.edits, wc.project, crate::i18n::tr1("io-import-mesh", "format", named));
     let source = super::embed_source(wc.project, &path).unwrap_or(0);
@@ -146,7 +146,7 @@ pub(crate) fn land_exact(
     let mut shapes = shapes.into_iter();
     let mut ids = Vec::with_capacity(nbodies);
     let mut read = Vec::with_capacity(nbodies);
-    for (mesh, fs) in bodies {
+    for Built { mesh, faces: fs } in bodies {
         let bid = wc.project.add_mesh(mesh);
         wc.live.faces.insert(bid, fs.clone()); // a face cache keyed by body Id, for quick access
         wc.project.set_body_faces(bid, fs);

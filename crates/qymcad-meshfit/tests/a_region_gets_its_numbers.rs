@@ -6,7 +6,7 @@ use qymcad_kernel::Shape;
 use qymcad_meshfit::{prepare, regions, weld_tolerance, Region, Surface, Tolerance};
 
 fn regions_of(shape: &Shape, deflection: f64) -> Vec<Region> {
-    let (mesh, _) = shape.tessellate(deflection).into_iter().next().expect("a body");
+    let qymcad_core::geom::Built { mesh, .. } = shape.tessellate(deflection).into_iter().next().expect("a body");
     let p = prepare(&mesh, weld_tolerance(&mesh));
     regions(&p, &Tolerance::for_mesh(&p))
 }

@@ -111,7 +111,7 @@ mod tests {
 
     /// Component `id` written into `target/step-export/<file>` as its row's menu writes it, and the file read back: its
     /// bodies and its tree. Only the system's chooser is stood in for, answered with the path.
-    fn exported(app: &mut App, ctx: &egui::Context, id: Id, file: &str) -> (Vec<qymcad_kernel::Body>, Vec<qymcad_kernel::ImportNode>) {
+    fn exported(app: &mut App, ctx: &egui::Context, id: Id, file: &str) -> (Vec<qymcad_core::geom::Built>, Vec<qymcad_kernel::ImportNode>) {
         let target = qymcad_ui_state::ExportTarget::Component(id);
         let format = qymcad_kernel::ExactFormat::Step;
         let plan = app.export_plan(target);

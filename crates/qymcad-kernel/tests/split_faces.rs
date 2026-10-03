@@ -10,7 +10,7 @@ fn cube() -> Shape {
 
 fn face_count(s: &Shape) -> usize {
     let b = s.tessellate_auto(qymcad_core::model::GeomQuality::Normal.deflection_k());
-    let mut ids: Vec<u32> = b.first().map(|(_, f)| f.iter().map(|f| f.id).collect()).unwrap_or_default();
+    let mut ids: Vec<u32> = b.first().map(|qymcad_core::geom::Built { faces: f, .. }| f.iter().map(|f| f.id).collect()).unwrap_or_default();
     ids.sort_unstable();
     ids.dedup();
     ids.len()
@@ -42,13 +42,13 @@ fn a_plane_that_misses_is_refused() {
 fn untouched_faces_keep_their_names() {
     let c = cube();
     let bodies = c.tessellate_auto(qymcad_core::model::GeomQuality::Normal.deflection_k());
-    let (_, faces) = bodies.first().expect("the body");
+    let qymcad_core::geom::Built { faces, .. } = bodies.first().expect("the body");
     let bottom = faces.iter().find(|f| f.normal[2] < -0.9).map(|f| f.id).expect("the bottom");
     let top = faces.iter().find(|f| f.normal[2] > 0.9).map(|f| f.id).expect("the top");
 
     let split = c.split_faces([0.0, 0.0, 10.0], [0.0, 0.0, 1.0]).expect("split");
     let b2 = split.tessellate_auto(qymcad_core::model::GeomQuality::Normal.deflection_k());
-    let (_, f2) = b2.first().expect("the body");
+    let qymcad_core::geom::Built { faces: f2, .. } = b2.first().expect("the body");
     let ids: Vec<u32> = f2.iter().map(|f| f.id).collect();
     assert!(ids.contains(&bottom), "the plane did not touch the bottom, so its name {bottom} has to remain");
     assert!(ids.contains(&top), "the plane did not touch the top, so its name {top} has to remain");

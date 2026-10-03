@@ -16,7 +16,7 @@ fn name(k: usize) -> &'static str {
     NAMES.lines().nth(k).expect("a name of the reference")
 }
 
-fn reference() -> (Vec<qymcad_kernel::Body>, Vec<qymcad_kernel::Shape>, Vec<ImportNode>) {
+fn reference() -> (Vec<qymcad_core::geom::Built>, Vec<qymcad_kernel::Shape>, Vec<ImportNode>) {
     read_exact_tree(ExactFormat::Iges, concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/assembly.igs"), 0.5).expect("the reference reads")
 }
 
@@ -108,7 +108,7 @@ fn an_iges_face_brings_a_colour_of_its_own() {
     assert_eq!(faces.iter().map(|(id, _)| *id).collect::<Vec<_>>(), [6], "the plate's faces of a colour of their own: {faces:?}");
     assert!(near(Some(faces[0].1), [0.1, 0.8, 0.1]), "the top face is not green: {:?}", faces[0].1);
     let live = shapes[nodes[plate].solid.expect("the plate's body")].tessellate_merged(0.5).expect("the plate tessellates");
-    assert_eq!(live.1.iter().find(|f| f.id == 6).map(|f| f.centroid.z), Some(5.0), "face 6 of the plate is not its top face");
+    assert_eq!(live.faces.iter().find(|f| f.id == 6).map(|f| f.centroid.z), Some(5.0), "face 6 of the plate is not its top face");
     assert!(nodes[named(&nodes, name(3))[0]].faces.is_empty(), "the pin has no face of a colour of its own");
 }
 
@@ -164,7 +164,7 @@ fn a_file_of_surfaces_comes_with_its_names_colours_and_groups() {
     assert!(near(Some(faces[0].1), [0.1, 0.8, 0.1]), "the face of its own colour is not green: {:?}", faces[0].1);
     // the face's number is its place in the order the body's faces are met, from 1 - the persistent ids come later, at
     // the door, and the faces here carry none yet
-    let top = bodies[solid].1.get(faces[0].0 as usize - 1).expect("the green face is in the plate");
+    let top = bodies[solid].faces.get(faces[0].0 as usize - 1).expect("the green face is in the plate");
     assert!((top.centroid.z - 5.0).abs() < 1e-3, "the green face is not the plate's top: its centre is at {:?}", top.centroid);
     let pin = named(&nodes, name(3))[0];
     let psolid = nodes[pin].solid.expect("the pin is a body");

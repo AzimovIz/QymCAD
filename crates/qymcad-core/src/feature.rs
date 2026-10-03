@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::geom::{Mesh, MeshFace, Point2, Point3};
+use crate::geom::{Built, Mesh, MeshFace, Point2, Point3};
 use crate::model::Id;
 
 /// Base plane of the global coordinate system, used to place a sketch.
@@ -214,9 +214,9 @@ impl PlaneFrame {
     }
 
     /// Move a body (mesh plus faces) built in the local axes of the frame into world space.
-    pub fn place_body(&self, mut mesh: Mesh, mut faces: Vec<MeshFace>) -> (Mesh, Vec<MeshFace>) {
+    pub fn place_body(&self, mut mesh: Mesh, mut faces: Vec<MeshFace>) -> Built {
         if self.is_identity() {
-            return (mesh, faces);
+            return Built { mesh, faces };
         }
         for v in &mut mesh.verts {
             *v = self.lift3(*v);
@@ -225,7 +225,7 @@ impl PlaneFrame {
             f.centroid = self.lift3(f.centroid);
             f.normal = self.rotate_dir(f.normal);
         }
-        (mesh, faces)
+        Built { mesh, faces }
     }
 }
 
@@ -1855,12 +1855,12 @@ pub struct Extruded<'a> {
 /// not shared.
 pub struct KernelJob {
     inputs: Vec<Id>,
-    work: Box<dyn FnOnce(&dyn Kernel) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> + Send>,
+    work: Box<dyn FnOnce(&dyn Kernel) -> Result<Built, crate::errors::CoreError> + Send>,
 }
 
 impl KernelJob {
     /// `inputs` are the bodies whose live shapes the work reads; they are what a worker has to be given.
-    pub fn new(inputs: Vec<Id>, work: impl FnOnce(&dyn Kernel) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> + Send + 'static) -> Self {
+    pub fn new(inputs: Vec<Id>, work: impl FnOnce(&dyn Kernel) -> Result<Built, crate::errors::CoreError> + Send + 'static) -> Self {
         Self { inputs, work: Box::new(work) }
     }
 
@@ -1873,24 +1873,24 @@ impl KernelJob {
         &self.inputs
     }
 
-    pub fn run(self, kernel: &dyn Kernel) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    pub fn run(self, kernel: &dyn Kernel) -> Result<Built, crate::errors::CoreError> {
         (self.work)(kernel)
     }
 }
 
 pub trait Kernel {
-    fn extrude(&self, body: Id, profile: &[f64], height: f64, place: [f64; 12]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError>;
-    fn revolve(&self, body: Id, profile: &[f64], axis: u8, angle_deg: f64, place: [f64; 12]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError>;
-    fn boolean(&self, body: Id, base: Extruded, tool: Extruded, op: u8, place: [f64; 12]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError>;
+    fn extrude(&self, body: Id, profile: &[f64], height: f64, place: [f64; 12]) -> Result<Built, crate::errors::CoreError>;
+    fn revolve(&self, body: Id, profile: &[f64], axis: u8, angle_deg: f64, place: [f64; 12]) -> Result<Built, crate::errors::CoreError>;
+    fn boolean(&self, body: Id, base: Extruded, tool: Extruded, op: u8, place: [f64; 12]) -> Result<Built, crate::errors::CoreError>;
     /// Extrude a region from the exact profile `profile` (the `geom::encode_profile` encoding: an outer
     /// contour plus holes made of real edges — lines, arcs, circles) to a height, giving a body with exact
     /// faces.
-    fn extrude_region(&self, body: Id, profile: &[f64], height: f64, place: [f64; 12]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError>;
+    fn extrude_region(&self, body: Id, profile: &[f64], height: f64, place: [f64; 12]) -> Result<Built, crate::errors::CoreError>;
     /// Extrude a profile and combine it with the already built body `src` (`op`: 0 cut, 1 union, 2
     /// intersection).
-    fn combine(&self, body: Id, src: Id, profile: &[f64], height: f64, op: u8, place: [f64; 12]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError>;
+    fn combine(&self, body: Id, src: Id, profile: &[f64], height: f64, op: u8, place: [f64; 12]) -> Result<Built, crate::errors::CoreError>;
     /// Like `combine`, but the tool is a region from the exact profile `profile` (outer contour plus holes).
-    fn combine_region(&self, body: Id, src: Id, profile: &[f64], height: f64, op: u8, place: [f64; 12]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError>;
+    fn combine_region(&self, body: Id, src: Id, profile: &[f64], height: f64, op: u8, place: [f64; 12]) -> Result<Built, crate::errors::CoreError>;
     /// Extrude several profiles (all from one sketch and plane `place`, to `height`), merge them into one
     /// tool and apply a single boolean against body `src`, giving one body. A zero `src` produces a new body
     /// from the tool itself and ignores `op`. This replaces chains of extrude plus boolean, keeping one
@@ -1899,13 +1899,13 @@ pub trait Kernel {
     /// `caps` holds the name descriptors of the start and end caps from the document name table: a cap is not
     /// produced by a profile edge, so its name arrives as a separate parameter rather than inside the
     /// encoding.
-    fn combine_region_multi(&self, bo: crate::model::BodyOp, profiles: &[Vec<f64>], height: f64, place: [f64; 12], caps: &[u32]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError>;
+    fn combine_region_multi(&self, bo: crate::model::BodyOp, profiles: &[Vec<f64>], height: f64, place: [f64; 12], caps: &[u32]) -> Result<Built, crate::errors::CoreError>;
     /// Revolve the exact profile `profile` about an axis (0 for X, 1 for Y) by an angle, giving a body with
     /// exact faces.
-    fn revolve_region(&self, body: Id, profile: &[f64], axis: u8, angle_deg: f64, place: [f64; 12], caps: [u32; 2]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError>;
+    fn revolve_region(&self, body: Id, profile: &[f64], axis: u8, angle_deg: f64, place: [f64; 12], caps: [u32; 2]) -> Result<Built, crate::errors::CoreError>;
     /// Revolve a region about an arbitrary axis (`origin` and `dir` in profile local space), that is, a datum
     /// axis. The default implementation is a fallback for the mock: an ordinary revolve about X.
-    fn revolve_region_axis(&self, body: Id, profile: &[f64], _line: AxisLine, angle_deg: f64, place: [f64; 12], caps: [u32; 2]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn revolve_region_axis(&self, body: Id, profile: &[f64], _line: AxisLine, angle_deg: f64, place: [f64; 12], caps: [u32; 2]) -> Result<Built, crate::errors::CoreError> {
         self.revolve_region(body, profile, 0, angle_deg, place, caps)
     }
 
@@ -1917,15 +1917,7 @@ pub trait Kernel {
     /// The default implementation is a fallback for the mock and for builds without OCCT: the profiles are
     /// revolved one at a time and added together with booleans. The shape comes out the same; what is missing
     /// is merging touching contours into one face.
-    fn revolve_region_multi(
-        &self,
-        bo: crate::model::BodyOp,
-        profiles: &[Vec<f64>],
-        about: RevolveAbout,
-        angle_deg: f64,
-        place: [f64; 12],
-        caps: &[u32],
-    ) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn revolve_region_multi(&self, bo: crate::model::BodyOp, profiles: &[Vec<f64>], about: RevolveAbout, angle_deg: f64, place: [f64; 12], caps: &[u32]) -> Result<Built, crate::errors::CoreError> {
         let crate::model::BodyOp { src, op, body } = bo;
         // The fallback is honest: a single profile without a boolean is reproduced exactly, arbitrary axis
         // included. Merging several profiles or combining with a body needs a real kernel, and silently
@@ -1944,15 +1936,7 @@ pub trait Kernel {
 
     /// Sweep several profiles along one path, merge them and apply a single boolean against body `src`. See
     /// [`Kernel::revolve_region_multi`].
-    fn sweep_multi(
-        &self,
-        bo: crate::model::BodyOp,
-        profiles: &[Vec<f64>],
-        profile_place: [f64; 12],
-        path: &[f64],
-        path_place: [f64; 12],
-        caps: &[u32],
-    ) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn sweep_multi(&self, bo: crate::model::BodyOp, profiles: &[Vec<f64>], profile_place: [f64; 12], path: &[f64], path_place: [f64; 12], caps: &[u32]) -> Result<Built, crate::errors::CoreError> {
         let crate::model::BodyOp { src, op, body } = bo;
         if src != 0 || profiles.len() > 1 {
             return Err(crate::errors::CoreError::KernelRequired(crate::errors::Op::Sweep));
@@ -1966,7 +1950,7 @@ pub trait Kernel {
     /// path `path` (`[1.0, loop_block]`, one open or closed contour) placed by `path_place`, giving a body
     /// with exact faces. The default implementation is a fallback, since there is no sweep without OCCT.
     #[allow(clippy::too_many_arguments)]
-    fn sweep(&self, _body: Id, _profile: &[f64], _profile_place: [f64; 12], _path: &[f64], _path_place: [f64; 12], _caps: [u32; 2]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn sweep(&self, _body: Id, _profile: &[f64], _profile_place: [f64; 12], _path: &[f64], _path_place: [f64; 12], _caps: [u32; 2]) -> Result<Built, crate::errors::CoreError> {
         Err(crate::errors::CoreError::KernelRequired(crate::errors::Op::Sweep))
     }
     /// Loft through sections. `sections` is the concatenation of loop blocks (each `[nedges, nedges*8]`),
@@ -1974,36 +1958,28 @@ pub trait Kernel {
     /// placement per section (length nsec * 12). `ruled` gives straight faces and `solid` closes the result
     /// into a body. The default implementation is a fallback.
     #[allow(clippy::too_many_arguments)]
-    fn loft(&self, _body: Id, _sections: LoftSections, _walls: LoftWalls, _kind: LoftBody, _caps: [u32; 2]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn loft(&self, _body: Id, _sections: LoftSections, _walls: LoftWalls, _kind: LoftBody, _caps: [u32; 2]) -> Result<Built, crate::errors::CoreError> {
         Err(crate::errors::CoreError::KernelRequired(crate::errors::Op::Loft))
     }
     /// Lofted boolean: the lofted solid acts as a tool and is combined with body `src` (`op`: 0 cut, 1 union,
     /// 2 intersection). The section parameters are as in `loft`. The default implementation is a fallback.
     #[allow(clippy::too_many_arguments)]
-    fn loft_combine(
-        &self,
-        _bo: crate::model::BodyOp,
-        _sections: &[f64],
-        _offsets: &[usize],
-        _places: &[f64],
-        _walls: LoftWalls,
-        _caps: [u32; 2],
-    ) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn loft_combine(&self, _bo: crate::model::BodyOp, _sections: &[f64], _offsets: &[usize], _places: &[f64], _walls: LoftWalls, _caps: [u32; 2]) -> Result<Built, crate::errors::CoreError> {
         Err(crate::errors::CoreError::KernelRequired(crate::errors::Op::LoftBoolean))
     }
     /// Stepped hole: the tool (a cylinder plus a counterbore or countersink) in frame `pl`. What drills it
     /// travels as one record - see `HoleTool` - because the five numbers describing it are one thing, and
     /// the same record is what the timeline stores. The mock default cuts a plain cylinder through
     /// `combine_region`.
-    fn hole(&self, body: Id, src: Id, tool: crate::model::HoleTool, pl: [f64; 12], _bore: u32, _extra: &[u32]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn hole(&self, body: Id, src: Id, tool: crate::model::HoleTool, pl: [f64; 12], _bore: u32, _extra: &[u32]) -> Result<Built, crate::errors::CoreError> {
         let prof = crate::geom::encode_profile(&crate::geom::circle_contour(0.0, 0.0, tool.diameter / 2.0, 0.05), &[]);
         self.combine_region(body, src, &prof, -tool.depth.abs(), 0, pl)
     }
     /// Many holes at once (at the points of a sketch): one cutting tool per frame in `pls`, all merged and
     /// subtracted by a single boolean. The default implementation applies `hole` for each point in turn.
-    fn holes(&self, body: Id, src: Id, tool: crate::model::HoleTool, pls: &[[f64; 12]], bores: &[u32], extra: &[u32]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn holes(&self, body: Id, src: Id, tool: crate::model::HoleTool, pls: &[[f64; 12]], bores: &[u32], extra: &[u32]) -> Result<Built, crate::errors::CoreError> {
         let mut cur = src;
-        let mut out: Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> = Err(crate::errors::CoreError::NoPointsForHoles);
+        let mut out: Result<Built, crate::errors::CoreError> = Err(crate::errors::CoreError::NoPointsForHoles);
         for (i, pl) in pls.iter().enumerate() {
             out = self.hole(body, cur, tool, *pl, bores.get(i).copied().unwrap_or(0), extra);
             // NOT `out.as_ref()?`: that hands back a BORROWED error, which this signature cannot convert.
@@ -2022,71 +1998,71 @@ pub trait Kernel {
     /// sweeps it along a helix of radius `radius` about the axis (`origin`, `dir`) and either subtracts it
     /// (`fuse = false`, a thread) or unites it (`fuse = true`, an auger flight). Thread and auger are thus one
     /// operation, and the profile stays exact, so a chamfer can be applied to it later.
-    fn helical(&self, _h: Helical<'_>) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn helical(&self, _h: Helical<'_>) -> Result<Built, crate::errors::CoreError> {
         Err(crate::errors::CoreError::KernelRequired(crate::errors::Op::Helix))
     }
     /// Exact cylinder primitive (axis Z, base at z = 0): a native kernel solid with three faces.
-    fn cylinder(&self, body: Id, r: f64, h: f64, names: [u32; 3]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError>;
+    fn cylinder(&self, body: Id, r: f64, h: f64, names: [u32; 3]) -> Result<Built, crate::errors::CoreError>;
     /// Exact sphere (centred at the origin): one face.
-    fn sphere(&self, body: Id, r: f64, names: [u32; 3]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError>;
+    fn sphere(&self, body: Id, r: f64, names: [u32; 3]) -> Result<Built, crate::errors::CoreError>;
     /// Exact cone (r1 at z = 0 to r2 at z = h, axis Z).
-    fn cone(&self, body: Id, r1: f64, r2: f64, h: f64, names: [u32; 3]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError>;
+    fn cone(&self, body: Id, r1: f64, r2: f64, h: f64, names: [u32; 3]) -> Result<Built, crate::errors::CoreError>;
     /// Exact torus (in the XY plane, axis Z).
-    fn torus(&self, body: Id, major: f64, minor: f64, names: [u32; 3]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError>;
+    fn torus(&self, body: Id, major: f64, minor: f64, names: [u32; 3]) -> Result<Built, crate::errors::CoreError>;
     /// Fillet the edges of body `src` with radius `radius` (an empty `edges` means every edge).
-    fn fillet(&self, body: Id, src: Id, radius: f64, edges: &[u32], names: BlendNames) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError>;
+    fn fillet(&self, body: Id, src: Id, radius: f64, edges: &[u32], names: BlendNames) -> Result<Built, crate::errors::CoreError>;
     /// Variable fillet specified at vertices: `verts` holds a vertex point and the radius there, and the
     /// kernel interpolates along the edge itself. A shared vertex has one radius for both neighbours, so a
     /// chain meets without a step — a property of the way it is specified rather than of any check. An
     /// endpoint without an entry uses `radius`. The mock default produces a constant fillet.
-    fn fillet_at_vertices(&self, body: Id, src: Id, radius: f64, edges: &[u32], _verts: &[([f64; 3], f64)]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn fillet_at_vertices(&self, body: Id, src: Id, radius: f64, edges: &[u32], _verts: &[([f64; 3], f64)]) -> Result<Built, crate::errors::CoreError> {
         self.fillet(body, src, radius, edges, BlendNames { surfaces: &[], corners: &[], all: &[] })
     }
     /// Copy faces into a separate sheet: the bridge from the parametric model into the surface layer. `names`
     /// holds the names of the copies, whose provenance the model knows. The default is an honest refusal:
     /// there is nothing to fake a surface with, and silently reporting success would take the timeline into a
     /// state that does not exist.
-    fn copy_faces(&self, _body: Id, _src: Id, _faces: &[u32], _names: &[u32]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn copy_faces(&self, _body: Id, _src: Id, _faces: &[u32], _names: &[u32]) -> Result<Built, crate::errors::CoreError> {
         Err(crate::errors::CoreError::OpFailed(crate::errors::Op::CopyFaces))
     }
 
     /// Offset sheet: the faces `faces` of body `src` moved `dist` along their normals as body `body`, each named by
     /// `names`. The default refuses: the mock has no surfaces to move.
-    fn offset_faces(&self, _body: Id, _src: Id, _faces: &[u32], _names: &[u32], _dist: f64) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn offset_faces(&self, _body: Id, _src: Id, _faces: &[u32], _names: &[u32], _dist: f64) -> Result<Built, crate::errors::CoreError> {
         Err(crate::errors::CoreError::KernelRequired(crate::errors::Op::OffsetSurface))
     }
 
     /// Patch: span a surface over a chain of edges. The default is a refusal.
-    fn patch(&self, _body: Id, _src: Id, _edges: &[u32], _tangent: bool, _name: u32) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn patch(&self, _body: Id, _src: Id, _edges: &[u32], _tangent: bool, _name: u32) -> Result<Built, crate::errors::CoreError> {
         Err(crate::errors::CoreError::OpFailed(crate::errors::Op::Patch))
     }
 
     /// Replace faces of a body with a surface: the node that stitches the surface layer back into the
     /// timeline. The default is a refusal.
-    fn replace_faces(&self, _body: Id, _src: Id, _faces: &[u32], _surface: Id) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn replace_faces(&self, _body: Id, _src: Id, _faces: &[u32], _surface: Id) -> Result<Built, crate::errors::CoreError> {
         Err(crate::errors::CoreError::OpFailed(crate::errors::Op::ReplaceFaces))
     }
 
     /// Trim a surface: the piece nearest to `keep` is retained. The default is a refusal.
-    fn trim(&self, _body: Id, _src: Id, _tool: Id, _keep: [f64; 3]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn trim(&self, _body: Id, _src: Id, _tool: Id, _keep: [f64; 3]) -> Result<Built, crate::errors::CoreError> {
         Err(crate::errors::CoreError::OpFailed(crate::errors::Op::Trim))
     }
 
     /// Stitch sheets into one surface. If the result closes, the output is a solid. The default is a
     /// refusal.
-    fn stitch(&self, _body: Id, _parts: &[Id], _tol: f64) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn stitch(&self, _body: Id, _parts: &[Id], _tol: f64) -> Result<Built, crate::errors::CoreError> {
         Err(crate::errors::CoreError::OpFailed(crate::errors::Op::Stitch))
     }
 
     /// Turn a mesh into a solid of its flat faces, a polyhedron. The default is a refusal: only a real kernel has
     /// faces to sew.
-    fn mesh_solid(&self, _body: Id, _mesh: &Mesh) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn mesh_solid(&self, _body: Id, _mesh: &Mesh) -> Result<Built, crate::errors::CoreError> {
         Err(crate::errors::CoreError::KernelRequired(crate::errors::Op::MeshSolid))
     }
 
     /// Recognise a mesh into a body of exact surfaces, `tol` multiplying the distance a corner may lie from its
     /// surface. The default is a refusal: only a real kernel builds the faces found.
-    fn mesh_recognised(&self, _body: Id, _mesh: &Mesh, _tol: f64, _sharp: f64) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn mesh_recognised(&self, _body: Id, _mesh: &Mesh, _tol: f64, _sharp: f64) -> Result<Built, crate::errors::CoreError> {
         Err(crate::errors::CoreError::KernelRequired(crate::errors::Op::MeshRecognise))
     }
 
@@ -2117,57 +2093,57 @@ pub trait Kernel {
 
     /// The solid number `index` of body `src` (in the order of `body_solids`) as body `body`. The default refuses, since
     /// the mock builds one solid a body.
-    fn take_solid(&self, _body: Id, _src: Id, _index: usize) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn take_solid(&self, _body: Id, _src: Id, _index: usize) -> Result<Built, crate::errors::CoreError> {
         Err(crate::errors::CoreError::BodyInOnePiece)
     }
 
     /// Chamfer the edges of body `src` by `dist` (an empty `edges` means every edge).
-    fn chamfer(&self, body: Id, src: Id, dist: f64, edges: &[u32], names: BlendNames) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError>;
+    fn chamfer(&self, body: Id, src: Id, dist: f64, edges: &[u32], names: BlendNames) -> Result<Built, crate::errors::CoreError>;
     /// Asymmetric chamfer. `TwoDist` uses setbacks `d1` on the reference face and `d2` on the adjacent one;
     /// `DistAngle` uses setback `d1` plus angle `d2` in degrees; `flip` selects which face is the reference.
     /// `ref_face` is the persistent id of a manually chosen reference face (0 selects it automatically from
     /// `flip`). `Symmetric` falls through to a plain `chamfer(d1)`. It requires an explicit edge selection,
     /// since asymmetry is not defined for "every edge". The mock default is a symmetric `chamfer(d1)`.
     #[allow(clippy::too_many_arguments)]
-    fn chamfer_ex(&self, body: Id, src: Id, d1: f64, _shape: crate::model::ChamferShape, edges: &[u32]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn chamfer_ex(&self, body: Id, src: Id, d1: f64, _shape: crate::model::ChamferShape, edges: &[u32]) -> Result<Built, crate::errors::CoreError> {
         self.chamfer(body, src, d1, edges, BlendNames { surfaces: &[], corners: &[], all: &[] })
     }
     /// Shell body `src`: open the faces named by `face_ids` (persistent ids) and leave walls of `thickness`.
     /// `outward` puts the wall outside instead of inside.
-    fn shell(&self, body: Id, src: Id, thickness: f64, outward: bool, face_ids: &[u32]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError>;
+    fn shell(&self, body: Id, src: Id, thickness: f64, outward: bool, face_ids: &[u32]) -> Result<Built, crate::errors::CoreError>;
 
     /// Shell with named walls: `walls` holds pairs of "source face to the name of its inner wall".
     ///
     /// A wall is produced by offsetting a face rather than by copying it, so the names have to be seeded
     /// during construction: in the finished body an outer face and its wall are indistinguishable.
-    fn shell_named(&self, body: Id, src: Id, thickness: f64, outward: bool, face_ids: &[u32], _walls: &[(u32, u32)]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn shell_named(&self, body: Id, src: Id, thickness: f64, outward: bool, face_ids: &[u32], _walls: &[(u32, u32)]) -> Result<Built, crate::errors::CoreError> {
         self.shell(body, src, thickness, outward, face_ids)
     }
     /// Centred shell: a wall of `thickness` centred on the surface. The mock default shells inwards as
     /// usual.
-    fn shell_center(&self, body: Id, src: Id, thickness: f64, face_ids: &[u32]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn shell_center(&self, body: Id, src: Id, thickness: f64, face_ids: &[u32]) -> Result<Built, crate::errors::CoreError> {
         self.shell(body, src, thickness, false, face_ids)
     }
     /// Push-pull a face: planar face `face` of body `src` moves along its own normal by `dist` (positive adds
     /// material, negative removes it), producing body `body`. Direct modelling: a body stops being hostage to
     /// its sketch and can be edited by grabbing a face and pulling it.
-    fn push_face(&self, _body: Id, _src: Id, _face: u32, _dist: f64) -> Result<(crate::geom::Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn push_face(&self, _body: Id, _src: Id, _face: u32, _dist: f64) -> Result<crate::geom::Built, crate::errors::CoreError> {
         Err(crate::errors::CoreError::KernelRequired(crate::errors::Op::PushFace))
     }
     /// Delete faces and heal: the faces named by `face_ids` are removed from body `src` and the neighbouring
     /// ones extended, producing body `body`. This is how a hole, a boss or a fillet is removed without taking
     /// the timeline apart.
-    fn remove_faces(&self, _body: Id, _src: Id, _face_ids: &[u32]) -> Result<(crate::geom::Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn remove_faces(&self, _body: Id, _src: Id, _face_ids: &[u32]) -> Result<crate::geom::Built, crate::errors::CoreError> {
         Err(crate::errors::CoreError::KernelRequired(crate::errors::Op::RemoveFaces))
     }
     /// Thicken a face: face `face` of body `src` becomes a plate of `thickness` as a new body `body`. The
     /// source stays alive — the plate is a separate part rather than a reworking of the original.
-    fn thicken_face(&self, _body: Id, _src: Id, _face: u32, _thickness: f64, _join: Id, _names: NameMaps) -> Result<(crate::geom::Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn thicken_face(&self, _body: Id, _src: Id, _face: u32, _thickness: f64, _join: Id, _names: NameMaps) -> Result<crate::geom::Built, crate::errors::CoreError> {
         Err(crate::errors::CoreError::KernelRequired(crate::errors::Op::Thicken))
     }
     /// Split faces by a plane without cutting the body: the body stays one, and the faces the plane crosses
     /// fall into pieces, producing `body`. This marks out a region rather than breaking the part apart.
-    fn split_faces(&self, _body: Id, _src: Id, _origin: [f64; 3], _normal: [f64; 3]) -> Result<(crate::geom::Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn split_faces(&self, _body: Id, _src: Id, _origin: [f64; 3], _normal: [f64; 3]) -> Result<crate::geom::Built, crate::errors::CoreError> {
         Err(crate::errors::CoreError::KernelRequired(crate::errors::Op::SplitFaces))
     }
     /// Split a body by a plane: body `src` is cut by the plane (`origin`, `normal`) into pieces, and each
@@ -2176,52 +2152,52 @@ pub trait Kernel {
     ///
     /// `bodies` holds pre-allocated ids, one per piece. If the number of pieces differs, an error is
     /// returned: silently losing a piece is worse than refusing.
-    fn split_body(&self, _bodies: &[Id], _src: Id, _origin: [f64; 3], _normal: [f64; 3], _section: u32) -> Result<Vec<(crate::geom::Mesh, Vec<MeshFace>)>, crate::errors::CoreError> {
+    fn split_body(&self, _bodies: &[Id], _src: Id, _origin: [f64; 3], _normal: [f64; 3], _section: u32) -> Result<Vec<crate::geom::Built>, crate::errors::CoreError> {
         Err(crate::errors::CoreError::KernelRequired(crate::errors::Op::SplitBody))
     }
     /// Draft: tilt the faces named by `face_ids` on body `src` by `angle` degrees relative to the neutral
     /// plane (`np_origin`, `np_normal`) along the pull direction `pull`. Requires a real kernel; the mock is a
     /// stub.
     #[allow(clippy::too_many_arguments)]
-    fn draft(&self, _body: Id, _src: Id, _face_ids: &[u32], _pull: DraftPull, _neutral: PlaneAt, _sides: &[u32]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn draft(&self, _body: Id, _src: Id, _face_ids: &[u32], _pull: DraftPull, _neutral: PlaneAt, _sides: &[u32]) -> Result<Built, crate::errors::CoreError> {
         Err(crate::errors::CoreError::KernelRequired(crate::errors::Op::Draft))
     }
     /// Pattern of body `src`: unite its copies placed by the transforms in `transforms`.
-    fn pattern(&self, body: Id, src: Id, transforms: &[[f64; 12]]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError>;
+    fn pattern(&self, body: Id, src: Id, transforms: &[[f64; 12]]) -> Result<Built, crate::errors::CoreError>;
 
     /// Pattern with named instances: `seeds[k]` holds pairs of "source face id to its name in copy k".
     ///
     /// Within one copy the ids are unique, so renaming by pairs is expressible here, unlike in the assembled
     /// result where every copy carries the same source number.
-    fn pattern_named(&self, body: Id, src: Id, transforms: &[[f64; 12]], _seeds: &[Vec<(u32, u32)>]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn pattern_named(&self, body: Id, src: Id, transforms: &[[f64; 12]], _seeds: &[Vec<(u32, u32)>]) -> Result<Built, crate::errors::CoreError> {
         self.pattern(body, src, transforms)
     }
     /// Mirror body `src` about plane `plane`; `keep` unites the result with the original.
-    fn mirror(&self, body: Id, src: Id, plane: u8, keep: bool) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError>;
+    fn mirror(&self, body: Id, src: Id, plane: u8, keep: bool) -> Result<Built, crate::errors::CoreError>;
 
     /// Mirror with named images: `seed` holds pairs of "source face to its name in the reflection". The copy
     /// has to receive its names before being united with the original, since afterwards both halves carry the
     /// same number.
-    fn mirror_named(&self, body: Id, src: Id, plane: u8, keep: bool, _seed: &[(u32, u32)]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn mirror_named(&self, body: Id, src: Id, plane: u8, keep: bool, _seed: &[(u32, u32)]) -> Result<Built, crate::errors::CoreError> {
         self.mirror(body, src, plane, keep)
     }
 
-    fn mirror_plane_named(&self, body: Id, src: Id, origin: [f64; 3], normal: [f64; 3], keep: bool, _seed: &[(u32, u32)]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn mirror_plane_named(&self, body: Id, src: Id, origin: [f64; 3], normal: [f64; 3], keep: bool, _seed: &[(u32, u32)]) -> Result<Built, crate::errors::CoreError> {
         self.mirror_plane(body, src, origin, normal, keep)
     }
     /// Mirror about an arbitrary plane (origin and normal), that is, a datum or a face. `keep` unites the
     /// result with the original.
-    fn mirror_plane(&self, body: Id, src: Id, origin: [f64; 3], normal: [f64; 3], keep: bool) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError>;
+    fn mirror_plane(&self, body: Id, src: Id, origin: [f64; 3], normal: [f64; 3], keep: bool) -> Result<Built, crate::errors::CoreError>;
     /// Rigid translation and rotation of the B-rep of body `src` by matrix `mat` (3x4), producing `body`.
-    fn transform_body(&self, body: Id, src: Id, mat: [f64; 12]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError>;
+    fn transform_body(&self, body: Id, src: Id, mat: [f64; 12]) -> Result<Built, crate::errors::CoreError>;
     /// Re-tessellate the already built or imported shape of body `body` from the kernel cache (an external
     /// STEP solid has no recipe). `None` means the kernel does not hold that body.
-    fn tessellate(&self, _body: Id) -> Option<(Mesh, Vec<MeshFace>)> {
+    fn tessellate(&self, _body: Id) -> Option<Built> {
         None
     }
     /// Body-to-body boolean: `op` applied to the B-reps of bodies `a` and `b`, producing `body`. `op` is 0 for
     /// a cut (a minus b), 1 for a union and 2 for an intersection. Both operands have to be built.
-    fn body_boolean(&self, body: Id, a: Id, b: Id, op: u8) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError>;
+    fn body_boolean(&self, body: Id, a: Id, b: Id, op: u8) -> Result<Built, crate::errors::CoreError>;
     /// Edges of the built body `body`: a persistent id plus the midpoint and tangent, in body local space.
     /// Used to resolve axis connectors by id. The default is empty, since a mock supplies no edges.
     fn face_splits(&self, _body: Id) -> Vec<(u32, u32, u32)> {

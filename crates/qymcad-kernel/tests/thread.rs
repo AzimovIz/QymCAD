@@ -34,7 +34,7 @@ fn external_thread_cuts_real_grooves() {
 
     let bodies = thr.tessellate(0.1);
     assert_eq!(bodies.len(), 1, "one body");
-    let (mesh, faces) = &bodies[0];
+    let qymcad_core::geom::Built { mesh, faces } = &bodies[0];
     assert!(!mesh.tris.is_empty(), "the mesh is not empty, so the body tessellates");
     assert!(faces.len() > 3, "the thread added B-rep faces, a bare cylinder having three: {} now", faces.len());
 }
@@ -101,7 +101,7 @@ fn two_start_thread_is_valid_solid() {
     assert!(v2 > 0.0 && v2 < v0, "a two-start thread is a valid body with material removed: {v0:.1} -> {v2:.1}");
     let bodies = two.tessellate(0.15);
     assert_eq!(bodies.len(), 1, "one body");
-    assert!(bodies[0].1.len() > 3, "the thread faces are added, the cylinder having had three: {}", bodies[0].1.len());
+    assert!(bodies[0].faces.len() > 3, "the thread faces are added, the cylinder having had three: {}", bodies[0].faces.len());
 }
 
 #[test]
@@ -356,7 +356,7 @@ fn thread_into_shoulder_builds() {
 /// Near zero it means a smooth surface, the turn having run out.
 fn ring_amplitude(s: &Shape, zlo: f64, zhi: f64) -> f64 {
     let bodies = s.tessellate(0.05);
-    let (mesh, _) = &bodies[0];
+    let qymcad_core::geom::Built { mesh, .. } = &bodies[0];
     let (mut lo, mut hi) = (f64::INFINITY, 0.0f64);
     for v in &mesh.verts {
         let (x, y, z) = (v.x, v.y, v.z);

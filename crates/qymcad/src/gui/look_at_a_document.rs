@@ -91,7 +91,7 @@ mod tests {
         };
         let bytes = std::fs::read(&path).expect("the solid file");
         let shape = qymcad_kernel::Shape::from_brep_bytes(&bytes).expect("the kernel reads it");
-        let (mesh, _faces) = shape.tessellate(0.5).into_iter().next().expect("it tessellates");
+        let qymcad_core::geom::Built { mesh, .. } = shape.tessellate(0.5).into_iter().next().expect("it tessellates");
         eprintln!("LOOKING AT {path}: {} vertices, {} triangles", mesh.verts.len(), mesh.tris.len());
 
         // ONE CONNECTED PIECE OF THE SHELL ON ITS OWN (`QYM_ONLY_PIECE`): where a band of surface seems to be

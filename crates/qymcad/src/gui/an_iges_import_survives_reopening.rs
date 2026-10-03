@@ -17,7 +17,7 @@ mod tests {
         let mut p = Project::default();
         p.new_document();
         let source = p.add_source("cube.igs", std::fs::read(&path).expect("reads"));
-        let (mesh, _) = qymcad_kernel::import_iges(&path.to_string_lossy(), 0.5).expect("imports").remove(0);
+        let qymcad_core::geom::Built { mesh, .. } = qymcad_kernel::import_iges(&path.to_string_lossy(), 0.5).expect("imports").remove(0);
         let body = p.add_mesh(mesh);
         p.import_tree_as_parts(vec![qymcad_core::model::ImportNode { name: "cube".into(), body: Some(body), ..Default::default() }], source, "cube");
         let raised = crate::gui::restore_import_shapes_for(&p);

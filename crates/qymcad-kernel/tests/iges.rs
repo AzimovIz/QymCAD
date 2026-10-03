@@ -117,12 +117,12 @@ fn the_same_file_reads_as_meshes_too() {
     write_iges(&[(&a, PLACE_IDENTITY), (&b, moved(30.0, 0.0)), (&c, moved(0.0, 30.0))], &p, LengthUnit::Millimetre).expect("the IGES is written");
     let bodies = import_iges(&p, 0.5).expect("the IGES imports");
     assert_eq!(bodies.len(), 3, "a body per solid, in step with the live shapes: got {}", bodies.len());
-    for (m, faces) in &bodies {
+    for qymcad_core::geom::Built { mesh: m, faces } in &bodies {
         assert!(m.tris.len() >= 12 && !faces.is_empty(), "a body came in with {} triangles and {} faces", m.tris.len(), faces.len());
     }
     let mut boxes: Vec<[f64; 6]> = bodies
         .iter()
-        .map(|(m, _)| {
+        .map(|qymcad_core::geom::Built { mesh: m, .. }| {
             let b = m.bounds().expect("a mesh has bounds");
             [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z]
         })
@@ -185,7 +185,7 @@ fn one_reading_gives_bodies_and_solids_in_step() {
         let (bodies, shapes) = qymcad_kernel::read_exact(format, path, 0.5).expect("reads");
         assert_eq!(bodies.len(), 3, "{format:?}: {} bodies", bodies.len());
         assert_eq!(shapes.len(), bodies.len(), "{format:?}: {} bodies but {} live solids", bodies.len(), shapes.len());
-        for (k, ((mesh, _), shape)) in bodies.iter().zip(&shapes).enumerate() {
+        for (k, (qymcad_core::geom::Built { mesh, .. }, shape)) in bodies.iter().zip(&shapes).enumerate() {
             let mb = mesh.bounds().expect("a mesh has bounds");
             let sb = shape.bbox().expect("a solid has a box");
             // the mesh lies inside the solid's box, which may only be looser than it

@@ -264,7 +264,7 @@ fn the_owners_head_is_measured_against_its_step() {
         .iter()
         .enumerate()
         .filter_map(|(i, n)| {
-            let (mesh, faces) = &bodies[n.solid.or(n.repeat_of)?];
+            let qymcad_core::geom::Built { mesh, faces } = &bodies[n.solid.or(n.repeat_of)?];
             let mut m = mesh.clone();
             m.transform(&world(i));
             Some((boxed(&m)?, faces.len(), n.name.clone()))
