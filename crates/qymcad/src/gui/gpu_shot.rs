@@ -19,10 +19,20 @@ pub(crate) mod eyes {
         shot_within(pn, rect, |adapter| adapter.limits())
     }
 
+    /// The same picture drawn with `samples` per pixel rather than the program's own setting: 1 is antialiasing
+    /// switched off. Given to the renderer it makes, so checks running beside it keep theirs.
+    pub(crate) fn shot_with_samples(pn: &qymcad_ui_state::Painting, rect: egui::Rect, samples: u32) -> Option<egui::ColorImage> {
+        shot_made(pn, rect, |adapter| adapter.limits(), samples)
+    }
+
     /// The same picture on a device that allows no more than `limits` answers for the card at hand: a check stands
     /// in for a weaker device - a virtual machine reached through OpenGL has no storage buffers in the fragment
     /// stage at all - with the device on this machine.
     pub(crate) fn shot_within(pn: &qymcad_ui_state::Painting, rect: egui::Rect, limits: impl Fn(&wgpu::Adapter) -> wgpu::Limits) -> Option<egui::ColorImage> {
+        shot_made(pn, rect, limits, crate::viewport_gpu::msaa_samples_for_test())
+    }
+
+    fn shot_made(pn: &qymcad_ui_state::Painting, rect: egui::Rect, limits: impl Fn(&wgpu::Adapter) -> wgpu::Limits, samples: u32) -> Option<egui::ColorImage> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default())).ok()?;
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
@@ -62,7 +72,7 @@ pub(crate) mod eyes {
         let paint = crate::viewport_gpu::MeshPaint::new(cam, size_px, Some(scene.pieces), scene.looks, key);
 
         let mut resources = egui_wgpu::CallbackResources::default();
-        crate::viewport_gpu::install_for_test(&device, &mut resources);
+        crate::viewport_gpu::install_for_test(&device, &mut resources, samples);
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("qym_eye_enc") });
         let screen = egui_wgpu::ScreenDescriptor { size_in_pixels: size_px, pixels_per_point: 1.0 };
         use eframe::egui_wgpu::CallbackTrait;

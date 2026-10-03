@@ -364,6 +364,9 @@ pub struct GpuRenderer {
     look_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     // the resources for the current size of the viewport (recreated on a resize)
+    /// THE SAMPLES A PIXEL IS DRAWN WITH, fixed when the renderer is made: the pipelines are built for it, and the
+    /// targets must agree with them. The setting takes effect on a restart, so it is read once, here.
+    samples: u32,
     msaa_view: Option<wgpu::TextureView>, // the multisample render target, resolved into color_view
     color_tex: Option<wgpu::Texture>, // the same texture, kept so a check can copy the drawn picture out
     color_view: Option<wgpu::TextureView>, // the single-sample resolve target, sampled by the blit
@@ -401,7 +404,7 @@ struct Span {
 }
 
 impl GpuRenderer {
-    fn new(device: &wgpu::Device, target_format: wgpu::TextureFormat) -> Self {
+    fn new(device: &wgpu::Device, target_format: wgpu::TextureFormat, samples: u32) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("qym_viewport_shader"),
             source: wgpu::ShaderSource::Wgsl(SHADER.into()),
@@ -468,7 +471,7 @@ impl GpuRenderer {
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             }),
-            multisample: wgpu::MultisampleState { count: msaa_samples(), ..Default::default() },
+            multisample: wgpu::MultisampleState { count: samples, ..Default::default() },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
                 entry_point: Some("fs_mesh"),
@@ -495,7 +498,7 @@ impl GpuRenderer {
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             }),
-            multisample: wgpu::MultisampleState { count: msaa_samples(), ..Default::default() },
+            multisample: wgpu::MultisampleState { count: samples, ..Default::default() },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
                 entry_point: Some("fs_mesh"),
@@ -522,7 +525,7 @@ impl GpuRenderer {
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             }),
-            multisample: wgpu::MultisampleState { count: msaa_samples(), ..Default::default() },
+            multisample: wgpu::MultisampleState { count: samples, ..Default::default() },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
                 entry_point: Some("fs_mesh"),
@@ -605,6 +608,7 @@ impl GpuRenderer {
             look_len: 0,
             vcount: 0,
             scene_key: u64::MAX,
+            samples,
         }
     }
 
@@ -615,18 +619,7 @@ impl GpuRenderer {
             return;
         }
         let extent = wgpu::Extent3d { width: size[0].max(1), height: size[1].max(1), depth_or_array_layers: 1 };
-        // the multisample render target — never sampled, only resolved
-        let msaa = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("qym_offscreen_msaa"),
-            size: extent,
-            mip_level_count: 1,
-            sample_count: msaa_samples(),
-            dimension: wgpu::TextureDimension::D2,
-            format: OFFSCREEN_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            view_formats: &[],
-        });
-        // the single-sample resolve target — the blit carries it
+        // the single-sample colour the blit carries: the resolve target, or the target itself with one sample
         let color = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("qym_offscreen_color"),
             size: extent,
@@ -645,13 +638,29 @@ impl GpuRenderer {
             label: Some("qym_offscreen_depth"),
             size: extent,
             mip_level_count: 1,
-            sample_count: msaa_samples(),
+            sample_count: self.samples,
             dimension: wgpu::TextureDimension::D2,
             format: DEPTH_FORMAT,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             view_formats: &[],
         });
-        let msaa_view = msaa.create_view(&wgpu::TextureViewDescriptor::default());
+        // A MULTISAMPLE TARGET ONLY WHEN THERE IS SOMETHING TO RESOLVE. With antialiasing off (one sample) the
+        // pass draws straight into the colour: a target of one sample resolved into another is a validation error
+        // of wgpu, and it closed the window on start (issue #2).
+        let msaa_view = (self.samples > 1).then(|| {
+            device
+                .create_texture(&wgpu::TextureDescriptor {
+                    label: Some("qym_offscreen_msaa"),
+                    size: extent,
+                    mip_level_count: 1,
+                    sample_count: self.samples,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: OFFSCREEN_FORMAT,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                    view_formats: &[],
+                })
+                .create_view(&wgpu::TextureViewDescriptor::default())
+        });
         let color_view = color.create_view(&wgpu::TextureViewDescriptor::default());
         let depth_view = depth.create_view(&wgpu::TextureViewDescriptor::default());
         let blit_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -662,7 +671,7 @@ impl GpuRenderer {
                 wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&self.sampler) },
             ],
         });
-        self.msaa_view = Some(msaa_view);
+        self.msaa_view = msaa_view;
         self.color_tex = Some(color);
         self.color_view = Some(color_view);
         self.depth_view = Some(depth_view);
@@ -796,19 +805,23 @@ impl egui_wgpu::CallbackTrait for MeshPaint {
             }
         }
 
-        // the offscreen pass: clear to transparent, draw the bodies with a depth buffer into the MSAA
-        // target, resolve into the colour target
-        let (Some(mv), Some(cv), Some(dv)) = (gpu.msaa_view.as_ref(), gpu.color_view.as_ref(), gpu.depth_view.as_ref()) else { return Vec::new() };
+        // the offscreen pass: clear to transparent, draw the bodies with a depth buffer - into the multisample
+        // target resolved into the colour, or with one sample straight into the colour
+        let (Some(cv), Some(dv)) = (gpu.color_view.as_ref(), gpu.depth_view.as_ref()) else { return Vec::new() };
+        let (view, resolve_target, store) = match gpu.msaa_view.as_ref() {
+            // the multisample texture is needed only for the resolve, so it is not stored (Discard); the resolve
+            // happens all the same
+            Some(mv) => (mv, Some(cv), wgpu::StoreOp::Discard),
+            None => (cv, None, wgpu::StoreOp::Store),
+        };
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("qym_offscreen_pass"),
             multiview_mask: None,
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: mv,
-                resolve_target: Some(cv),
+                view,
+                resolve_target,
                 depth_slice: None,
-                // the MSAA texture is needed only for the resolve, so it is not stored (Discard); the
-                // resolve happens all the same
-                ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Discard },
+                ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store },
             })],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                 view: dv,
@@ -870,8 +883,8 @@ impl egui_wgpu::CallbackTrait for MeshPaint {
 /// device and nothing else, and it must run the SAME pipeline: a copy of the setup here would prove that the
 /// copy works.
 #[cfg(test)]
-pub(crate) fn install_for_test(device: &wgpu::Device, resources: &mut egui_wgpu::CallbackResources) {
-    resources.insert(GpuRenderer::new(device, OFFSCREEN_FORMAT));
+pub(crate) fn install_for_test(device: &wgpu::Device, resources: &mut egui_wgpu::CallbackResources, samples: u32) {
+    resources.insert(GpuRenderer::new(device, OFFSCREEN_FORMAT, samples));
 }
 
 /// The texture the bodies were drawn into, for copying the picture out of a check.
@@ -889,7 +902,7 @@ pub fn install(render_state: &egui_wgpu::RenderState) -> bool {
     // picture".
     probe_supported(&render_state.device, render_state.target_format);
     set_msaa(MSAA_SAMPLES.load(std::sync::atomic::Ordering::Relaxed));
-    let renderer = GpuRenderer::new(&render_state.device, render_state.target_format);
+    let renderer = GpuRenderer::new(&render_state.device, render_state.target_format, msaa_samples());
     render_state.renderer.write().callback_resources.insert(renderer);
     true
 }
