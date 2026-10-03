@@ -29,10 +29,13 @@ fn surfaces(found: &[Region]) -> Vec<Surface> {
 #[test]
 fn a_cylinder_gets_its_radius_and_its_axis() {
     let found = surfaces(&regions_of(&Shape::cylinder(10.0, 30.0).expect("a cylinder"), 0.05));
-    let cyl: Vec<([f64; 3], [f64; 3], f64)> = found.iter().filter_map(|s| match *s {
-        Surface::Cylinder { point, axis, radius } => Some((point, axis, radius)),
-        _ => None,
-    }).collect();
+    let cyl: Vec<([f64; 3], [f64; 3], f64)> = found
+        .iter()
+        .filter_map(|s| match *s {
+            Surface::Cylinder { point, axis, radius } => Some((point, axis, radius)),
+            _ => None,
+        })
+        .collect();
     assert_eq!(cyl.len(), 1, "surfaces {found:?}");
     let (point, axis, radius) = cyl[0];
     assert!((radius - 10.0).abs() < 0.01, "radius {radius}, not 10");
@@ -65,10 +68,13 @@ fn a_rounded_bar_gets_every_radius() {
 #[test]
 fn a_cone_gets_its_apex_and_its_angle() {
     let found = surfaces(&regions_of(&Shape::cone(10.0, 4.0, 20.0).expect("a cone"), 0.05));
-    let cones: Vec<([f64; 3], [f64; 3], f64)> = found.iter().filter_map(|s| match *s {
-        Surface::Cone { apex, axis, half_angle } => Some((apex, axis, half_angle)),
-        _ => None,
-    }).collect();
+    let cones: Vec<([f64; 3], [f64; 3], f64)> = found
+        .iter()
+        .filter_map(|s| match *s {
+            Surface::Cone { apex, axis, half_angle } => Some((apex, axis, half_angle)),
+            _ => None,
+        })
+        .collect();
     assert_eq!(cones.len(), 1, "surfaces {found:?}");
     let (apex, axis, half) = cones[0];
     let want = (6.0f64 / 20.0).atan();

@@ -46,7 +46,10 @@ fn a_hole_stands_where_it_was_placed() {
     let hole = p.add_hole_at(block, key, at, HoleTool { kind: 0, diameter: 4.0, depth: 5.0, dia2: 0.0, depth2: 0.0 });
     let _ = qymcad_testkit::regenerate(&mut p);
     let wall = |p: &Project| {
-        p.regen_faces.get(&hole).and_then(|fs| fs.iter().find(|f| f.normal[2].abs() < 0.1 && (f.area - PI * 4.0 * 5.0).abs() < 2.0).map(|f| [f.centroid.x, f.centroid.y])).expect("the wall of the hole")
+        p.regen_faces
+            .get(&hole)
+            .and_then(|fs| fs.iter().find(|f| f.normal[2].abs() < 0.1 && (f.area - PI * 4.0 * 5.0).abs() < 2.0).map(|f| [f.centroid.x, f.centroid.y]))
+            .expect("the wall of the hole")
     };
     let w = wall(&p);
     assert!((w[0] - at[0]).abs() < 0.3 && (w[1] - at[1]).abs() < 0.3, "the hole stands at {w:?} across the top, it was placed at {at:?}");

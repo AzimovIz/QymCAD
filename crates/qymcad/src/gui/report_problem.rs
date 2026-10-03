@@ -37,17 +37,7 @@ pub(crate) struct ReportDraft {
 
 impl Default for ReportDraft {
     fn default() -> Self {
-        Self {
-            what: String::new(),
-            expected: String::new(),
-            steps: String::new(),
-            attach_shot: true,
-            attach_env: true,
-            attach_crash: true,
-            attach_doc: false,
-            folder: None,
-            awaiting_shot: false,
-        }
+        Self { what: String::new(), expected: String::new(), steps: String::new(), attach_shot: true, attach_env: true, attach_crash: true, attach_doc: false, folder: None, awaiting_shot: false }
     }
 }
 
@@ -109,11 +99,7 @@ impl super::App {
             }
             body = body.chars().take(keep).collect();
         }
-        format!(
-            "{ISSUES_NEW}?template=bug.yml&title={}&what-happened={}",
-            urlencode(&title),
-            urlencode(&body)
-        )
+        format!("{ISSUES_NEW}?template=bug.yml&title={}&what-happened={}", urlencode(&title), urlencode(&body))
     }
 
     /// GATHER THE FILES INTO ONE FOLDER, ready to be dragged into the form.
@@ -180,12 +166,7 @@ impl super::App {
 /// The newest crash file, whether or not it has been shown.
 fn newest_crash_file() -> Option<PathBuf> {
     let dir = qymcad_paths::data("crashes")?;
-    let mut all: Vec<PathBuf> = std::fs::read_dir(dir)
-        .ok()?
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| p.file_name().map(|n| n.to_string_lossy().starts_with("crash_")).unwrap_or(false))
-        .collect();
+    let mut all: Vec<PathBuf> = std::fs::read_dir(dir).ok()?.flatten().map(|e| e.path()).filter(|p| p.file_name().map(|n| n.to_string_lossy().starts_with("crash_")).unwrap_or(false)).collect();
     all.sort();
     all.pop()
 }
@@ -233,12 +214,9 @@ pub(crate) fn report_window(
     let mut open = true;
     let mut collect = false;
     let mut to_form = false;
-    egui::Window::new(format!("{} {}", ph::BUG, crate::i18n::tr("report-title")))
-        .open(&mut open)
-        .collapsible(false)
-        .default_width(540.0)
-        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-        .show(ctx, |ui| {
+    egui::Window::new(format!("{} {}", ph::BUG, crate::i18n::tr("report-title"))).open(&mut open).collapsible(false).default_width(540.0).anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0]).show(
+        ctx,
+        |ui| {
             ui.add_space(4.0);
             ui.label(crate::i18n::tr("report-intro"));
             ui.add_space(8.0);
@@ -275,10 +253,15 @@ pub(crate) fn report_window(
             ui.add_space(10.0);
             ui.horizontal(|ui| {
                 let ready = !draft.what.trim().is_empty();
-                if ui.add_enabled(ready, egui::Button::new(format!("{} {}", ph::FOLDER_OPEN, crate::i18n::tr("report-collect")))).on_disabled_hover_text(crate::i18n::tr("report-need-what")).clicked() {
+                if ui.add_enabled(ready, egui::Button::new(format!("{} {}", ph::FOLDER_OPEN, crate::i18n::tr("report-collect")))).on_disabled_hover_text(crate::i18n::tr("report-need-what")).clicked()
+                {
                     collect = true;
                 }
-                if ui.add_enabled(ready, egui::Button::new(format!("{} {}", ph::ARROW_SQUARE_OUT, crate::i18n::tr("report-open-form")))).on_disabled_hover_text(crate::i18n::tr("report-need-what")).clicked() {
+                if ui
+                    .add_enabled(ready, egui::Button::new(format!("{} {}", ph::ARROW_SQUARE_OUT, crate::i18n::tr("report-open-form"))))
+                    .on_disabled_hover_text(crate::i18n::tr("report-need-what"))
+                    .clicked()
+                {
                     to_form = true;
                 }
             });
@@ -293,7 +276,8 @@ pub(crate) fn report_window(
                     ui.output_mut(|o| o.commands.push(egui::OutputCommand::CopyText(dir.to_string_lossy().into_owned())));
                 }
             }
-        });
+        },
+    );
     asked.collect = collect;
     asked.to_form = to_form;
     if !open {
@@ -303,160 +287,155 @@ pub(crate) fn report_window(
 
 #[cfg(test)]
 mod tests {
-use crate::gui::WinKind;
-use crate::gui::App;
+    use crate::gui::WinKind;
+    use crate::gui::App;
 
-/// The ids of the fields in the issue form, read from the form itself.
-fn form_field_ids() -> Vec<String> {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.github/ISSUE_TEMPLATE/bug.yml");
-    let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("the issue form is missing at {path:?}: {e}"));
-    text.lines()
-        .filter_map(|l| l.trim().strip_prefix("id:").map(|v| v.trim().trim_matches('"').to_string()))
-        .collect()
-}
-
-/// A RUSSIAN PHRASE BUILT FROM CODE POINTS RATHER THAN TYPED.
-///
-/// The tests below have to work on Cyrillic - that is the whole point of them, since percent-encoding
-/// triples it - but a ratchet counts every Cyrillic literal in the sources and only lets that number
-/// go down. This is data, not a message to anybody, so it is written as code points and the ratchet
-/// keeps holding what it was put there to hold. U+0430..U+044F is the Russian lower-case alphabet.
-fn cyrillic() -> String {
-    (0x0430u32..=0x044F).filter_map(char::from_u32).collect()
-}
-
-/// The query keys of a link, without their values.
-fn query_keys(url: &str) -> Vec<String> {
-    let Some((_, q)) = url.split_once('?') else { return Vec::new() };
-    q.split('&').filter_map(|p| p.split_once('=').map(|(k, _)| k.to_string())).collect()
-}
-
-/// THE LINK AND THE FORM MUST NAME THE SAME FIELDS.
-///
-/// GitHub fills a form from the query string BY FIELD ID. Rename a field in the form, or a key in
-/// the link, and the prefilling stops - silently: the form simply comes up empty, and nobody
-/// notices, because an empty form is what a form looks like.
-#[test]
-fn the_form_and_the_link_name_the_same_fields() {
-    let ids = form_field_ids();
-    assert!(ids.contains(&"what-happened".to_string()), "the form has no field to fill in: {ids:?}");
-
-    let mut app = crate::gui::screen_keys::tests::populated();
-    app.disk.report.what = "the fillet does not take".into();
-    let url = app.report_url();
-
-    assert!(url.starts_with(super::ISSUES_NEW), "the link does not lead to the tracker: {url}");
-    assert!(url.contains("template=bug.yml"), "the link does not name the form: {url}");
-
-    for k in query_keys(&url) {
-        if k == "template" || k == "title" {
-            continue; // both are GitHub's own, not fields of ours
-        }
-        assert!(ids.contains(&k), "the link fills in `{k}`, and the form has no such field: {ids:?}");
+    /// The ids of the fields in the issue form, read from the form itself.
+    fn form_field_ids() -> Vec<String> {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.github/ISSUE_TEMPLATE/bug.yml");
+        let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("the issue form is missing at {path:?}: {e}"));
+        text.lines().filter_map(|l| l.trim().strip_prefix("id:").map(|v| v.trim().trim_matches('"').to_string())).collect()
     }
-}
 
-/// A LINK TOO LONG SIMPLY DOES NOT OPEN, and to the person the button "does nothing".
-///
-/// Percent-encoding triples a Russian sentence - three bytes a letter, three characters a byte - so
-/// the budget is counted on the encoded length. Checked in Russian for that very reason: in Latin
-/// the same text would fit and the check would pass while proving nothing.
-#[test]
-fn the_link_stays_short_enough_to_open() {
-    let phrase = cyrillic();
-    let mut app = crate::gui::screen_keys::tests::populated();
-    app.disk.report.what = format!("{phrase} ").repeat(400);
-    let url = app.report_url();
-    assert!(url.len() < 8000, "the link came out {} characters long and will not open", url.len());
-    // ...and what was cut off is still whole text, not half a letter.
-    assert!(url.is_char_boundary(url.len()), "the link was cut through a character");
-    let head = super::urlencode(&phrase.chars().take(3).collect::<String>());
-    assert!(url.contains(&head), "the beginning of what was written did not survive the trim: {}", &url[..url.len().min(200)]);
-}
-
-/// THE DOCUMENT IS NEVER ATTACHED BY ITSELF. An issue is public for ever, and the model is the
-/// person's own work: the tick is theirs to make.
-#[test]
-fn the_document_is_never_attached_by_itself() {
-    let d = super::ReportDraft::default();
-    assert!(!d.attach_doc, "the document would travel to a public tracker without being asked for");
-    assert!(d.attach_env, "the environment is the cheap half of the answer and carries nothing personal");
-}
-
-/// The environment goes into the text only when it was asked for.
-#[test]
-fn the_text_carries_what_was_ticked() {
-    let mut app = crate::gui::screen_keys::tests::populated();
-    app.disk.report.what = "the fillet does not take".into();
-    app.disk.report.attach_env = true;
-    let with = app.report_text();
-    assert!(with.contains("## Environment"), "the environment was ticked and is not in the text:\n{with}");
-    assert!(with.contains("QymCAD "), "the environment block is empty:\n{with}");
-
-    app.disk.report.attach_env = false;
-    let without = app.report_text();
-    assert!(!without.contains("## Environment"), "the environment travelled although it was not ticked:\n{without}");
-    assert!(without.contains("the fillet does not take"), "what the person wrote was lost:\n{without}");
-}
-
-fn raw() -> egui::RawInput {
-    egui::RawInput {
-        screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(1400.0, 900.0))),
-        ..Default::default()
+    /// A RUSSIAN PHRASE BUILT FROM CODE POINTS RATHER THAN TYPED.
+    ///
+    /// The tests below have to work on Cyrillic - that is the whole point of them, since percent-encoding
+    /// triples it - but a ratchet counts every Cyrillic literal in the sources and only lets that number
+    /// go down. This is data, not a message to anybody, so it is written as code points and the ratchet
+    /// keeps holding what it was put there to hold. U+0430..U+044F is the Russian lower-case alphabet.
+    fn cyrillic() -> String {
+        (0x0430u32..=0x044F).filter_map(char::from_u32).collect()
     }
-}
 
-fn painted(app: &mut App) -> Vec<String> {
-    fn walk(s: &egui::epaint::Shape, out: &mut Vec<String>) {
-        match s {
-            egui::epaint::Shape::Text(t) => out.push(t.galley.text().to_string()),
-            egui::epaint::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
-            _ => {}
+    /// The query keys of a link, without their values.
+    fn query_keys(url: &str) -> Vec<String> {
+        let Some((_, q)) = url.split_once('?') else { return Vec::new() };
+        q.split('&').filter_map(|p| p.split_once('=').map(|(k, _)| k.to_string())).collect()
+    }
+
+    /// THE LINK AND THE FORM MUST NAME THE SAME FIELDS.
+    ///
+    /// GitHub fills a form from the query string BY FIELD ID. Rename a field in the form, or a key in
+    /// the link, and the prefilling stops - silently: the form simply comes up empty, and nobody
+    /// notices, because an empty form is what a form looks like.
+    #[test]
+    fn the_form_and_the_link_name_the_same_fields() {
+        let ids = form_field_ids();
+        assert!(ids.contains(&"what-happened".to_string()), "the form has no field to fill in: {ids:?}");
+
+        let mut app = crate::gui::screen_keys::tests::populated();
+        app.disk.report.what = "the fillet does not take".into();
+        let url = app.report_url();
+
+        assert!(url.starts_with(super::ISSUES_NEW), "the link does not lead to the tracker: {url}");
+        assert!(url.contains("template=bug.yml"), "the link does not name the form: {url}");
+
+        for k in query_keys(&url) {
+            if k == "template" || k == "title" {
+                continue; // both are GitHub's own, not fields of ours
+            }
+            assert!(ids.contains(&k), "the link fills in `{k}`, and the form has no such field: {ids:?}");
         }
     }
-    let ctx = egui::Context::default();
-    crate::gui::install_fonts(&ctx);
-    let _ = ctx.run_ui(raw(), |c| app.report_window(c.ctx()));
-    let out = ctx.run_ui(raw(), |c| app.report_window(c.ctx()));
-    let mut found = Vec::new();
-    for cs in &out.shapes {
-        walk(&cs.shape, &mut found);
+
+    /// A LINK TOO LONG SIMPLY DOES NOT OPEN, and to the person the button "does nothing".
+    ///
+    /// Percent-encoding triples a Russian sentence - three bytes a letter, three characters a byte - so
+    /// the budget is counted on the encoded length. Checked in Russian for that very reason: in Latin
+    /// the same text would fit and the check would pass while proving nothing.
+    #[test]
+    fn the_link_stays_short_enough_to_open() {
+        let phrase = cyrillic();
+        let mut app = crate::gui::screen_keys::tests::populated();
+        app.disk.report.what = format!("{phrase} ").repeat(400);
+        let url = app.report_url();
+        assert!(url.len() < 8000, "the link came out {} characters long and will not open", url.len());
+        // ...and what was cut off is still whole text, not half a letter.
+        assert!(url.is_char_boundary(url.len()), "the link was cut through a character");
+        let head = super::urlencode(&phrase.chars().take(3).collect::<String>());
+        assert!(url.contains(&head), "the beginning of what was written did not survive the trim: {}", &url[..url.len().min(200)]);
     }
-    found
-}
 
-/// THE CONSEQUENCE IS WRITTEN WHERE THE TICK IS MADE.
-///
-/// Attaching the document sends somebody's own work to a tracker that is public for ever. A warning
-/// in a help article they will not open is no warning; it has to stand under the tick itself, and
-/// only when the tick is on - a warning shown always is a warning nobody reads.
-#[test]
-fn the_document_tick_says_what_it_costs() {
-    let mut app = crate::gui::screen_keys::tests::populated();
-    app.win.open(WinKind::Report);
-    crate::gui::set_project_path(&mut app.disk.project_path, &mut app.set, std::env::temp_dir().join("a-part.qcad").to_string_lossy().into_owned());
+    /// THE DOCUMENT IS NEVER ATTACHED BY ITSELF. An issue is public for ever, and the model is the
+    /// person's own work: the tick is theirs to make.
+    #[test]
+    fn the_document_is_never_attached_by_itself() {
+        let d = super::ReportDraft::default();
+        assert!(!d.attach_doc, "the document would travel to a public tracker without being asked for");
+        assert!(d.attach_env, "the environment is the cheap half of the answer and carries nothing personal");
+    }
 
-    let quiet = painted(&mut app);
-    let warning = crate::i18n::tr("report-doc-public");
-    assert!(quiet.iter().any(|t| t.contains(&crate::i18n::tr("report-title"))), "the window did not open at all");
-    assert!(!quiet.iter().any(|t| t.contains(&warning)), "the warning is shown while nothing is being attached");
+    /// The environment goes into the text only when it was asked for.
+    #[test]
+    fn the_text_carries_what_was_ticked() {
+        let mut app = crate::gui::screen_keys::tests::populated();
+        app.disk.report.what = "the fillet does not take".into();
+        app.disk.report.attach_env = true;
+        let with = app.report_text();
+        assert!(with.contains("## Environment"), "the environment was ticked and is not in the text:\n{with}");
+        assert!(with.contains("QymCAD "), "the environment block is empty:\n{with}");
 
-    app.disk.report.attach_doc = true;
-    let loud = painted(&mut app);
-    assert!(loud.iter().any(|t| t.contains(&warning)), "the tick is on and nothing says the model becomes public: {loud:?}");
-}
+        app.disk.report.attach_env = false;
+        let without = app.report_text();
+        assert!(!without.contains("## Environment"), "the environment travelled although it was not ticked:\n{without}");
+        assert!(without.contains("the fillet does not take"), "what the person wrote was lost:\n{without}");
+    }
 
-/// The urlencoding by hand, on what it is actually given: Cyrillic, spaces, newlines, the
-/// characters that mean something in a query string.
-#[test]
-fn the_encoding_leaves_nothing_that_breaks_a_query() {
-    assert_eq!(super::urlencode("a-b_c.d~e"), "a-b_c.d~e", "the unreserved characters must pass through");
-    assert_eq!(super::urlencode("a b"), "a%20b");
-    assert_eq!(super::urlencode("a&b=c#d"), "a%26b%3Dc%23d");
-    // U+0434 U+0430 - two Russian letters, as code points for the reason given by `cyrillic`.
-    let two: String = [0x0434u32, 0x0430].iter().filter_map(|c| char::from_u32(*c)).collect();
-    assert_eq!(super::urlencode(&two), "%D0%B4%D0%B0", "a letter of three bytes must come out as three escapes");
-    let encoded = super::urlencode("line\nline");
-    assert!(!encoded.contains('\n'), "a newline in a link cuts it in half: {encoded}");
-}
+    fn raw() -> egui::RawInput {
+        egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(1400.0, 900.0))), ..Default::default() }
+    }
+
+    fn painted(app: &mut App) -> Vec<String> {
+        fn walk(s: &egui::epaint::Shape, out: &mut Vec<String>) {
+            match s {
+                egui::epaint::Shape::Text(t) => out.push(t.galley.text().to_string()),
+                egui::epaint::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
+                _ => {}
+            }
+        }
+        let ctx = egui::Context::default();
+        crate::gui::install_fonts(&ctx);
+        let _ = ctx.run_ui(raw(), |c| app.report_window(c.ctx()));
+        let out = ctx.run_ui(raw(), |c| app.report_window(c.ctx()));
+        let mut found = Vec::new();
+        for cs in &out.shapes {
+            walk(&cs.shape, &mut found);
+        }
+        found
+    }
+
+    /// THE CONSEQUENCE IS WRITTEN WHERE THE TICK IS MADE.
+    ///
+    /// Attaching the document sends somebody's own work to a tracker that is public for ever. A warning
+    /// in a help article they will not open is no warning; it has to stand under the tick itself, and
+    /// only when the tick is on - a warning shown always is a warning nobody reads.
+    #[test]
+    fn the_document_tick_says_what_it_costs() {
+        let mut app = crate::gui::screen_keys::tests::populated();
+        app.win.open(WinKind::Report);
+        crate::gui::set_project_path(&mut app.disk.project_path, &mut app.set, std::env::temp_dir().join("a-part.qcad").to_string_lossy().into_owned());
+
+        let quiet = painted(&mut app);
+        let warning = crate::i18n::tr("report-doc-public");
+        assert!(quiet.iter().any(|t| t.contains(&crate::i18n::tr("report-title"))), "the window did not open at all");
+        assert!(!quiet.iter().any(|t| t.contains(&warning)), "the warning is shown while nothing is being attached");
+
+        app.disk.report.attach_doc = true;
+        let loud = painted(&mut app);
+        assert!(loud.iter().any(|t| t.contains(&warning)), "the tick is on and nothing says the model becomes public: {loud:?}");
+    }
+
+    /// The urlencoding by hand, on what it is actually given: Cyrillic, spaces, newlines, the
+    /// characters that mean something in a query string.
+    #[test]
+    fn the_encoding_leaves_nothing_that_breaks_a_query() {
+        assert_eq!(super::urlencode("a-b_c.d~e"), "a-b_c.d~e", "the unreserved characters must pass through");
+        assert_eq!(super::urlencode("a b"), "a%20b");
+        assert_eq!(super::urlencode("a&b=c#d"), "a%26b%3Dc%23d");
+        // U+0434 U+0430 - two Russian letters, as code points for the reason given by `cyrillic`.
+        let two: String = [0x0434u32, 0x0430].iter().filter_map(|c| char::from_u32(*c)).collect();
+        assert_eq!(super::urlencode(&two), "%D0%B4%D0%B0", "a letter of three bytes must come out as three escapes");
+        let encoded = super::urlencode("line\nline");
+        assert!(!encoded.contains('\n'), "a newline in a link cuts it in half: {encoded}");
+    }
 }

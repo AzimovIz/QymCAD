@@ -54,10 +54,7 @@ fn the_hole_is_the_minor_diameter_and_near_the_standard() {
     for (d, pitch) in [(10.0, 1.5), (8.0, 1.25), (6.0, 1.0), (5.0, 0.8)] {
         let (_own, hole) = m(d, pitch, false, 0.0).blank_diameters();
         let iso_d1 = d - 1.0825 * pitch;
-        assert!(
-            (hole - iso_d1).abs() < 0.25,
-            "M{d}x{pitch}: the hole comes out {hole:.3} mm against the standard's D1 = {iso_d1:.3} - a part made here would not fit a real bolt"
-        );
+        assert!((hole - iso_d1).abs() < 0.25, "M{d}x{pitch}: the hole comes out {hole:.3} mm against the standard's D1 = {iso_d1:.3} - a part made here would not fit a real bolt");
     }
 }
 
@@ -72,14 +69,7 @@ fn the_hole_is_the_minor_diameter_and_near_the_standard() {
 /// land between the turns — the plates that were reported.
 #[test]
 fn a_groove_wider_than_the_pitch_is_refused() {
-    let reported = ThreadSpec {
-        standard: ThreadStandard::Custom,
-        nominal_d: 40.0,
-        pitch: 5.0,
-        custom_angle: 80.0,
-        custom_depth: 3.6,
-        ..Default::default()
-    };
+    let reported = ThreadSpec { standard: ThreadStandard::Custom, nominal_d: 40.0, pitch: 5.0, custom_angle: 80.0, custom_depth: 3.6, ..Default::default() };
     let (width, max_depth, min_pitch) = reported.profile_overflow().expect("this profile does not fit and must say so");
     assert!((width - 6.04).abs() < 0.05, "the V at that depth would be {width:.2} mm across, expected about 6.04");
     assert!((max_depth - 2.68).abs() < 0.05, "at this angle and pitch the depth reaches {max_depth:.2}, expected about 2.68");

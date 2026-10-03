@@ -26,10 +26,7 @@ mod tests {
         let ctx = egui::Context::default();
         super::super::install_fonts(&ctx);
         ctx.set_zoom_factor(zoom);
-        let input = egui::RawInput {
-            screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), window)),
-            ..Default::default()
-        };
+        let input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), window)), ..Default::default() };
         // two frames: the first lays out, the second shows the SETTLED width
         let _ = ctx.run_ui(input.clone(), |c| draw_left(app, c));
         let _ = ctx.run_ui(input, |c| draw_left(app, c));
@@ -62,10 +59,7 @@ mod tests {
             c.name = long.clone();
         }
         let after = tree_width(&mut app, window, 1.0);
-        assert!(
-            after <= base + 1.0,
-            "a long name widened the tree panel: it was {base}, it became {after} — the canvas is taken away from a person for naming their part carefully"
-        );
+        assert!(after <= base + 1.0, "a long name widened the tree panel: it was {base}, it became {after} — the canvas is taken away from a person for naming their part carefully");
     }
 
     /// TWO HUNDRED FEATURES IN THE TIMELINE — THE PANEL IS THE SAME WIDTH.
@@ -89,10 +83,7 @@ mod tests {
         // THE WIDTH MUST BE NON-ZERO. Without this the check is green even for a panel that did not
         // lay out at all: "no wider than before" is true of nothing as well.
         assert!(base > 50.0 && after > 50.0, "setup: the panel must be laid out, and it came out {base} and {after}");
-        assert!(
-            after <= base + 1.0,
-            "two hundred nodes widened the tree panel: it was {base}, it became {after} — a long history is paid for with canvas"
-        );
+        assert!(after <= base + 1.0, "two hundred nodes widened the tree panel: it was {base}, it became {after} — a long history is paid for with canvas");
     }
 
     /// A NARROW WINDOW: THE PANEL DOES NOT EAT IT WHOLE.
@@ -109,11 +100,7 @@ mod tests {
             let window = egui::vec2(900.0, 600.0);
             let w = tree_width(&mut app, window, zoom);
             assert!(w > 50.0, "at scale {zoom} the tree panel did not lay out (width {w}) — the check below would be green for nothing");
-            assert!(
-                w < window.x * 0.5,
-                "at scale {zoom} the tree took {w} of {} — a strip of the model is what is left",
-                window.x
-            );
+            assert!(w < window.x * 0.5, "at scale {zoom} the tree took {w} of {} — a strip of the model is what is left", window.x);
         }
     }
 }

@@ -36,11 +36,7 @@ mod tests {
         let (mut app, _) = a_part_with_an_unselected_sketch();
         app.start_feat_cmd(1);
 
-        assert_eq!(
-            app.tools.picking.sketch_for(),
-            Some(1),
-            "the tool answered the click with a line in the status bar and nothing else: a person sees that they pressed and nothing happened"
-        );
+        assert_eq!(app.tools.picking.sketch_for(), Some(1), "the tool answered the click with a line in the status bar and nothing else: a person sees that they pressed and nothing happened");
         assert!(!app.status.is_empty(), "and the waiting must say what it is waiting for");
     }
 

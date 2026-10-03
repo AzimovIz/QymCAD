@@ -26,12 +26,7 @@ mod tests {
     /// A point ON THE BODY that can be clicked: the centre of the topmost face.
     fn aim(app: &App, body: Id) -> [f64; 3] {
         let wt = app.project.body_display_transform(body, qymcad_ui_state::current_ctx_id(&app.active_path, &app.project));
-        let f = app
-            .project
-            .regen_faces
-            .get(&body)
-            .and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z)))
-            .expect("the body has faces");
+        let f = app.project.regen_faces.get(&body).and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z))).expect("the body has faces");
         qymcad_core::feature::apply12(&wt, [f.centroid.x, f.centroid.y, f.centroid.z])
     }
 
@@ -97,10 +92,7 @@ mod tests {
             // C is held by a VERTICAL slider: horizontally there is no freedom, so x and y must match B
             let lag = ((pc[0] - pb[0]).powi(2) + (pc[1] - pb[1]).powi(2)).sqrt();
             worst = worst.max(lag);
-            assert!(
-                lag < 1e-3,
-                "frame {k}: the third part lagged behind the second by {lag:.3} mm (B at {pb:?}, C at {pc:?}) — that is the jelly"
-            );
+            assert!(lag < 1e-3, "frame {k}: the third part lagged behind the second by {lag:.3} mm (B at {pb:?}, C at {pc:?}) — that is the jelly");
         }
         qymcad_assembly::joint_giz_end_for_test(&mut app.joint_ctx());
         let (pb, pc) = (origin_of(&app, comp_b), origin_of(&app, comp_c));
@@ -142,11 +134,7 @@ mod tests {
         let led_to = origin_of(&app, comp_b);
 
         app.drain_busy_for_test(); // the result has arrived — this is where it used to be thrown away
-        assert!(
-            !app.status.contains(&crate::i18n::tr("io-doc-changed")),
-            "the result of the rebuild was thrown away because a part was being dragged: \"{}\"",
-            app.status
-        );
+        assert!(!app.status.contains(&crate::i18n::tr("io-doc-changed")), "the result of the rebuild was thrown away because a part was being dragged: \"{}\"", app.status);
         let after = origin_of(&app, comp_b);
         let jump = ((after[0] - led_to[0]).powi(2) + (after[1] - led_to[1]).powi(2) + (after[2] - led_to[2]).powi(2)).sqrt();
         assert!(jump < 1e-3, "the rebuild arrived and threw the part {jump:.3} mm back: {led_to:?} -> {after:?}");
@@ -200,10 +188,7 @@ mod tests {
         qymcad_assembly::joint_giz_end_for_test(&mut app.joint_ctx());
 
         let steps = app.disk.edits.undo.len() - before;
-        assert_eq!(
-            steps, 1,
-            "one drag put {steps} steps into the undo stack — so a copy of the document was taken on every frame, and on a large assembly that is exactly the reluctant following"
-        );
+        assert_eq!(steps, 1, "one drag put {steps} steps into the undo stack — so a copy of the document was taken on every frame, and on a large assembly that is exactly the reluctant following");
     }
 
     /// A DOCUMENT WHERE THE LIVE B-rep IS NOT ALL RAISED — AND THE DRAG STILL STAYS SILENT.
@@ -235,10 +220,7 @@ mod tests {
             let key = qymcad_core::feature::FaceKey { index: fi as u32, centroid: [f.centroid.x, f.centroid.y, f.centroid.z], normal: f.normal, id: f.id };
             app.project.add_connector(comp_b, qymcad_core::feature::AnchorRef::FaceCenter(body_b, key))
         };
-        assert!(
-            app.project.connectors.iter().any(|c| c.id == extra),
-            "setup: the anchor on a face must be created"
-        );
+        assert!(app.project.connectors.iter().any(|c| c.id == extra), "setup: the anchor on a face must be created");
         let free = app.project.add_part("hanger");
         let cf = app.project.add_connector(free, AnchorRef::BasePlane(BasePlane::XY));
         app.project.add_joint(extra, cf, JointKind::Rigid); // the face anchor is in a joint now, so the frame demands a live B-rep
@@ -273,10 +255,7 @@ mod tests {
             }
         }
         qymcad_assembly::joint_giz_end_for_test(&mut app.joint_ctx());
-        assert_eq!(
-            asks, 0,
-            "on a document with the B-rep not raised, the drag asked for {asks} rebuilds — as many flashes of the rebuild window"
-        );
+        assert_eq!(asks, 0, "on a document with the B-rep not raised, the drag asked for {asks} rebuilds — as many flashes of the rebuild window");
         // and the part did arrive after all: the silence must not cost the movement
         let now = origin_of(&app, comp_b);
         assert!(now[0].abs() > 1.0, "the part did not move at all: {now:?}");

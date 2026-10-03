@@ -23,17 +23,7 @@ fn tol(v: f64) -> f64 {
 }
 
 fn case(body: &'static Body, picks: Vec<Pick>, value: f64, more: &[(&'static str, f64)], expect: Expect, what: &str) -> Case {
-    Case {
-        body,
-        picks,
-        bar: Vec::new(),
-        value: format!("{value}"),
-        more: more.iter().map(|(c, v)| (*c, format!("{v}"))).collect(),
-        expect,
-        what: what.to_string(),
-        then: None,
-        after: Vec::new(),
-    }
+    Case { body, picks, bar: Vec::new(), value: format!("{value}"), more: more.iter().map(|(c, v)| (*c, format!("{v}"))).collect(), expect, what: what.to_string(), then: None, after: Vec::new() }
 }
 
 /// The case, and then the block made 15 tall instead of 10 above the tool: the copies follow it, and the tool now adds

@@ -56,10 +56,7 @@ fn face_names_survive_the_round_trip() {
     assert_eq!(before.len(), 6, "setup: a cube has six named faces");
     let back = Shape::from_brep_bytes(&c.to_brep_bytes().expect("writing")).expect("reading");
     let after = named_faces(&back);
-    assert_eq!(
-        before, after,
-        "the face names drifted after the round trip: fillets and chamfers will land on other faces silently\nbefore: {before:?}\nafter:  {after:?}"
-    );
+    assert_eq!(before, after, "the face names drifted after the round trip: fillets and chamfers will land on other faces silently\nbefore: {before:?}\nafter:  {after:?}");
 }
 
 /// And after operations too: a body with changed topology is exactly where names live.

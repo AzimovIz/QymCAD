@@ -16,11 +16,7 @@ use qymcad_core::model::Project;
 fn plate_with_fillets() -> Project {
     let mut p = Project::default();
     p.new_document();
-    let sid = p.add_line_sketch(
-        "Sketch 1",
-        vec![Point2::new(0.0, 0.0), Point2::new(60.0, 0.0), Point2::new(60.0, 40.0), Point2::new(0.0, 40.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("Sketch 1", vec![Point2::new(0.0, 0.0), Point2::new(60.0, 0.0), Point2::new(60.0, 40.0), Point2::new(0.0, 40.0)], true);
     let si = p.sketch_index(sid).expect("the sketch");
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {

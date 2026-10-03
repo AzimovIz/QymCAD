@@ -49,11 +49,7 @@ fn part_and_sketch() -> (Live, u64, usize) {
 
 /// The persistent id of the TOP face of a body.
 fn top_face_id(p: &Project, body: u64) -> u32 {
-    p.regen_faces
-        .get(&body)
-        .and_then(|fs| fs.iter().filter(|f| f.normal[2] > 0.9).max_by(|a, b| a.centroid.z.partial_cmp(&b.centroid.z).unwrap()))
-        .map(|f| f.id)
-        .expect("there is a top face")
+    p.regen_faces.get(&body).and_then(|fs| fs.iter().filter(|f| f.normal[2] > 0.9).max_by(|a, b| a.centroid.z.partial_cmp(&b.centroid.z).unwrap())).map(|f| f.id).expect("there is a top face")
 }
 
 /// Driven entities of the projections in a sketch.

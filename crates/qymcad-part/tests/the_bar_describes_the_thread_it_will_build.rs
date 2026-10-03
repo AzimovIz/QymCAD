@@ -57,14 +57,7 @@ fn a_thread_of_ones_own() -> (Bench, qymcad_core::thread::ThreadSpec) {
 
     // WHAT WILL BE BUILT, stated here from the numbers a person typed rather than taken from the code under
     // test: the same fields, read straight off the command.
-    let spec = qymcad_core::thread::ThreadSpec {
-        standard: qymcad_core::thread::ThreadStandard::Custom,
-        nominal_d: 20.0,
-        pitch: 5.0,
-        custom_angle: 40.0,
-        custom_depth: 2.5,
-        ..Default::default()
-    };
+    let spec = qymcad_core::thread::ThreadSpec { standard: qymcad_core::thread::ThreadStandard::Custom, nominal_d: 20.0, pitch: 5.0, custom_angle: 40.0, custom_depth: 2.5, ..Default::default() };
     (b, spec)
 }
 
@@ -103,11 +96,7 @@ fn the_bar_prints_the_geometry_of_the_profile_that_was_asked_for() {
     let g = spec.geometry();
     let said = what_the_bar_says(&mut b);
 
-    assert!(
-        said.contains(&qymcad_i18n::num(g.depth, 2)),
-        "the profile is {:.2} deep and the bar prints a different depth:\n{said}",
-        g.depth
-    );
+    assert!(said.contains(&qymcad_i18n::num(g.depth, 2)), "the profile is {:.2} deep and the bar prints a different depth:\n{said}", g.depth);
     assert!(said.contains(&qymcad_i18n::num(g.minor_d, 2)), "and the minor diameter is {:.2}:\n{said}", g.minor_d);
 }
 
@@ -129,8 +118,5 @@ fn the_depth_field_opens_on_the_depth_that_will_be_cut() {
     let shown = qymcad_ui_state::cmd_val(&b.cmd, "depth");
     let cut = qymcad_part::thread_spec(&b.cmd, b.thread).geometry().depth;
 
-    assert!(
-        (shown - cut).abs() < 1e-6,
-        "the field says the groove is {shown:.2} deep and the groove that gets cut is {cut:.2}: a field that does not describe its own feature"
-    );
+    assert!((shown - cut).abs() < 1e-6, "the field says the groove is {shown:.2} deep and the groove that gets cut is {cut:.2}: a field that does not describe its own feature");
 }

@@ -50,11 +50,6 @@ fn collinear_pulls_the_rect_onto_the_reference_line() {
     for id in &left {
         let pt = s.points.iter().find(|q| q.id == *id).unwrap();
         eprintln!("x = {:.12}", pt.x);
-        assert!(
-            (pt.x + 130.0).abs() < 1e-4,
-            "collinearity did not move the side of the slot: x={:.4}, expecting -130.0, leaving {:.4} mm of film",
-            pt.x,
-            (pt.x + 130.0).abs()
-        );
+        assert!((pt.x + 130.0).abs() < 1e-4, "collinearity did not move the side of the slot: x={:.4}, expecting -130.0, leaving {:.4} mm of film", pt.x, (pt.x + 130.0).abs());
     }
 }

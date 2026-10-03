@@ -29,11 +29,11 @@ mod tests {
             open_last: !d.open_last,
             show_start_screen: !d.show_start_screen,
             mouse_nav: qymcad_ui_state::MouseNav::Blender,
-            zoom_at: qymcad_ui_state::ZoomAt::ViewCentre, // the factory value is Cursor
-            update_check: qymcad_ui_state::UpdateCheck::Weekly, // the factory value is Daily
-            update_last_checked: 1_788_900_000, // the factory value is 0 - never asked
+            zoom_at: qymcad_ui_state::ZoomAt::ViewCentre,             // the factory value is Cursor
+            update_check: qymcad_ui_state::UpdateCheck::Weekly,       // the factory value is Daily
+            update_last_checked: 1_788_900_000,                       // the factory value is 0 - never asked
             zoom_editing: qymcad_ui_state::ZoomWhileEditing::AsUsual, // the factory value is PartCentre
-            orbit_about: qymcad_ui_state::OrbitAbout::Pointer, // the factory value is ViewCentre
+            orbit_about: qymcad_ui_state::OrbitAbout::Pointer,        // the factory value is ViewCentre
             msaa: 8,
             autosave_secs: 600,
             undo_cap: 7,
@@ -42,7 +42,7 @@ mod tests {
             persp_fov_deg: 60.0,
             gpu_viewport: !d.gpu_viewport,
             projection: Projection::Perspective, // the default is Ortho
-            shading: Shading::Flat, // the default is Smooth
+            shading: Shading::Flat,              // the default is Smooth
             show_contours: !d.show_contours,
             show_joints: !d.show_joints,
             show_interference: !d.show_interference,
@@ -50,7 +50,7 @@ mod tests {
             auto_constrain: !d.auto_constrain,
             dim_show_name: !d.dim_show_name,
             dim_show_formula: !d.dim_show_formula,
-            dim_font: 20.0, // the factory value is 13
+            dim_font: 20.0,                                     // the factory value is 13
             dim_text: qymcad_ui_state::DimTextTurn::Horizontal, // the factory value is along the line
             defaults: super::super::Defaults { extrude_h: 42.0, offset_2d: 8.25 },
             ui_scale: 1.4,
@@ -80,7 +80,11 @@ mod tests {
         assert_eq!(a.snap.grid, b.snap.grid, "the grid step");
         assert_eq!(a.snap.rot_deg, b.snap.rot_deg, "the rotation step");
         assert_eq!(a.auto_constrain, b.auto_constrain, "the automatic constraints");
-        assert_eq!((a.dim_show_name, a.dim_show_formula, a.dim_font, a.dim_text), (b.dim_show_name, b.dim_show_formula, b.dim_font, b.dim_text), "what the labels of the dimensions say, their size and their turn");
+        assert_eq!(
+            (a.dim_show_name, a.dim_show_formula, a.dim_font, a.dim_text),
+            (b.dim_show_name, b.dim_show_formula, b.dim_font, b.dim_text),
+            "what the labels of the dimensions say, their size and their turn"
+        );
         assert_eq!(a.defaults.extrude_h, b.defaults.extrude_h, "the height of an extrusion");
         assert_eq!(a.defaults.offset_2d, b.defaults.offset_2d, "the 2D offset");
         assert_eq!(a.open_last, b.open_last, "reopening the previous project");

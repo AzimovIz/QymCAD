@@ -59,9 +59,9 @@ fn merge_heals_bigger_gap_at_origin() {
     p.add_line_entity(si, 0.0, 0.0, 10.0, 0.0, qymcad_core::feature::Purpose::Real); // starting from the origin
     p.add_line_entity(si, 10.0, 0.0, 10.0, 10.0, qymcad_core::feature::Purpose::Real);
     p.add_line_entity(si, 10.0, 10.0, 0.05, 0.0, qymcad_core::feature::Purpose::Real); // closing at (0.05,0), where the end lies on the first line
-    // The planar arrangement does find a closed face, the triangle through (0.05,0), (10,0) and (10,10): the
-    // end of the third line lies on the first, a real intersection, and the small tail near the origin simply
-    // falls outside the region.
+                                                                                       // The planar arrangement does find a closed face, the triangle through (0.05,0), (10,0) and (10,10): the
+                                                                                       // end of the third line lies on the first, a real intersection, and the small tail near the origin simply
+                                                                                       // falls outside the region.
     assert_eq!(closed_contours(&p, si).len(), 1, "the arrangement finds a face despite the gap at the origin");
     // Merging at a tolerance of 0.1 stitches (0.05,0) to the corner at zero. The two are the person's own
     // points and one of them survives carrying both lines; the origin is not part of it - the frame of

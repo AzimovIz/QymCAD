@@ -52,6 +52,13 @@ fn equal_on_two_dimensioned_circles_makes_the_second_radius_a_reference() {
     assert!(cs.iter().any(|c| matches!(c, Constraint::EqualRadius { .. })), "equal was not put on the circles: {status:?}");
     assert!(cs.iter().any(|c| matches!(c, Constraint::Diameter { c, driven: true, .. } if *c == c2)), "the second circle's radius did not become a reference");
     assert!(cs.iter().any(|c| matches!(c, Constraint::Diameter { c, driven: false, .. } if *c == c1)), "the first circle's radius stopped driving");
-    let r2 = p.sketches[si].entities.iter().find_map(|e| match e.kind { qymcad_core::model::EntityKind::Circle { center, r } if center == c2 => Some(r), _ => None }).expect("the second radius");
+    let r2 = p.sketches[si]
+        .entities
+        .iter()
+        .find_map(|e| match e.kind {
+            qymcad_core::model::EntityKind::Circle { center, r } if center == c2 => Some(r),
+            _ => None,
+        })
+        .expect("the second radius");
     assert!((r2 - 10.0).abs() < 1e-6, "the second circle stands at radius {r2}, not the first's 10");
 }

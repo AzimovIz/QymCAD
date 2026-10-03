@@ -21,11 +21,6 @@ impl App {
     pub(crate) fn armed_assembly_tools(&self) -> Vec<AssemblyTool> {
         armed_assembly_tools(&self.painting())
     }
-
-
-
-
-
 }
 
 /// RELEASE EVERY ASSEMBLY TOOL. Esc looks here too.

@@ -55,7 +55,6 @@ impl App {
         self.disk.file_ask.is_some()
     }
 
-
     /// Once a frame: run the continuation if the answer has landed. Returns whether a chooser is still open,
     /// which is what keeps the frames coming - egui sleeps between events, and the answer arrives from a
     /// thread, which is not an event it knows about.
@@ -94,13 +93,9 @@ pub(crate) fn inert_while_choosing(ui: &mut egui::Ui) {
     let screen = ui.ctx().viewport_rect();
     // ABOVE `Foreground`, where the menus and the barriers of a rebuild live: a barrier level with what
     // it is meant to cover decides nothing.
-    egui::Area::new(egui::Id::new("file_chooser_barrier"))
-        .order(egui::Order::Tooltip)
-        .fixed_pos(screen.min)
-        .interactable(true)
-        .show(ui.ctx(), |ui| {
-            ui.allocate_response(screen.size(), egui::Sense::click_and_drag());
-        });
+    egui::Area::new(egui::Id::new("file_chooser_barrier")).order(egui::Order::Tooltip).fixed_pos(screen.min).interactable(true).show(ui.ctx(), |ui| {
+        ui.allocate_response(screen.size(), egui::Sense::click_and_drag());
+    });
 }
 
 #[cfg(test)]
@@ -223,8 +218,6 @@ mod tests {
 /// change a dimension, and answer the chooser while the rebuild that edit started is still running. The
 /// export and the rebuild both want the one modal slot, and the loser used to be dropped without a word.
 
-
-
 #[cfg(test)]
 mod exporting_over_a_rebuild {
     use crate::gui::App;
@@ -233,13 +226,7 @@ mod exporting_over_a_rebuild {
     /// so the test holds it: a dropped one would read as a job that has already finished.
     fn rebuilding(app: &mut App) -> std::sync::mpsc::Sender<qymcad_ui_state::JobResult> {
         let (tx, rx) = std::sync::mpsc::channel();
-        app.regen.busy = Some(qymcad_ui_state::Busy { started: std::time::Instant::now(),
-            label: "rebuild".into(),
-            rx,
-            kind: qymcad_ui_state::BgKind::Regen,
-            pulse: None,
-            quiet: false,
-        });
+        app.regen.busy = Some(qymcad_ui_state::Busy { started: std::time::Instant::now(), label: "rebuild".into(), rx, kind: qymcad_ui_state::BgKind::Regen, pulse: None, quiet: false });
         tx
     }
 
@@ -252,12 +239,16 @@ mod exporting_over_a_rebuild {
 
         let mut app = App::default();
         let _job = rebuilding(&mut app);
-        crate::gui::io_jobs::write_exact_to(&mut app.live, &mut app.project, &mut app.regen, &mut app.status, &path, &crate::gui::io_jobs::ExportJob { format: qymcad_kernel::ExactFormat::Step, bodies: Vec::new(), note: String::new(), tree: Vec::new() });
-
-        assert!(
-            matches!(&app.regen.busy, Some(b) if b.kind == qymcad_ui_state::BgKind::Regen),
-            "the rebuild lost the modal slot - its result would then never land"
+        crate::gui::io_jobs::write_exact_to(
+            &mut app.live,
+            &mut app.project,
+            &mut app.regen,
+            &mut app.status,
+            &path,
+            &crate::gui::io_jobs::ExportJob { format: qymcad_kernel::ExactFormat::Step, bodies: Vec::new(), note: String::new(), tree: Vec::new() },
         );
+
+        assert!(matches!(&app.regen.busy, Some(b) if b.kind == qymcad_ui_state::BgKind::Regen), "the rebuild lost the modal slot - its result would then never land");
         assert_eq!(app.status, crate::i18n::tr("io-export-busy"), "the refusal has to be said out loud, not swallowed");
         assert!(!path.exists(), "nothing was written either");
     }
@@ -267,7 +258,12 @@ mod exporting_over_a_rebuild {
     fn the_stl_export_waits_its_turn_too() {
         let mut app = App::default();
         let _job = rebuilding(&mut app);
-        crate::gui::io_jobs::write_mesh_to(qymcad_ui_state::editing_of!(app), &mut app.live, std::path::Path::new("/tmp/qym-never-written.stl"), &crate::gui::io_jobs::MeshJob { format: qymcad_ui_state::MeshFormat::Stl, bodies: (&[]).to_vec(), note: ("").to_string(), deflection: 0.1, tree: Vec::new() });
+        crate::gui::io_jobs::write_mesh_to(
+            qymcad_ui_state::editing_of!(app),
+            &mut app.live,
+            std::path::Path::new("/tmp/qym-never-written.stl"),
+            &crate::gui::io_jobs::MeshJob { format: qymcad_ui_state::MeshFormat::Stl, bodies: (&[]).to_vec(), note: ("").to_string(), deflection: 0.1, tree: Vec::new() },
+        );
         assert!(matches!(&app.regen.busy, Some(b) if b.kind == qymcad_ui_state::BgKind::Regen));
         assert_eq!(app.status, crate::i18n::tr("io-export-busy"));
     }

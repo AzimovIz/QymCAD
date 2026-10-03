@@ -15,10 +15,7 @@ fn pulling_a_face_outwards_adds_exactly_that_much_material() {
     let top = top_face_id(&cube).expect("the top face was found");
     let pulled = cube.push_face(top, 5.0).expect("the face pulled outwards");
     let v1 = pulled.volume();
-    assert!(
-        (v1 - (v0 + 20.0 * 20.0 * 5.0)).abs() < 1e-3,
-        "pulling the face by 5 has to grow the volume by 2000: it was {v0} and became {v1}"
-    );
+    assert!((v1 - (v0 + 20.0 * 20.0 * 5.0)).abs() < 1e-3, "pulling the face by 5 has to grow the volume by 2000: it was {v0} and became {v1}");
     assert!(pulled.is_valid(), "the body has to stay valid");
 }
 
@@ -30,10 +27,7 @@ fn pushing_a_face_inwards_removes_exactly_that_much_material() {
     let top = top_face_id(&cube).expect("the top face was found");
     let pushed = cube.push_face(top, -5.0).expect("the face pushed in");
     let v1 = pushed.volume();
-    assert!(
-        (v1 - (v0 - 20.0 * 20.0 * 5.0)).abs() < 1e-3,
-        "pushing the face in by 5 has to reduce the volume by 2000: it was {v0} and became {v1}"
-    );
+    assert!((v1 - (v0 - 20.0 * 20.0 * 5.0)).abs() < 1e-3, "pushing the face in by 5 has to reduce the volume by 2000: it was {v0} and became {v1}");
     assert!(pushed.is_valid(), "the body has to stay valid");
 }
 

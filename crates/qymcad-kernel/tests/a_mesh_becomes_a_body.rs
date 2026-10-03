@@ -52,7 +52,14 @@ fn a_big_mesh_becomes_a_body_in_time() {
     let sphere = Shape::sphere(20.0).expect("a sphere");
     for defl in [0.05, 0.005, 0.001] {
         let (mesh, _) = sphere.tessellate(defl).into_iter().next().expect("a mesh");
-        let held: f64 = mesh.tris.iter().map(|t| { let (a, b, c) = (mesh.verts[t[0] as usize], mesh.verts[t[1] as usize], mesh.verts[t[2] as usize]); (a.x * (b.y * c.z - b.z * c.y) - a.y * (b.x * c.z - b.z * c.x) + a.z * (b.x * c.y - b.y * c.x)) / 6.0 }).sum();
+        let held: f64 = mesh
+            .tris
+            .iter()
+            .map(|t| {
+                let (a, b, c) = (mesh.verts[t[0] as usize], mesh.verts[t[1] as usize], mesh.verts[t[2] as usize]);
+                (a.x * (b.y * c.z - b.z * c.y) - a.y * (b.x * c.z - b.z * c.x) + a.z * (b.x * c.y - b.y * c.x)) / 6.0
+            })
+            .sum();
         let t = std::time::Instant::now();
         let body = Shape::from_mesh(&mesh);
         let took = t.elapsed().as_secs_f64();
@@ -89,7 +96,14 @@ fn a_cylinder_mesh_keeps_its_caps_whole() {
     let s = Shape::from_mesh(&mesh).expect("the mesh becomes a body");
     assert!(s.is_valid(), "the body is broken");
     assert_eq!(s.solid_count(), 1, "one solid");
-    let held: f64 = mesh.tris.iter().map(|t| { let (a, b, c) = (mesh.verts[t[0] as usize], mesh.verts[t[1] as usize], mesh.verts[t[2] as usize]); (a.x * (b.y * c.z - b.z * c.y) - a.y * (b.x * c.z - b.z * c.x) + a.z * (b.x * c.y - b.y * c.x)) / 6.0 }).sum();
+    let held: f64 = mesh
+        .tris
+        .iter()
+        .map(|t| {
+            let (a, b, c) = (mesh.verts[t[0] as usize], mesh.verts[t[1] as usize], mesh.verts[t[2] as usize]);
+            (a.x * (b.y * c.z - b.z * c.y) - a.y * (b.x * c.z - b.z * c.x) + a.z * (b.x * c.y - b.y * c.x)) / 6.0
+        })
+        .sum();
     assert!((s.volume() - held).abs() < 1e-6 * held, "the volume {} against the mesh's {held}", s.volume());
     let caps = mesh.tris.iter().filter(|t| t.iter().all(|&v| mesh.verts[v as usize].z.abs() < 1e-9) || t.iter().all(|&v| (mesh.verts[v as usize].z - 20.0).abs() < 1e-9)).count();
     let walls = mesh.tris.len() - caps;

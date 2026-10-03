@@ -20,7 +20,14 @@ fn a_broken_horizontal_line_is_two_horizontal_lines() {
     p.sketches[si].constraints.push(Constraint::Horizontal { a, b });
     p.regen_sketch(si);
     assert!(p.break_line(si, l, 5.0, 0.0), "the line broke");
-    let lines: Vec<(u64, u64)> = p.sketches[si].entities.iter().filter_map(|e| match e.kind { EntityKind::Line { a, b } => Some((a, b)), _ => None }).collect();
+    let lines: Vec<(u64, u64)> = p.sketches[si]
+        .entities
+        .iter()
+        .filter_map(|e| match e.kind {
+            EntityKind::Line { a, b } => Some((a, b)),
+            _ => None,
+        })
+        .collect();
     assert_eq!(lines.len(), 2, "two halves");
     for (x, y) in lines {
         let held = p.sketches[si].constraints.iter().any(|c| matches!(c, Constraint::Horizontal { a, b } if (*a == x && *b == y) || (*a == y && *b == x)));

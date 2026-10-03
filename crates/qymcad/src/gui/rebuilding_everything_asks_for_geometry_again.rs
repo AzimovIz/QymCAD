@@ -11,7 +11,6 @@
 //! declared the work done without doing it.
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn after_rebuilding_everything_the_geometry_is_asked_for_anew() {
@@ -29,18 +28,12 @@ mod tests {
 
         // The live body is gone, and the program must acknowledge that rather than count it ready.
         assert!(!app.live.shapes.contains_key(&body), "\"rebuild everything\" must drop the live B-rep");
-        assert!(
-            !app.live.ready,
-            "the live B-rep was thrown away while the preparation counts as finished — a person is told there is nothing to wait for exactly where waiting is required"
-        );
+        assert!(!app.live.ready, "the live B-rep was thrown away while the preparation counts as finished — a person is told there is nothing to wait for exactly where waiting is required");
 
         // And the repeat preparation must GET TO WORK rather than return on the already-attempted guard.
         crate::gui::io_jobs::ensure_brep(&mut app.rebuild_ctx());
         app.drain_bg_for_test();
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
-        assert!(
-            app.live.shapes.contains_key(&body),
-            "after \"rebuild everything\" the live geometry did not come back — the command declared the work done without doing it"
-        );
+        assert!(app.live.shapes.contains_key(&body), "after \"rebuild everything\" the live geometry did not come back — the command declared the work done without doing it");
     }
 }

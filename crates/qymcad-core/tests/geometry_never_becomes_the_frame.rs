@@ -53,10 +53,7 @@ fn geometry_drawn_at_the_origin_can_still_be_moved() {
     eprintln!("origin={origin} line ends={a},{b} system={sys:?}");
 
     assert!(!sys.contains(&a) && !sys.contains(&b), "an end of the line became a system point of the frame");
-    assert!(
-        !immovable.contains(&a) && !immovable.contains(&b),
-        "an end of the line cannot be dragged: it is held as immovable"
-    );
+    assert!(!immovable.contains(&a) && !immovable.contains(&b), "an end of the line cannot be dragged: it is held as immovable");
     assert!(p.sketches[si].points.iter().any(|q| q.id == origin), "the origin itself has to survive");
     let o = p.sketches[si].points.iter().find(|q| q.id == origin).unwrap();
     assert_eq!((o.x, o.y), (0.0, 0.0), "the origin stays at zero");

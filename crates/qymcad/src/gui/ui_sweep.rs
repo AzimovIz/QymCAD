@@ -254,7 +254,11 @@ mod tests {
         app.win.open(WinKind::Settings);
         for (i, sec) in super::super::settings_sections::SettingsSection::all().iter().enumerate() {
             app.scheme.section = *sec;
-            let img = shot(&mut app, 940, 620, |a, ui| { let mut asks = Vec::new(); crate::gui::panels_windows::settings_window(&mut a.win_ctx(&mut asks), ui.ctx()); a.do_win_asks(asks, ui.ctx()); });
+            let img = shot(&mut app, 940, 620, |a, ui| {
+                let mut asks = Vec::new();
+                crate::gui::panels_windows::settings_window(&mut a.win_ctx(&mut asks), ui.ctx());
+                a.do_win_asks(asks, ui.ctx());
+            });
             save(&format!("11-settings-{i}"), &img);
         }
 
@@ -265,7 +269,11 @@ mod tests {
             qymcad_core::model::Param { name: "h".into(), expr: "w/2".into(), value: 30.0 },
             qymcad_core::model::Param { name: "bad".into(), expr: "w/".into(), value: 0.0 },
         ];
-        let img = shot(&mut app, 700, 400, |a, ui| { let mut asks = Vec::new(); crate::gui::panels_windows::params_window(&mut a.win_ctx(&mut asks), ui.ctx()); a.do_win_asks(asks, ui.ctx()); });
+        let img = shot(&mut app, 700, 400, |a, ui| {
+            let mut asks = Vec::new();
+            crate::gui::panels_windows::params_window(&mut a.win_ctx(&mut asks), ui.ctx());
+            a.do_win_asks(asks, ui.ctx());
+        });
         save("12-params-with-error", &img);
 
         // A COMMAND FIELD WITH A TYPO — does it say what is wrong and in which field.
@@ -292,12 +300,20 @@ mod tests {
 
         let mut app = part();
         app.win.open(WinKind::DocProps);
-        let img = shot(&mut app, 700, 520, |a, ui| { let mut asks = Vec::new(); crate::gui::panels_windows::doc_props_window(&mut a.win_ctx(&mut asks), ui.ctx()); a.do_win_asks(asks, ui.ctx()); });
+        let img = shot(&mut app, 700, 520, |a, ui| {
+            let mut asks = Vec::new();
+            crate::gui::panels_windows::doc_props_window(&mut a.win_ctx(&mut asks), ui.ctx());
+            a.do_win_asks(asks, ui.ctx());
+        });
         save("15-doc-props", &img);
 
         let mut app = part();
         app.win.open(WinKind::PartsLibrary);
-        let img = shot(&mut app, 900, 620, |a, ui| { let mut asks = Vec::new(); crate::gui::panels_windows::parts_library_window(&mut a.win_ctx(&mut asks), ui.ctx()); a.do_win_asks(asks, ui.ctx()); });
+        let img = shot(&mut app, 900, 620, |a, ui| {
+            let mut asks = Vec::new();
+            crate::gui::panels_windows::parts_library_window(&mut a.win_ctx(&mut asks), ui.ctx());
+            a.do_win_asks(asks, ui.ctx());
+        });
         save("16-parts-library", &img);
 
         // THE COMMAND SEARCH — a new window.
@@ -325,7 +341,11 @@ mod tests {
             app.set.scheme = id.into();
             app.win.open(WinKind::Settings);
             app.scheme.section = super::super::settings_sections::SettingsSection::Appearance;
-            let img = shot(&mut app, 940, 620, |a, ui| { let mut asks = Vec::new(); crate::gui::panels_windows::settings_window(&mut a.win_ctx(&mut asks), ui.ctx()); a.do_win_asks(asks, ui.ctx()); });
+            let img = shot(&mut app, 940, 620, |a, ui| {
+                let mut asks = Vec::new();
+                crate::gui::panels_windows::settings_window(&mut a.win_ctx(&mut asks), ui.ctx());
+                a.do_win_asks(asks, ui.ctx());
+            });
             save(&format!("21-scheme-{id}-settings"), &img);
 
             // THE SKETCH, THE TREE AND THE PROPERTIES — IN EVERY SCHEME, not only in the dark one.
@@ -358,5 +378,4 @@ mod tests {
 
         eprintln!("captures of the sweep: {}", out_dir().display());
     }
-
 }

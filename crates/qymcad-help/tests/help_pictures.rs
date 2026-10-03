@@ -68,10 +68,7 @@ fn every_picture_a_help_article_asks_for_actually_exists() {
 #[test]
 fn every_drawn_picture_is_used_by_some_article() {
     let img = help_dir().join("img");
-    let used: std::collections::HashSet<String> = image_refs()
-        .into_iter()
-        .map(|(_, r)| r.rsplit("img/").next().unwrap_or(&r).trim().trim_end_matches('/').to_string())
-        .collect();
+    let used: std::collections::HashSet<String> = image_refs().into_iter().map(|(_, r)| r.rsplit("img/").next().unwrap_or(&r).trim().trim_end_matches('/').to_string()).collect();
     let mut orphan = Vec::new();
     for e in std::fs::read_dir(&img).expect("the help picture directory").flatten() {
         let name = e.file_name().to_string_lossy().into_owned();
@@ -97,8 +94,7 @@ fn every_tool_article_shows_a_picture() {
     // a capture of a dialogue shows nothing the words do not already say. Kept explicit rather than
     // guessed from the path, so that adding one is a decision somebody takes on purpose.
     const NO_PICTURE_NEEDED: &[&str] = &[
-        "index.md",
-        "13-report.md",  // the "report a problem" window
+        "index.md", "13-report.md",  // the "report a problem" window
         "14-updates.md", // the check for a newer version
     ];
     let mut silent = Vec::new();
@@ -123,10 +119,5 @@ fn every_tool_article_shows_a_picture() {
         }
     }
     silent.sort();
-    assert!(
-        silent.is_empty(),
-        "tool articles without a single picture ({}): a person is not shown what will come out:\n{}",
-        silent.len(),
-        silent.join("\n")
-    );
+    assert!(silent.is_empty(), "tool articles without a single picture ({}): a person is not shown what will come out:\n{}", silent.len(), silent.join("\n"));
 }

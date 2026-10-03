@@ -17,12 +17,15 @@ fn gui_flow_new_part_rect_extrude() {
     eprintln!("closed: {} {:?}, owner of the sketch: {:?}, active: {:?}", closed.len(), closed, p.sketch_owner(sid), p.active_component);
     assert!(!closed.is_empty(), "the rectangle gave a closed contour");
     // apply_sketch_cmd: owner → active; part == active_body(ctx)
-    if let Some(o) = p.sketch_owner(sid) { p.set_active_component(Some(o)); }
+    if let Some(o) = p.sketch_owner(sid) {
+        p.set_active_component(Some(o));
+    }
     let ctx = p.current_ctx();
     let cur = p.active_body(ctx);
     eprintln!("ctx={ctx} current_body={cur:?}");
     let body = match cur {
-        None => { // an empty part: extrude, then `finish_base_body`
+        None => {
+            // an empty part: extrude, then `finish_base_body`
             let e = p.add_extrude_multi(sid, closed.clone(), 10.0, qymcad_core::feature::Reach::Forward, 0.0, vec![]);
             assert!(e != 0, "`add_extrude_multi` returned a node");
             p.finish_base_body(e, 1)
@@ -30,7 +33,9 @@ fn gui_flow_new_part_rect_extrude() {
         Some(b) => p.add_combine_multi_op(b, sid, closed.clone(), qymcad_core::model::CombineSpan { height: 10.0, down: 0.0, extent: qymcad_core::feature::Extent::default(), fill: &[] }, 1),
     };
     let (report, shapes) = qymcad_testkit::regenerate(&mut p);
-    for (id,e) in &report.errors { eprintln!("error {id}: {e}"); }
+    for (id, e) in &report.errors {
+        eprintln!("error {id}: {e}");
+    }
     eprintln!("the body was built: {} (body={body})", shapes.contains_key(&body));
     assert!(shapes.contains_key(&body), "an extrusion in a new, empty part builds a body");
     eprintln!("V={:.1}", shapes.get(&body).unwrap().volume());

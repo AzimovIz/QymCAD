@@ -177,8 +177,22 @@ pub static HOLE: Tool = Tool {
         // countersink; each takes what the hole of 6 has not taken there already
         &[
             Mode { word: "cmd-simple", clicks: None, outcome: Some(holed(6.0, 15.0)) },
-            Mode { word: "cmd-counterbore", clicks: None, outcome: Some(Outcome::Body { volume: 12000.0 - PI * 9.0 * 10.0 - PI * (36.0 - 9.0) * 4.0, faces: 9, edges: 18, min: [0.0, 0.0, 0.0], max: [40.0, 30.0, 10.0] }) },
-            Mode { word: "cmd-countersink", clicks: None, outcome: Some(Outcome::Body { volume: 12000.0 - PI * 9.0 * 10.0 - PI * 4.0 / 3.0 * (36.0 + 18.0 + 9.0) + PI * 9.0 * 4.0, faces: 8, edges: 17, min: [0.0, 0.0, 0.0], max: [40.0, 30.0, 10.0] }) },
+            Mode {
+                word: "cmd-counterbore",
+                clicks: None,
+                outcome: Some(Outcome::Body { volume: 12000.0 - PI * 9.0 * 10.0 - PI * (36.0 - 9.0) * 4.0, faces: 9, edges: 18, min: [0.0, 0.0, 0.0], max: [40.0, 30.0, 10.0] }),
+            },
+            Mode {
+                word: "cmd-countersink",
+                clicks: None,
+                outcome: Some(Outcome::Body {
+                    volume: 12000.0 - PI * 9.0 * 10.0 - PI * 4.0 / 3.0 * (36.0 + 18.0 + 9.0) + PI * 9.0 * 4.0,
+                    faces: 8,
+                    edges: 17,
+                    min: [0.0, 0.0, 0.0],
+                    max: [40.0, 30.0, 10.0],
+                }),
+            },
         ],
     ],
     result: holed(6.0, 15.0),
@@ -273,7 +287,13 @@ fn turned(angle: f64) -> Outcome {
     let (sin, cos) = (angle.to_radians().sin(), angle.to_radians().cos());
     let (y0, y1) = if angle > 90.0 { (30.0 * cos.min(0.0), 30.0) } else { (0.0, 30.0) };
     // past a quarter turn the far corner has gone over the top: the height is the whole 30
-    let (z0, z1) = if angle > 180.0 { (-30.0, 30.0) } else if angle >= 90.0 { (0.0, 30.0) } else { (0.0, 30.0 * sin.max(0.0)) };
+    let (z0, z1) = if angle > 180.0 {
+        (-30.0, 30.0)
+    } else if angle >= 90.0 {
+        (0.0, 30.0)
+    } else {
+        (0.0, 30.0 * sin.max(0.0))
+    };
     Outcome::Body { volume: PI * 900.0 * 40.0 * angle / 360.0, faces: 5, edges: 9, min: [0.0, y0, z0], max: [40.0, y1, z1] }
 }
 
@@ -527,21 +547,13 @@ pub static CIRCULAR_ARRAY: Tool = Tool {
     undo: "f-operation",
     undo_steps: 1,
     stays: false,
-    upstream: Some(Upstream::Reopen {
-        node: Node { kind: "Extrude", row: Some("cmd-extrude") },
-        caption: "f-length",
-        value: 20.0,
-        then: Outcome::Pieces { pieces: 6, volume: 96000.0 },
-    }),
+    upstream: Some(Upstream::Reopen { node: Node { kind: "Extrude", row: Some("cmd-extrude") }, caption: "f-length", value: 20.0, then: Outcome::Pieces { pieces: 6, volume: 96000.0 } }),
     dependency: Some(Node { kind: "Extrude", row: Some("cmd-extrude") }),
     contexts: &[Context::SecondPart],
     refusal: None,
     budget: (30, 2000),
     help: "part/18-circular-array",
-    not_applicable: &[(
-        17,
-        "copies of a body turned about an axis always build: what the kernel could not make of them is a matter of where they fall, not of the count typed",
-    )],
+    not_applicable: &[(17, "copies of a body turned about an axis always build: what the kernel could not make of them is a matter of where they fall, not of the count typed")],
 };
 
 /// The block cut across by a plane `depth` below its top: two pieces of 1200 mm^2 by what is left of the 10 of
@@ -607,8 +619,7 @@ pub static SPLIT_FACE: Tool = Tool {
     pick_trial: &[Pick::Face([20.0, 15.0, 10.0])],
     wrong_picks: &[],
     words: &[],
-    fields: &[Field { caption: "f-offset", by_placeholder: false, when: When::Before, class: Class::Length, typical: -5.0, lo: -9.9, hi: -0.1, zero: false, negative: true, outcome: split_faces },
-    ],
+    fields: &[Field { caption: "f-offset", by_placeholder: false, when: When::Before, class: Class::Length, typical: -5.0, lo: -9.9, hi: -0.1, zero: false, negative: true, outcome: split_faces }],
     modes: &[],
     result: split_faces(-5.0),
     node: "SplitFace",
@@ -702,7 +713,18 @@ pub static DATUM_PLANE: Tool = Tool {
     words: &[],
     // a datum plane may sit on the face it is taken from (0) or under it (a negative offset), so both are values of
     // its own; the body is the same whatever the plane does, and where the plane stands is read by what is built on it
-    fields: &[Field { caption: "f-offset", by_placeholder: false, when: When::Before, class: Class::Length, typical: 10.0, lo: -100000.0, hi: 100000.0, zero: true, negative: true, outcome: block_alone }],
+    fields: &[Field {
+        caption: "f-offset",
+        by_placeholder: false,
+        when: When::Before,
+        class: Class::Length,
+        typical: 10.0,
+        lo: -100000.0,
+        hi: 100000.0,
+        zero: true,
+        negative: true,
+        outcome: block_alone,
+    }],
     modes: &[],
     result: block_alone(10.0),
     node: "Plane",
@@ -1194,7 +1216,18 @@ pub static STITCH: Tool = Tool {
     wrong_picks: &[],
     words: &[],
     // how far apart two edges may be and still be one seam: the sheets meet exactly, so any tolerance joins them
-    fields: &[Field { caption: "f-stitch-tol", by_placeholder: false, when: When::Before, class: Class::Tolerance, typical: 0.01, lo: 0.000001, hi: 10.0, zero: false, negative: false, outcome: stitched }],
+    fields: &[Field {
+        caption: "f-stitch-tol",
+        by_placeholder: false,
+        when: When::Before,
+        class: Class::Tolerance,
+        typical: 0.01,
+        lo: 0.000001,
+        hi: 10.0,
+        zero: false,
+        negative: false,
+        outcome: stitched,
+    }],
     modes: &[],
     result: stitched(0.01),
     node: "Stitch",

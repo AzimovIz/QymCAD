@@ -21,7 +21,11 @@ fn clearance(c: Pos2, size: Vec2, a: Pos2, b: Pos2) -> f32 {
 #[test]
 fn the_text_of_a_linear_dimension_does_not_cross_its_line() {
     let size = dim_text_size("25.0", 13.0);
-    for (name, la, lb) in [("horizontal", pos2(100.0, 300.0), pos2(400.0, 300.0)), ("vertical", pos2(300.0, 100.0), pos2(300.0, 400.0)), ("slanted", pos2(100.0, 100.0), pos2(300.0, 300.0))] {
+    for (name, la, lb) in [
+        ("horizontal", pos2(100.0, 300.0), pos2(400.0, 300.0)),
+        ("vertical", pos2(300.0, 100.0), pos2(300.0, 400.0)),
+        ("slanted", pos2(100.0, 100.0), pos2(300.0, 300.0)),
+    ] {
         let dir = (lb - la).normalized();
         let perp = vec2(-dir.y, dir.x);
         let place = dim_text_place(la, lb, perp, size, None, false);

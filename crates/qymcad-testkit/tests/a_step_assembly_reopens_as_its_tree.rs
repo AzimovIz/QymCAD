@@ -18,7 +18,13 @@ fn tree(p: &Project) -> Vec<(String, String, [f64; 12])> {
 /// Where each part stands in the world, sorted: the second plate is a clone and brings no body of its own from the
 /// file, so parts are counted, not the bodies read.
 fn places(p: &Project) -> Vec<[f64; 3]> {
-    let mut out: Vec<[f64; 3]> = p.components.iter().filter(|c| c.kind == qymcad_core::feature::ComponentKind::Part && !p.component_bodies(c.id).is_empty()).map(|c| p.world_transform(c.id)).map(|w| [w[3], w[7], w[11]]).collect();
+    let mut out: Vec<[f64; 3]> = p
+        .components
+        .iter()
+        .filter(|c| c.kind == qymcad_core::feature::ComponentKind::Part && !p.component_bodies(c.id).is_empty())
+        .map(|c| p.world_transform(c.id))
+        .map(|w| [w[3], w[7], w[11]])
+        .collect();
     out.sort_by(|a, b| a.partial_cmp(b).expect("numbers"));
     out
 }

@@ -23,12 +23,7 @@ mod tests {
     /// A point ON THE BODY that can be clicked: the centre of its topmost face.
     fn aim(app: &App, body: Id) -> [f64; 3] {
         let wt = app.project.body_display_transform(body, qymcad_ui_state::current_ctx_id(&app.active_path, &app.project));
-        let f = app
-            .project
-            .regen_faces
-            .get(&body)
-            .and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z)))
-            .expect("the body has faces");
+        let f = app.project.regen_faces.get(&body).and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z))).expect("the body has faces");
         qymcad_core::feature::apply12(&wt, [f.centroid.x, f.centroid.y, f.centroid.z])
     }
 
@@ -68,7 +63,9 @@ mod tests {
         let members: Vec<Id> = mine.iter().filter_map(|b| app.project.body_owner(*b)).collect();
         app.project.add_group(&members[..2]);
         app.start_relation_pick();
-        if let Some(p) = app.side.joint.relation_pick.as_mut() { p.set(RelationKind::Gear, 2.0); }
+        if let Some(p) = app.side.joint.relation_pick.as_mut() {
+            p.set(RelationKind::Gear, 2.0);
+        }
         qymcad_assembly::relation_pick_click(&mut app.joint_ctx(), first);
         qymcad_assembly::relation_pick_click(&mut app.joint_ctx(), second);
         qymcad_assembly::relation_pick_confirm(&mut app.joint_ctx());
@@ -96,7 +93,10 @@ mod tests {
                 // collision is born precisely from simultaneity; each piece alone is flawless.
                 egui::Panel::left("tree").show(c, |ui| app.build_tree_for_test(ui));
                 egui::Panel::right("props").show(c, |ui| app.joints_panel_for_test(ui));
-                { app.side.joint.edit = app.side.joint.edit.or_else(|| app.project.joints.first().map(|j| j.id)); qymcad_assembly::joint_popup(&mut app.joint_ctx(), c, viewport()); }
+                {
+                    app.side.joint.edit = app.side.joint.edit.or_else(|| app.project.joints.first().map(|j| j.id));
+                    qymcad_assembly::joint_popup(&mut app.joint_ctx(), c, viewport());
+                }
             });
             texts.clear();
             for cs in &out.shapes {
@@ -107,9 +107,6 @@ mod tests {
         assert!(texts.len() > 5, "GUARD: the screen painted suspiciously few strings ({}), so there is nothing to look at", texts.len());
         // egui always writes its complaint with the words: widget ID.
         let complaints: Vec<&String> = texts.iter().filter(|t| t.contains("widget ID") || t.contains("Widget ID")).collect();
-        assert!(
-            complaints.is_empty(),
-            "the assembly screen complains about itself in the viewport: two widgets took one id and one of them stopped responding:\n{complaints:?}"
-        );
+        assert!(complaints.is_empty(), "the assembly screen complains about itself in the viewport: two widgets took one id and one of them stopped responding:\n{complaints:?}");
     }
 }

@@ -129,9 +129,7 @@ pub fn articles(l: &str) -> Vec<String> {
 /// first edit. With no heading the path is shown: a silent empty row in the contents is worse than an
 /// ugly one.
 pub fn title(path: &str) -> String {
-    article(path)
-        .and_then(|md| md.lines().find_map(|l| l.trim().strip_prefix("# ").map(|t| t.trim().to_string())))
-        .unwrap_or_else(|| path.to_string())
+    article(path).and_then(|md| md.lines().find_map(|l| l.trim().strip_prefix("# ").map(|t| t.trim().to_string()))).unwrap_or_else(|| path.to_string())
 }
 
 /// THE TITLE OF AN ARTICLE IN A PARTICULAR LANGUAGE — past the current choice.

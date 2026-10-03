@@ -110,10 +110,7 @@ mod tests {
         assert!(texts.len() > 20, "GUARD: the screen drew suspiciously few lines ({}) — there was nothing to check", texts.len());
 
         let bad: Vec<&String> = texts.iter().filter(|t| looks_like_a_key(t)).collect();
-        assert!(
-            bad.is_empty(),
-            "the assembly screen shows internal codes instead of words: {bad:?}\neverything drawn: {texts:?}"
-        );
+        assert!(bad.is_empty(), "the assembly screen shows internal codes instead of words: {bad:?}\neverything drawn: {texts:?}");
     }
 
     /// THE SAME IN THE JOINT POPUP AND IN THE TOOL BARS.
@@ -152,7 +149,10 @@ mod tests {
                 app.side.joint.edit = Some(jid);
                 let out = ctx.run_ui(egui::RawInput { screen_rect: Some(viewport()), ..Default::default() }, |c| {
                     if popup {
-                        { app.side.joint.edit = app.side.joint.edit.or_else(|| app.project.joints.first().map(|j| j.id)); qymcad_assembly::joint_popup(&mut app.joint_ctx(), c, viewport()); }
+                        {
+                            app.side.joint.edit = app.side.joint.edit.or_else(|| app.project.joints.first().map(|j| j.id));
+                            qymcad_assembly::joint_popup(&mut app.joint_ctx(), c, viewport());
+                        }
                     } else {
                         qymcad_assembly::joint_tool_bar(&mut app.joint_ctx(), c);
                     }

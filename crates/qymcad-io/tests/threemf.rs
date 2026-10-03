@@ -28,11 +28,15 @@ const RELS: &str = r#"<?xml version="1.0"?><Relationships xmlns="http://schemas.
 
 /// One triangle, as an object with a mesh.
 fn tri_object(id: u32) -> String {
-    format!(r#"<object id="{id}" type="model"><mesh><vertices><vertex x="0" y="0" z="0"/><vertex x="1" y="0" z="0"/><vertex x="0" y="1" z="0"/></vertices><triangles><triangle v1="0" v2="1" v3="2"/></triangles></mesh></object>"#)
+    format!(
+        r#"<object id="{id}" type="model"><mesh><vertices><vertex x="0" y="0" z="0"/><vertex x="1" y="0" z="0"/><vertex x="0" y="1" z="0"/></vertices><triangles><triangle v1="0" v2="1" v3="2"/></triangles></mesh></object>"#
+    )
 }
 
 fn model(unit: &str, resources: &str, build: &str) -> String {
-    format!(r#"<?xml version="1.0" encoding="UTF-8"?><model unit="{unit}" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><resources>{resources}</resources><build>{build}</build></model>"#)
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?><model unit="{unit}" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><resources>{resources}</resources><build>{build}</build></model>"#
+    )
 }
 
 fn tetra(x: f64) -> Mesh {
@@ -71,7 +75,13 @@ fn a_model_in_inches_comes_in_in_millimetres() {
 fn components_and_items_place_what_they_carry() {
     let composite = r#"<object id="2" type="model"><components><component objectid="1"/><component objectid="1" transform="1 0 0 0 1 0 0 0 1 10 0 0"/></components></object>"#;
     let rels = RELS.replace("/3D/3dmodel.model", "/3D/elsewhere.model");
-    let p = package("components.3mf", &[("_rels/.rels", &rels), ("3D/elsewhere.model", &model("millimeter", &format!("{}{composite}", tri_object(1)), r#"<item objectid="2" transform="1 0 0 0 1 0 0 0 1 0 0 5"/>"#))]);
+    let p = package(
+        "components.3mf",
+        &[
+            ("_rels/.rels", &rels),
+            ("3D/elsewhere.model", &model("millimeter", &format!("{}{composite}", tri_object(1)), r#"<item objectid="2" transform="1 0 0 0 1 0 0 0 1 0 0 5"/>"#)),
+        ],
+    );
     let back = import_3mf(&p).expect("reads");
     assert_eq!(back.len(), 1, "one build item is one body");
     let m = &back[0].mesh;
@@ -100,7 +110,11 @@ fn a_broken_package_is_refused_by_name() {
 /// and none in the model.
 #[test]
 fn a_slicer_project_names_its_parts() {
-    let resources = format!(r#"{}{}<object id="3" type="model"><components><component objectid="1"/><component objectid="2" transform="1 0 0 0 1 0 0 0 1 5 0 0"/></components></object>"#, tri_object(1), tri_object(2));
+    let resources = format!(
+        r#"{}{}<object id="3" type="model"><components><component objectid="1"/><component objectid="2" transform="1 0 0 0 1 0 0 0 1 5 0 0"/></components></object>"#,
+        tri_object(1),
+        tri_object(2)
+    );
     let config = r#"<?xml version="1.0" encoding="UTF-8"?><config><object id="3"><metadata key="name" value="head.step"/><part id="1" subtype="normal_part"><metadata key="name" value="bolt"/></part><part id="2" subtype="normal_part"><metadata key="name" value="plate"/></part></object></config>"#;
     let p = package("slicer.3mf", &[("_rels/.rels", RELS), ("3D/3dmodel.model", &model("millimeter", &resources, r#"<item objectid="3"/>"#)), ("Metadata/model_settings.config", config)]);
     let back = import_3mf(&p).expect("reads");
@@ -111,7 +125,11 @@ fn a_slicer_project_names_its_parts() {
 /// mate, not a mesh baked into place. The plate's component is shifted by 5 along X.
 #[test]
 fn a_named_part_keeps_its_own_coordinates_and_its_place() {
-    let resources = format!(r#"{}{}<object id="3" type="model"><components><component objectid="1"/><component objectid="2" transform="1 0 0 0 1 0 0 0 1 5 0 0"/></components></object>"#, tri_object(1), tri_object(2));
+    let resources = format!(
+        r#"{}{}<object id="3" type="model"><components><component objectid="1"/><component objectid="2" transform="1 0 0 0 1 0 0 0 1 5 0 0"/></components></object>"#,
+        tri_object(1),
+        tri_object(2)
+    );
     let config = r#"<?xml version="1.0" encoding="UTF-8"?><config><object id="3"><part id="1"><metadata key="name" value="bolt"/></part><part id="2"><metadata key="name" value="plate"/></part></object></config>"#;
     let p = package("placed.3mf", &[("_rels/.rels", RELS), ("3D/3dmodel.model", &model("millimeter", &resources, r#"<item objectid="3"/>"#)), ("Metadata/model_settings.config", config)]);
     let back = import_3mf(&p).expect("reads");
@@ -144,7 +162,11 @@ fn an_object_comes_in_its_colour() {
 #[test]
 fn an_object_of_parts_the_model_names_comes_in_a_piece_a_part() {
     let named = |id: u32, name: &str| tri_object(id).replace(r#"type="model""#, &format!(r#"type="model" name="{name}""#));
-    let resources = format!(r#"{}{}<object id="3" type="model" name="head"><components><component objectid="1"/><component objectid="2" transform="1 0 0 0 1 0 0 0 1 5 0 0"/></components></object>"#, named(1, "bolt &amp; nut"), named(2, "plate"));
+    let resources = format!(
+        r#"{}{}<object id="3" type="model" name="head"><components><component objectid="1"/><component objectid="2" transform="1 0 0 0 1 0 0 0 1 5 0 0"/></components></object>"#,
+        named(1, "bolt &amp; nut"),
+        named(2, "plate")
+    );
     let p = package("model-named.3mf", &[("_rels/.rels", RELS), ("3D/3dmodel.model", &model("millimeter", &resources, r#"<item objectid="3"/>"#))]);
     let back = import_3mf(&p).expect("reads");
     assert_eq!(back.iter().map(|m| m.name.as_str()).collect::<Vec<_>>(), ["bolt & nut", "plate"], "an object of named parts came in as one piece");
@@ -160,7 +182,15 @@ fn a_tree_goes_out_as_an_object_of_parts() {
     use std::io::Read;
     let p = file("tree.3mf");
     let at = |x: f64, z: f64| [1.0, 0.0, 0.0, x, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, z];
-    let node = |name: &str, parent: Option<usize>, place: [f64; 12], body: Option<u64>, same_as: Option<usize>, color: Option<[u8; 3]>| ExportNode { name: name.into(), parent, place, body, same_as, color, face_colors: Vec::new() };
+    let node = |name: &str, parent: Option<usize>, place: [f64; 12], body: Option<u64>, same_as: Option<usize>, color: Option<[u8; 3]>| ExportNode {
+        name: name.into(),
+        parent,
+        place,
+        body,
+        same_as,
+        color,
+        face_colors: Vec::new(),
+    };
     let (red, blue) = (Some([204, 26, 26]), Some([26, 51, 230]));
     let nodes = [
         node("head", None, at(0.0, 0.0), None, None, None),
@@ -226,15 +256,21 @@ fn a_piece_coloured_over_all_round_comes_back_so() {
 
 /// A closed tetrahedron with its triangles facing out, as an object with a mesh.
 fn tet_object(id: u32) -> String {
-    format!(r#"<object id="{id}" type="model"><mesh><vertices><vertex x="0" y="0" z="0"/><vertex x="1" y="0" z="0"/><vertex x="0" y="1" z="0"/><vertex x="0" y="0" z="1"/></vertices><triangles><triangle v1="0" v2="2" v3="1"/><triangle v1="0" v2="1" v3="3"/><triangle v1="0" v2="3" v3="2"/><triangle v1="1" v2="2" v3="3"/></triangles></mesh></object>"#)
+    format!(
+        r#"<object id="{id}" type="model"><mesh><vertices><vertex x="0" y="0" z="0"/><vertex x="1" y="0" z="0"/><vertex x="0" y="1" z="0"/><vertex x="0" y="0" z="1"/></vertices><triangles><triangle v1="0" v2="2" v3="1"/><triangle v1="0" v2="1" v3="3"/><triangle v1="0" v2="3" v3="2"/><triangle v1="1" v2="2" v3="3"/></triangles></mesh></object>"#
+    )
 }
 
 /// The volume a closed mesh holds, positive when its triangles face out.
 fn volume(m: &Mesh) -> f64 {
-    m.tris.iter().map(|t| {
-        let [a, b, c] = t.map(|k| m.verts[k as usize]);
-        a.x * (b.y * c.z - b.z * c.y) - a.y * (b.x * c.z - b.z * c.x) + a.z * (b.x * c.y - b.y * c.x)
-    }).sum::<f64>() / 6.0
+    m.tris
+        .iter()
+        .map(|t| {
+            let [a, b, c] = t.map(|k| m.verts[k as usize]);
+            a.x * (b.y * c.z - b.z * c.y) - a.y * (b.x * c.z - b.z * c.x) + a.z * (b.x * c.y - b.y * c.x)
+        })
+        .sum::<f64>()
+        / 6.0
 }
 
 /// A MIRRORED COMPONENT KEEPS ITS INSIDE IN: the standard says a transform with a negative determinant "MUST NOT change
@@ -255,7 +291,11 @@ fn a_mirrored_component_keeps_its_inside_in() {
 #[test]
 fn a_part_scaled_by_its_component_stands_rigidly() {
     let named = |id: u32, name: &str| tri_object(id).replace(r#"type="model""#, &format!(r#"type="model" name="{name}""#));
-    let resources = format!(r#"{}{}<object id="3" type="model" name="head"><components><component objectid="1" transform="2 0 0 0 2 0 0 0 2 5 0 0"/><component objectid="2"/></components></object>"#, named(1, "bolt"), named(2, "plate"));
+    let resources = format!(
+        r#"{}{}<object id="3" type="model" name="head"><components><component objectid="1" transform="2 0 0 0 2 0 0 0 2 5 0 0"/><component objectid="2"/></components></object>"#,
+        named(1, "bolt"),
+        named(2, "plate")
+    );
     let p = package("scaled-part.3mf", &[("_rels/.rels", RELS), ("3D/3dmodel.model", &model("millimeter", &resources, r#"<item objectid="3"/>"#))]);
     let back = import_3mf(&p).expect("reads");
     let bolt = back.iter().find(|m| m.name == "bolt").expect("the bolt came in");
@@ -296,7 +336,15 @@ fn a_tree_goes_out_with_its_subassemblies() {
     use std::io::Read;
     let p = file("levels.3mf");
     let at = |x: f64, z: f64| [1.0, 0.0, 0.0, x, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, z];
-    let node = |name: &str, parent: Option<usize>, place: [f64; 12], body: Option<u64>, same_as: Option<usize>| ExportNode { name: name.into(), parent, place, body, same_as, color: None, face_colors: Vec::new() };
+    let node = |name: &str, parent: Option<usize>, place: [f64; 12], body: Option<u64>, same_as: Option<usize>| ExportNode {
+        name: name.into(),
+        parent,
+        place,
+        body,
+        same_as,
+        color: None,
+        face_colors: Vec::new(),
+    };
     let nodes = [
         node("head", None, at(0.0, 0.0), None, None),
         node("plate", Some(0), at(0.0, 0.0), Some(1), None),

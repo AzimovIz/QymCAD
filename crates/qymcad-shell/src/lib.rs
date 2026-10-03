@@ -153,12 +153,7 @@ impl Shell {
 
     /// Draw one kind of place, in registration order. The frame calls this six times, in `Slot::ORDER`.
     pub fn run_slot(&self, slot: Slot, ui: &mut egui::Ui, host: &mut dyn Fills) {
-        let keys: Vec<&'static str> = self
-            .places
-            .iter()
-            .filter(|p| self.moved.get(p.key).copied().unwrap_or(p.slot) == slot)
-            .map(|p| p.key)
-            .collect();
+        let keys: Vec<&'static str> = self.places.iter().filter(|p| self.moved.get(p.key).copied().unwrap_or(p.slot) == slot).map(|p| p.key).collect();
         for key in keys {
             if !host.live(key) {
                 continue;
@@ -208,23 +203,13 @@ mod tests {
         // THE CODE, WITHOUT THE PROSE. The doc comments name a tree and a toolbar on purpose - as examples
         // of what MIGHT stand in a place - and forbidding that would forbid explaining the file. And below
         // the test module the panels are named deliberately, to check that a key travels through untouched.
-        let code: String = src
-            .split("\n#[cfg(test)]")
-            .next()
-            .expect("the working part is the file above its tests")
-            .lines()
-            .map(|l| l.trim_start())
-            .filter(|l| !l.starts_with("//"))
-            .collect::<Vec<_>>()
-            .join("\n");
+        let code: String =
+            src.split("\n#[cfg(test)]").next().expect("the working part is the file above its tests").lines().map(|l| l.trim_start()).filter(|l| !l.starts_with("//")).collect::<Vec<_>>().join("\n");
         // WHOLE WORDS. A plain `contains("part")` found it inside "apart" and reported the shell for a word
         // it had not said - a needle that fires on prose teaches everyone to ignore it.
         let words: Vec<String> = code.split(|c: char| !c.is_alphanumeric() && c != '_').map(|w| w.to_lowercase()).collect();
         for name in ["sketch", "part", "assembly", "cam", "joint", "tree", "viewport", "toolbar", "properties", "sketcher"] {
-            assert!(
-                !words.iter().any(|w| w == name),
-                "the shell names `{name}` - a place is a KIND of container, and what stands in it is not the shell's business"
-            );
+            assert!(!words.iter().any(|w| w == name), "the shell names `{name}` - a place is a KIND of container, and what stands in it is not the shell's business");
         }
     }
 

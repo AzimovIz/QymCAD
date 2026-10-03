@@ -83,10 +83,7 @@ mod tests {
     #[test]
     fn the_upgrade_code_is_the_one_already_in_the_world() {
         let wxs = read("packaging/win/qymcad.wxs");
-        assert!(
-            wxs.contains("UpgradeCode=\"DF949703-CA05-535F-80FD-8404D9704F33\""),
-            "the upgrade code changed: every copy already installed would stop being recognised as this program"
-        );
+        assert!(wxs.contains("UpgradeCode=\"DF949703-CA05-535F-80FD-8404D9704F33\""), "the upgrade code changed: every copy already installed would stop being recognised as this program");
     }
 
     /// AND NO PLACEHOLDER MAY REACH A SUBMITTED MANIFEST.
@@ -115,16 +112,8 @@ mod tests {
     fn the_installer_tool_is_pinned() {
         let wf = read(".github/workflows/release.yml");
         // The command is quoted in the comment right above it, so match the step that runs, not the prose.
-        let line = wf
-            .lines()
-            .map(str::trim)
-            .find(|l| l.starts_with("run:") && l.contains("dotnet tool install") && l.contains("wix"))
-            .expect("the workflow no longer installs WiX at all");
-        assert!(
-            line.contains("--version"),
-            "WiX is installed without a version, so the build takes whatever was released last: {}",
-            line.trim()
-        );
+        let line = wf.lines().map(str::trim).find(|l| l.starts_with("run:") && l.contains("dotnet tool install") && l.contains("wix")).expect("the workflow no longer installs WiX at all");
+        assert!(line.contains("--version"), "WiX is installed without a version, so the build takes whatever was released last: {}", line.trim());
     }
 
     /// THE INSTALLER PUTS A SHORTCUT WHERE PEOPLE LOOK FOR ONE.

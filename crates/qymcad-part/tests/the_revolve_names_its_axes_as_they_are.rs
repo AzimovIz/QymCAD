@@ -59,14 +59,8 @@ fn the_revolve_bar_on(plane: qymcad_core::feature::BasePlane) -> Vec<String> {
 #[test]
 fn on_the_front_plane_the_upright_axis_is_called_z() {
     let said = the_revolve_bar_on(qymcad_core::feature::BasePlane::XZ);
-    assert!(
-        said.iter().any(|t| t == "Z"),
-        "the sketch stands on the front plane, its second axis points along the world Z, and the bar offers no Z at all: {said:?}"
-    );
-    assert!(
-        !said.iter().any(|t| t == "Y"),
-        "and it must not go on calling that same axis Y - there is no Y in this plane: {said:?}"
-    );
+    assert!(said.iter().any(|t| t == "Z"), "the sketch stands on the front plane, its second axis points along the world Z, and the bar offers no Z at all: {said:?}");
+    assert!(!said.iter().any(|t| t == "Y"), "and it must not go on calling that same axis Y - there is no Y in this plane: {said:?}");
 }
 
 /// ON THE SIDE PLANE THE PAIR IS Y AND Z.

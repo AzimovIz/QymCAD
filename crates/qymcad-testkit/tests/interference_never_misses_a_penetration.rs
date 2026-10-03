@@ -25,11 +25,7 @@ fn m(d: f64, pitch: f64, fit: f64) -> ThreadSpec {
 fn rim(p: &mut Project, body: u64, r: f64) -> u32 {
     let (_report, _shapes) = qymcad_testkit::regenerate(p);
     let e = p.regen_edges.get(&body).cloned().unwrap_or_default();
-    e.iter()
-        .filter(|e| e.radius > 1e-9 && (e.radius - r).abs() < 0.05)
-        .map(|e| e.id)
-        .next()
-        .unwrap_or_else(|| panic!("body {body} has no round edge of radius {r}"))
+    e.iter().filter(|e| e.radius > 1e-9 && (e.radius - r).abs() < 0.05).map(|e| e.id).next().unwrap_or_else(|| panic!("body {body} has no round edge of radius {r}"))
 }
 
 /// THE BOLT OF THE COMPLAINT, built through a document: a shaft threaded over its whole length, with a
@@ -48,10 +44,7 @@ fn bolt(d: f64, pitch: f64, len: f64, lead: f64, fit: f64) -> Shape {
 
 /// A slab of space: a disc wide enough to swallow anything under test, `t` thick, its bottom at `z`.
 fn slab(t: f64, z: f64) -> Shape {
-    Shape::cylinder(50.0, t)
-        .expect("the slab")
-        .transformed(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, z])
-        .expect("the slab moved into place")
+    Shape::cylinder(50.0, t).expect("the slab").transformed(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, z]).expect("the slab moved into place")
 }
 
 /// THE SAME SLAB OF THE SAME BOLT WEIGHS THE SAME AT EVERY HEIGHT.

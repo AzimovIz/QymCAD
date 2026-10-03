@@ -25,12 +25,7 @@ mod tests {
 
     fn aim(app: &App, body: Id) -> [f64; 3] {
         let wt = app.project.body_display_transform(body, qymcad_ui_state::current_ctx_id(&app.active_path, &app.project));
-        let f = app
-            .project
-            .regen_faces
-            .get(&body)
-            .and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z)))
-            .expect("the body has faces");
+        let f = app.project.regen_faces.get(&body).and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z))).expect("the body has faces");
         qymcad_core::feature::apply12(&wt, [f.centroid.x, f.centroid.y, f.centroid.z])
     }
 
@@ -93,10 +88,7 @@ mod tests {
         let basis = app.viewing.cam.basis();
         let at = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: viewport(), basis: &basis }.at(aim(&app, body)).0;
         let by = egui::vec2(50.0, 0.0);
-        assert!(
-            app.joint_grab_part_at(viewport(), at, by, &basis),
-            "the joint is raised to the root and the part cannot be grabbed from there: the hand refused silently"
-        );
+        assert!(app.joint_grab_part_at(viewport(), at, by, &basis), "the joint is raised to the root and the part cannot be grabbed from there: the hand refused silently");
         for k in 1..=4 {
             let step = by * (k as f32 / 4.0);
             qymcad_assembly::joint_giz_drag_to(&mut app.joint_ctx(), at + step, by / 4.0, viewport(), &basis);
@@ -124,9 +116,6 @@ mod tests {
         let basis = app.viewing.cam.basis();
         let at = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: viewport(), basis: &basis }.at(aim(&app, body)).0;
         let by = egui::vec2(50.0, 0.0);
-        assert!(
-            !app.joint_grab_part_at(viewport(), at, by, &basis),
-            "the tick is cleared — the joint is not in effect in the root, and the hand must not take hold of it"
-        );
+        assert!(!app.joint_grab_part_at(viewport(), at, by, &basis), "the tick is cleared — the joint is not in effect in the root, and the hand must not take hold of it");
     }
 }

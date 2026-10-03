@@ -18,12 +18,7 @@ mod tests {
     /// A point ON THE BODY that can be clicked: the centre of the topmost face.
     fn aim(app: &App, body: Id) -> [f64; 3] {
         let wt = app.project.body_display_transform(body, qymcad_ui_state::current_ctx_id(&app.active_path, &app.project));
-        let f = app
-            .project
-            .regen_faces
-            .get(&body)
-            .and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z)))
-            .expect("the body has faces");
+        let f = app.project.regen_faces.get(&body).and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z))).expect("the body has faces");
         qymcad_core::feature::apply12(&wt, [f.centroid.x, f.centroid.y, f.centroid.z])
     }
 
@@ -78,10 +73,7 @@ mod tests {
         app.project.solve_joints();
         let now = app.project.world_transform(owner);
         let went = [3usize, 7, 11].iter().map(|&k| (now[k] - was[k]).powi(2)).sum::<f64>().sqrt();
-        assert!(
-            (went - 20.0).abs() < 1e-3,
-            "the stop is at 20 mm and the drive went to 40 — the part must stand at 20.000, and it travelled {went:.4}"
-        );
+        assert!((went - 20.0).abs() < 1e-3, "the stop is at 20 mm and the drive went to 40 — the part must stand at 20.000, and it travelled {went:.4}");
         // AND THE READING MUST AGREE WITH THE STOP rather than stay at forty: otherwise the field
         // says one thing and the part stands somewhere else.
         let shown = app.project.joints.iter().find(|x| x.id == jid).map(|x| x.offset).unwrap_or(f64::NAN);
@@ -105,18 +97,12 @@ mod tests {
         app.project.solve_joints();
 
         let stopped = app.project.joints_at_limit();
-        assert!(
-            stopped.iter().any(|(id, slot)| *id == jid && *slot == 1),
-            "the part stands at the stop and the program says nothing about it: what counts as stopped is {stopped:?}"
-        );
+        assert!(stopped.iter().any(|(id, slot)| *id == jid && *slot == 1), "the part stands at the stop and the program says nothing about it: what counts as stopped is {stopped:?}");
 
         // AND IT IS VISIBLE IN THE FRAME rather than merely recorded in memory.
         let words = panel_words(&mut app);
         let want = crate::i18n::tr("jp-at-limit");
-        assert!(
-            words.iter().any(|t| t.contains(&want)),
-            "the joint stands at the stop and the panel says not a word about it: drawn {words:?}"
-        );
+        assert!(words.iter().any(|t| t.contains(&want)), "the joint stands at the stop and the panel says not a word about it: drawn {words:?}");
     }
 
     /// "GO TO THE LIMIT" PUTS THE PART EXACTLY ON THE STOP.

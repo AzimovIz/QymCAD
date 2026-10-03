@@ -23,7 +23,9 @@ fn area(p: &Project, cid: u64) -> f64 {
 fn ring_regions_exist() {
     let (p, closed) = mk();
     eprintln!("contours: {}", closed.len());
-    for &c in &closed { eprintln!("  contour {c}: area={:.0}", area(&p, c)); }
+    for &c in &closed {
+        eprintln!("  contour {c}: area={:.0}", area(&p, c));
+    }
     // expect 3 regions: the ring 30/20 (pi*500 = about 1571), the ring 20/10 (pi*300 = about 942), the disc 10 (pi*100 = about 314)
     assert_eq!(closed.len(), 3, "3 circles give 3 regions (2 rings and a disc)");
 }
@@ -31,7 +33,7 @@ fn ring_regions_exist() {
 fn extrude_each_region_correct_volume() {
     let (p0, closed) = mk();
     let pi = std::f64::consts::PI;
-    let expect = [pi*500.0*10.0, pi*300.0*10.0, pi*100.0*10.0]; // ring areas times h, in any order
+    let expect = [pi * 500.0 * 10.0, pi * 300.0 * 10.0, pi * 100.0 * 10.0]; // ring areas times h, in any order
     let mut got: Vec<f64> = Vec::new();
     for &c in &closed {
         let mut p = p0.clone();
@@ -39,15 +41,18 @@ fn extrude_each_region_correct_volume() {
         let e = p.add_extrude_multi(sid, vec![c], 10.0, qymcad_core::feature::Reach::Forward, 0.0, vec![]);
         let body = p.finish_base_body(e, 1);
         let (report, shapes) = qymcad_testkit::regenerate(&mut p);
-        for (id,er) in &report.errors { eprintln!("ERROR {id}: {er}"); }
+        for (id, er) in &report.errors {
+            eprintln!("ERROR {id}: {er}");
+        }
         let v = shapes.get(&body).map(|s| s.volume()).unwrap_or(0.0);
         eprintln!("contour {c}: V={v:.0}");
         got.push(v);
     }
-    got.sort_by(|a,b| b.partial_cmp(a).unwrap());
-    let mut exp = expect.to_vec(); exp.sort_by(|a,b| b.partial_cmp(a).unwrap());
-    for (g,e) in got.iter().zip(exp.iter()) {
-        assert!((g-e).abs()/e < 0.02, "region volume: got {g:.0}, expected {e:.0}");
+    got.sort_by(|a, b| b.partial_cmp(a).unwrap());
+    let mut exp = expect.to_vec();
+    exp.sort_by(|a, b| b.partial_cmp(a).unwrap());
+    for (g, e) in got.iter().zip(exp.iter()) {
+        assert!((g - e).abs() / e < 0.02, "region volume: got {g:.0}, expected {e:.0}");
     }
 }
 #[test]
@@ -56,24 +61,34 @@ fn extrude_disk_then_cut_middle_ring() {
     let sid = p.sketches[0].id;
     let pi = std::f64::consts::PI;
     // find them by area: the disc (314), the middle ring (942), the outer one (1571)
-    let mut by_area: Vec<(f64,u64)> = closed.iter().map(|&c| (area(&p,c), c)).collect();
-    by_area.sort_by(|a,b| a.0.partial_cmp(&b.0).unwrap());
+    let mut by_area: Vec<(f64, u64)> = closed.iter().map(|&c| (area(&p, c), c)).collect();
+    by_area.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
     let (disk, mid, outer) = (by_area[0].1, by_area[1].1, by_area[2].1);
     // extrude EVERYTHING (the disc plus both rings, that is the full R30 circle) by 10
     let e = p.add_extrude_multi(sid, vec![disk, mid, outer], 10.0, qymcad_core::feature::Reach::Forward, 0.0, vec![]);
     let body = p.finish_base_body(e, 1);
     let (r1, s1) = qymcad_testkit::regenerate(&mut p);
-    for (id,er) in &r1.errors { eprintln!("ERROR in the base {id}: {er}"); }
+    for (id, er) in &r1.errors {
+        eprintln!("ERROR in the base {id}: {er}");
+    }
     let v1 = s1.get(&body).map(|s| s.volume()).unwrap_or(0.0);
-    eprintln!("base (3 regions at once): V={v1:.0}, expected {:.0}", pi*900.0*10.0);
-    assert!((v1 - pi*900.0*10.0).abs()/(pi*900.0*10.0) < 0.02, "a full R30 cylinder from 3 regions");
+    eprintln!("base (3 regions at once): V={v1:.0}, expected {:.0}", pi * 900.0 * 10.0);
+    assert!((v1 - pi * 900.0 * 10.0).abs() / (pi * 900.0 * 10.0) < 0.02, "a full R30 cylinder from 3 regions");
     // CUT with the middle ring all the way through, leaving a groove: the R10 disc and the 30/20 ring remain
-    let cut = p.add_combine_multi_op(body, sid, vec![mid], qymcad_core::model::CombineSpan { height: 12.0, down: 0.0, extent: qymcad_core::feature::Extent { through: true, ..Default::default() }, fill: &[] }, 0);
+    let cut = p.add_combine_multi_op(
+        body,
+        sid,
+        vec![mid],
+        qymcad_core::model::CombineSpan { height: 12.0, down: 0.0, extent: qymcad_core::feature::Extent { through: true, ..Default::default() }, fill: &[] },
+        0,
+    );
     let (r2, s2) = qymcad_testkit::regenerate(&mut p);
-    for (id,er) in &r2.errors { eprintln!("ERROR in the cut {id}: {er}"); }
+    for (id, er) in &r2.errors {
+        eprintln!("ERROR in the cut {id}: {er}");
+    }
     // the groove parts the disc from the ring: two bodies of the part, together the volume
     let v2: f64 = p.timeline.iter().find(|n| n.kind.body() == Some(cut)).map(|n| n.kind.bodies()).unwrap_or_default().iter().filter_map(|b| s2.get(b)).map(|s| s.volume()).sum();
-    let exp2 = pi*(500.0+100.0)*10.0;
+    let exp2 = pi * (500.0 + 100.0) * 10.0;
     eprintln!("after cutting with the ring: V={v2:.0}, expected {exp2:.0}");
-    assert!((v2-exp2).abs()/exp2 < 0.02, "cut with the middle ring: V={v2:.0} != {exp2:.0}");
+    assert!((v2 - exp2).abs() / exp2 < 0.02, "cut with the middle ring: V={v2:.0} != {exp2:.0}");
 }

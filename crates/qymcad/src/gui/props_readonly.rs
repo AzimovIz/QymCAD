@@ -18,12 +18,7 @@ mod tests {
     fn the_properties_panel_has_no_editing_widgets() {
         let src = crate::gui::panels_source::PANELS;
         let a = src.find("fn feature_props").expect("the feature properties panel is there");
-        let b = ["\n    pub(super) fn ", "\n    pub(crate) fn ", "\n    fn ", "\npub(crate) fn ", "\nfn "]
-            .iter()
-            .filter_map(|m| src[a..].find(m))
-            .min()
-            .map(|i| a + i)
-            .unwrap_or(src.len());
+        let b = ["\n    pub(super) fn ", "\n    pub(crate) fn ", "\n    fn ", "\npub(crate) fn ", "\nfn "].iter().filter_map(|m| src[a..].find(m)).min().map(|i| a + i).unwrap_or(src.len());
         let body = &src[a..b];
         for w in ["DragValue", "selectable_value", "checkbox", "TextEdit"] {
             assert!(
@@ -66,10 +61,7 @@ mod tests {
             crate::gui::commands::start_feat_cmd_edit(&mut app.part_ctx(), fid);
             let has_params = !app.tools.cmd.params.is_empty();
             let opened = app.tools.armed.cmd_kind() != 0;
-            assert!(
-                opened || !has_params,
-                "\"{name}\": the command did not open, so the feature cannot be edited from the properties panel"
-            );
+            assert!(opened || !has_params, "\"{name}\": the command did not open, so the feature cannot be edited from the properties panel");
         }
     }
 }

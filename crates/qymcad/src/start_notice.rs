@@ -29,12 +29,7 @@ pub fn tell_the_person(failure: &StartFailure) {
     }
     // The blocking call is right HERE and nowhere else: there is no frame loop left to hold up - the
     // window never opened - and the program has nothing to do but say this and stop.
-    rfd::MessageDialog::new()
-        .set_level(rfd::MessageLevel::Error)
-        .set_title(&title)
-        .set_description(&body)
-        .set_buttons(rfd::MessageButtons::Ok)
-        .show();
+    rfd::MessageDialog::new().set_level(rfd::MessageLevel::Error).set_title(&title).set_description(&body).set_buttons(rfd::MessageButtons::Ok).show();
 }
 
 #[cfg(test)]

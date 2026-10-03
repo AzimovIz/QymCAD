@@ -19,11 +19,7 @@ fn the_build_that_saved_the_file_is_written_into_it() {
     p.meta.version = "rev. B".into(); // the PERSON's version - it must not be overwritten by ours
 
     let text = to_ron(&p).expect("the document serialises");
-    assert!(
-        text.contains("QymCAD 9.9.9 (deadbeef1, 2026-08-25)"),
-        "the file does not name the build that wrote it:\n{}",
-        &text[..text.len().min(400)]
-    );
+    assert!(text.contains("QymCAD 9.9.9 (deadbeef1, 2026-08-25)"), "the file does not name the build that wrote it:\n{}", &text[..text.len().min(400)]);
 
     let back = from_ron(&text).expect("the document reads back");
     assert_eq!(back.meta.saved_by, producer(), "the stamp did not survive the file");

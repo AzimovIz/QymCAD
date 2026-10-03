@@ -7,7 +7,14 @@ use qymcad_core::feature::Purpose;
 use qymcad_core::model::{Constraint, EntityKind, Project};
 
 fn radii(p: &Project, si: usize) -> Vec<f64> {
-    let mut r: Vec<f64> = p.sketches[si].entities.iter().filter_map(|e| match e.kind { EntityKind::Circle { r, .. } => Some(r), _ => None }).collect();
+    let mut r: Vec<f64> = p.sketches[si]
+        .entities
+        .iter()
+        .filter_map(|e| match e.kind {
+            EntityKind::Circle { r, .. } => Some(r),
+            _ => None,
+        })
+        .collect();
     r.sort_by(|a, b| a.total_cmp(b));
     r
 }

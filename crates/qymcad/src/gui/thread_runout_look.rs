@@ -109,17 +109,8 @@ mod tests {
     #[test]
     #[ignore]
     fn look_at_the_reported_thread() {
-        let spec = ThreadSpec {
-            standard: ThreadStandard::Custom,
-            nominal_d: 40.0,
-            pitch: 5.0,
-            fit: 0.2,
-            custom_angle: 80.0,
-            custom_depth: 3.6,
-            crest_r: Some(0.0),
-            root_r: Some(0.0),
-            ..Default::default()
-        };
+        let spec =
+            ThreadSpec { standard: ThreadStandard::Custom, nominal_d: 40.0, pitch: 5.0, fit: 0.2, custom_angle: 80.0, custom_depth: 3.6, crest_r: Some(0.0), root_r: Some(0.0), ..Default::default() };
         let g = spec.geometry();
         eprintln!("major {:.3}, pitch_d {:.3}, minor {:.3}, depth {:.3}, angle {:.1}, pitch {:.3}", g.major_d, g.pitch_d, g.minor_d, g.depth, g.angle_deg, g.pitch);
         eprintln!("the groove has {} edges", g.groove.len());

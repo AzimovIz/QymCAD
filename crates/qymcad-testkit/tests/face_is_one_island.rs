@@ -41,11 +41,7 @@ fn frame_with_a_chewed_rim() -> (Project, u64, u64) {
 fn build_frame_with_a_chewed_rim() -> (Project, u64, u64) {
     let mut p = Project::default();
     p.new_document();
-    let sid = p.add_line_sketch(
-        "Sketch 1",
-        vec![Point2::new(0.0, 0.0), Point2::new(50.0, 0.0), Point2::new(50.0, 50.0), Point2::new(0.0, 50.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("Sketch 1", vec![Point2::new(0.0, 0.0), Point2::new(50.0, 0.0), Point2::new(50.0, 50.0), Point2::new(0.0, 50.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {
@@ -64,22 +60,14 @@ fn build_frame_with_a_chewed_rim() -> (Project, u64, u64) {
 
     // the FRONT rim is eaten by a fillet: two top edges at y about 0 and y about 2, radius 1 — exactly
     // the full width of the wall, as in the real part.
-    let front: Vec<u32> = p.regen_edges[&frame]
-        .iter()
-        .filter(|e| (e.a[2] - 50.0).abs() < 1e-6 && (e.b[2] - 50.0).abs() < 1e-6 && e.mid[1] < 2.5)
-        .map(|e| e.id)
-        .collect();
+    let front: Vec<u32> = p.regen_edges[&frame].iter().filter(|e| (e.a[2] - 50.0).abs() < 1e-6 && (e.b[2] - 50.0).abs() < 1e-6 && e.mid[1] < 2.5).map(|e| e.id).collect();
     assert_eq!(front.len(), 2, "there are two edges at the top front (outer and inner), and {} were found", front.len());
     let filleted = p.add_fillet_ref(frame, 1.0, qymcad_core::refs::Ref::picks(&front));
     let (rep, _) = qymcad_testkit::regenerate(&mut p);
     assert!(rep.errors.is_empty(), "the fillet must build: {:?}", rep.errors);
 
     // the BACK rim is eaten by a chamfer on the outer edge at y about 50.
-    let back: Vec<u32> = p.regen_edges[&filleted]
-        .iter()
-        .filter(|e| (e.a[2] - 50.0).abs() < 1e-6 && (e.b[2] - 50.0).abs() < 1e-6 && e.mid[1] > 49.5)
-        .map(|e| e.id)
-        .collect();
+    let back: Vec<u32> = p.regen_edges[&filleted].iter().filter(|e| (e.a[2] - 50.0).abs() < 1e-6 && (e.b[2] - 50.0).abs() < 1e-6 && e.mid[1] > 49.5).map(|e| e.id).collect();
     assert_eq!(back.len(), 1, "there is one outer edge at the top back, and {} were found", back.len());
     let chamfered = p.add_chamfer_ref(filleted, 2.0, qymcad_core::refs::Ref::picks(&back));
     let (rep, _) = qymcad_testkit::regenerate(&mut p);
@@ -138,12 +126,7 @@ fn pushing_one_rim_strip_lifts_only_it() {
 
     let v1 = p.bodies.iter().find(|b| b.id == pushed).expect("the new body").mesh.volume();
     let want = strip.area * 5.0;
-    assert!(
-        (v1 - v0 - want).abs() < 1.0,
-        "pushing a strip of S={:.2} by 5 mm must add {want:.2} mm^3, and it added {:.2} — more than one face went up",
-        strip.area,
-        v1 - v0
-    );
+    assert!((v1 - v0 - want).abs() < 1.0, "pushing a strip of S={:.2} by 5 mm must add {want:.2} mm^3, and it added {:.2} — more than one face went up", strip.area, v1 - v0);
 }
 
 /// AND THE SECOND STRIP PUSHES JUST LIKE THE FIRST.

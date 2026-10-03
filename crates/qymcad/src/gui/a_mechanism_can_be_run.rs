@@ -18,12 +18,7 @@ mod tests {
     /// A point ON THE BODY that can be clicked: the centre of its topmost face.
     fn aim(app: &App, body: Id) -> [f64; 3] {
         let wt = app.project.body_display_transform(body, qymcad_ui_state::current_ctx_id(&app.active_path, &app.project));
-        let f = app
-            .project
-            .regen_faces
-            .get(&body)
-            .and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z)))
-            .expect("the body has faces");
+        let f = app.project.regen_faces.get(&body).and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z))).expect("the body has faces");
         qymcad_core::feature::apply12(&wt, [f.centroid.x, f.centroid.y, f.centroid.z])
     }
 
@@ -56,10 +51,7 @@ mod tests {
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
         let jid = app.project.joints.last().map(|j| j.id).expect("two clicks must create a joint");
         let j = app.project.joints.iter().find(|x| x.id == jid).expect("the joint");
-        assert!(
-            j.limit_min.iter().chain(j.limit_max.iter()).all(|b| b.is_none()),
-            "GUARD: the joint must have no limits, otherwise there is nothing to check"
-        );
+        assert!(j.limit_min.iter().chain(j.limit_max.iter()).all(|b| b.is_none()), "GUARD: the joint must have no limits, otherwise there is nothing to check");
         (jid, mine[1])
     }
 
@@ -88,11 +80,7 @@ mod tests {
             }
         }
         assert!(span > 1e-6, "GUARD: the extent of the part along the travel axis is zero, so there is nothing to compare with");
-        assert!(
-            ((hi - lo) - span).abs() < 1e-6,
-            "the default travel must equal the length of the part along the axis of motion ({span:.4}), and it is {:.4}",
-            hi - lo
-        );
+        assert!(((hi - lo) - span).abs() < 1e-6, "the default travel must equal the length of the part along the axis of motion ({span:.4}), and it is {:.4}", hi - lo);
     }
 
     /// AND THE RUN REALLY CARRIES THE PART: from the start of the range to its end it covers the whole travel.
@@ -113,10 +101,6 @@ mod tests {
         };
         let (start, end) = (at(&mut app, lo), at(&mut app, hi));
         let went = ((end[0] - start[0]).powi(2) + (end[1] - start[1]).powi(2) + (end[2] - start[2]).powi(2)).sqrt();
-        assert!(
-            (went - (hi - lo)).abs() < 1e-3,
-            "a run from {lo:.4} to {hi:.4} must carry the part {:.4}, and it travelled {went:.4}",
-            hi - lo
-        );
+        assert!((went - (hi - lo)).abs() < 1e-3, "a run from {lo:.4} to {hi:.4} must carry the part {:.4}, and it travelled {went:.4}", hi - lo);
     }
 }

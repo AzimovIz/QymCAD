@@ -82,10 +82,7 @@ fn a_tangent_puts_the_shaft_on_the_plane() {
     // THE SHAFT AXIS SITS EXACTLY ONE RADIUS ABOVE THE PLANE: the shaft lies ON it.
     let at = apply12(&p.world_transform(cs), [0.0, 0.0, 0.0]);
     let above = at[2] - plane.centroid[2];
-    assert!(
-        (above - radius).abs() < 1e-3,
-        "the shaft did not lie on the plane: its axis is {above:.3} above the face, and the radius is {radius:.3}"
-    );
+    assert!((above - radius).abs() < 1e-3, "the shaft did not lie on the plane: its axis is {above:.3} above the face, and the radius is {radius:.3}");
 }
 
 /// A SHAFT STANDING ON ITS END IS LAID DOWN ON THE PLANE.
@@ -176,11 +173,7 @@ fn two_shafts_touch_side_by_side_at_the_sum_of_their_radii() {
 
     let at = apply12(&p.world_transform(c2), [0.0, 0.0, 0.0]);
     let between = (at[0] * at[0] + at[1] * at[1]).sqrt(); // both axes along Z, the first at the origin
-    assert!(
-        (between - (r1 + r2)).abs() < 1e-2,
-        "the shafts did not touch side by side: {between:.3} between the axes, and the sum of the radii is {:.3}",
-        r1 + r2
-    );
+    assert!((between - (r1 + r2)).abs() < 1e-2, "the shafts did not touch side by side: {between:.3} between the axes, and the sum of the radii is {:.3}", r1 + r2);
     // AND IT WAS NOT PULLED INSIDE: the side is chosen by proximity, and the shaft stood OUTSIDE.
     assert!(between > r1, "the smaller shaft was dragged inside the larger one: {between:.3} between the axes at radius {r1:.3}");
 }
@@ -193,7 +186,14 @@ fn ball(p: &mut Project, r: f64) -> (Id, Id) {
     let s = p.new_sketch("ball");
     let sid = p.sketches[s].id;
     p.add_sketch_node(sid, "ball");
-    p.add_arc_entity(s, qymcad_core::geom::Point2::new(0.0, 0.0), qymcad_core::geom::Point2::new(-r, 0.0), qymcad_core::geom::Point2::new(r, 0.0), qymcad_core::feature::Winding::Ccw, qymcad_core::feature::Purpose::Real);
+    p.add_arc_entity(
+        s,
+        qymcad_core::geom::Point2::new(0.0, 0.0),
+        qymcad_core::geom::Point2::new(-r, 0.0),
+        qymcad_core::geom::Point2::new(r, 0.0),
+        qymcad_core::feature::Winding::Ccw,
+        qymcad_core::feature::Purpose::Real,
+    );
     p.add_line_entity(s, r, 0.0, -r, 0.0, qymcad_core::feature::Purpose::Real);
     p.regen_sketch(s);
     let cid = p.sketches[s].contour_ids.iter().copied().find(|k| p.contour_profile_xy(*k).is_some()).expect("semicircle contour");
@@ -274,10 +274,7 @@ fn a_ball_settles_on_the_plate_at_exactly_its_radius() {
 
     let at = apply12(&p.world_transform(cb), [0.0, 0.0, 0.0]);
     let above = at[2] - plane.centroid[2];
-    assert!(
-        (above - radius).abs() < 1e-3,
-        "the ball did not settle on the plate: its centre is {above:.3} above the face, and the radius is {radius:.3}"
-    );
+    assert!((above - radius).abs() < 1e-3, "the ball did not settle on the plate: its centre is {above:.3} above the face, and the radius is {radius:.3}");
     // and it was NOT flipped under the plate: the side is chosen by the current position
     assert!(above > 0.0, "the ball ended up UNDER the plate ({above:.3}) — the wrong side was chosen");
 }
@@ -325,10 +322,7 @@ fn a_shaft_inside_a_bore_touches_at_the_difference_of_radii() {
     let at = apply12(&p.world_transform(cs), [0.0, 0.0, 0.0]);
     let between = ((at[0] - 20.0).powi(2) + (at[1] - 20.0).powi(2)).sqrt();
     let want = r_bore - r_shaft;
-    assert!(
-        (between - want).abs() < 1e-2,
-        "the shaft did not settle against the bore wall FROM INSIDE: {between:.3} between the axes, and the difference of the radii is {want:.3}"
-    );
+    assert!((between - want).abs() < 1e-2, "the shaft did not settle against the bore wall FROM INSIDE: {between:.3} between the axes, and the difference of the radii is {want:.3}");
     // AND IT DID NOT POP OUT: the sum of the radii would be 13, and the shaft stood inside.
     assert!(between < r_bore, "the shaft popped out of the bore: {between:.3} between the axes at bore radius {r_bore:.3}");
 }

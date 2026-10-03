@@ -58,7 +58,10 @@ mod tests {
         assert!(gui.contains("crate::viewport_gpu::set_msaa(app.set.msaa);"), "the antialiasing setting does not reach the renderer at startup");
         let panels = crate::gui::panels_source::PANELS;
         assert!(panels.contains("settings-msaa-restart"), "the \"applies on the next start\" note is gone — the setting started lying");
-        assert!(panels.contains("crate::viewport_gpu::supported_msaa()"), "the window offers a list of its own instead of the list of the device again — that is exactly how the program was crashed at startup");
+        assert!(
+            panels.contains("crate::viewport_gpu::supported_msaa()"),
+            "the window offers a list of its own instead of the list of the device again — that is exactly how the program was crashed at startup"
+        );
         let gpu = include_str!("../viewport_gpu.rs");
         assert!(gpu.contains("probe_supported(&render_state.device"), "the device is no longer asked before the pipelines are built");
     }

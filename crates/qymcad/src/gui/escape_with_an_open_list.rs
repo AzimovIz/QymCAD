@@ -66,8 +66,8 @@ mod tests {
             let input = egui::RawInput { screen_rect: Some(self.rect), events: std::mem::take(&mut self.events), ..Default::default() };
             let rect = self.rect;
             let out = self.ctx.run_ui(input, |ui| {
-            // The frame hands in the root `Ui` now; the context comes from it.
-            let ctx = &ui.ctx().clone();
+                // The frame hands in the root `Ui` now; the context comes from it.
+                let ctx = &ui.ctx().clone();
                 app.handle_key_commands(ctx);
                 crate::gui::commands::feat_cmd_popup(&mut app.part_ctx(), ctx, rect);
             });

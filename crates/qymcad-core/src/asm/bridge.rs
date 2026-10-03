@@ -218,11 +218,7 @@ pub fn problem_of_with_pins(project: &Project, pins: &std::collections::HashMap<
     // the part that holds the mates of the grabbed body.
     if let Some((comp, local, to)) = project.drag_pull {
         if let Some(&bi) = index.get(&comp) {
-            let anchor = Anchor {
-                body: bi,
-                local: Isometry3::from_parts(Translation3::new(local[0], local[1], local[2]), UnitQuaternion::identity()),
-                roll_known: false,
-            };
+            let anchor = Anchor { body: bi, local: Isometry3::from_parts(Translation3::new(local[0], local[1], local[2]), UnitQuaternion::identity()), roll_known: false };
             problem.add(super::problem::Constraint::Pull { a: anchor, to: Vector3::new(to[0], to[1], to[2]) });
             joint_of_constraint.push(0); // The goal belongs to no mate, so the report has nothing to attribute it to.
         }
@@ -433,12 +429,7 @@ pub fn solve_project(project: &mut Project) -> Option<AssemblyReport> {
     // The mating side is decided once, before solving, and stored in the mate itself. After that only an
     // explicit flag changes it: a guess recomputed on every solve rocks the body between two solutions
     // (measured on a machine document: 300 mm back and forth).
-    let undecided: Vec<(Id, Side)> = project
-        .joints
-        .iter()
-        .filter(|j| !j.flip_decided)
-        .map(|j| (j.id, joint_side_now(project, j)))
-        .collect();
+    let undecided: Vec<(Id, Side)> = project.joints.iter().filter(|j| !j.flip_decided).map(|j| (j.id, joint_side_now(project, j))).collect();
     for (id, side) in undecided {
         if let Some(j) = project.joints.iter_mut().find(|x| x.id == id) {
             (j.flip, j.roll_flip) = (side.flip, side.roll_flip);
@@ -684,10 +675,10 @@ pub fn joint_side_now(project: &Project, j: &crate::feature::Joint) -> Side {
     let d = [m[(0, 0)], m[(1, 1)], m[(2, 2)]];
     // (main reversed, secondary reversed) -> diagonal signs of the turn
     let variants = [
-        (Side { flip: false, roll_flip: false }, [1.0, 1.0, 1.0]),   // as is
-        (Side { flip: true, roll_flip: false }, [1.0, -1.0, -1.0]),  // 180 degrees about X: main axis reversed
-        (Side { flip: false, roll_flip: true }, [-1.0, -1.0, 1.0]),  // 180 degrees about Z: secondary axis reversed
-        (Side { flip: true, roll_flip: true }, [-1.0, 1.0, -1.0]),   // both at once = 180 degrees about Y
+        (Side { flip: false, roll_flip: false }, [1.0, 1.0, 1.0]),  // as is
+        (Side { flip: true, roll_flip: false }, [1.0, -1.0, -1.0]), // 180 degrees about X: main axis reversed
+        (Side { flip: false, roll_flip: true }, [-1.0, -1.0, 1.0]), // 180 degrees about Z: secondary axis reversed
+        (Side { flip: true, roll_flip: true }, [-1.0, 1.0, -1.0]),  // both at once = 180 degrees about Y
     ];
     // On a tie, the variant with fewer turns wins. Ties are common rather than rare: when the anchors
     // need a 90-degree turn, "as is" and "secondary axis reversed" are equally far from the target and the
@@ -825,10 +816,7 @@ mod tests {
 
     #[test]
     fn matrix_round_trip_is_exact() {
-        let t = Isometry3::from_parts(
-            Translation3::new(3.0, -7.0, 11.0),
-            UnitQuaternion::from_axis_angle(&nalgebra::Unit::new_normalize(Vector3::new(1.0, 2.0, -3.0)), 0.9),
-        );
+        let t = Isometry3::from_parts(Translation3::new(3.0, -7.0, 11.0), UnitQuaternion::from_axis_angle(&nalgebra::Unit::new_normalize(Vector3::new(1.0, 2.0, -3.0)), 0.9));
         let back = pose_from12(&pose_to12(&t));
         assert!((back.translation.vector - t.translation.vector).norm() < 1e-12, "translation must survive the conversion");
         assert!(back.rotation.angle_to(&t.rotation) < 1e-12, "rotation must survive the conversion");

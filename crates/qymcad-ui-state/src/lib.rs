@@ -105,7 +105,6 @@ impl Workbench {
             Workbench::Assembly => "assembly",
         }
     }
-
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -423,7 +422,6 @@ pub struct TrimTool {
     pub keep: Option<(Id, [f64; 3])>,
     pub tool: Option<Id>,
 }
-
 
 /// UNDO, REDO AND WHAT IS SAVED: the history of the document and how far it has been written to disk.
 pub struct Edits {
@@ -1568,7 +1566,7 @@ impl Default for Settings {
             autosave_secs: 180,
             undo_cap: 40,
             ghost_alpha: 115,
-            kernel_threads: 0, // all the cores but one
+            kernel_threads: 0,   // all the cores but one
             persp_fov_deg: 35.5, // equals the former PERSP_FOV_HALF_TAN of 0.32: 2*atan(0.32)
             hotkeys: Default::default(),
             help_lang: String::new(),
@@ -2121,16 +2119,28 @@ pub enum InlineEdit {
 
 impl InlineEdit {
     pub fn note(&self) -> Option<usize> {
-        match *self { InlineEdit::Note(i) => Some(i), _ => None }
+        match *self {
+            InlineEdit::Note(i) => Some(i),
+            _ => None,
+        }
     }
     pub fn text(&self) -> Option<usize> {
-        match *self { InlineEdit::Text(i) => Some(i), _ => None }
+        match *self {
+            InlineEdit::Text(i) => Some(i),
+            _ => None,
+        }
     }
     pub fn dim(&self) -> Option<usize> {
-        match *self { InlineEdit::Dim(i) => Some(i), _ => None }
+        match *self {
+            InlineEdit::Dim(i) => Some(i),
+            _ => None,
+        }
     }
     pub fn circle(&self) -> Option<Id> {
-        match *self { InlineEdit::Circle(i) => Some(i), _ => None }
+        match *self {
+            InlineEdit::Circle(i) => Some(i),
+            _ => None,
+        }
     }
     pub fn clear(&mut self) {
         *self = InlineEdit::None;
@@ -2170,7 +2180,10 @@ impl Picking {
         matches!(self, Picking::SketchPlane(_))
     }
     pub fn plane_face(&self) -> Option<Id> {
-        match *self { Picking::SketchPlane(f) => f, _ => None }
+        match *self {
+            Picking::SketchPlane(f) => f,
+            _ => None,
+        }
     }
     pub fn set_plane_face(&mut self, f: Option<Id>) {
         if self.is_sketch_plane() {
@@ -2178,17 +2191,26 @@ impl Picking {
         }
     }
     pub fn replace_sketch(&self) -> Option<usize> {
-        match *self { Picking::ReplaceSketch(i) => Some(i), _ => None }
+        match *self {
+            Picking::ReplaceSketch(i) => Some(i),
+            _ => None,
+        }
     }
     pub fn fillet_all(&self) -> bool {
         *self == Picking::FilletAll
     }
     pub fn contour(&self) -> Option<ContourSlot> {
-        match *self { Picking::Contour(s) => Some(s), _ => None }
+        match *self {
+            Picking::Contour(s) => Some(s),
+            _ => None,
+        }
     }
     /// Which command is waiting for a sketch, if any.
     pub fn sketch_for(&self) -> Option<u8> {
-        match *self { Picking::SketchFor(k) => Some(k), _ => None }
+        match *self {
+            Picking::SketchFor(k) => Some(k),
+            _ => None,
+        }
     }
 
     /// THE WORDS FOR "THIS PICK IS CANCELLED", for the modes that Escape simply puts down.
@@ -2350,7 +2372,7 @@ impl GeomSelection {
     /// If a description of a DIFFERENT kind was there before (say "everything parallel"), it is
     /// replaced — different intents must not be mixed silently.
     pub fn describe_edges_of_face(&mut self, fid: u32) {
-                self.described = Some(match self.described.take() {
+        self.described = Some(match self.described.take() {
             Some(Query::Adjacent(inner)) => Query::Adjacent(Box::new(Query::Union(inner, Box::new(Query::Id(fid))))),
             _ => Query::Adjacent(Box::new(Query::Id(fid))),
         });
@@ -2419,10 +2441,10 @@ impl Cam3 {
 /// to one another.
 #[derive(Default)]
 pub struct HelpWin {
-pub open: bool,
-pub article: String,
-pub back: Vec<String>,
-pub query: String,
+    pub open: bool,
+    pub article: String,
+    pub back: Vec<String>,
+    pub query: String,
 }
 
 impl HelpWin {
@@ -2822,7 +2844,6 @@ pub enum AxisHit {
     Edge(usize),
     Face(Id, u32),
 }
-
 
 /// A CATALOGUE KEY WRAPPED SO THAT IT CANNOT BE DRAWN.
 ///
@@ -3399,11 +3420,7 @@ impl Waiting {
 
 impl Default for Waiting {
     fn default() -> Self {
-        Self {
-            splash_until: Some(std::time::Instant::now() + SPLASH_MIN),
-            save_since: None,
-            save_shown: None,
-        }
+        Self { splash_until: Some(std::time::Instant::now() + SPLASH_MIN), save_since: None, save_shown: None }
     }
 }
 
@@ -3419,10 +3436,7 @@ pub struct Interference {
 
 impl Default for Interference {
     fn default() -> Self {
-        Self {
-            pairs: Vec::new(),
-            rev: u64::MAX,
-        }
+        Self { pairs: Vec::new(), rev: u64::MAX }
     }
 }
 
@@ -4265,7 +4279,9 @@ pub enum BarAsk {
     Undo,
     Redo,
     /// The clipboard.
-    Clipboard { cut: bool },
+    Clipboard {
+        cut: bool,
+    },
     Paste,
     /// Rebuild everything from the timeline.
     RebuildEverything,
@@ -4362,7 +4378,10 @@ pub enum WinAsk {
     Save,
     /// Jump to a sketch or a feature: step into its component (if any) and select it. ONE request,
     /// because stepping in clears the selection.
-    GoTo { owner: Option<Id>, sel: Sel },
+    GoTo {
+        owner: Option<Id>,
+        sel: Sel,
+    },
     /// Bring a part of the library into the document.
     InsertPart(PartSource),
     /// Write the settings out, or read them in.
@@ -4710,13 +4729,9 @@ pub fn invalidate(regen: &mut Rebuilding) {
     regen.geom_rev = regen.geom_rev.wrapping_add(1); // invalidate the 3D render cache
 }
 
-
 pub fn to_world(view: &View2d, rect: Rect, s: Pos2) -> Point2 {
     let c = rect.center();
-    Point2::new(
-        (view.center.x + (s.x - c.x) / view.scale) as f64,
-        (view.center.y - (s.y - c.y) / view.scale) as f64,
-    )
+    Point2::new((view.center.x + (s.x - c.x) / view.scale) as f64, (view.center.y - (s.y - c.y) / view.scale) as f64)
 }
 
 /// The index of the note under a screen point (a rough bounding box of the text).
@@ -4780,13 +4795,16 @@ pub fn line_screen_dir(project: &Project, view: &View2d, si: usize, a: Id, b: Id
 pub fn sel_circle_centers(project: &Project, sel_sk: &SketchSelection, si: usize) -> Vec<Id> {
     use qymcad_core::model::EntityKind;
     let Some(s) = project.sketches.get(si) else { return Vec::new() };
-    sel_sk.items
+    sel_sk
+        .items
         .iter()
         .filter(|(k, _)| *k == 1)
-        .filter_map(|(_, eid)| s.entities.iter().find(|e| e.id == *eid).and_then(|e| match e.kind {
-            EntityKind::Circle { center, .. } | EntityKind::Arc { center, .. } => Some(center),
-            _ => None,
-        }))
+        .filter_map(|(_, eid)| {
+            s.entities.iter().find(|e| e.id == *eid).and_then(|e| match e.kind {
+                EntityKind::Circle { center, .. } | EntityKind::Arc { center, .. } => Some(center),
+                _ => None,
+            })
+        })
         .collect()
 }
 
@@ -4824,9 +4842,7 @@ pub fn radius_of(project: &Project, si: usize, c: Id) -> Option<f64> {
     let s = project.sketches.get(si)?;
     s.entities.iter().find_map(|e| match e.kind {
         EntityKind::Circle { center, r } if center == c => Some(r),
-        EntityKind::Arc { center, a, .. } if center == c => sketch_pt(project, si, a)
-            .zip(sketch_pt(project, si, center))
-            .map(|(pa, pc)| ((pa.x - pc.x).powi(2) + (pa.y - pc.y).powi(2)).sqrt()),
+        EntityKind::Arc { center, a, .. } if center == c => sketch_pt(project, si, a).zip(sketch_pt(project, si, center)).map(|(pa, pc)| ((pa.x - pc.x).powi(2) + (pa.y - pc.y).powi(2)).sqrt()),
         _ => None,
     })
 }
@@ -5094,7 +5110,6 @@ impl Screen<'_> {
     }
 }
 
-
 /// The body is shown only as CONTEXT (a neighbouring part while `show_context` is on) rather than as
 /// the active part, so it is drawn as a ghost and not picked as one's own (edit-in-context).
 pub fn body_is_ghost(dc: &DrawCtx, mi: usize) -> bool {
@@ -5283,7 +5298,11 @@ pub fn datum_render_transform(pn: &Painting, datum_id: Id) -> Option<[f64; 12]> 
         .project
         .timeline
         .iter()
-        .find(|n| matches!(n.kind, FK::DatumPoint { point } if point == datum_id) || matches!(n.kind, FK::DatumAxis { axis } if axis == datum_id) || matches!(n.kind, FK::Plane { plane } if plane == datum_id))
+        .find(|n| {
+            matches!(n.kind, FK::DatumPoint { point } if point == datum_id)
+                || matches!(n.kind, FK::DatumAxis { axis } if axis == datum_id)
+                || matches!(n.kind, FK::Plane { plane } if plane == datum_id)
+        })
         .and_then(|n| n.parent)?;
     // A datum is visible ONLY when the visibility context is the owner itself or one of its
     // descendants (we are "inside" the owner). So a Part's datums are NOT shown in the assembly or at
@@ -5397,11 +5416,7 @@ pub fn section_eff(section: &SectionTool) -> Option<([f64; 3], [f64; 3])> {
         let (s, c) = deg.to_radians().sin_cos();
         let cr = v_cross(axis, vec);
         let d = v_dot(axis, vec);
-        [
-            vec[0] * c + cr[0] * s + axis[0] * d * (1.0 - c),
-            vec[1] * c + cr[1] * s + axis[1] * d * (1.0 - c),
-            vec[2] * c + cr[2] * s + axis[2] * d * (1.0 - c),
-        ]
+        [vec[0] * c + cr[0] * s + axis[0] * d * (1.0 - c), vec[1] * c + cr[1] * s + axis[1] * d * (1.0 - c), vec[2] * c + cr[2] * s + axis[2] * d * (1.0 - c)]
     };
     let n = v_norm(rot(rot(nn, u, section.rot[0]), v, section.rot[1]));
     let o = [o[0] + n[0] * section.offset, o[1] + n[1] * section.offset, o[2] + n[2] * section.offset];
@@ -5481,7 +5496,6 @@ pub fn tallest_body(pn: &Painting) -> f64 {
     visible_mesh_items(pn).iter().filter_map(|m| m.mesh.bounds()).map(|bb| bb.max.z - bb.min.z).fold(0.0, f64::max)
 }
 
-
 /// WHAT `body_shown` ACTUALLY DEPENDS ON, as one number - the key of the cache below.
 ///
 /// The geometry revision alone is not enough: the answer also turns on the context, on the "show neighbours"
@@ -5522,10 +5536,7 @@ pub fn shown_bodies(pn: &Painting) -> Vec<(usize, Id)> {
             return c.value.list.clone();
         }
     }
-    let list: Vec<(usize, Id)> = (0..pn.project.bodies.len())
-        .filter(|&mi| body_shown(pn.body_view(), mi))
-        .filter_map(|mi| pn.project.mesh_id(mi).map(|b| (mi, b)))
-        .collect();
+    let list: Vec<(usize, Id)> = (0..pn.project.bodies.len()).filter(|&mi| body_shown(pn.body_view(), mi)).filter_map(|mi| pn.project.mesh_id(mi).map(|b| (mi, b))).collect();
     pn.cache.shown_bodies.borrow_mut().put(key, ShownBodies { ctx, list: list.clone() });
     list
 }
@@ -5559,32 +5570,32 @@ pub fn visible_mesh_items<'a>(pn: &'a Painting) -> Vec<SceneMesh<'a>> {
     let hl = highlight_mesh_set(pn.project, &pn.sel);
     // every mesh carries the WORLD transform of its owning component: a body is built in the part's
     // local frame, and `world_transform` (composed up the assembly tree) places it into the world.
-        // While a modifier feature (shell, hole, fillet, chamfer and so on) is being edited, the state
-        // BEFORE it is shown: its RESULT and its whole descendant chain are hidden. The consumed SOURCE
-        // is shown by `body_shown`, which is also what throws consumed bodies away — keeping a SECOND
-        // check of the same thing here was a mistake: the exception for the source ended up behind an
-        // earlier refusal and never worked.
-        let edit_hide = edit_hidden_bodies(pn.cmd, pn.project);
-        let ctx = current_ctx_id(pn.active_path, pn.project); // the placement is RELATIVE to the active context (a part sits at the origin, an assembly in place)
-        // THE PLACEMENT IS ASKED ONCE PER OWNER, not once per body. `body_display_transform` inverts and
-        // multiplies its way up the component tree, looking every level up by a linear scan; on a document of
-        // 1296 bodies that pass is what the frame was being spent on. Bodies of one part share one answer.
-        let mut placed: std::collections::HashMap<Id, [f64; 12]> = std::collections::HashMap::new();
-        // WHOSE EACH BODY IS, in ONE pass over the timeline instead of one pass per body. Asked body by body
-        // it is 1.7 million comparisons on a document of 1296 bodies, every frame.
-        // THE FIRST NODE THAT OWNS THE BODY, exactly as `Project::body_owner` answers: a body travels through
-        // the nodes that consume and remake it, and the later ones may sit in another component. Taking the
-        // last one instead turned parts into ghosts of a foreign context and placed them by the wrong frame.
-        let mut owner_of: std::collections::HashMap<Id, Option<Id>> = std::collections::HashMap::new();
-        for n in &pn.project.timeline {
-            for b in n.kind.bodies() {
-                owner_of.entry(b).or_insert(n.parent);
-            }
+    // While a modifier feature (shell, hole, fillet, chamfer and so on) is being edited, the state
+    // BEFORE it is shown: its RESULT and its whole descendant chain are hidden. The consumed SOURCE
+    // is shown by `body_shown`, which is also what throws consumed bodies away — keeping a SECOND
+    // check of the same thing here was a mistake: the exception for the source ended up behind an
+    // earlier refusal and never worked.
+    let edit_hide = edit_hidden_bodies(pn.cmd, pn.project);
+    let ctx = current_ctx_id(pn.active_path, pn.project); // the placement is RELATIVE to the active context (a part sits at the origin, an assembly in place)
+                                                          // THE PLACEMENT IS ASKED ONCE PER OWNER, not once per body. `body_display_transform` inverts and
+                                                          // multiplies its way up the component tree, looking every level up by a linear scan; on a document of
+                                                          // 1296 bodies that pass is what the frame was being spent on. Bodies of one part share one answer.
+    let mut placed: std::collections::HashMap<Id, [f64; 12]> = std::collections::HashMap::new();
+    // WHOSE EACH BODY IS, in ONE pass over the timeline instead of one pass per body. Asked body by body
+    // it is 1.7 million comparisons on a document of 1296 bodies, every frame.
+    // THE FIRST NODE THAT OWNS THE BODY, exactly as `Project::body_owner` answers: a body travels through
+    // the nodes that consume and remake it, and the later ones may sit in another component. Taking the
+    // last one instead turned parts into ghosts of a foreign context and placed them by the wrong frame.
+    let mut owner_of: std::collections::HashMap<Id, Option<Id>> = std::collections::HashMap::new();
+    for n in &pn.project.timeline {
+        for b in n.kind.bodies() {
+            owner_of.entry(b).or_insert(n.parent);
         }
-        // A GHOST IS A PROPERTY OF THE OWNER, not of the body: every body of one part answers alike.
-        let root = pn.project.root;
-        let mut ghostly: std::collections::HashMap<Id, bool> = std::collections::HashMap::new();
-        shown_bodies(pn)
+    }
+    // A GHOST IS A PROPERTY OF THE OWNER, not of the body: every body of one part answers alike.
+    let root = pn.project.root;
+    let mut ghostly: std::collections::HashMap<Id, bool> = std::collections::HashMap::new();
+    shown_bodies(pn)
             .into_iter()
             .filter(|(_, b)| !edit_hide.contains(b)) // the feature being edited plus its descendant chain
             .filter_map(|(mi, b)| pn.project.bodies.get(mi).map(|body| (mi, b, &body.mesh)))
@@ -6490,14 +6501,7 @@ macro_rules! text_ctx_of {
 #[macro_export]
 macro_rules! editing_of {
     ($x:expr) => {
-        $crate::Editing {
-            project: &mut $x.project,
-            edits: &mut $x.disk.edits,
-            regen: &mut $x.regen,
-            sel: &mut $x.chosen.sel,
-            status: &mut $x.status,
-            view: &mut $x.viewing.view,
-        }
+        $crate::Editing { project: &mut $x.project, edits: &mut $x.disk.edits, regen: &mut $x.regen, sel: &mut $x.chosen.sel, status: &mut $x.status, view: &mut $x.viewing.view }
     };
 }
 
@@ -6505,14 +6509,7 @@ macro_rules! editing_of {
 #[macro_export]
 macro_rules! editing_in {
     ($x:expr) => {
-        $crate::Editing {
-            project: &mut *$x.project,
-            edits: &mut *$x.edits,
-            regen: &mut *$x.regen,
-            sel: &mut *$x.sel,
-            status: &mut *$x.status,
-            view: &mut *$x.view,
-        }
+        $crate::Editing { project: &mut *$x.project, edits: &mut *$x.edits, regen: &mut *$x.regen, sel: &mut *$x.sel, status: &mut *$x.status, view: &mut *$x.view }
     };
 }
 
@@ -6559,17 +6556,29 @@ impl Armed {
     /// The code of the drawing tool in hand, or zero. Named as the field it replaces, so that a reading
     /// site says the same thing it said before.
     pub fn draw_kind(&self) -> u8 {
-        if let Armed::Draw(k) = self { *k } else { 0 }
+        if let Armed::Draw(k) = self {
+            *k
+        } else {
+            0
+        }
     }
 
     /// The code of the click-acting tool, or zero.
     pub fn click_op(&self) -> u8 {
-        if let Armed::ClickOp(k) = self { *k } else { 0 }
+        if let Armed::ClickOp(k) = self {
+            *k
+        } else {
+            0
+        }
     }
 
     /// The code of the editing button in hand, or zero.
     pub fn modify(&self) -> u8 {
-        if let Armed::Modify(k) = self { *k } else { 0 }
+        if let Armed::Modify(k) = self {
+            *k
+        } else {
+            0
+        }
     }
 
     /// THE BUTTON'S OWN NUMBER of the editing tool in hand (0 delete, 1 mirror, 2 and 3 the patterns, 4 and 5 fillet and
@@ -6590,22 +6599,38 @@ impl Armed {
 
     /// The code of the move tool, or zero.
     pub fn move_op(&self) -> u8 {
-        if let Armed::Move(k) = self { *k } else { 0 }
+        if let Armed::Move(k) = self {
+            *k
+        } else {
+            0
+        }
     }
 
     /// The code of the sketch pattern, or zero.
     pub fn pat_op(&self) -> u8 {
-        if let Armed::Pattern(k) = self { *k } else { 0 }
+        if let Armed::Pattern(k) = self {
+            *k
+        } else {
+            0
+        }
     }
 
     /// The kind of dimension being placed, or zero.
     pub fn dim_kind(&self) -> u8 {
-        if let Armed::Dimension(k) = self { *k } else { 0 }
+        if let Armed::Dimension(k) = self {
+            *k
+        } else {
+            0
+        }
     }
 
     /// The kind of feature command being run, or zero.
     pub fn cmd_kind(&self) -> u8 {
-        if let Armed::Command(k) = self { *k } else { 0 }
+        if let Armed::Command(k) = self {
+            *k
+        } else {
+            0
+        }
     }
 
     /// Whether a feature command is open.
@@ -6889,16 +6914,7 @@ impl Default for Viewing {
     /// `Rect::NOTHING` rather than a zero rectangle: an empty rect at the origin would read as a canvas
     /// one pixel wide at the corner, and the barrier that uses it would let a frame through.
     fn default() -> Self {
-        Viewing {
-            cam: Cam3::default(),
-            view: View2d::default(),
-            mode_3d: false,
-            view_rect: egui::Rect::NOTHING,
-            view_anim: None,
-            view_restore: None,
-            view_dragging: false,
-            nav_stash: Vec::new(),
-        }
+        Viewing { cam: Cam3::default(), view: View2d::default(), mode_3d: false, view_rect: egui::Rect::NOTHING, view_anim: None, view_restore: None, view_dragging: false, nav_stash: Vec::new() }
     }
 }
 
@@ -6974,7 +6990,6 @@ pub struct Tools<'a> {
     /// Which drawing tool is chosen.
     pub tool: &'a mut SketchTool,
 }
-
 
 /// ONE DRAWING TOOL THAT CAN BE IN HAND.
 ///
@@ -7068,7 +7083,6 @@ pub fn armed_draw_tools(t: &Tools) -> Vec<DrawTool> {
     out
 }
 
-
 /// TAKE THE MEASURING TOOL, or put it down.
 ///
 /// LIKE EVERY OTHER TOOL: the others are released FIRST, and only then is this one taken. The reverse
@@ -7160,16 +7174,7 @@ pub struct BodyView<'a> {
 #[macro_export]
 macro_rules! body_view_of {
     ($x:expr) => {
-        $crate::BodyView {
-            armed: &$x.tools.armed,
-            active_path: &$x.active_path,
-            cache: &$x.cache,
-            cmd: &$x.tools.cmd,
-            project: &$x.project,
-            regen: &$x.regen,
-            sketch_ses: $x.sketch_ses,
-            win: &$x.win,
-        }
+        $crate::BodyView { armed: &$x.tools.armed, active_path: &$x.active_path, cache: &$x.cache, cmd: &$x.tools.cmd, project: &$x.project, regen: &$x.regen, sketch_ses: $x.sketch_ses, win: &$x.win }
     };
 }
 
@@ -7177,16 +7182,7 @@ macro_rules! body_view_of {
 #[macro_export]
 macro_rules! body_view_in {
     ($x:expr) => {
-        $crate::BodyView {
-            armed: $x.armed,
-            active_path: $x.active_path,
-            cache: &*$x.cache,
-            cmd: &*$x.cmd,
-            project: &*$x.project,
-            regen: &*$x.regen,
-            sketch_ses: *$x.sketch_ses,
-            win: &*$x.win,
-        }
+        $crate::BodyView { armed: $x.armed, active_path: $x.active_path, cache: &*$x.cache, cmd: &*$x.cmd, project: &*$x.project, regen: &*$x.regen, sketch_ses: *$x.sketch_ses, win: &*$x.win }
     };
 }
 
@@ -7200,16 +7196,7 @@ impl<'a> Painting<'a> {
 impl<'a> Painting<'a> {
     /// The visibility seven out of a whole frame's drawing state.
     pub fn body_view(&self) -> BodyView<'a> {
-        BodyView {
-            armed: self.armed,
-            active_path: self.active_path,
-            cache: self.cache,
-            cmd: self.cmd,
-            project: self.project,
-            regen: self.regen,
-            sketch_ses: self.sketch_ses,
-            win: self.win,
-        }
+        BodyView { armed: self.armed, active_path: self.active_path, cache: self.cache, cmd: self.cmd, project: self.project, regen: self.regen, sketch_ses: self.sketch_ses, win: self.win }
     }
 }
 
@@ -7295,9 +7282,6 @@ impl Tools<'_> {
         }
     }
 }
-
-
-
 
 /// WHILE A KEY IS BEING REASSIGNED: what is being waited for, and why the last press was refused.
 ///
@@ -7531,18 +7515,6 @@ pub fn dist_point_seg(p: Point2, a: Point2, b: Point2) -> f64 {
     let t = t.clamp(0.0, 1.0);
     p.dist(Point2::new(a.x + ab.x * t, a.y + ab.y * t))
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 /// WHERE THE BREADCRUMB GOES. Opening an edit records what a person just did, so that a report about a
 /// crash carries the last few steps. The record crate must not know what a crash report is, nor where it
@@ -7790,7 +7762,7 @@ pub fn linear_dim_line(project: &Project, si: usize, c: &qymcad_core::model::Con
             let ab = line_screen_dir(project, &sh.view, si, a, b, sh.rect)?;
             let foot = sa + ab * (sp - sa).dot(ab);
             let o = ab * (off as f32 * sc); // the leader runs along the line measured from
-            // its text beside it, on the side it was led to along that line - not along the dimension line itself
+                                            // its text beside it, on the side it was led to along that line - not along the dimension line itself
             Some((sp + o, foot + o, ab * if off < 0.0 { -1.0 } else { 1.0 }))
         }
         Constraint::EdgeDistance { c1, c2, m1, m2, off, .. } => {
@@ -8052,7 +8024,7 @@ pub fn tangent_arc(s: Point2, t: (f64, f64), e: Point2) -> Option<(f64, f64, f64
         return None;
     }
     let (rx, ry) = ((s.x - cx) / r, (s.y - cy) / r); // the radial direction at s
-    // the counter-clockwise tangent at s is the radial turned by +90 deg: (-ry, rx)
+                                                     // the counter-clockwise tangent at s is the radial turned by +90 deg: (-ry, rx)
     let ccw = tx * (-ry) + ty * rx > 0.0;
     Some((cx, cy, r, ccw))
 }
@@ -8103,14 +8075,6 @@ pub fn rotate_pt_about_axis(o: [f64; 3], dir: [f64; 3], ang: f64, p: [f64; 3]) -
     ]
 }
 
-
-
-
-
-
-
-
-
 /// The signed area (the edge function) used for barycentric coordinates and rasterisation.
 pub fn edge(ax: f32, ay: f32, bx: f32, by: f32, px: f32, py: f32) -> f32 {
     (bx - ax) * (py - ay) - (by - ay) * (px - ax)
@@ -8158,11 +8122,7 @@ pub fn depth_ndc(world_depth: f64, inv_d: f64, z_near: f64, z_far: f64, depth_ha
 /// components' transforms are rigid and uniform, so R * n is enough without an inverse transpose; the
 /// result is normalised.
 pub fn rotate_normal(wt: &[f64; 12], n: [f64; 3]) -> [f64; 3] {
-    v_norm([
-        wt[0] * n[0] + wt[1] * n[1] + wt[2] * n[2],
-        wt[4] * n[0] + wt[5] * n[1] + wt[6] * n[2],
-        wt[8] * n[0] + wt[9] * n[1] + wt[10] * n[2],
-    ])
+    v_norm([wt[0] * n[0] + wt[1] * n[1] + wt[2] * n[2], wt[4] * n[0] + wt[5] * n[1] + wt[6] * n[2], wt[8] * n[0] + wt[9] * n[1] + wt[10] * n[2]])
 }
 
 /// The outline polyline of an ellipse entity in WORLD coordinates (for hit-testing and drawing).
@@ -8369,10 +8329,14 @@ pub fn ensure_vertex_normals(cache: &Caches, project: &Project, regen: &Rebuildi
     if c.rev == regen.geom_rev && c.value.len() == project.bodies.len() {
         return;
     }
-    let pieces: std::collections::HashSet<qymcad_core::model::Id> = project.timeline.iter().filter_map(|n| match n.kind {
-        qymcad_core::feature::FeatureKind::MeshPiece { body, .. } => Some(body),
-        _ => None,
-    }).collect();
+    let pieces: std::collections::HashSet<qymcad_core::model::Id> = project
+        .timeline
+        .iter()
+        .filter_map(|n| match n.kind {
+            qymcad_core::feature::FeatureKind::MeshPiece { body, .. } => Some(body),
+            _ => None,
+        })
+        .collect();
     c.value = project.bodies.iter().map(|b| if pieces.contains(&b.id) { Normals::AtCorner(b.mesh.corner_normals(CREASE_DEG)) } else { Normals::AtVertex(b.mesh.vertex_normals()) }).collect();
     c.rev = regen.geom_rev;
 }
@@ -8385,9 +8349,9 @@ pub fn gpu_scene_key(pn: &Painting) -> u64 {
     let mut h = std::collections::hash_map::DefaultHasher::new();
     view_rev(pn.regen).hash(&mut h);
     (pn.set.shading == Shading::Smooth).hash(&mut h); // smooth carries a vertex normal, flat carries none - a different buffer
-    // THE COLOURS ARE NOT HERE ANY MORE, and neither is the highlight. Both live in the look table beside the
-    // vertices: changing a scheme or moving the pointer over the model rewrites two numbers per body instead
-    // of the whole scene. Measured on the reference engine: 739 MB re-uploaded for a change of highlight.
+                                                      // THE COLOURS ARE NOT HERE ANY MORE, and neither is the highlight. Both live in the look table beside the
+                                                      // vertices: changing a scheme or moving the pointer over the model rewrites two numbers per body instead
+                                                      // of the whole scene. Measured on the reference engine: 739 MB re-uploaded for a change of highlight.
     if let Some((o, n)) = section_eff(pn.section) {
         for v in o.iter().chain(n.iter()) {
             v.to_bits().hash(&mut h); // the section moved or turned, so the buffer is rebuilt
@@ -8435,10 +8399,10 @@ pub fn view_key(pn: &Painting, rect: Rect, ppp: f32) -> u64 {
     (pn.set.projection == Projection::Perspective).hash(&mut h); // perspective against orthographic changes the projection, so it goes into the raster cache key
     (pn.set.shading == Shading::Smooth).hash(&mut h); // smooth against flat shading changes the vertex colours, so it goes in too
     pn.scheme.pal.fingerprint().hash(&mut h); // the raster is already coloured by the scheme: change the scheme and it is drawn anew
-    // The selection highlight is painted into the texture, so the WHOLE set of highlighted bodies goes into the
-    // key - the one both drawing paths colour by (a body lights itself, a component its whole subtree), in a
-    // fixed order, the set being a hash set. Without it a click on a part in the tree lit nothing on the
-    // software picture until the camera moved.
+                                              // The selection highlight is painted into the texture, so the WHOLE set of highlighted bodies goes into the
+                                              // key - the one both drawing paths colour by (a body lights itself, a component its whole subtree), in a
+                                              // fixed order, the set being a hash set. Without it a click on a part in the tree lit nothing on the
+                                              // software picture until the camera moved.
     let mut lit: Vec<usize> = highlight_mesh_set(pn.project, &pn.sel).into_iter().collect();
     lit.sort_unstable();
     lit.hash(&mut h);
@@ -8664,7 +8628,15 @@ pub fn take_arrow_value(ctx: &egui::Context, cmd: &FeatCommand, key: &str) -> f6
 pub fn drag_cmd_arrow(cmd: &mut FeatCommand, gsel: &GeomSelection, project: &Project, feat: &mut FeatTarget, scr: &Screen, cur: Pos2) {
     let Some(key) = cmd.drag else { return };
     let Some((base, n, _)) = feat_cmd_axis(cmd, gsel, project) else { return };
-    let dir = if key == "down" { if feat.flip { n } else { [-n[0], -n[1], -n[2]] } } else { n };
+    let dir = if key == "down" {
+        if feat.flip {
+            n
+        } else {
+            [-n[0], -n[1], -n[2]]
+        }
+    } else {
+        n
+    };
     let (s0, s1) = (scr.at(base).0, scr.at([base[0] + dir[0], base[1] + dir[1], base[2] + dir[2]]).0);
     let pd = s1 - s0;
     let denom = (pd.x * pd.x + pd.y * pd.y) as f64;
@@ -8817,12 +8789,7 @@ pub fn visible_lineage_body(project: &qymcad_core::model::Project, body: Id) -> 
 
 /// The centre of mesh `mi`'s bounding box (world, or the Part's local frame). [0, 0, 0] when the mesh is empty.
 pub fn mesh_center(project: &qymcad_core::model::Project, mi: usize) -> [f64; 3] {
-    project
-        .bodies
-        .get(mi)
-        .and_then(|b| b.mesh.bounds())
-        .map(|b| [(b.min.x + b.max.x) / 2.0, (b.min.y + b.max.y) / 2.0, (b.min.z + b.max.z) / 2.0])
-        .unwrap_or([0.0, 0.0, 0.0])
+    project.bodies.get(mi).and_then(|b| b.mesh.bounds()).map(|b| [(b.min.x + b.max.x) / 2.0, (b.min.y + b.max.y) / 2.0, (b.min.z + b.max.z) / 2.0]).unwrap_or([0.0, 0.0, 0.0])
 }
 
 /// THE ARROW ON THE SELECTED FACE (the "push the face" handle): its origin is the centre of the face,
@@ -8901,14 +8868,6 @@ pub fn cmd_arrow_ref(pn: &Painting) -> Option<([f64; 3], [f64; 3])> {
     }
 }
 
-
-
-
-
-
-
-
-
 /// The DOF gizmo handles of a joint in the frame of the context: (the origin, [(slot, whether it is a
 /// ring, the direction axis)]). Parameters driven by an expression (`feat_dim`) are NOT free to drag and
 /// are left out.
@@ -8986,12 +8945,8 @@ pub fn joint_endpoints(dc: &DrawCtx, j: &qymcad_core::feature::Joint, rect: Rect
 /// and the joint's home is the active context (the joints of nested subassemblies are not shown in the
 /// parent - they get in the way).
 pub fn joint_visible(active_path: &[Id], project: &Project, set: &Settings, workbench: Workbench, j: &qymcad_core::feature::Joint) -> bool {
-    set.show_joints
-        && matches!(workbench, Workbench::Assembly)
-        && project.joint_in_context(j, current_ctx_id(active_path, project))
+    set.show_joints && matches!(workbench, Workbench::Assembly) && project.joint_in_context(j, current_ctx_id(active_path, project))
 }
-
-
 
 /// The geometry of the DOF gizmo handles for a kind of joint: (slot [0=angle, 1=offset, 2=offset2],
 /// whether it is a ring, the frame axis 0/1/2). It matches `JointKind::motion`: the angle turns about Z;
@@ -9000,18 +8955,16 @@ pub fn joint_slot_geom(kind: qymcad_core::feature::JointKind) -> Vec<(u8, bool, 
     use qymcad_core::feature::JointKind::*;
     match kind {
         Rigid => vec![],
-        Revolute => vec![(0, true, 2)],                        // an angle about Z
-        Slider => vec![(1, false, 2)],                         // a shift along Z
-        Cylindrical => vec![(0, true, 2), (1, false, 2)],      // an angle and a shift along Z
-        PinSlot => vec![(0, true, 2), (1, false, 0)],          // an angle about Z plus a shift along X
+        Revolute => vec![(0, true, 2)],                             // an angle about Z
+        Slider => vec![(1, false, 2)],                              // a shift along Z
+        Cylindrical => vec![(0, true, 2), (1, false, 2)],           // an angle and a shift along Z
+        PinSlot => vec![(0, true, 2), (1, false, 0)],               // an angle about Z plus a shift along X
         Planar => vec![(0, true, 2), (1, false, 0), (2, false, 1)], // an angle about Z plus shifts along X and Y
         Ball => vec![(0, true, 2), (1, true, 0), (2, true, 1)],     // angles about Z, X and Y
         // parallelism has no handles: it holds a direction, not a value - there is nothing to drag
         Parallel => vec![],
     }
 }
-
-
 
 /// ALL of the sketch diagnostics in one pass and THROUGH A CACHE (recomputed only when the imprint
 /// changes).
@@ -9126,12 +9079,7 @@ pub fn sketch_fingerprint(project: &qymcad_core::model::Project, si: usize) -> u
 }
 
 /// Whether a sketch (by id) is shown in the visibility context.
-pub fn sketch_in_ctx(
-    active_path: &[Id],
-    project: &qymcad_core::model::Project,
-    sketch_ses: SketchSession,
-    sketch_id: Id,
-) -> bool {
+pub fn sketch_in_ctx(active_path: &[Id], project: &qymcad_core::model::Project, sketch_ses: SketchSession, sketch_id: Id) -> bool {
     // NESTED ONES BELONG. The rule used to be strict equality, and in the root of an assembly EVERY
     // sketch counted as someone else's: they belong to the parts, not to the root. Because of that the
     // contours tick box in an assembly showed nothing at all - reported as there being no contours in 3D
@@ -9191,8 +9139,6 @@ pub enum CompGizmoMode {
     Joint(Id), // driven by a joint: the degree-of-freedom gizmo, offering only that joint's freedoms
 }
 
-
-
 /// The value of the parameter with snapping applied (the degree or millimetre step from the panel).
 pub fn joint_giz_value(joint: &JointCommand, set: &Settings, snap: bool) -> Option<(f64, bool)> {
     let dg = joint.giz_drag?;
@@ -9200,16 +9146,6 @@ pub fn joint_giz_value(joint: &JointCommand, set: &Settings, snap: bool) -> Opti
     let amt = if snap { (dg.amt / step).round() * step } else { dg.amt };
     Some((dg.start + amt, dg.ring))
 }
-
-
-
-
-
-
-
-
-
-
 
 /// The live wireframe preview of the active command (the prism of the profile along its extent) plus the
 /// arrow gizmo of the length.
@@ -9389,14 +9325,6 @@ pub fn armed_assembly_tools(pn: &Painting) -> Vec<AssemblyTool> {
     AssemblyTool::ALL.into_iter().filter(|&t| assembly_tool_armed(pn.joint, t)).collect()
 }
 
-
-
-
-
-
-
-
-
 /// IS THIS PARTICULAR TOOL TAKEN UP. One answer for everyone who asks.
 pub fn assembly_tool_armed(joint: &JointCommand, t: AssemblyTool) -> bool {
     match t {
@@ -9411,50 +9339,6 @@ pub fn assembly_tool_armed(joint: &JointCommand, t: AssemblyTool) -> bool {
         AssemblyTool::Repick => joint.edit_repick.is_some(),
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /// THE TOOLS OF THE ASSEMBLY WORKBENCH — everything that can be "taken up".
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -9520,8 +9404,6 @@ impl AssemblyTool {
     }
 }
 
-
-
 /// THE SECTION CAPS: an exact planar cut of every visible body, in world coordinates, cached by (plane,
 /// geom_rev, visible bodies).
 pub fn section_caps_for_frame(pn: &Painting) -> std::rc::Rc<Vec<qymcad_core::geom::Mesh>> {
@@ -9585,13 +9467,11 @@ pub fn section_caps_for_frame(pn: &Painting) -> std::rc::Rc<Vec<qymcad_core::geo
     rc
 }
 
-
-
 /// Whether the PLANE crosses the world bounding box of mesh `mi`. A cheap rejection before the
 /// expensive boolean for the section cap: a body lying entirely on one side has no cap by definition.
 pub fn mesh_crosses_plane(pn: &Painting, mi: usize, o: [f64; 3], n: [f64; 3]) -> bool {
     let Some(b) = mesh_world_bounds(pn, mi) else { return true }; // the box is unknown, so assume it cuts
-    // the box's support point along the normal: if the WHOLE box is on one side, there is no intersection
+                                                                  // the box's support point along the normal: if the WHOLE box is on one side, there is no intersection
     let (mut lo, mut hi) = (0.0, 0.0);
     for k in 0..3 {
         let (a, b2) = ((b.0[k] - o[k]) * n[k], (b.1[k] - o[k]) * n[k]);
@@ -9649,8 +9529,6 @@ pub fn mesh_world_bounds(pn: &Painting, mi: usize) -> Option<([f64; 3], [f64; 3]
     out
 }
 
-
-
 /// THE LIVE BODIES A REBUILD LEAVES: those the document holds a mesh for. A body whose node stopped building keeps
 /// both its mesh and its live body - the last good state, for the author to repair and to measure.
 ///
@@ -9671,10 +9549,10 @@ pub fn keep_live_shapes(live: &mut LiveGeom, project: &Project) {
 
 pub fn regenerate_now(rc: &mut RebuildCtx) {
     prune_dangling_features(rc.live, rc.project); // anti-ghost: on EVERY regen, orphan meshes and dangling features go
-    // THE REBUILD GRAPH: a parameter may have changed (including a named sketch dimension - those are in
-    // `param_map`) -> ONLY the features that refer to it are rebuilt. This used to mark ALL features
-    // carrying expressions, and it fired on EVERY rebuild: any trifle dragged the whole parametrics of
-    // the project through a recount.
+                                                  // THE REBUILD GRAPH: a parameter may have changed (including a named sketch dimension - those are in
+                                                  // `param_map`) -> ONLY the features that refer to it are rebuilt. This used to mark ALL features
+                                                  // carrying expressions, and it fired on EVERY rebuild: any trifle dragged the whole parametrics of
+                                                  // the project through a recount.
     mark_changed_params_dirty(rc.params_seen, rc.project);
     let _gate = qymcad_kernel::kernel_gate();
     // HOW MANY CORES THE KERNEL MAY TAKE, said where a rebuild starts rather than remembered somewhere.
@@ -9693,10 +9571,10 @@ pub fn regenerate_now(rc: &mut RebuildCtx) {
     let snaps = rc.project.snap_rebinds.load(std::sync::atomic::Ordering::Relaxed).saturating_sub(snaps_before);
     rc.live.shapes = kernel.shapes.into_inner();
     settle_params_seen(rc.params_seen, rc.project); // the rebuild HAPPENED - only now are the values "seen"
-    // the cache of live B-rep must match what the project actually holds. A regen REMOVES the mesh of a
-    // body that stopped building (a rollback, a suppression, a cascade of an error) - while its former
-    // shape stayed in the cache as a ghost: a foreign volume in the counts, wasted memory, and the risk
-    // of handing dead geometry outside.
+                                                    // the cache of live B-rep must match what the project actually holds. A regen REMOVES the mesh of a
+                                                    // body that stopped building (a rollback, a suppression, a cascade of an error) - while its former
+                                                    // shape stayed in the cache as a ghost: a foreign volume in the counts, wasted memory, and the risk
+                                                    // of handing dead geometry outside.
     keep_live_shapes(rc.live, rc.project);
     for (body, faces) in report.built {
         set_body_faces(rc.live, rc.project, body, faces); // both into the index-parallel `faces` and into the cache by body Id
@@ -9750,19 +9628,12 @@ pub fn ensure_brep(rc: &mut RebuildCtx) {
         return;
     }
     rc.live.tried_rev = Some(brep_input_key(rc.live, rc.project)); // guards against re-entering from inside a rebuild
-    // ONLY the nodes whose bodies have no live B-rep are rebuilt (their sources - also without shapes -
-    // land on the same list, so the chain comes whole). A forced regen of the entire project here would
-    // cost a full re-tessellation of 1170 imports for nothing.
-    // only what waits for a B-rep: a mesh piece never has one (see `FeatureKind::waits_for_brep`)
-    let missing: Vec<Id> = rc
-        .project
-        .timeline
-        .iter()
-        .filter(|n| n.kind.waits_for_brep())
-        .filter_map(|n| n.kind.body().map(|b| (n.id, b)))
-        .filter(|(_, b)| !rc.live.shapes.contains_key(b))
-        .map(|(id, _)| id)
-        .collect();
+                                                                   // ONLY the nodes whose bodies have no live B-rep are rebuilt (their sources - also without shapes -
+                                                                   // land on the same list, so the chain comes whole). A forced regen of the entire project here would
+                                                                   // cost a full re-tessellation of 1170 imports for nothing.
+                                                                   // only what waits for a B-rep: a mesh piece never has one (see `FeatureKind::waits_for_brep`)
+    let missing: Vec<Id> =
+        rc.project.timeline.iter().filter(|n| n.kind.waits_for_brep()).filter_map(|n| n.kind.body().map(|b| (n.id, b))).filter(|(_, b)| !rc.live.shapes.contains_key(b)).map(|(id, _)| id).collect();
     if missing.is_empty() {
         rc.live.ready = true;
         fill_model_edges_for_anchors(rc); // see above: otherwise edge anchors are dead after opening
@@ -9801,7 +9672,8 @@ pub fn settle_brep_wait(rc: &mut RebuildCtx, was_clean: bool) {
     rc.live.ready = rc.project.timeline.iter().filter(|n| n.kind.waits_for_brep()).filter_map(|n| n.kind.body()).all(|b| rc.live.shapes.contains_key(&b));
     fill_model_edges_for_anchors(rc); // anchors on edges are dead after opening otherwise (see io_jobs)
     if was_clean {
-        rc.edits.saved_key = edit_key(&DrawCtx { cam: rc.cam, set: rc.set, scheme: rc.scheme, project: rc.project, active_path: rc.active_path }); // rebuilding the cache is not an edit made by hand
+        rc.edits.saved_key = edit_key(&DrawCtx { cam: rc.cam, set: rc.set, scheme: rc.scheme, project: rc.project, active_path: rc.active_path });
+        // rebuilding the cache is not an edit made by hand
     }
 }
 
@@ -10045,8 +9917,8 @@ pub fn restore(rc: &mut RebuildCtx, snap: Snapshot) -> Vec<Id> {
     shelve_source_data(rc.live, rc.project, &mut restored);
     restored.take_source_data_from(rc.project); // the source bytes come from the live document
     restored.keep_ids_past(rc.project); // an id handed out once is never handed out again
-    // the derived topology caches never went into the snapshot — bring them back from the live state
-    // for the bodies the edit did not touch (the changed ones are rebuilt below anyway)
+                                        // the derived topology caches never went into the snapshot — bring them back from the live state
+                                        // for the bodies the edit did not touch (the changed ones are rebuilt below anyway)
     let (rf, re) = (std::mem::take(&mut rc.project.regen_faces), std::mem::take(&mut rc.project.regen_edges));
     shelve_imports(rc.live, rc.project, &restored);
     *rc.project = restored;
@@ -10180,7 +10052,11 @@ pub fn step_through_history(rc: &mut RebuildCtx, redo: bool) -> Option<Vec<Id>> 
         *before = step.snap.clone();
     }
     let cur = Step { name: step.name.clone(), snap: std::mem::replace(&mut rc.edits.baseline, step.snap.clone()) };
-    if redo { rc.edits.undo.push(cur) } else { rc.edits.redo.push(cur) }
+    if redo {
+        rc.edits.undo.push(cur)
+    } else {
+        rc.edits.redo.push(cur)
+    }
     let path = restore(rc, step.snap);
     rc.edits.committed_key = doc_key(rc.project);
     *rc.status = qymcad_i18n::tr1(if redo { "g-redone" } else { "g-undone" }, "what", &step.name);
@@ -10407,10 +10283,6 @@ impl<'a> Edit<'a> {
         self.rc.project
     }
 
-
-
-
-
     fn finish(&mut self, ok: bool) {
         if self.done {
             return;
@@ -10430,8 +10302,6 @@ impl Drop for Edit<'_> {
         self.finish(true);
     }
 }
-
-
 
 /// Clicking an anchor (a face or an edge) for a joint: the first pick becomes A, the second one (on
 /// ANOTHER part) becomes B, and a joint of the chosen kind is created. Face to face flips B so the
@@ -10457,8 +10327,6 @@ pub fn ensure_model_edges(rc: &mut RebuildCtx, body: Id) {
         rc.project.regen_edges.insert(body, edges);
     }
 }
-
-
 
 pub fn set_body_faces(live: &mut LiveGeom, project: &mut Project, body: Id, faces: Vec<MeshFace>) {
     // THE BODY WAS REBUILT — THE STORED BLOB IS STALE. It is dropped here rather than in one of the
@@ -10529,11 +10397,7 @@ pub fn exit_joint_edit(joint: &mut JointCommand, status: &mut String) {
 
 /// The name of the PART that owns body `body` (for the anchor's label in the editing popup).
 pub fn body_comp_name(project: &qymcad_core::model::Project, body: Id) -> String {
-    project
-        .body_owner(body)
-        .and_then(|o| project.components.iter().find(|c| c.id == o))
-        .map(|c| qymcad_i18n::name(&c.name))
-        .unwrap_or_else(|| "?".into())
+    project.body_owner(body).and_then(|o| project.components.iter().find(|c| c.id == o)).map(|c| qymcad_i18n::name(&c.name)).unwrap_or_else(|| "?".into())
 }
 
 /// SWEEPING A DEGREE OF FREEDOM (animating a joint).
@@ -10669,7 +10533,7 @@ pub fn dim_expr_field_in(rc: &mut RebuildCtx, ui: &mut egui::Ui, id: Id, key: &s
             } else {
                 rc.project.name_dim(nm.clone(), target.clone());
             }
-        commit_edit(rc);
+            commit_edit(rc);
             if !nm.is_empty() {
                 rc.project.mark_param_dependents_dirty_for(&nm);
             }
@@ -10738,17 +10602,7 @@ pub fn name_field(ui: &mut egui::Ui, project: &Project, id: egui::Id, model: &st
 /// not release the focus — otherwise out comes exactly the reported trouble: typing `len` and having
 /// the `n` deleted automatically. A person finishes the name or presses Escape, and meanwhile the
 /// program says what is wrong.
-pub fn field(
-    ui: &mut egui::Ui,
-    project: &Project,
-    id: egui::Id,
-    model: &str,
-    w: f32,
-    hint: &str,
-    valid: &dyn Fn(&str) -> bool,
-    with_list: bool,
-    autofocus: bool,
-) -> ExprOut {
+pub fn field(ui: &mut egui::Ui, project: &Project, id: egui::Id, model: &str, w: f32, hint: &str, valid: &dyn Fn(&str) -> bool, with_list: bool, autofocus: bool) -> ExprOut {
     let mut st: FieldState = ui.data_mut(|d| d.get_temp(id)).unwrap_or_default();
     // A VALUE SET FROM ELSEWHERE REACHES A FIELD NOBODY HAS TYPED INTO: the field that took the focus when the tool
     // opened keeps its text as a buffer, and a pick that sizes the tool (a thread sized to the cylinder picked) was
@@ -10855,10 +10709,7 @@ pub fn field(
     // area being interacted with wins. `Order::Tooltip` is higher, so the list is always visible.
     let mut picked: Option<String> = None;
     if !hits.is_empty() {
-        let area = egui::Area::new(id.with("drv"))
-            .order(egui::Order::Tooltip)
-            .fixed_pos(resp.rect.left_bottom() + egui::vec2(0.0, 2.0))
-            .constrain(true);
+        let area = egui::Area::new(id.with("drv")).order(egui::Order::Tooltip).fixed_pos(resp.rect.left_bottom() + egui::vec2(0.0, 2.0)).constrain(true);
         area.show(ui.ctx(), |ui| {
             egui::Frame::popup(ui.style()).show(ui, |ui| {
                 ui.set_min_width(resp.rect.width().max(240.0));
@@ -11038,25 +10889,11 @@ pub fn insert_driver(text: &str, name: &str, caret: usize) -> (String, usize) {
     (format!("{}{}{}", &text[..start], name, &text[end..]), start + name.len())
 }
 
-
-
 /// The length of a character in bytes, from its first byte — so that a string is never cut in the middle
 /// of a letter (names may be written in any alphabet, and `i + 1` panics there).
 pub fn c_len(text: &str, i: usize) -> usize {
     text[i..].chars().next().map(|c| c.len_utf8()).unwrap_or(1)
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 /// The state of one field between frames. It sits in the temporary memory of egui under the `id` of the
 /// field: that way the widget needs no access to `App`, so it can be called even from where `App` is
@@ -11136,13 +10973,16 @@ pub fn selected_centroid(project: &Project, sel: &Sel) -> Option<Point2> {
 pub fn sel_line_pts(project: &Project, sel_sk: &SketchSelection, si: usize) -> Vec<(Id, Id)> {
     use qymcad_core::model::EntityKind;
     let Some(s) = project.sketches.get(si) else { return Vec::new() };
-    sel_sk.items
+    sel_sk
+        .items
         .iter()
         .filter(|(k, _)| *k == 1)
-        .filter_map(|(_, eid)| s.entities.iter().find(|e| e.id == *eid).and_then(|e| match e.kind {
-            EntityKind::Line { a, b } => Some((a, b)),
-            _ => None,
-        }))
+        .filter_map(|(_, eid)| {
+            s.entities.iter().find(|e| e.id == *eid).and_then(|e| match e.kind {
+                EntityKind::Line { a, b } => Some((a, b)),
+                _ => None,
+            })
+        })
         .collect()
 }
 
@@ -11214,10 +11054,7 @@ pub fn fit(project: &Project, view: &mut View2d, rect: Rect) {
             let hi = Point2::new(mb.max.x, mb.max.y);
             b = Some(match b {
                 None => (lo, hi),
-                Some((bl, bh)) => (
-                    Point2::new(bl.x.min(lo.x), bl.y.min(lo.y)),
-                    Point2::new(bh.x.max(hi.x), bh.y.max(hi.y)),
-                ),
+                Some((bl, bh)) => (Point2::new(bl.x.min(lo.x), bl.y.min(lo.y)), Point2::new(bh.x.max(hi.x), bh.y.max(hi.y))),
             });
         }
     }
@@ -11404,7 +11241,11 @@ pub fn text_popups(mut ed: Editing, font_cache: &mut FontCache, tc: &mut TextCtx
                 // a name once)
                 let mut data = egui::FontData::from_owned(bytes);
                 data.index = font.index;
-                ctx.add_font(egui::epaint::text::FontInsert::new(&format!("tool-font:{}#{}", font.path, font.index), data, vec![egui::epaint::text::InsertFontFamily { family: egui::FontFamily::Proportional, priority: egui::epaint::text::FontPriority::Lowest }]));
+                ctx.add_font(egui::epaint::text::FontInsert::new(
+                    &format!("tool-font:{}#{}", font.path, font.index),
+                    data,
+                    vec![egui::epaint::text::InsertFontFamily { family: egui::FontFamily::Proportional, priority: egui::epaint::text::FontPriority::Lowest }],
+                ));
             }
             let glyphs = bake_text_glyphs(font_cache, &font, 0.0, 0.0, tc.tool_text_height, tc.text);
             tc.tool.text_ghost = Some((tc.text.clone(), tc.tool_text_height, tc.font.clone(), glyphs));
@@ -11431,7 +11272,11 @@ pub fn text_popups(mut ed: Editing, font_cache: &mut FontCache, tc: &mut TextCtx
             *tc.font = f;
         }
     }
-    if want_file { vec![BarAsk::PickFontFile] } else { Vec::new() }
+    if want_file {
+        vec![BarAsk::PickFontFile]
+    } else {
+        Vec::new()
+    }
 }
 
 /// ONE ROW OF THE LIST: the family and the style, written in that very face.
@@ -11515,30 +11360,25 @@ pub fn font_picker_window(cache: &mut FontCache, ctx: &egui::Context, want_file:
 
     let mut chosen: Option<qymcad_core::model::FontRef> = None;
     let mut open = true;
-    egui::Window::new(qymcad_i18n::tr("font-window"))
-        .open(&mut open)
-        .default_pos(egui::pos2(40.0, 40.0))
-        .default_width(460.0)
-        .resizable(true)
-        .show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.add(egui::TextEdit::singleline(&mut cache.picker.search).desired_width(200.0).hint_text(qymcad_i18n::tr("font-search")));
-                if ui.button(qymcad_i18n::tr("font-from-file")).on_hover_text(qymcad_i18n::tr("opt-pick-font")).clicked() {
-                    *want_file = true;
-                }
-            });
-            ui.label(if ready { qymcad_i18n::tr1("font-found", "n", &shown.len().to_string()) } else { qymcad_i18n::tr("font-searching") });
-            ui.separator();
-            let row = 26.0;
-            egui::ScrollArea::vertical().max_height(420.0).show_rows(ui, row, shown.len(), |ui, range| {
-                for i in range {
-                    let f = shown[i].clone();
-                    if font_row(ui, cache, &f, row).clicked() {
-                        chosen = Some(qymcad_core::model::FontRef { family: f.family.clone(), path: f.path.clone(), index: f.index });
-                    }
-                }
-            });
+    egui::Window::new(qymcad_i18n::tr("font-window")).open(&mut open).default_pos(egui::pos2(40.0, 40.0)).default_width(460.0).resizable(true).show(ctx, |ui| {
+        ui.horizontal(|ui| {
+            ui.add(egui::TextEdit::singleline(&mut cache.picker.search).desired_width(200.0).hint_text(qymcad_i18n::tr("font-search")));
+            if ui.button(qymcad_i18n::tr("font-from-file")).on_hover_text(qymcad_i18n::tr("opt-pick-font")).clicked() {
+                *want_file = true;
+            }
         });
+        ui.label(if ready { qymcad_i18n::tr1("font-found", "n", &shown.len().to_string()) } else { qymcad_i18n::tr("font-searching") });
+        ui.separator();
+        let row = 26.0;
+        egui::ScrollArea::vertical().max_height(420.0).show_rows(ui, row, shown.len(), |ui, range| {
+            for i in range {
+                let f = shown[i].clone();
+                if font_row(ui, cache, &f, row).clicked() {
+                    chosen = Some(qymcad_core::model::FontRef { family: f.family.clone(), path: f.path.clone(), index: f.index });
+                }
+            }
+        });
+    });
     if !open || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
         cache.picker.open = false;
     }
@@ -11949,7 +11789,7 @@ pub fn move_body_at(rc: &mut RebuildCtx, mi: usize, mat: [f64; 12]) {
         rc.project.bodies[mi].faces = rc.project.bodies[mi].mesh.detect_faces(8.0);
         invalidate(rc.regen);
     }
-        commit_edit(rc);
+    commit_edit(rc);
 }
 
 /// In-place editing of a note's text (a double click).
@@ -12059,11 +11899,7 @@ pub fn text_obj_editor(ed: Editing, font_cache: &mut FontCache, tc: &mut TextCtx
                 invalidate(ed.regen);
             }
             None => {
-                *ed.status = if font.family.is_empty() {
-                    qymcad_i18n::tr("sk-text-font-unknown")
-                } else {
-                    qymcad_i18n::tr1("sk-text-font-gone", "name", &font.family)
-                };
+                *ed.status = if font.family.is_empty() { qymcad_i18n::tr("sk-text-font-unknown") } else { qymcad_i18n::tr1("sk-text-font-gone", "name", &font.family) };
             }
         }
         close = true;
@@ -12072,9 +11908,6 @@ pub fn text_obj_editor(ed: Editing, font_cache: &mut FontCache, tc: &mut TextCtx
         end_text_edit(tc);
     }
 }
-
-
-
 
 /// Draw the header. Returns the new name if a person touched it.
 pub fn props_header(ui: &mut egui::Ui, icon: &str, kind_key: &str, name: NameSlot, lin: &Lineage) -> Option<String> {
@@ -12174,24 +12007,6 @@ pub fn select_body(project: &mut Project, sel: &mut Sel, view: &mut View2d, body
     }
     view.initialized = false;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /// The sketch anchor under the cursor - for dimensions and constraints between ANY geometry.
 #[derive(Clone, Copy)]
@@ -12348,7 +12163,11 @@ pub fn constraint_label(c: &qymcad_core::model::Constraint) -> String {
         C::Diameter { d, driven, diam, expr, .. } => {
             let val = value(qymcad_i18n::num(*d, 1), expr);
             let pfx = if *diam { "Ø" } else { "R" };
-            if *driven { qymcad_i18n::tr2("con-dim-driven", "what", pfx, "value", &val) } else { qymcad_i18n::tr2("con-dim", "what", pfx, "value", &val) }
+            if *driven {
+                qymcad_i18n::tr2("con-dim-driven", "what", pfx, "value", &val)
+            } else {
+                qymcad_i18n::tr2("con-dim", "what", pfx, "value", &val)
+            }
         }
         C::DistancePL { d, driven, expr, .. } => dim("con-name-distance-pl", value(qymcad_i18n::num(*d, 1), expr), *driven),
     }
@@ -12375,12 +12194,7 @@ pub fn profile_axis_lines(project: &qymcad_core::model::Project, si: usize) -> V
     // Construction lines come FIRST: they are drawn precisely to serve as an axis, and that is the most
     // frequent choice.
     let Some(s) = project.sketches.get(si) else { return Vec::new() };
-    let lines = |constr: bool| {
-        s.entities
-            .iter()
-            .filter(move |e| e.construction == constr && matches!(e.kind, qymcad_core::model::EntityKind::Line { .. }))
-            .map(|e| e.id)
-    };
+    let lines = |constr: bool| s.entities.iter().filter(move |e| e.construction == constr && matches!(e.kind, qymcad_core::model::EntityKind::Line { .. })).map(|e| e.id);
     lines(true).chain(lines(false)).collect()
 }
 
@@ -12541,12 +12355,7 @@ pub fn box_select(ed: Editing, sel_sk: &mut SketchSelection, sketch_ses: SketchS
 
 /// The label of a candidate axis line for the command bar — construction lines are marked as such.
 pub fn axis_line_label(project: &qymcad_core::model::Project, si: usize, line: Id, n: usize) -> String {
-    let constr = project
-        .sketches
-        .get(si)
-        .and_then(|s| s.entities.iter().find(|e| e.id == line))
-        .map(|e| e.construction)
-        .unwrap_or(false);
+    let constr = project.sketches.get(si).and_then(|s| s.entities.iter().find(|e| e.id == line)).map(|e| e.construction).unwrap_or(false);
     if constr {
         qymcad_i18n::tr1("sk-axis-line-n", "n", &n.to_string())
     } else {
@@ -12574,15 +12383,11 @@ pub fn finish_dim(project: &mut Project, regen: &mut Rebuilding, si: usize, ci: 
     (redundant, conflict)
 }
 
-
-
 /// The lineage of object `id` BY NAMES. `None` means the object has no Id of its own (a face)
 /// and has no lineage.
 pub fn lineage_of(project: &qymcad_core::model::Project, id: Option<Id>) -> Lineage {
     let Some(id) = id else { return Lineage::default() };
-    let name_of = |nid: Id| -> String {
-        project.timeline.iter().find(|n| n.id == nid).map(|n| qymcad_i18n::name(&n.name)).unwrap_or_else(|| format!("#{nid}"))
-    };
+    let name_of = |nid: Id| -> String { project.timeline.iter().find(|n| n.id == nid).map(|n| qymcad_i18n::name(&n.name)).unwrap_or_else(|| format!("#{nid}")) };
     // "WHAT CREATED IT" for a timeline node is the node itself, and there is no point repeating
     // it under its own heading: what is selected is already written there. What is shown is the
     // input it stands on.
@@ -12592,8 +12397,6 @@ pub fn lineage_of(project: &qymcad_core::model::Project, id: Option<Id>) -> Line
     };
     Lineage { built_on, dependents: project.dependents_of(id).into_iter().map(name_of).collect() }
 }
-
-
 
 /// Whether a point lies inside a polygon (by ray casting). The contour is closed implicitly.
 pub fn point_in_poly(p: Pos2, poly: &[Pos2]) -> bool {
@@ -12630,10 +12433,12 @@ pub fn entity_outline(s: &qymcad_core::model::Sketch, kind: &qymcad_core::model:
     use qymcad_core::model::EntityKind;
     let pt = |id: Id| s.points.iter().find(|q| q.id == id).map(|q| Point2::new(q.x, q.y));
     let ring = |c: Point2, u: (f64, f64), v: (f64, f64), a0: f64, sweep: f64| -> Vec<Point2> {
-        (0..=48).map(|i| {
-            let t = a0 + sweep * i as f64 / 48.0;
-            Point2::new(c.x + u.0 * t.cos() + v.0 * t.sin(), c.y + u.1 * t.cos() + v.1 * t.sin())
-        }).collect()
+        (0..=48)
+            .map(|i| {
+                let t = a0 + sweep * i as f64 / 48.0;
+                Point2::new(c.x + u.0 * t.cos() + v.0 * t.sin(), c.y + u.1 * t.cos() + v.1 * t.sin())
+            })
+            .collect()
     };
     match *kind {
         EntityKind::Line { a, b } => [pt(a), pt(b)].into_iter().flatten().collect(),
@@ -12716,24 +12521,6 @@ pub fn box_select_sketch(ed: Editing, sel_sk: &mut SketchSelection, rect: Rect, 
     }
     *ed.status = qymcad_i18n::tr1("g-selected-n", "n", &sel_sk.items.len().to_string());
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /// The closed contours of sketch `si` (by Id) that will do as the profile of a feature.
 pub fn sketch_closed_contours(project: &qymcad_core::model::Project, si: usize) -> Vec<Id> {
@@ -12819,22 +12606,22 @@ fn try_modify_in(ed: Editing, sel_sk: &mut SketchSelection, sk_pat: SketchPatter
             true
         }
         3 => {
-            let (cx, cy) = if let Some(p) = sel_point_ids(sel_sk).first().and_then(|id| sketch_pt(ed.project, si, *id)) {
-                (p.x, p.y)
-            } else {
-                ed.project.entities_centroid(si, &eids)
-            };
+            let (cx, cy) = if let Some(p) = sel_point_ids(sel_sk).first().and_then(|id| sketch_pt(ed.project, si, *id)) { (p.x, p.y) } else { ed.project.entities_centroid(si, &eids) };
             ed.project.array_circular(si, &eids, cx, cy, sk_pat.count, sk_pat.angle);
             true
         }
-        4 => eids.len() >= 2 && ed.project.fillet_lines(si, eids[0], eids[1], tool_prefs.fillet) && {
-            sel_sk.clear(); // the selection and whatever was waiting for it
-            true
-        },
-        5 => eids.len() >= 2 && ed.project.chamfer_lines(si, eids[0], eids[1], tool_prefs.fillet) && {
-            sel_sk.clear(); // the selection and whatever was waiting for it
-            true
-        },
+        4 => {
+            eids.len() >= 2 && ed.project.fillet_lines(si, eids[0], eids[1], tool_prefs.fillet) && {
+                sel_sk.clear(); // the selection and whatever was waiting for it
+                true
+            }
+        }
+        5 => {
+            eids.len() >= 2 && ed.project.chamfer_lines(si, eids[0], eids[1], tool_prefs.fillet) && {
+                sel_sk.clear(); // the selection and whatever was waiting for it
+                true
+            }
+        }
         // the distance field refusing its value refuses the offset too: the last good distance is not what was typed
         6 if bar_field_bad("sk_offset") => {
             *ed.status = qymcad_i18n::tr("sk-offset-field-bad");
@@ -13058,11 +12845,7 @@ pub fn num_or_expr(p: &mut ExprBarCtx, ui: &mut egui::Ui, key: &'static str, cur
     let vars = p.project.param_map();
     // THE TEXT IS BORROWED FOR A MOMENT. The drop-down list reads the whole document while the buffer
     // sits in the same `self`, and both cannot be borrowed at once. We work on a copy and put it back.
-    let txt = p
-        .bar_exprs
-        .get(key)
-        .cloned()
-        .unwrap_or_else(|| if integer { format!("{cur:.0}") } else { qymcad_core::expr::fmt_num(cur) });
+    let txt = p.bar_exprs.get(key).cloned().unwrap_or_else(|| if integer { format!("{cur:.0}") } else { qymcad_core::expr::fmt_num(cur) });
     let w = (60.0 + suffix.len() as f32 * 6.0).min(96.0);
     // ONE FIELD, AND IN THE FEATURES TOO, not only in sketches. This expression field is a single one
     // for ALL the tool bars (see `expr_fields.rs`), so the list of drivers and the typing rules arrive
@@ -13474,20 +13257,6 @@ pub fn ensure_active_path(active_path: &mut Vec<Id>, project: &mut Project) {
     }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /// WHAT A NUMBER FIELD IN A TOOL BAR NEEDS: the text being typed, the document it may name parameters
 /// from, and the colours. Three fields - and the field was a method of `App` only because the buffer is.
 pub struct ExprBarCtx<'a> {
@@ -13495,7 +13264,6 @@ pub struct ExprBarCtx<'a> {
     pub project: &'a qymcad_core::model::Project,
     pub scheme: &'a SchemeUi,
 }
-
 
 /// THE LOOK OF A SCHEME FOR THE PANELS, whatever theme the system says it is in. egui keeps a look for its dark theme
 /// and one for its light, follows the system's between them, and `set_visuals` fills only the one in use: Windows
@@ -13585,7 +13353,6 @@ pub fn cancel_feat_cmd(pc: &mut PartCtx) {
     }
     *pc.status = qymcad_i18n::tr("msg-cancelled");
 }
-
 
 /// An edge polyline is nearly STRAIGHT (and so fit to be an axis): every point lies on the line from the
 /// first to the last. An arc or a circle (a deviation above 1% of the length plus 0.05 mm) is rejected,
@@ -13678,15 +13445,7 @@ pub struct Doing<'a> {
 #[macro_export]
 macro_rules! doing_in {
     ($x:expr) => {
-        $crate::Doing {
-            armed: $x.armed,
-            cmd: &*$x.cmd,
-            gsel: &*$x.gsel,
-            joint: $x.joint,
-            picking: *$x.picking,
-            sketch_ses: *$x.sketch_ses,
-            workbench: $x.workbench,
-        }
+        $crate::Doing { armed: $x.armed, cmd: &*$x.cmd, gsel: &*$x.gsel, joint: $x.joint, picking: *$x.picking, sketch_ses: *$x.sketch_ses, workbench: $x.workbench }
     };
 }
 
@@ -13706,10 +13465,7 @@ impl Sheet {
     /// document, and the frame can be lifted into a local even in a function that goes on to change it.
     pub fn at(&self, p: Point2) -> Pos2 {
         let c = self.rect.center();
-        Pos2::new(
-            c.x + (p.x as f32 - self.view.center.x) * self.view.scale,
-            c.y - (p.y as f32 - self.view.center.y) * self.view.scale,
-        )
+        Pos2::new(c.x + (p.x as f32 - self.view.center.x) * self.view.scale, c.y - (p.y as f32 - self.view.center.y) * self.view.scale)
     }
 }
 
@@ -13756,25 +13512,14 @@ pub fn needs_live_brep(d: Doing, project: &Project, set: &Settings) -> bool {
     // then leaves the part with a degree of freedom, and a slider on a flat face does not know the principal
     // direction and travels anywhere. A check by matrix showed exactly that.
     if project.connectors.iter().any(|c| {
-        matches!(
-            c.anchor,
-            qymcad_core::feature::AnchorRef::EdgeMid(..)
-                | qymcad_core::feature::AnchorRef::Vertex(..)
-                | qymcad_core::feature::AnchorRef::FaceCenter(..)
-        ) && project.joints.iter().any(|j| j.a == c.id || j.b == c.id)
+        matches!(c.anchor, qymcad_core::feature::AnchorRef::EdgeMid(..) | qymcad_core::feature::AnchorRef::Vertex(..) | qymcad_core::feature::AnchorRef::FaceCenter(..))
+            && project.joints.iter().any(|j| j.a == c.id || j.b == c.id)
     }) {
         return true;
     }
     // an open sketch ON A FACE draws that face's outline
-    sketch_ses
-        .editing
-        .and_then(|si| project.sketches.iter().find(|s| s.id == si))
-        .is_some_and(|s| matches!(s.plane, qymcad_core::feature::SketchPlane::Face(..)))
+    sketch_ses.editing.and_then(|si| project.sketches.iter().find(|s| s.id == si)).is_some_and(|s| matches!(s.plane, qymcad_core::feature::SketchPlane::Face(..)))
 }
-
-
-
-
 
 pub fn finish_drawing(ed: Editing, pending_import: &mut PendingImport, sketch_ses: SketchSession, closed: bool) {
     if let Some(pts) = pending_import.draw_pts.take() {
@@ -13811,9 +13556,9 @@ pub fn end_feat_cmd_state(picks: FeatPicks, cmd: &mut FeatCommand, gsel: &mut Ge
     gsel.edges.clear();
     gsel.faces.clear();
     gsel.faces_body = None; // the scope of the multiple face selection
-    // UNFINISHED MENU GESTURES end together with the command too: waiting for the second face of a
-    // "between", the memory of the face and edge last pointed at. A wait that outlived its command
-    // would fire in the next one.
+                            // UNFINISHED MENU GESTURES end together with the command too: waiting for the second face of a
+                            // "between", the memory of the face and edge last pointed at. A wait that outlived its command
+                            // would fire in the next one.
     gsel.between_first = None;
     gsel.last_face = None;
     gsel.last_edge = None;
@@ -13979,12 +13724,23 @@ mod blend_outline {
         let (a, b) = (Point2::new(0.0, 0.0), Point2::new(15.0, 0.0));
         let vertices = |(c, v): (Point2, Point2)| -> Vec<[f64; 2]> {
             let (r, a0) = (((v.x - c.x).powi(2) + (v.y - c.y).powi(2)).sqrt(), (v.y - c.y).atan2(v.x - c.x));
-            (0..6).map(|k| { let t = a0 + std::f64::consts::TAU * k as f64 / 6.0; [c.x + r * t.cos(), c.y + r * t.sin()] }).collect()
+            (0..6)
+                .map(|k| {
+                    let t = a0 + std::f64::consts::TAU * k as f64 / 6.0;
+                    [c.x + r * t.cos(), c.y + r * t.sin()]
+                })
+                .collect()
         };
         let on = |p: [f64; 2], q: [f64; 2]| (p[0] - q[0]).abs() < 1e-9 && (p[1] - q[1]).abs() < 1e-9;
         assert!(vertices(super::polygon_from_clicks(a, b, 6, 0)).iter().any(|v| on(*v, [15.0, 0.0])), "inscribed: a vertex at the click");
         let vs = vertices(super::polygon_from_clicks(a, b, 6, 1));
-        assert!((0..6).any(|k| { let (p, q) = (vs[k], vs[(k + 1) % 6]); on([(p[0] + q[0]) / 2.0, (p[1] + q[1]) / 2.0], [15.0, 0.0]) }), "circumscribed: the middle of an edge at the click: {vs:?}");
+        assert!(
+            (0..6).any(|k| {
+                let (p, q) = (vs[k], vs[(k + 1) % 6]);
+                on([(p[0] + q[0]) / 2.0, (p[1] + q[1]) / 2.0], [15.0, 0.0])
+            }),
+            "circumscribed: the middle of an edge at the click: {vs:?}"
+        );
         let vs = vertices(super::polygon_from_clicks(a, b, 6, 2));
         assert!(vs.iter().any(|v| on(*v, [0.0, 0.0])) && vs.iter().any(|v| on(*v, [15.0, 0.0])), "by edge: both clicks are vertices: {vs:?}");
     }

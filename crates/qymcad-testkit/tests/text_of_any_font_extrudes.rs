@@ -79,12 +79,7 @@ fn a_text_set_in_a_ttf_font_extrudes_into_a_body() {
         }
         hit
     };
-    let want: f64 = loops
-        .iter()
-        .enumerate()
-        .filter(|(i, l)| !loops.iter().enumerate().any(|(j, o)| j != *i && area(o) > area(l) && inside(l[0], o)))
-        .map(|(_, l)| area(l))
-        .sum();
+    let want: f64 = loops.iter().enumerate().filter(|(i, l)| !loops.iter().enumerate().any(|(j, o)| j != *i && area(o) > area(l) && inside(l[0], o))).map(|(_, l)| area(l)).sum();
     let top: f64 = (0..mesh.tris.len())
         .filter_map(|ti| {
             let t = mesh.triangle(ti);
@@ -97,10 +92,7 @@ fn a_text_set_in_a_ttf_font_extrudes_into_a_body() {
             (len > 1e-12 && n[2] / len > 0.9 && t.iter().all(|v| (v.z - 5.0).abs() < 1e-6)).then_some(0.5 * len)
         })
         .sum();
-    assert!(
-        (top - want).abs() < 1.0,
-        "the top of the extruded text measures {top:.3} mm^2 while the loops handed to it enclose {want:.3} mm^2"
-    );
+    assert!((top - want).abs() < 1.0, "the top of the extruded text measures {top:.3} mm^2 while the loops handed to it enclose {want:.3} mm^2");
 }
 
 /// AND A DOCUMENT SAVED BEFORE THE FIX EXTRUDES WHEN IT IS OPENED.

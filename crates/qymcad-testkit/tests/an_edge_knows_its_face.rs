@@ -76,9 +76,5 @@ fn two_parallel_edges_on_different_faces_give_different_frames() {
         seen.push(fr.x);
     }
     let same = seen.iter().filter(|x| dot(**x, seen[0]) > 0.999).count();
-    assert!(
-        same < 4,
-        "all four vertical edges share one secondary axis {:?} — it is derived from the world rather than from the faces of the part",
-        seen[0]
-    );
+    assert!(same < 4, "all four vertical edges share one secondary axis {:?} — it is derived from the world rather than from the faces of the part", seen[0]);
 }

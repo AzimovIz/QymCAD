@@ -62,23 +62,14 @@ fn descriptive_queries_read_the_geometry_itself() {
 #[test]
 fn sets_combine_the_way_sets_should() {
     let (names, pool, base, hole) = stand();
-    let both = Query::Union(
-        Box::new(Query::OfFeature { feature: base, role: Some(Role::Wall) }),
-        Box::new(Query::OfFeature { feature: hole, role: None }),
-    );
+    let both = Query::Union(Box::new(Query::OfFeature { feature: base, role: Some(Role::Wall) }), Box::new(Query::OfFeature { feature: hole, role: None }));
     assert_eq!(resolve_f(&both, &pool, &names).len(), 6, "four walls plus the two faces of the hole");
 
     // "every face of the base except the top one" is the most common query there is
-    let sides = Query::Minus(
-        Box::new(Query::OfFeature { feature: base, role: None }),
-        Box::new(Query::Oriented { dir: [0.0, 0.0, 1.0], tol_deg: 10.0 }),
-    );
+    let sides = Query::Minus(Box::new(Query::OfFeature { feature: base, role: None }), Box::new(Query::Oriented { dir: [0.0, 0.0, 1.0], tol_deg: 10.0 }));
     assert_eq!(resolve_f(&sides, &pool, &names).len(), 5, "one top face left out of six");
 
-    let vertical_walls = Query::Filter(
-        Box::new(Query::OfFeature { feature: base, role: Some(Role::Wall) }),
-        Box::new(Query::Oriented { dir: [1.0, 0.0, 0.0], tol_deg: 10.0 }),
-    );
+    let vertical_walls = Query::Filter(Box::new(Query::OfFeature { feature: base, role: Some(Role::Wall) }), Box::new(Query::Oriented { dir: [1.0, 0.0, 0.0], tol_deg: 10.0 }));
     assert_eq!(resolve_f(&vertical_walls, &pool, &names).len(), 1, "there is a single wall facing +X");
 }
 
@@ -157,15 +148,8 @@ fn a_query_grows_with_the_model_while_a_list_of_ids_does_not() {
 #[test]
 fn a_query_refuses_instead_of_finding_something_similar() {
     let (names, pool, _, _) = stand();
-    let gone = Ref {
-        query: Query::FromSource { src: 999 },
-        expect: Cardinality::One,
-        hint: Fingerprint { centroid: [1.0, 2.0, 3.0], normal: [0.0, 0.0, 1.0] },
-    };
-    assert!(
-        matches!(gone.resolve("ref-what-cut-wall", &pool, &names, &pool), Err(RefError::Lost { .. })),
-        "with the source entity gone there has to be a refusal, not the nearest similar face"
-    );
+    let gone = Ref { query: Query::FromSource { src: 999 }, expect: Cardinality::One, hint: Fingerprint { centroid: [1.0, 2.0, 3.0], normal: [0.0, 0.0, 1.0] } };
+    assert!(matches!(gone.resolve("ref-what-cut-wall", &pool, &names, &pool), Err(RefError::Lost { .. })), "with the source entity gone there has to be a refusal, not the nearest similar face");
 }
 
 /// Edges are described through their faces, an edge having no recipe of its own.
@@ -198,10 +182,7 @@ fn edges_are_described_through_the_faces_they_separate() {
     assert_eq!(all_top.len(), 5, "the top cap has four rim edges plus the mouth of the hole");
 
     // where the cap meets the hole: the mouth alone, with none of the outer rim
-    let seam = Query::Between(
-        Box::new(Query::Id(top)),
-        Box::new(Query::OfFeature { feature: hole, role: None }),
-    );
+    let seam = Query::Between(Box::new(Query::Id(top)), Box::new(Query::OfFeature { feature: hole, role: None }));
     let found = resolve(&seam, &edges, &names, &faces);
     assert_eq!(found, vec![mouth], "the junction has to yield exactly the mouth of the hole: {found:?}");
 }
@@ -247,13 +228,7 @@ fn seg(pool: &mut Vec<Candidate>, desc: u32, a: [f64; 3], b: [f64; 3]) {
     let mid = [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0, (a[2] + b[2]) / 2.0];
     let d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
     let l = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
-    pool.push(Candidate {
-        desc,
-        centroid: mid,
-        normal: [d[0] / l, d[1] / l, d[2] / l],
-        area: l,
-        edge: Some(crate::refs::EdgeGeom { a, b, ..Default::default() }),
-    });
+    pool.push(Candidate { desc, centroid: mid, normal: [d[0] / l, d[1] / l, d[2] / l], area: l, edge: Some(crate::refs::EdgeGeom { a, b, ..Default::default() }) });
 }
 
 /// A quarter-circle arc in the XY plane, from `from` to `to` about `center`.

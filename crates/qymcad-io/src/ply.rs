@@ -266,8 +266,8 @@ fn parse(bytes: &[u8]) -> Result<(Mesh, Vec<[u8; 3]>), String> {
     }
     if tri_rgb.len() != tris.len() {
         tri_rgb.clear(); // colours on some faces only are no colours of the mesh
-        // the vertices' colours, where every vertex has one: a triangle here is of one colour, so it takes the colour most
-        // of its corners have, its first corner's where all three differ - never a blend no vertex has
+                         // the vertices' colours, where every vertex has one: a triangle here is of one colour, so it takes the colour most
+                         // of its corners have, its first corner's where all three differ - never a blend no vertex has
         if vert_rgb.iter().all(Option::is_some) {
             let c = |i: u32| vert_rgb[i as usize].unwrap_or_default();
             tri_rgb = tris.iter().map(|t| if c(t[1]) == c(t[2]) { c(t[1]) } else { c(t[0]) }).collect();

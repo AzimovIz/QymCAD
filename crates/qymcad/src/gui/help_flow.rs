@@ -79,10 +79,8 @@ mod tests {
     fn a_table_is_parsed_as_a_table() {
         let md = "Before.\n\n| Kind | Freedom |\n|---|---|\n| Rigid | nothing |\n| Slider | along the axis |\n\nAfter.\n";
         let blocks = help::parse(md);
-        let (head, rows) = blocks
-            .iter()
-            .find_map(|b| if let Block::Table { head, rows } = b { Some((head, rows)) } else { None })
-            .expect("the table is not parsed — its lines travelled into a paragraph");
+        let (head, rows) =
+            blocks.iter().find_map(|b| if let Block::Table { head, rows } = b { Some((head, rows)) } else { None }).expect("the table is not parsed — its lines travelled into a paragraph");
         let head = head.as_ref().expect("the header is not separated from the data by a |---| line");
         assert_eq!(head.len(), 2, "the header has other than two columns");
         assert!(head[0].iter().any(|s| s.text.contains("Kind")), "the header lost its first column");
@@ -424,7 +422,11 @@ mod tests {
         assert!(!body.is_empty(), "not one caption was found in the body of the window");
         let leftmost = body.iter().cloned().fold(f32::MAX, f32::min);
         let edge = leftmost - 260.0;
-        assert!(edge > 4.0, "the text of the article is nailed to the edge of the panel: there are {edge:.1} px of free space on the left, and there must be at least {}", super::super::help_window::HELP_PAD);
+        assert!(
+            edge > 4.0,
+            "the text of the article is nailed to the edge of the panel: there are {edge:.1} px of free space on the left, and there must be at least {}",
+            super::super::help_window::HELP_PAD
+        );
     }
 
     /// THE CONTENTS AND THE SEARCH REACH THE SCREEN.

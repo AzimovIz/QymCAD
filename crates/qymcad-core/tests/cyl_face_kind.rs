@@ -38,10 +38,7 @@ fn cylinder_side(r: f64, h: f64, seg: usize, outward: bool) -> (Mesh, Vec<u32>) 
 fn full_shaft_is_external_full_bore_is_internal() {
     let (shaft, st) = cylinder_side(15.0, 100.0, 64, true);
     let (bore, bt) = cylinder_side(15.0, 100.0, 64, false);
-    assert!(
-        !cyl_face_is_internal(&shaft, &st, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0]),
-        "a solid Ø30 shaft takes an external thread; this exact error produced a thread cut into thin air"
-    );
+    assert!(!cyl_face_is_internal(&shaft, &st, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0]), "a solid Ø30 shaft takes an external thread; this exact error produced a thread cut into thin air");
     assert!(cyl_face_is_internal(&bore, &bt, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0]), "a Ø30 hole takes an internal thread");
 }
 

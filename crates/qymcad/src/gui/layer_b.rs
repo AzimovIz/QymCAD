@@ -6,7 +6,7 @@
 //! new command falls under the contract automatically, and an exception has to be named out loud.
 #[cfg(test)]
 mod tests {
-    
+
     use crate::command_catalog::{Launch, COMMANDS};
 
     /// The timeline feature commands from the catalogue.
@@ -28,11 +28,7 @@ mod tests {
         // datum buttons are) while the workbench ones are in `panels.rs`. Checking one file would
         // declare missing what actually exists.
         let panels = [crate::gui::panels_source::PANELS, include_str!("../gui.rs")].concat();
-        let missing: Vec<&str> = feat_kinds()
-            .into_iter()
-            .filter(|(_, k)| !panels.contains(&format!("BarAsk::FeatCmd({k})")))
-            .map(|(code, _)| code)
-            .collect();
+        let missing: Vec<&str> = feat_kinds().into_iter().filter(|(_, k)| !panels.contains(&format!("BarAsk::FeatCmd({k})"))).map(|(code, _)| code).collect();
         assert!(missing.is_empty(), "the toolbar has no buttons for these commands: {}", missing.join(", "));
     }
 
@@ -60,12 +56,8 @@ mod tests {
             .filter(|l| l.contains("armed.cmd_kind()"))
             .flat_map(|l| l.split(|c: char| !c.is_ascii_digit()).filter(|t| !t.is_empty()).filter_map(|t| t.parse::<u8>().ok()).collect::<Vec<u8>>())
             .collect();
-        let missing: Vec<String> = feat_kinds()
-            .into_iter()
-            .filter(|(_, k)| !excused.iter().any(|(e, _)| e == k))
-            .filter(|(_, k)| !drawn.contains(k))
-            .map(|(code, k)| format!("{code} (kind {k})"))
-            .collect();
+        let missing: Vec<String> =
+            feat_kinds().into_iter().filter(|(_, k)| !excused.iter().any(|(e, _)| e == k)).filter(|(_, k)| !drawn.contains(k)).map(|(code, k)| format!("{code} (kind {k})")).collect();
         assert!(missing.is_empty(), "these commands draw nothing, so to a person they \"do not work\": {}", missing.join(", "));
     }
 }

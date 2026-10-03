@@ -159,24 +159,15 @@ mod tests {
         // stops before any check runs. The compiler holds these two; the one below is the one this test
         // actually earns its keep on.
         assert!(src.contains("fn draw_projection_overlay"), "driven geometry must have a drawing layer of its own");
-        assert!(
-            dense(crate::gui::sketch_source::SKETCH).contains(&dense("draw_projection_overlay(")),
-            "the layer must be called from the sketch frame"
-        );
+        assert!(dense(crate::gui::sketch_source::SKETCH).contains(&dense("draw_projection_overlay(")), "the layer must be called from the sketch frame");
         // EVERY function of that name. Once the layer was lifted out of `App` a one-line wrapper stayed
         // behind under the same name, and it is the one `find` hits first: reading only there says the
         // lost-source branch is gone when it has merely moved next door.
-        let lost = src
-            .match_indices("fn draw_projection_overlay")
-            .any(|(a, _)| {
-                let rest = &src[a..];
-                let end = ["\n    pub(super) fn ", "\n    pub(crate) fn ", "\n    fn ", "\npub(crate) fn ", "\nfn "]
-                    .iter()
-                    .filter_map(|m| rest.find(m))
-                    .min()
-                    .unwrap_or(rest.len());
-                rest[..end].contains("proj.lost")
-            });
+        let lost = src.match_indices("fn draw_projection_overlay").any(|(a, _)| {
+            let rest = &src[a..];
+            let end = ["\n    pub(super) fn ", "\n    pub(crate) fn ", "\n    fn ", "\npub(crate) fn ", "\nfn "].iter().filter_map(|m| rest.find(m)).min().unwrap_or(rest.len());
+            rest[..end].contains("proj.lost")
+        });
         assert!(lost, "a lost source must be visible separately");
     }
 }

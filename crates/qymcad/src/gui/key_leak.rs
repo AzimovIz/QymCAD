@@ -55,15 +55,15 @@ fn tokens(text: &str) -> Vec<String> {
 /// checks save documents named `sketch-line-saved.qcad`, and the window shows that name as it was given.
 pub(crate) fn leaks(text: &str) -> Vec<String> {
     let s = shapes();
-    let file = |w: &str| w.contains('/') || w.contains('\\') || w.rsplit_once('.').is_some_and(|(_, ext)| (2..=5).contains(&ext.trim_end_matches(|c: char| !c.is_ascii_alphanumeric()).len()) && ext.starts_with(|c: char| c.is_ascii_alphanumeric()));
+    let file = |w: &str| {
+        w.contains('/')
+            || w.contains('\\')
+            || w.rsplit_once('.').is_some_and(|(_, ext)| (2..=5).contains(&ext.trim_end_matches(|c: char| !c.is_ascii_alphanumeric()).len()) && ext.starts_with(|c: char| c.is_ascii_alphanumeric()))
+    };
     // a word the layout cut short ends in an ellipsis, and what was cut - an extension, the rest of a name - cannot be
     // told from a key any more: a file name elided in a tab ("sketch-con-coincident-round-trip.q...") was one
     let cut = |w: &str| w.ends_with('\u{2026}');
-    text.split_whitespace()
-        .filter(|w| !file(w) && !cut(w))
-        .flat_map(tokens)
-        .filter(|t| t.split('-').next().is_some_and(|h| s.prefixes.contains(h)) && !s.words.contains(t))
-        .collect()
+    text.split_whitespace().filter(|w| !file(w) && !cut(w)).flat_map(tokens).filter(|t| t.split('-').next().is_some_and(|h| s.prefixes.contains(h)) && !s.words.contains(t)).collect()
 }
 
 #[cfg(test)]

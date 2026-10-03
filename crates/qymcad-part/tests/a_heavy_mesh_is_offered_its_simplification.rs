@@ -12,7 +12,12 @@ fn strip(tris: usize, length: f64) -> Mesh {
         let x = length * i as f64 / (n - 1) as f64;
         verts.extend([Point3::new(x, 0.0, 0.0), Point3::new(x, 1.0, 0.0)]);
     }
-    let tris = (0..n - 1).flat_map(|i| { let k = 2 * i as u32; [[k, k + 2, k + 1], [k + 1, k + 2, k + 3]] }).collect();
+    let tris = (0..n - 1)
+        .flat_map(|i| {
+            let k = 2 * i as u32;
+            [[k, k + 2, k + 1], [k + 1, k + 2, k + 3]]
+        })
+        .collect();
     Mesh { verts, tris }
 }
 

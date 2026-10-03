@@ -69,12 +69,7 @@ mod tests {
         app.apply_feat_cmd();
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
 
-        let node = app
-            .project
-            .timeline
-            .iter()
-            .find(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::SplitBody { .. }))
-            .expect("a split feature must appear in the timeline");
+        let node = app.project.timeline.iter().find(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::SplitBody { .. })).expect("a split feature must appear in the timeline");
         let parts = node.kind.bodies();
         assert_eq!(parts.len(), 2, "the split must give two bodies");
         assert!(app.project.bodies.len() > bodies_before, "there must be more bodies in the project; the status line: {}", app.status);
@@ -134,10 +129,7 @@ mod tests {
         // WHITESPACE-BLIND. The condition is spread over several lines now, and a needle written as one
         // line can never match it however right the code is.
         use crate::gui::render_source::dense;
-        assert!(
-            dense(crate::gui::render_source::RENDER).contains(&dense("pn.armed.cmd_kind() == 27 || pn.armed.cmd_kind() == 29")),
-            "a click in the viewport must choose the cutting plane"
-        );
+        assert!(dense(crate::gui::render_source::RENDER).contains(&dense("pn.armed.cmd_kind() == 27 || pn.armed.cmd_kind() == 29")), "a click in the viewport must choose the cutting plane");
     }
 
     /// The feature is visible in the tree and reopens for editing — otherwise it is a one-shot.
@@ -174,13 +166,7 @@ mod tests {
         }
         app.apply_feat_cmd();
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
-        let fid = app
-            .project
-            .timeline
-            .iter()
-            .find(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::SplitBody { .. }))
-            .map(|n| n.id)
-            .expect("the split feature");
+        let fid = app.project.timeline.iter().find(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::SplitBody { .. })).map(|n| n.id).expect("the split feature");
         let parts: Vec<u64> = app.project.timeline.iter().find(|n| n.id == fid).map(|n| n.kind.bodies()).expect("the pieces");
         let thin_before = parts.iter().filter_map(|b| app.project.mesh_index(*b)).map(|i| app.project.bodies[i].mesh.volume()).fold(f64::MAX, f64::min);
 
@@ -231,12 +217,7 @@ mod tests {
         app.apply_feat_cmd();
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
 
-        let node = app
-            .project
-            .timeline
-            .iter()
-            .find(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::SplitFace { .. }))
-            .expect("a split-faces feature must appear in the timeline");
+        let node = app.project.timeline.iter().find(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::SplitFace { .. })).expect("a split-faces feature must appear in the timeline");
         assert_eq!(node.kind.bodies().len(), 1, "there is EXACTLY ONE output — this is not a split of a body");
         assert_eq!(app.project.bodies.len(), bodies_before + 1, "the body is one: the result was added, not pieces; the status line: {}", app.status);
         let out = node.kind.body().expect("the body");
@@ -255,6 +236,4 @@ mod tests {
         assert!(!crate::i18n::tr("feat-name-split-face").is_empty() && crate::i18n::tr("feat-name-split-face") != "feat-name-split-face", "the default name of the feature must have a translation");
         assert!(crate::gui::render_source::has(crate::gui::sketch_source::PART, "FeatureKind::SplitFace { plane, datum, offset, face, .. } => {"), "reopening for editing");
     }
-
-
 }

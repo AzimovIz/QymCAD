@@ -17,11 +17,7 @@ use qymcad_core::refs::Ref;
 fn plate() -> (Project, u64) {
     let mut p = Project::default();
     p.new_document();
-    let sid = p.add_line_sketch(
-        "Sketch 1",
-        vec![Point2::new(0.0, 0.0), Point2::new(60.0, 0.0), Point2::new(60.0, 40.0), Point2::new(0.0, 40.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("Sketch 1", vec![Point2::new(0.0, 0.0), Point2::new(60.0, 0.0), Point2::new(60.0, 40.0), Point2::new(0.0, 40.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {
@@ -36,11 +32,7 @@ fn plate() -> (Project, u64) {
 
 /// The top edge of a body at the given y (the front or the back long edge).
 fn top_edge_at_y(p: &Project, body: u64, y: f64) -> u32 {
-    p.regen_edges[&body]
-        .iter()
-        .find(|e| (e.a[2] - 12.0).abs() < 1e-6 && (e.b[2] - 12.0).abs() < 1e-6 && (e.mid[1] - y).abs() < 1e-6)
-        .map(|e| e.id)
-        .expect("the top edge")
+    p.regen_edges[&body].iter().find(|e| (e.a[2] - 12.0).abs() < 1e-6 && (e.b[2] - 12.0).abs() < 1e-6 && (e.mid[1] - y).abs() < 1e-6).map(|e| e.id).expect("the top edge")
 }
 
 /// THE REPORTED CASE: a fillet at the front, a chamfer at the back; delete the fillet and the chamfer
@@ -94,7 +86,13 @@ fn a_sketch_on_a_face_survives_deleting_the_feature_under_it() {
     p.add_rect_entity(si, 20.0, 15.0, 40.0, 25.0, qymcad_core::feature::Purpose::Real);
     p.regen_sketch(si);
     let cid = p.sketches[si].contour_ids.iter().copied().find(|c| p.contour_profile_xy(*c).is_some()).expect("the pocket contour");
-    let cut = p.add_combine_multi_op(fil, sid, vec![cid], qymcad_core::model::CombineSpan { height: 4.0, down: 0.0, extent: qymcad_core::feature::Extent { reach: qymcad_core::feature::Reach::Backward, ..Default::default() }, fill: &[] }, 0);
+    let cut = p.add_combine_multi_op(
+        fil,
+        sid,
+        vec![cid],
+        qymcad_core::model::CombineSpan { height: 4.0, down: 0.0, extent: qymcad_core::feature::Extent { reach: qymcad_core::feature::Reach::Backward, ..Default::default() }, fill: &[] },
+        0,
+    );
     let (rep, _) = qymcad_testkit::regenerate(&mut p);
     assert!(rep.errors.is_empty(), "setup — the pocket: {:?}", rep.errors);
     let v_cut = p.bodies.iter().find(|b| b.id == cut).expect("the body with the pocket").mesh.volume();
@@ -140,9 +138,5 @@ fn a_reference_to_geometry_that_the_deleted_node_created_fails_honestly() {
 
     p.delete_feature_op(fil);
     let (rep, _) = qymcad_testkit::regenerate(&mut p);
-    assert!(
-        rep.errors.iter().any(|(id, _)| *id == copy),
-        "the anchor vanished with the fillet — the node must fail rather than settle on a neighbouring face: {:?}",
-        rep.errors
-    );
+    assert!(rep.errors.iter().any(|(id, _)| *id == copy), "the anchor vanished with the fillet — the node must fail rather than settle on a neighbouring face: {:?}", rep.errors);
 }

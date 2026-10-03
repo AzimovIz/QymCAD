@@ -477,7 +477,6 @@ probe! {
     }
 }
 
-
 probe! {
     /// A THREAD PUT ON A SHORT CYLINDER OPENS NO LONGER THAN THE CYLINDER: on a shaft 10 long the length field holds 10
     /// and Apply can be pressed at once. Reported behaviour: the length opened at one and a half diameters, 30, and was

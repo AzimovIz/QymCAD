@@ -18,7 +18,6 @@ use crate::gui::WinKind;
 const MAX_ROWS: usize = 8;
 
 impl App {
-
     /// The search window: the door that builds the narrow context.
     pub(super) fn command_search_window(&mut self, ctx: &egui::Context) {
         let mut asks = Vec::new();
@@ -84,14 +83,8 @@ pub(crate) fn command_search_window(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui
     // cancel ladder.
     // Enter is TAKEN, not only read: it launches the command found, and a tool launched in this frame must not see
     // the same key as its own Enter - a joint answered "not yet" to a key nobody pressed for it
-    let (up, down, enter, esc) = ctx.input_mut(|i| {
-        (
-            i.key_pressed(egui::Key::ArrowUp),
-            i.key_pressed(egui::Key::ArrowDown),
-            i.consume_key(egui::Modifiers::NONE, egui::Key::Enter),
-            i.key_pressed(egui::Key::Escape),
-        )
-    });
+    let (up, down, enter, esc) =
+        ctx.input_mut(|i| (i.key_pressed(egui::Key::ArrowUp), i.key_pressed(egui::Key::ArrowDown), i.consume_key(egui::Modifiers::NONE, egui::Key::Enter), i.key_pressed(egui::Key::Escape)));
     if down && !hits.is_empty() {
         wc.win.cmd_search_sel = (wc.win.cmd_search_sel + 1) % hits.len();
     }

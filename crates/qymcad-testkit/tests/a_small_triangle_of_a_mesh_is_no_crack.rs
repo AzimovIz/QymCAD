@@ -83,9 +83,20 @@ fn a_large_body_of_a_mesh_with_a_face_flat_to_its_precision_is_sound() {
     let s = 1000.0;
     let verts = vec![v(0.0, 0.0, 0.0), v(s, 0.0, 0.0), v(s, s, 0.0), v(0.0, s, 0.0), v(0.0, 0.0, s), v(s, 0.0, s), v(s, s, s), v(0.0, s, s), v(s / 2.0, s / 2.0, s + 5e-7)];
     let tris = vec![
-        [0, 2, 1], [0, 3, 2], // bottom, facing down
-        [0, 1, 5], [0, 5, 4], [1, 2, 6], [1, 6, 5], [2, 3, 7], [2, 7, 6], [3, 0, 4], [3, 4, 7], // sides
-        [4, 5, 8], [5, 6, 8], [6, 7, 8], [7, 4, 8], // the top, around its lifted middle
+        [0, 2, 1],
+        [0, 3, 2], // bottom, facing down
+        [0, 1, 5],
+        [0, 5, 4],
+        [1, 2, 6],
+        [1, 6, 5],
+        [2, 3, 7],
+        [2, 7, 6],
+        [3, 0, 4],
+        [3, 4, 7], // sides
+        [4, 5, 8],
+        [5, 6, 8],
+        [6, 7, 8],
+        [7, 4, 8], // the top, around its lifted middle
     ];
     let body = Shape::from_mesh(&Mesh { verts, tris }).expect("a body of the mesh");
     assert!(body.volume() > 0.0, "setup: the cube is inside out");

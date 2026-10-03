@@ -115,9 +115,7 @@ fn every_kind_on_every_one_of_the_seven_anchors() {
                 continue;
             }
             p.set_grounded(ca_owner, true);
-            let pick = |p: &Project, body: Id| {
-                seven_anchors(p, body).into_iter().find(|(n, _)| *n == anchor_name).map(|(_, a)| a).expect("anchor by name")
-            };
+            let pick = |p: &Project, body: Id| seven_anchors(p, body).into_iter().find(|(n, _)| *n == anchor_name).map(|(_, a)| a).expect("anchor by name");
             let (aa, ab) = (pick(&p, body_a), pick(&p, body_b));
             let ca = p.add_connector(ca_owner, aa);
             let cb = p.add_connector(cb_owner, ab);

@@ -426,9 +426,15 @@ pub fn chord_deflection(p: &Prepared, sharp_deg: f64) -> f64 {
             let [a, b, _] = p.mesh.tris[t];
             let (ea, eb) = (p.mesh.verts[a as usize], p.mesh.verts[b as usize]);
             let shared = p.mesh.tris[u as usize].contains(&a) && p.mesh.tris[u as usize].contains(&b);
-            let (ea, eb) = if shared { (ea, eb) } else {
+            let (ea, eb) = if shared {
+                (ea, eb)
+            } else {
                 let [_, b2, c2] = p.mesh.tris[t];
-                if p.mesh.tris[u as usize].contains(&b2) && p.mesh.tris[u as usize].contains(&c2) { (p.mesh.verts[b2 as usize], p.mesh.verts[c2 as usize]) } else { (p.mesh.verts[c2 as usize], p.mesh.verts[a as usize]) }
+                if p.mesh.tris[u as usize].contains(&b2) && p.mesh.tris[u as usize].contains(&c2) {
+                    (p.mesh.verts[b2 as usize], p.mesh.verts[c2 as usize])
+                } else {
+                    (p.mesh.verts[c2 as usize], p.mesh.verts[a as usize])
+                }
             };
             let along = sub(eb, ea);
             let l = len(along).max(1e-300);

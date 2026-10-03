@@ -64,7 +64,17 @@ fn every_user_edit_changes_the_key() {
         }
     });
     check("a label was placed in a sketch", &mut p, &|p| {
-        p.sketches[0].texts.push(qymcad_core::model::SketchText { id: 900, x: 0.0, y: 0.0, height: 5.0, angle: 0.0, text: "A".into(), construction: false, glyphs: Vec::new(), font: Default::default() });
+        p.sketches[0].texts.push(qymcad_core::model::SketchText {
+            id: 900,
+            x: 0.0,
+            y: 0.0,
+            height: 5.0,
+            angle: 0.0,
+            text: "A".into(),
+            construction: false,
+            glyphs: Vec::new(),
+            font: Default::default(),
+        });
     });
     check("a label was retyped", &mut p, &|p| {
         if let Some(t) = p.sketches[0].texts.last_mut() {

@@ -195,11 +195,7 @@ pub fn one_connector_controls(joint: &mut qymcad_ui_state::JointCommand, project
             ui.horizontal(|ui| {
                 let armed = joint.axis_pick == Some(cid);
                 let has = project.connector(cid).is_some_and(|c| c.axis_ref.is_some());
-                if ui
-                    .selectable_label(armed, format!("{} {}", ph::CROSSHAIR, qymcad_i18n::tr("j-axis-pick")))
-                    .on_hover_text(qymcad_i18n::tr("j-axis-pick-hint"))
-                    .clicked()
-                {
+                if ui.selectable_label(armed, format!("{} {}", ph::CROSSHAIR, qymcad_i18n::tr("j-axis-pick"))).on_hover_text(qymcad_i18n::tr("j-axis-pick-hint")).clicked() {
                     joint.axis_pick = if armed { None } else { Some(cid) };
                 }
                 if has && ui.button(qymcad_i18n::tr("j-axis-auto")).on_hover_text(qymcad_i18n::tr("j-axis-auto-hint")).clicked() {
@@ -213,10 +209,7 @@ pub fn one_connector_controls(joint: &mut qymcad_ui_state::JointCommand, project
                 ui.label(qymcad_i18n::tr("j-offset-lower"));
                 for (k, name) in ["X", "Y", "Z"].iter().enumerate() {
                     ui.label(*name);
-                    changed |= ui
-                        .add(egui::DragValue::new(&mut off[k]).speed(0.1).suffix(qymcad_i18n::tr("unit-mm-suffix")))
-                        .on_hover_text(qymcad_i18n::tr("j-slide-hint"))
-                        .changed();
+                    changed |= ui.add(egui::DragValue::new(&mut off[k]).speed(0.1).suffix(qymcad_i18n::tr("unit-mm-suffix"))).on_hover_text(qymcad_i18n::tr("j-slide-hint")).changed();
                 }
             });
             if changed {
@@ -387,7 +380,6 @@ pub fn start_relation_pick_armed(jc: &mut qymcad_ui_state::JointCtx, on: bool) {
 /// point (on a hole, the middle or an end face), turn the secondary axis, slide along the main one.
 /// Without these handles the only way to correct a position is to move the part at random.
 pub fn connector_controls(jc: &mut qymcad_ui_state::JointCtx, ui: &mut egui::Ui, jid: Id) -> bool {
-    
     let Some((ca, cb)) = jc.project.joints.iter().find(|j| j.id == jid).map(|j| (j.a, j.b)) else { return false };
     let mut changed = false;
     // EXPANDED BY DEFAULT. Tuning the anchors IS the answer to "why did the part end up in the wrong
@@ -416,7 +408,8 @@ pub fn joint_glyphs(jc: &mut qymcad_ui_state::JointCtx, rect: Rect) -> Vec<(Id, 
         .iter()
         .filter(|j| qymcad_ui_state::joint_visible(jc.active_path, jc.project, jc.set, jc.workbench, j))
         .filter_map(|j| {
-            let (a, b) = qymcad_ui_state::joint_endpoints(&qymcad_ui_state::DrawCtx { cam: jc.cam, set: jc.set, scheme: jc.scheme, project: jc.project, active_path: jc.active_path }, j, rect, &basis)?;
+            let (a, b) =
+                qymcad_ui_state::joint_endpoints(&qymcad_ui_state::DrawCtx { cam: jc.cam, set: jc.set, scheme: jc.scheme, project: jc.project, active_path: jc.active_path }, j, rect, &basis)?;
             Some((j.id, Pos2::new((a.x + b.x) * 0.5, (a.y + b.y) * 0.5), j.kind))
         })
         .collect()
@@ -450,7 +443,11 @@ pub fn joint_giz_end(jc: &mut qymcad_ui_state::JointCtx) {
 
 /// Start dragging a DOF gizmo handle: pin the frame (o and dir) and the starting value of the parameter.
 pub fn joint_giz_begin(jc: &mut qymcad_ui_state::JointCtx, jid: Id, slot: u8, ring: bool) {
-    let Some(qymcad_ui_state::JointGizmo { origin: o, handles: hs }) = qymcad_ui_state::joint_giz_handles(&qymcad_ui_state::DrawCtx { cam: jc.cam, set: jc.set, scheme: jc.scheme, project: jc.project, active_path: jc.active_path }, jid) else { return };
+    let Some(qymcad_ui_state::JointGizmo { origin: o, handles: hs }) =
+        qymcad_ui_state::joint_giz_handles(&qymcad_ui_state::DrawCtx { cam: jc.cam, set: jc.set, scheme: jc.scheme, project: jc.project, active_path: jc.active_path }, jid)
+    else {
+        return;
+    };
     let Some(dir) = hs.iter().find(|h| h.slot == slot && h.ring == ring).map(|h| h.dir) else { return };
     // the drag starts from THE DRIVER if there is one, otherwise from the reading: the pull must start
     // from what was asked for, not from how it ended up if the request could not be met
@@ -471,7 +468,8 @@ pub fn joint_giz_begin(jc: &mut qymcad_ui_state::JointCtx, jid: Id, slot: u8, ri
 /// The DOF gizmo handle under the cursor: (slot, whether it is a ring). Arrows take priority over rings,
 /// as in the six-degree gizmo.
 pub fn joint_handle_hit(jc: &mut qymcad_ui_state::JointCtx, jid: Id, rect: Rect, basis: &([f64; 3], [f64; 3], [f64; 3]), pp: Pos2) -> Option<(u8, bool)> {
-    let qymcad_ui_state::JointGizmo { origin: o, handles: hs } = qymcad_ui_state::joint_giz_handles(&qymcad_ui_state::DrawCtx { cam: jc.cam, set: jc.set, scheme: jc.scheme, project: jc.project, active_path: jc.active_path }, jid)?;
+    let qymcad_ui_state::JointGizmo { origin: o, handles: hs } =
+        qymcad_ui_state::joint_giz_handles(&qymcad_ui_state::DrawCtx { cam: jc.cam, set: jc.set, scheme: jc.scheme, project: jc.project, active_path: jc.active_path }, jid)?;
     let l = 60.0 / jc.cam.scale as f64;
     // the translation arrows first
     for &qymcad_ui_state::JointHandle { slot, ring, dir } in hs.iter().filter(|h| !h.ring) {
@@ -747,8 +745,8 @@ pub fn tangent_pick_click(jc: &mut qymcad_ui_state::JointCtx, body: Id, key: qym
     jc.project.add_tangent(pair[0].0, pair[0].1.clone(), pair[1].0, pair[1].1.clone());
     *jc.status = qymcad_i18n::tr("j-tangent-made-ok");
     joint_console_settle(jc); // the round part rests on the flat one now, not on some later solve
-    // THE OPERATION STAYS OPEN: the part rests where the condition puts it as a preview until Apply or Enter keeps it and
-    // Esc takes it away (`tangent_finish`); the two picks stay in `tangent_pick` as the mark of that
+                              // THE OPERATION STAYS OPEN: the part rests where the condition puts it as a preview until Apply or Enter keeps it and
+                              // Esc takes it away (`tangent_finish`); the two picks stay in `tangent_pick` as the mark of that
 }
 
 /// FINISH A TANGENT CONDITION JUST MADE by its second pick: kept, its open operation closes as one step; not kept, the
@@ -1006,8 +1004,16 @@ pub fn joint_edit_bar(jc: &mut qymcad_ui_state::JointCtx, ui: &mut egui::Ui) {
         jc.joint.edit = None;
         return;
     };
-    let desc_a = jc.project.connector(j.a).map(|c| qymcad_ui_state::anchor_desc(&qymcad_ui_state::DrawCtx { cam: jc.cam, set: jc.set, scheme: jc.scheme, project: jc.project, active_path: jc.active_path }, &c.anchor)).unwrap_or_default();
-    let desc_b = jc.project.connector(j.b).map(|c| qymcad_ui_state::anchor_desc(&qymcad_ui_state::DrawCtx { cam: jc.cam, set: jc.set, scheme: jc.scheme, project: jc.project, active_path: jc.active_path }, &c.anchor)).unwrap_or_default();
+    let desc_a = jc
+        .project
+        .connector(j.a)
+        .map(|c| qymcad_ui_state::anchor_desc(&qymcad_ui_state::DrawCtx { cam: jc.cam, set: jc.set, scheme: jc.scheme, project: jc.project, active_path: jc.active_path }, &c.anchor))
+        .unwrap_or_default();
+    let desc_b = jc
+        .project
+        .connector(j.b)
+        .map(|c| qymcad_ui_state::anchor_desc(&qymcad_ui_state::DrawCtx { cam: jc.cam, set: jc.set, scheme: jc.scheme, project: jc.project, active_path: jc.active_path }, &c.anchor))
+        .unwrap_or_default();
     let repick = jc.joint.edit_repick;
     let (creating, mut finish) = (jc.joint.creating, None::<bool>);
     let mut done = false;
@@ -1029,8 +1035,7 @@ pub fn joint_edit_bar(jc: &mut qymcad_ui_state::JointCtx, ui: &mut egui::Ui) {
             // solver report and the list of joints: two places with the same words and different
             // truths is a thing already been through.
             if let Some((_, why)) = jc.project.joint_faults().iter().find(|(id, _)| *id == jid) {
-                ui.label(egui::RichText::new(format!("{} {}", ph::WARNING, qymcad_i18n::tr(why))).color(jc.scheme.pal.error_mild()))
-                    .on_hover_text(qymcad_i18n::tr(&format!("{why}-hint")));
+                ui.label(egui::RichText::new(format!("{} {}", ph::WARNING, qymcad_i18n::tr(why))).color(jc.scheme.pal.error_mild())).on_hover_text(qymcad_i18n::tr(&format!("{why}-hint")));
             }
             ui.separator();
             // changing the KIND of a joint right in the edit bar (the anchors are kept).
@@ -1154,12 +1159,17 @@ pub fn joint_tool_bar(jc: &mut qymcad_ui_state::JointCtx, ui: &mut egui::Ui) {
     if let Some(sel) = jc.joint.tangent_pick.clone() {
         let made = sel.len() >= 2;
         let (mut cancel, mut apply) = (false, false);
-        egui::Panel::top("tangent_tool_bar").frame(qymcad_ui_state::tool_bar_frame(jc.scheme))
-.show(ui, |ui| {
+        egui::Panel::top("tangent_tool_bar").frame(qymcad_ui_state::tool_bar_frame(jc.scheme)).show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.label(egui::RichText::new(format!("{} {}", ph::CIRCLE_HALF_TILT, qymcad_i18n::tr("j-tangent-made"))).strong());
                 ui.separator();
-                let hint = if made { qymcad_i18n::tr("j-tangent-made-ok") } else if sel.is_empty() { qymcad_i18n::tr("j-tangent-pick") } else { qymcad_i18n::tr("j-tangent-second") };
+                let hint = if made {
+                    qymcad_i18n::tr("j-tangent-made-ok")
+                } else if sel.is_empty() {
+                    qymcad_i18n::tr("j-tangent-pick")
+                } else {
+                    qymcad_i18n::tr("j-tangent-second")
+                };
                 ui.label(egui::RichText::new(hint).color(jc.scheme.pal.hint()));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if made {
@@ -1195,8 +1205,7 @@ pub fn joint_tool_bar(jc: &mut qymcad_ui_state::JointCtx, ui: &mut egui::Ui) {
     // the width tool bar - how many anchors are shown, a "make it" button and a way out.
     if let Some(sel) = jc.joint.width_pick.clone() {
         let (mut make, mut cancel) = (false, false);
-        egui::Panel::top("width_tool_bar").frame(qymcad_ui_state::tool_bar_frame(jc.scheme))
-.show(ui, |ui| {
+        egui::Panel::top("width_tool_bar").frame(qymcad_ui_state::tool_bar_frame(jc.scheme)).show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.label(egui::RichText::new(format!("{} {}", ph::ARROWS_OUT_LINE_HORIZONTAL, qymcad_i18n::tr("j-width-made"))).strong());
                 ui.separator();
@@ -1229,8 +1238,7 @@ pub fn joint_tool_bar(jc: &mut qymcad_ui_state::JointCtx, ui: &mut egui::Ui) {
     // as every other tool: the hint on top, Enter confirms, Esc cancels.
     if let Some(sel) = jc.joint.group_pick.clone() {
         let (mut make, mut cancel) = (false, false);
-        egui::Panel::top("group_tool_bar").frame(qymcad_ui_state::tool_bar_frame(jc.scheme))
-.show(ui, |ui| {
+        egui::Panel::top("group_tool_bar").frame(qymcad_ui_state::tool_bar_frame(jc.scheme)).show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.label(egui::RichText::new(format!("{} {}", ph::SELECTION_ALL, qymcad_i18n::tr("j-group-made"))).strong());
                 ui.separator();
@@ -1262,8 +1270,7 @@ pub fn joint_tool_bar(jc: &mut qymcad_ui_state::JointCtx, ui: &mut egui::Ui) {
     // the grounding tool bar - a hint and a way out
     if jc.joint.ground_pick {
         let mut cancel = false;
-        egui::Panel::top("ground_tool_bar").frame(qymcad_ui_state::tool_bar_frame(jc.scheme))
-.show(ui, |ui| {
+        egui::Panel::top("ground_tool_bar").frame(qymcad_ui_state::tool_bar_frame(jc.scheme)).show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.label(egui::RichText::new(format!("{} {}", ph::ANCHOR, qymcad_i18n::tr("jt-ground-btn"))).strong());
                 ui.separator();
@@ -1292,8 +1299,7 @@ pub fn joint_tool_bar(jc: &mut qymcad_ui_state::JointCtx, ui: &mut egui::Ui) {
     // THE ANCHOR TOOL BAR: the kind of anchor and a hint about where to click.
     if jc.joint.conn_pick {
         let mut cancel = false;
-        egui::Panel::top("conn_tool_bar").frame(qymcad_ui_state::tool_bar_frame(jc.scheme))
-.show(ui, |ui| {
+        egui::Panel::top("conn_tool_bar").frame(qymcad_ui_state::tool_bar_frame(jc.scheme)).show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.label(egui::RichText::new(format!("{} {}", ph::CROSSHAIR, qymcad_i18n::tr("j-conn-new"))).strong());
                 ui.separator();
@@ -1323,15 +1329,19 @@ pub fn joint_tool_bar(jc: &mut qymcad_ui_state::JointCtx, ui: &mut egui::Ui) {
         let pick = jc.joint.relation_pick.clone().unwrap_or_default();
         let need = relation_picks_needed(pick.kind);
         let have = if need == 1 { pick.picks.len() / 2 } else { pick.picks.len() };
-        egui::Panel::top("relation_tool_bar").frame(qymcad_ui_state::tool_bar_frame(jc.scheme))
-.show(ui, |ui| {
+        egui::Panel::top("relation_tool_bar").frame(qymcad_ui_state::tool_bar_frame(jc.scheme)).show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.label(egui::RichText::new(format!("{} {}", ph::GEAR_SIX, qymcad_i18n::tr("j-relation-btn"))).strong());
                 ui.separator();
                 ui.label(qymcad_i18n::tr("j-kind"));
                 let mut k = pick.kind;
                 egui::ComboBox::from_id_salt("relation_bar_kind").selected_text(qymcad_i18n::tr(k.label())).show_ui(ui, |ui| {
-                    for kk in [qymcad_core::feature::RelationKind::Gear, qymcad_core::feature::RelationKind::RackPinion, qymcad_core::feature::RelationKind::Screw, qymcad_core::feature::RelationKind::Linear] {
+                    for kk in [
+                        qymcad_core::feature::RelationKind::Gear,
+                        qymcad_core::feature::RelationKind::RackPinion,
+                        qymcad_core::feature::RelationKind::Screw,
+                        qymcad_core::feature::RelationKind::Linear,
+                    ] {
                         ui.selectable_value(&mut k, kk, qymcad_i18n::tr(kk.label()));
                     }
                 });
@@ -1539,7 +1549,11 @@ pub fn joint_grab_part(jc: &mut qymcad_ui_state::JointCtx, body: Id, rect: Rect,
         return true;
     }
     let Some(jid) = jc.project.drive_joint_in_context(owner, ctx) else { return false };
-    let Some(qymcad_ui_state::JointGizmo { origin: o, handles: hs }) = qymcad_ui_state::joint_giz_handles(&qymcad_ui_state::DrawCtx { cam: jc.cam, set: jc.set, scheme: jc.scheme, project: jc.project, active_path: jc.active_path }, jid) else { return false };
+    let Some(qymcad_ui_state::JointGizmo { origin: o, handles: hs }) =
+        qymcad_ui_state::joint_giz_handles(&qymcad_ui_state::DrawCtx { cam: jc.cam, set: jc.set, scheme: jc.scheme, project: jc.project, active_path: jc.active_path }, jid)
+    else {
+        return false;
+    };
     if hs.is_empty() {
         return false; // no freedoms left - there is nothing to drive
     }

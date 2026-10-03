@@ -249,4 +249,3 @@ probe! {
         assert!(first_now != first_before || second_now.iter().all(|v| v.abs() < 1e-3), "swapping the roles changed nothing: the first part stands at {first_now:?} and the second at {second_now:?}");
     }
 }
-

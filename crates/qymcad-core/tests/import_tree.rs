@@ -41,7 +41,11 @@ fn a_tree_comes_in_as_parts_and_subassemblies_where_the_file_places_them() {
     let children = |id| p.components.iter().filter(move |c| c.parent == Some(id)).map(|c| (c.name.clone(), c.kind)).collect::<Vec<_>>();
     assert_eq!((comp(root).name.as_str(), comp(root).kind), ("head", ComponentKind::Assembly), "one node at the top stands alone, under its own name");
     assert_eq!(comp(root).parent, Some(p.root), "the import lands in the active context");
-    assert_eq!(children(root), vec![("plate".to_string(), ComponentKind::Part), ("plate".to_string(), ComponentKind::Part), ("unit".to_string(), ComponentKind::Assembly)], "an empty group must not come in");
+    assert_eq!(
+        children(root),
+        vec![("plate".to_string(), ComponentKind::Part), ("plate".to_string(), ComponentKind::Part), ("unit".to_string(), ComponentKind::Assembly)],
+        "an empty group must not come in"
+    );
     let unit = p.components.iter().find(|c| c.name == "unit").expect("the subassembly").id;
     assert_eq!(children(unit), vec![("pin".to_string(), ComponentKind::Part)]);
     // every body holds an Import node in its own part, pointing back at its place in the source
@@ -185,7 +189,8 @@ fn a_piece_of_more_colours_than_its_palette_holds_keeps_them_near() {
     p.import_tree_as_parts(vec![piece], source, "scan").expect("came in");
     let (palette, places) = p.tri_colors.get(&p.lineage_root(body)).expect("the piece keeps its triangles' colours");
     assert!(palette.len() <= 255, "a palette of {} colours", palette.len());
-    let far: Vec<(usize, [u8; 3], [u8; 3])> = places.iter().map(|&k| palette[k as usize]).zip(&colours).enumerate().filter(|(_, (got, c))| (0..3).any(|i| got[i].abs_diff(c[i]) > 8)).map(|(k, (got, c))| (k, *c, got)).collect();
+    let far: Vec<(usize, [u8; 3], [u8; 3])> =
+        places.iter().map(|&k| palette[k as usize]).zip(&colours).enumerate().filter(|(_, (got, c))| (0..3).any(|i| got[i].abs_diff(c[i]) > 8)).map(|(k, (got, c))| (k, *c, got)).collect();
     assert!(far.is_empty(), "{} triangles come in far from their colours (triangle, its colour, shown), the first: {:?}", far.len(), &far[..far.len().min(5)]);
 }
 

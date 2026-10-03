@@ -59,10 +59,7 @@ mod tests {
         // The package writes the architecture as `$CARCH` - namcap asks for that, and with arch=('x86_64')
         // it is the same word. The two spellings are both accepted here; what must not change is the shape
         // of the name and the fact that the package is declared for the architecture the build writes.
-        assert!(
-            src.contains("qymcad-${_relver}-${CARCH}.AppImage") || src.contains("qymcad-${_relver}-x86_64.AppImage"),
-            "the source line does not name the file the build writes"
-        );
+        assert!(src.contains("qymcad-${_relver}-${CARCH}.AppImage") || src.contains("qymcad-${_relver}-x86_64.AppImage"), "the source line does not name the file the build writes");
         assert!(field(&src, "arch").contains("x86_64"), "the build writes an x86_64 file and the package is not declared for x86_64");
         assert!(!field(&src, "_relver").is_empty(), "the release version is empty, so the source line points at nothing");
     }
@@ -92,7 +89,9 @@ mod tests {
     fn the_installed_files_can_be_read_by_everybody() {
         let src = pkgbuild();
         let copy = src.find("cp -a usr \"$pkgdir/opt/qymcad/\"").expect("the package copies the AppImage's usr into /opt/qymcad");
-        let modes = src.find("chmod -R u=rwX,go=rX \"$pkgdir/opt/qymcad\"").unwrap_or_else(|| panic!("the package keeps the modes the unpacking left - its directories are 0700, so only root could open them"));
+        let modes = src
+            .find("chmod -R u=rwX,go=rX \"$pkgdir/opt/qymcad\"")
+            .unwrap_or_else(|| panic!("the package keeps the modes the unpacking left - its directories are 0700, so only root could open them"));
         assert!(modes > copy, "the modes are set before the copy that brings the unpacked 0700 directories in");
     }
 
@@ -135,10 +134,6 @@ mod tests {
         if !info.contains(&sum) {
             apart.push(format!("the checksum {sum} is not in .SRCINFO"));
         }
-        assert!(
-            apart.is_empty(),
-            "the generated .SRCINFO has drifted from the PKGBUILD - regenerate it with packaging/aur/update-pkgbuild.sh:\n{}",
-            apart.join("\n")
-        );
+        assert!(apart.is_empty(), "the generated .SRCINFO has drifted from the PKGBUILD - regenerate it with packaging/aur/update-pkgbuild.sh:\n{}", apart.join("\n"));
     }
 }

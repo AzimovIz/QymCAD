@@ -21,9 +21,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::geom::Contour;
-use crate::model::{
-    Body, DatumAxis, DatumPoint, Id, NamedDim, Param, Project, Sketch, SourceFile, Units, WorkPlane,
-};
+use crate::model::{Body, DatumAxis, DatumPoint, Id, NamedDim, Param, Project, Sketch, SourceFile, Units, WorkPlane};
 
 /// THE MAPS OF THE FILE ARE ORDERED, and that is about the file rather than about speed.
 ///

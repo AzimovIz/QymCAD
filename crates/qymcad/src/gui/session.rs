@@ -378,7 +378,18 @@ impl Session {
         crate::system::stand_in(true);
         let win = Window::new(egui::vec2(machine.screen.0, machine.screen.1));
         let app = Box::new(super::start_the_program(&win.ctx, Some(&machine.kept)));
-        let mut session = Session { app, win, kept: machine.kept, budget: Duration::from_secs(120), pointer: None, held: Modifiers::default(), last_press: f64::NEG_INFINITY, down: Vec::new(), locale: machine.locale, watching: false };
+        let mut session = Session {
+            app,
+            win,
+            kept: machine.kept,
+            budget: Duration::from_secs(120),
+            pointer: None,
+            held: Modifiers::default(),
+            last_press: f64::NEG_INFINITY,
+            down: Vec::new(),
+            locale: machine.locale,
+            watching: false,
+        };
         if !machine.greeting {
             // the greeting has been on screen for its time: it goes on the first frame, through its own branch
             session.app.waiting.splash_until = Some(Instant::now());
@@ -840,11 +851,7 @@ impl Session {
 
     /// Where the small buttons of the window stand: an icon, not a tool plate and not a word.
     fn small_buttons(&mut self) -> Vec<Pos2> {
-        self.widgets()
-            .into_iter()
-            .filter(|w| matches!(w.kind, crate::gui::window::Kind::Button) && w.rect.width() <= 32.0 && w.rect.height() <= 32.0)
-            .map(|w| w.rect.center())
-            .collect()
+        self.widgets().into_iter().filter(|w| matches!(w.kind, crate::gui::window::Kind::Button) && w.rect.width() <= 32.0 && w.rect.height() <= 32.0).map(|w| w.rect.center()).collect()
     }
 
     /// THE HINT OF EVERY TOOL BUTTON OF THE WINDOW, read as a person reads them: the pointer rests over each button in
@@ -1164,7 +1171,15 @@ impl Session {
         let cube = self.app.cube_ctx();
         let rect = self.app.viewing.view_rect;
         let zones = super::viewcube::zones();
-        let sign = |v: f64| if v > 1e-9 { 1 } else if v < -1e-9 { -1 } else { 0 };
+        let sign = |v: f64| {
+            if v > 1e-9 {
+                1
+            } else if v < -1e-9 {
+                -1
+            } else {
+                0
+            }
+        };
         let i = zones.iter().position(|z| z.dir.map(sign) == dir)?;
         let at = super::viewcube::zone_center(&cube, rect, i);
         (super::viewcube::zone_at(&cube, rect, at) == Some(i)).then_some(at)
@@ -1307,8 +1322,14 @@ impl Session {
                 visible: c.visible,
                 grounded: c.grounded,
                 clone_of: Some(p.instance_origin(c.id)).filter(|o| *o != c.id).and_then(|o| p.components.iter().find(|q| q.id == o)).map(|q| named(&q.name)),
-                at: { let t = p.component_transform(c.id); [t[3], t[7], t[11]] },
-                axes: { let t = p.component_transform(c.id); [[t[0], t[4], t[8]], [t[1], t[5], t[9]], [t[2], t[6], t[10]]] },
+                at: {
+                    let t = p.component_transform(c.id);
+                    [t[3], t[7], t[11]]
+                },
+                axes: {
+                    let t = p.component_transform(c.id);
+                    [[t[0], t[4], t[8]], [t[1], t[5], t[9]], [t[2], t[6], t[10]]]
+                },
             })
             .collect();
         use qymcad_core::model::EntityKind;
@@ -1412,12 +1433,7 @@ impl Session {
             parts,
             sketches,
             editing: qymcad_ui_state::edit_si(p, &app.sketch_ses).map(|si| named(&p.sketches[si].name)),
-            context: app
-                .active_path
-                .last()
-                .and_then(|id| p.components.iter().find(|c| c.id == *id))
-                .map(|c| named(&c.name))
-                .unwrap_or_else(|| qymcad_i18n::tr("wb-assembly")),
+            context: app.active_path.last().and_then(|id| p.components.iter().find(|c| c.id == *id)).map(|c| named(&c.name)).unwrap_or_else(|| qymcad_i18n::tr("wb-assembly")),
             datums: p
                 .planes
                 .iter()
@@ -1523,7 +1539,12 @@ impl Session {
             panic!("no window titled {title:?} is open; open: {:?}", self.windows());
         };
         // the cross is the framework's own button, and it tells a screen reader what it does in these words
-        let cross = self.win.widgets.iter().find(|w| w.kind == Kind::Button && w.label == "Close window" && window.contains(w.rect.center()) && w.rect.center().y < window.min.y + 40.0).map(|w| w.rect.center());
+        let cross = self
+            .win
+            .widgets
+            .iter()
+            .find(|w| w.kind == Kind::Button && w.label == "Close window" && window.contains(w.rect.center()) && w.rect.center().y < window.min.y + 40.0)
+            .map(|w| w.rect.center());
         match cross {
             Some(at) => self.click(at),
             None => panic!("the window {title:?} has no cross to close it with"),
@@ -1574,7 +1595,11 @@ impl Session {
                 });
                 cells.push(cell);
             }
-            let lost = g.rows.iter().flat_map(|r| r.row.glyphs.iter()).any(|glyph| !glyph.chr.is_whitespace() && !matches!(glyph.chr, '\u{25fb}' | '?') && !glyph.uv_rect.is_nothing() && cells.contains(&(glyph.uv_rect.min, glyph.uv_rect.max)));
+            let lost = g
+                .rows
+                .iter()
+                .flat_map(|r| r.row.glyphs.iter())
+                .any(|glyph| !glyph.chr.is_whitespace() && !matches!(glyph.chr, '\u{25fb}' | '?') && !glyph.uv_rect.is_nothing() && cells.contains(&(glyph.uv_rect.min, glyph.uv_rect.max)));
             if lost {
                 out.push(job.text.clone());
             }

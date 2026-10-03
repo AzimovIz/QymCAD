@@ -32,7 +32,9 @@ pub(crate) fn take(pc: &mut PartCtx, at: ArrayAxisAim) {
     let axis = match at {
         ArrayAxisAim::Axis(AxisHit::Datum(id)) => Ok((id, "vp-array-axis-datum")),
         ArrayAxisAim::Axis(AxisHit::Edge(i)) => crate::gui::axis_from_edge(pc.active_path, pc.edges, pc.live, pc.project, i).map(|id| (id, "vp-array-axis-edge")).ok_or("vp-edge-not-axis"),
-        ArrayAxisAim::Axis(AxisHit::Face(body, fid)) => crate::gui::axis_from_face(pc.active_path, pc.edges, pc.live, pc.project, body, fid).map(|id| (id, "vp-array-axis-cyl")).ok_or("vp-face-has-no-axis"),
+        ArrayAxisAim::Axis(AxisHit::Face(body, fid)) => {
+            crate::gui::axis_from_face(pc.active_path, pc.edges, pc.live, pc.project, body, fid).map(|id| (id, "vp-array-axis-cyl")).ok_or("vp-face-has-no-axis")
+        }
         ArrayAxisAim::Point(p) => match pc.arr.axis_first.take() {
             None => {
                 pc.arr.axis_first = Some(p);

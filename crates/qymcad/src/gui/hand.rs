@@ -275,7 +275,8 @@ impl<'a> Hand<'a> {
     fn picks2d(&mut self, place: (f64, f64)) -> Option<(u8, u64)> {
         let si = qymcad_ui_state::edit_si(&self.app.project, &self.app.sketch_ses)?;
         let (rect, pos) = (self.app.viewing.view_rect, self.screen2d(place));
-        if qymcad_ui_state::text_at(&self.app.project, &self.app.viewing.view, rect, pos, si).is_some() || qymcad_ui_state::note_at(&self.app.project, &self.app.viewing.view, rect, pos, si).is_some() {
+        if qymcad_ui_state::text_at(&self.app.project, &self.app.viewing.view, rect, pos, si).is_some() || qymcad_ui_state::note_at(&self.app.project, &self.app.viewing.view, rect, pos, si).is_some()
+        {
             return None;
         }
         let mut sk = self.app.sketch_ctx();
@@ -295,7 +296,7 @@ impl<'a> Hand<'a> {
     fn in_view2d(&mut self, places: &[(f64, f64)]) {
         self.app.viewing.mode_3d = false;
         self.frame(Vec::new()); // the canvas as this frame lays it out, with the view as it now stands
-        // A REBUILD UNDER WAY REFUSES INPUT, and a person waits for its spinner to go before pressing anything.
+                                // A REBUILD UNDER WAY REFUSES INPUT, and a person waits for its spinner to go before pressing anything.
         let waiting = std::time::Instant::now();
         while self.app.regen.busy.is_some() && waiting.elapsed() < std::time::Duration::from_secs(60) {
             std::thread::sleep(std::time::Duration::from_millis(20));
@@ -619,7 +620,7 @@ impl<'a> Hand<'a> {
         // the list a row at a time until a click lands on one, which is what a person does after a miss; the
         // rows are 26 px apart. It never presses the button itself, which opens the file dialog of the system.
         self.frame(Vec::new());
-        let Some(below) = self.win.drawn.iter().find(|(t, _)| *t == qymcad_i18n::tr("font-from-file")).map(|(_, r)| r) .copied() else { return false };
+        let Some(below) = self.win.drawn.iter().find(|(t, _)| *t == qymcad_i18n::tr("font-from-file")).map(|(_, r)| r).copied() else { return false };
         let first = egui::pos2(below.left(), below.bottom() + 26.0 + 13.0);
         for step in 0..12 {
             let at = first + egui::vec2(0.0, 26.0 * step as f32);
@@ -646,9 +647,13 @@ impl<'a> Hand<'a> {
             self.sk_tool(11);
         }
         self.frame(Vec::new());
-        let word = |hand: &Self, w: &str, near: egui::Pos2| hand.win.drawn.iter().filter(|(t, _)| t == w).map(|(_, r)| *r).min_by(|a, b| a.center().distance(near).total_cmp(&b.center().distance(near)));
+        let word =
+            |hand: &Self, w: &str, near: egui::Pos2| hand.win.drawn.iter().filter(|(t, _)| t == w).map(|(_, r)| *r).min_by(|a, b| a.center().distance(near).total_cmp(&b.center().distance(near)));
         let named = word(self, &qymcad_i18n::tr("tool-text"), egui::Pos2::new(700.0, 0.0)).expect("the top bar of the text tool names no string field");
-        for (field, typed) in [(named, text.to_string()), (word(self, &qymcad_i18n::tr("opt-height-short"), named.center()).expect("the top bar of the text tool names no height"), format!("{height}"))] {
+        for (field, typed) in [
+            (named, text.to_string()),
+            (word(self, &qymcad_i18n::tr("opt-height-short"), named.center()).expect("the top bar of the text tool names no height"), format!("{height}")),
+        ] {
             self.press_screen(egui::pos2(field.right() + 24.0, field.center().y));
             self.chord(egui::Modifiers::COMMAND, egui::Key::A);
             self.type_text(&typed);
@@ -817,7 +822,6 @@ impl<'a> Hand<'a> {
         qymcad_ui_state::rebuild_if_dirty(&mut self.app.rebuild_ctx());
         self
     }
-
 }
 
 #[cfg(test)]
@@ -840,12 +844,7 @@ mod tests {
         if let Some(owner) = app.project.body_owner(body) {
             app.enter_component(owner);
         }
-        let edge = app.project.regen_edges[&body]
-            .iter()
-            .filter(|e| (e.a[2] - e.b[2]).abs() < 1e-6)
-            .max_by(|x, y| x.mid[2].total_cmp(&y.mid[2]))
-            .cloned()
-            .expect("the top edge");
+        let edge = app.project.regen_edges[&body].iter().filter(|e| (e.a[2] - e.b[2]).abs() < 1e-6).max_by(|x, y| x.mid[2].total_cmp(&y.mid[2])).cloned().expect("the top edge");
 
         let mut hand = Hand::new(&mut app);
         hand.look_at([10.0, 10.0, 5.0], 9.0).tool(4).click(edge.mid).enter();

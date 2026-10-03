@@ -47,13 +47,7 @@ mod tests {
             app.exit_context();
         }
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
-        let mine: Vec<Id> = app
-            .project
-            .components
-            .iter()
-            .filter(|c| c.parent == Some(app.project.root) && !before.contains(&c.id))
-            .map(|c| c.id)
-            .collect();
+        let mine: Vec<Id> = app.project.components.iter().filter(|c| c.parent == Some(app.project.root) && !before.contains(&c.id)).map(|c| c.id).collect();
         assert_eq!(mine.len(), 2, "setup: there should be two parts of our own, and there are {}", mine.len());
         (mine[0], mine[1])
     }
@@ -107,11 +101,7 @@ mod tests {
 
         qymcad_assembly::delete_connector_asked(&mut app.joint_ctx(), ca);
         assert!(app.project.connector(ca).is_some(), "a connector under a joint must survive");
-        assert!(
-            app.status.contains(&crate::i18n::tr1("j-conn-in-use", "n", "1")),
-            "the refusal must be said in words, and the status line holds: {}",
-            app.status
-        );
+        assert!(app.status.contains(&crate::i18n::tr1("j-conn-in-use", "n", "1")), "the refusal must be said in words, and the status line holds: {}", app.status);
 
         // and a free one is deleted
         let free = app.project.add_connector_standalone(a, AnchorRef::Origin);

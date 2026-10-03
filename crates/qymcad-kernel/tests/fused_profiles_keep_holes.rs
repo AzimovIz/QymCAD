@@ -10,12 +10,7 @@ use qymcad_core::geom::{encode_profile, Contour, Point2};
 
 fn rect(cx: f64, cy: f64, w: f64, h: f64) -> Contour {
     let (hw, hh) = (0.5 * w, 0.5 * h);
-    Contour::closed(vec![
-        Point2::new(cx - hw, cy - hh),
-        Point2::new(cx + hw, cy - hh),
-        Point2::new(cx + hw, cy + hh),
-        Point2::new(cx - hw, cy + hh),
-    ])
+    Contour::closed(vec![Point2::new(cx - hw, cy - hh), Point2::new(cx + hw, cy - hh), Point2::new(cx + hw, cy + hh), Point2::new(cx - hw, cy + hh)])
 }
 
 #[test]
@@ -28,10 +23,7 @@ fn fused_profiles_keep_their_holes() {
     let profiles = vec![encode_profile(&outer, &[&mid]), encode_profile(&mid, &[&inner])];
     let s = qymcad_kernel::Shape::extrude_profiles_fused(&profiles, 1.0).expect("fusing the profiles");
     let v = s.volume();
-    assert!(
-        (v - 9600.0).abs() < 1.0,
-        "the fusion has to keep the hole in the centre: V={v:.1}, expecting 9600; a solid slab would give 10000 and the sum of the outer loops 13600"
-    );
+    assert!((v - 9600.0).abs() < 1.0, "the fusion has to keep the hole in the centre: V={v:.1}, expecting 9600; a solid slab would give 10000 and the sum of the outer loops 13600");
 }
 
 /// The same case with an island inside the hole: the island is material and the hole remains around it.

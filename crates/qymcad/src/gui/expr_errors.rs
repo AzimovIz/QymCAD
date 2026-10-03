@@ -75,7 +75,11 @@ mod tests {
         let mut app = App::default();
         app.project.parameters = vec![qymcad_core::model::Param { name: "w".into(), expr: "60 +".into(), value: 0.0 }];
         app.win.open(WinKind::Params);
-        let texts = super::super::screen_keys::tests::frame_text(&mut app, |a, c| { let mut asks = Vec::new(); crate::gui::panels_windows::params_window(&mut a.win_ctx(&mut asks), c); a.do_win_asks(asks, c); });
+        let texts = super::super::screen_keys::tests::frame_text(&mut app, |a, c| {
+            let mut asks = Vec::new();
+            crate::gui::panels_windows::params_window(&mut a.win_ctx(&mut asks), c);
+            a.do_win_asks(asks, c);
+        });
         let want = crate::gui::error_words::expr_error_text(&app.project.eval_expr("60 +").expect_err("the expression is broken"));
         crate::i18n::set_language(&prev);
         assert!(texts.iter().any(|t| t.contains(&want)), "the parameters window carries no reason \"{want}\": {texts:?}");

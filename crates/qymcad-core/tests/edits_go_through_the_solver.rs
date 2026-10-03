@@ -73,10 +73,7 @@ fn moving_a_shape_cannot_break_a_coincidence_with_a_point_left_behind() {
     };
     let (u, v) = (at(ma), at(sa));
     eprintln!("the tied ends came to rest at {u:?} and {v:?}");
-    assert!(
-        (u.0 - v.0).hypot(u.1 - v.1) < 1e-6,
-        "the move tore a coincidence apart: {u:?} against {v:?}"
-    );
+    assert!((u.0 - v.0).hypot(u.1 - v.1) < 1e-6, "the move tore a coincidence apart: {u:?} against {v:?}");
 }
 
 #[test]
@@ -90,12 +87,7 @@ fn rotating_a_horizontal_line_leaves_it_horizontal() {
 
     let (a2, b2) = line(&p, si);
     eprintln!("after a 30 deg turn the ends sit at y={} and y={}", a2.2, b2.2);
-    assert!(
-        (a2.2 - b2.2).abs() < 1e-6,
-        "the line is no longer horizontal though a horizontal constraint holds it: y={} and y={}",
-        a2.2,
-        b2.2
-    );
+    assert!((a2.2 - b2.2).abs() < 1e-6, "the line is no longer horizontal though a horizontal constraint holds it: y={} and y={}", a2.2, b2.2);
 }
 
 #[test]
@@ -103,14 +95,7 @@ fn scaling_a_dimensioned_line_leaves_the_dimension_true() {
     let (mut p, si) = new_sketch();
     let eid = p.add_line_entity(si, 10.0, 0.0, 30.0, 0.0, qymcad_core::feature::Purpose::Real);
     let (a, b) = line(&p, si);
-    p.sketches[si].constraints.push(Constraint::Distance {
-        a: a.0,
-        b: b.0,
-        d: 20.0,
-        off: 0.0,
-        expr: String::new(),
-        driven: false,
-        axis: 0, at: None });
+    p.sketches[si].constraints.push(Constraint::Distance { a: a.0, b: b.0, d: 20.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
 
     p.scale_entities(si, &[eid], 10.0, 0.0, 2.0);
 

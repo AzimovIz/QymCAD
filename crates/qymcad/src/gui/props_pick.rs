@@ -19,7 +19,9 @@ fn xyz(p: [f64; 3]) -> String {
 /// half a turn), anything else the length of its polyline - exact for a straight edge.
 fn length_of(pr: &mut PropsCtx, body: Id, e: &qymcad_core::geom::MeshEdge) -> f64 {
     let poly_len = qymcad_pick::body_edges_cached(pr.cache, pr.live, pr.regen, body)
-        .and_then(|polys| polys.ids.iter().position(|i| *i == e.id).map(|k| polys.polys[k].windows(2).map(|w| (0..3).map(|i| (w[1][i] - w[0][i]) as f64).map(|d| d * d).sum::<f64>().sqrt()).sum::<f64>()))
+        .and_then(|polys| {
+            polys.ids.iter().position(|i| *i == e.id).map(|k| polys.polys[k].windows(2).map(|w| (0..3).map(|i| (w[1][i] - w[0][i]) as f64).map(|d| d * d).sum::<f64>().sqrt()).sum::<f64>())
+        })
         .unwrap_or(0.0);
     if e.radius <= 0.0 {
         return poly_len;

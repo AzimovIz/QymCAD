@@ -32,7 +32,14 @@ pub fn offset_bulge(verts: &[BVert], dist: f64) -> Vec<Vec<BVert>> {
     }
     pl.parallel_offset(dist)
         .iter()
-        .map(|r| (0..r.vertex_count()).map(|i| { let v = r.at(i); BVert { x: v.x, y: v.y, bulge: v.bulge } }).collect::<Vec<_>>())
+        .map(|r| {
+            (0..r.vertex_count())
+                .map(|i| {
+                    let v = r.at(i);
+                    BVert { x: v.x, y: v.y, bulge: v.bulge }
+                })
+                .collect::<Vec<_>>()
+        })
         .filter(|v: &Vec<BVert>| v.len() >= 2)
         .collect()
 }
@@ -47,11 +54,7 @@ pub fn offset(contour: &Contour, dist: f64) -> Vec<Contour> {
     for p in &contour.points {
         pl.add(p.x, p.y, 0.0);
     }
-    pl.parallel_offset(dist)
-        .iter()
-        .map(pline_to_contour)
-        .filter(|c| c.points.len() >= 3)
-        .collect()
+    pl.parallel_offset(dist).iter().map(pline_to_contour).filter(|c| c.points.len() >= 3).collect()
 }
 
 /// Offset outwards, growing the extents, or inwards, shrinking them, regardless of the traversal direction of
@@ -62,10 +65,7 @@ pub fn offset_to_side(contour: &Contour, dist: f64, outward: bool) -> Vec<Contou
     candidates.extend(offset(contour, dist));
     candidates.extend(offset(contour, -dist));
 
-    candidates
-        .into_iter()
-        .filter(|c| if outward { c.area() > base } else { c.area() < base })
-        .collect()
+    candidates.into_iter().filter(|c| if outward { c.area() > base } else { c.area() < base }).collect()
 }
 
 /// A boolean operation over two closed contours, used by trimming and region edits.
@@ -110,12 +110,7 @@ fn pline_to_contour(pl: &Polyline<f64>) -> Contour {
         };
         if let Some(nv) = next {
             if v.bulge.abs() > 1e-9 {
-                let arc = tessellate_bulge(
-                    Point2::new(v.x, v.y),
-                    Point2::new(nv.x, nv.y),
-                    v.bulge,
-                    ARC_SAG,
-                );
+                let arc = tessellate_bulge(Point2::new(v.x, v.y), Point2::new(nv.x, nv.y), v.bulge, ARC_SAG);
                 pts.extend(arc);
             }
         }
@@ -176,18 +171,13 @@ mod tests {
         // the middle one passes near (0.707, 0.707)
         let mid = pts[pts.len() / 2];
         let d = std::f64::consts::FRAC_1_SQRT_2; // the corner of a unit square lies at (1/sqrt 2, 1/sqrt 2)
-    assert!((mid.x - d).abs() < 0.05 && (mid.y - d).abs() < 0.05);
+        assert!((mid.x - d).abs() < 0.05 && (mid.y - d).abs() < 0.05);
     }
 
     #[test]
     fn offset_square_outward_inward() {
         // a 10×10 square, counter-clockwise
-        let sq = Contour::closed(vec![
-            Point2::new(0.0, 0.0),
-            Point2::new(10.0, 0.0),
-            Point2::new(10.0, 10.0),
-            Point2::new(0.0, 10.0),
-        ]);
+        let sq = Contour::closed(vec![Point2::new(0.0, 0.0), Point2::new(10.0, 0.0), Point2::new(10.0, 10.0), Point2::new(0.0, 10.0)]);
         let out = offset_to_side(&sq, 2.0, true);
         assert!(!out.is_empty(), "an outward offset has to exist");
         // the area grew: with rounded corners it is about 14×14 minus the corner cuts

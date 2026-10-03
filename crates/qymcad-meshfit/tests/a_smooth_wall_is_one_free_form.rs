@@ -75,12 +75,24 @@ fn a_fitted_wall_makes_a_face_of_its_own_area() {
     }
     // the four sides, walked anticlockwise seen from above (the saddle faces up), each a polyline of the saddle's points
     let side = |from: (f64, f64), to: (f64, f64)| -> Vec<[f64; 3]> {
-        (0..=40).map(|k| { let t = k as f64 / 40.0; let (x, y) = (from.0 + (to.0 - from.0) * t, from.1 + (to.1 - from.1) * t); [x, y, f(x, y)] }).collect()
+        (0..=40)
+            .map(|k| {
+                let t = k as f64 / 40.0;
+                let (x, y) = (from.0 + (to.0 - from.0) * t, from.1 + (to.1 - from.1) * t);
+                [x, y, f(x, y)]
+            })
+            .collect()
     };
     let c = [(-h, -h), (h, -h), (h, h), (-h, h)];
     let corners: Vec<[f64; 3]> = c.iter().map(|&(x, y)| [x, y, f(x, y)]).collect();
     let edges: Vec<FaceEdge> = (0..4).map(|k| FaceEdge { curve: EdgeCurve::Polyline, ends: Some([k, (k + 1) % 4]), points: side(c[k], c[(k + 1) % 4]) }).collect();
-    let face = BoundedFace { surface: FaceSurface::Spline { nu: wall.surface.nu, nv: wall.surface.nv, frame: wall.surface.frame }, outward: true, inside: [0.0, 0.0, 0.0], loops: vec![vec![(0, true), (1, true), (2, true), (3, true)]], points: wall.surface.poles.clone() };
+    let face = BoundedFace {
+        surface: FaceSurface::Spline { nu: wall.surface.nu, nv: wall.surface.nv, frame: wall.surface.frame },
+        outward: true,
+        inside: [0.0, 0.0, 0.0],
+        loops: vec![vec![(0, true), (1, true), (2, true), (3, true)]],
+        points: wall.surface.poles.clone(),
+    };
     let took = Shape::face_areas(&corners, &edges, &[face], 1e-3).expect("the face is measured")[0];
     assert!(took.is_some_and(|a| (a - want).abs() < 1e-3 * want), "the fitted wall took {took:?} mm^2 of a saddle of {want}");
 }
@@ -115,7 +127,11 @@ fn vaulted_box(grid: usize) -> (qymcad_core::geom::Mesh, f64) {
         }
         // the net's own turn, against the way the face looks out
         let (a, b, c) = (at(0, 0), at(1, 0), at(0, 1));
-        let n = [(b[1] - a[1]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[1] - a[1]), (b[2] - a[2]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[2] - a[2]), (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])];
+        let n = [
+            (b[1] - a[1]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[1] - a[1]),
+            (b[2] - a[2]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[2] - a[2]),
+            (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]),
+        ];
         let flip = n[0] * out[0] + n[1] * out[1] + n[2] * out[2] < 0.0;
         let id = |i: usize, j: usize| base + (i * (grid + 1) + j) as u32;
         for i in 0..grid {
@@ -127,7 +143,14 @@ fn vaulted_box(grid: usize) -> (qymcad_core::geom::Mesh, f64) {
         }
     }
     let mesh = Mesh { verts, tris };
-    let volume = mesh.tris.iter().map(|t| { let [a, b, c] = t.map(|v| mesh.verts[v as usize]); (a.x * (b.y * c.z - b.z * c.y) - a.y * (b.x * c.z - b.z * c.x) + a.z * (b.x * c.y - b.y * c.x)) / 6.0 }).sum();
+    let volume = mesh
+        .tris
+        .iter()
+        .map(|t| {
+            let [a, b, c] = t.map(|v| mesh.verts[v as usize]);
+            (a.x * (b.y * c.z - b.z * c.y) - a.y * (b.x * c.z - b.z * c.x) + a.z * (b.x * c.y - b.y * c.x)) / 6.0
+        })
+        .sum();
     (mesh, volume)
 }
 
@@ -163,7 +186,10 @@ fn a_vaulted_box_becomes_a_sound_body_of_six_faces() {
     let tol = Tolerance::for_mesh(&p);
     let found = regions(&p, &tol);
     let (sound, solid, faces, volume, free) = body_of(&p, &found, &tol);
-    assert!(sound && solid && faces == 6 && free == 0 && (volume - want).abs() < 1e-3 * want, "the vaulted box: sound {sound}, solid {solid}, {faces} faces, {free} sides free, holding {volume} against {want}");
+    assert!(
+        sound && solid && faces == 6 && free == 0 && (volume - want).abs() < 1e-3 * want,
+        "the vaulted box: sound {sound}, solid {solid}, {faces} faces, {free} sides free, holding {volume} against {want}"
+    );
 }
 
 /// A FITTED WALL BESIDE REGIONS LEFT AS MESH STILL MAKES A SOUND BODY: the vault stays a face while the four sides
@@ -185,6 +211,8 @@ fn a_fitted_wall_beside_the_mesh_makes_a_sound_body() {
     }
     assert!(found.iter().any(|r| matches!(r.surface, Some(Surface::Spline(_)))), "the top is a fitted wall");
     let (sound, solid, faces, volume, free) = body_of(&p, &found, &tol);
-    assert!(sound && solid && free == 0 && (volume - want).abs() < 1e-3 * want, "the vaulted box with its sides as mesh: sound {sound}, solid {solid}, {faces} faces, {free} sides free, holding {volume} against {want}");
+    assert!(
+        sound && solid && free == 0 && (volume - want).abs() < 1e-3 * want,
+        "the vaulted box with its sides as mesh: sound {sound}, solid {solid}, {faces} faces, {free} sides free, holding {volume} against {want}"
+    );
 }
-

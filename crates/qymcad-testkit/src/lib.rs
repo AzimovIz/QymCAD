@@ -7,7 +7,6 @@ use qymcad_core::model::{Id, Project};
 use qymcad_kernel::OcctKernel;
 use std::collections::HashMap;
 
-
 /// A forced regeneration of the whole project by the real kernel. It returns the report and the cache of live
 /// shapes by body.
 pub fn regenerate(project: &mut Project) -> (qymcad_core::feature::RegenReport, HashMap<Id, qymcad_kernel::Shape>) {

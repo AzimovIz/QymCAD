@@ -74,16 +74,7 @@ impl Cage {
     /// A cube of side `s` about the origin, the most common starting cage.
     pub fn cube(s: f64) -> Cage {
         let h = s / 2.0;
-        let verts = vec![
-            [-h, -h, -h],
-            [h, -h, -h],
-            [h, h, -h],
-            [-h, h, -h],
-            [-h, -h, h],
-            [h, -h, h],
-            [h, h, h],
-            [-h, h, h],
-        ];
+        let verts = vec![[-h, -h, -h], [h, -h, -h], [h, h, -h], [-h, h, -h], [-h, -h, h], [h, -h, h], [h, h, h], [-h, h, h]];
         let faces = vec![
             vec![0, 3, 2, 1], // bottom
             vec![4, 5, 6, 7], // top
@@ -219,10 +210,7 @@ impl Cage {
                 continue;
             }
             let f_avg = scale(faces.iter().fold([0.0; 3], |acc, &fi| add(acc, self.face_point(&self.faces[fi]))), 1.0 / faces.len() as f64);
-            let r_avg = scale(
-                edges.iter().fold([0.0; 3], |acc, &(a, b)| add(acc, mid(self.verts[a as usize], self.verts[b as usize]))),
-                1.0 / n,
-            );
+            let r_avg = scale(edges.iter().fold([0.0; 3], |acc, &(a, b)| add(acc, mid(self.verts[a as usize], self.verts[b as usize]))), 1.0 / n);
             // (F + 2R + (n−3)P) / n
             verts.push(scale(add(add(f_avg, scale(r_avg, 2.0)), scale(p, n - 3.0)), 1.0 / n));
         }

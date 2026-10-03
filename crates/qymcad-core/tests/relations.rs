@@ -64,18 +64,10 @@ fn a_gear_relation_turns_the_second_wheel_by_the_ratio() {
     let (poses, rep) = solve_assembly(&p);
     assert!(rep.converged, "a gear pair has to converge: {:.3e}", rep.residual);
     assert!((spin_deg(&poses[1]) - 30.0).abs() < 1e-6, "the driving wheel has to stay at the requested 30°: {:.6}", spin_deg(&poses[1]));
-    assert!(
-        (spin_deg(&poses[2]) + 60.0).abs() < 1e-4,
-        "with a ratio of 2 and the driver at 30° the driven wheel has to sit at −60°, but sits at {:.6}°",
-        spin_deg(&poses[2])
-    );
+    assert!((spin_deg(&poses[2]) + 60.0).abs() < 1e-4, "with a ratio of 2 and the driver at 30° the driven wheel has to sit at −60°, but sits at {:.6}°", spin_deg(&poses[2]));
     assert_eq!(rep.dof, 0, "the relation has to consume the last degree of freedom: the driven angle is no longer arbitrary");
     // the body did not travel: a relation holds the rotation, not the position
-    assert!(
-        (poses[2].translation.vector - Vector3::new(50.0, 0.0, 0.0)).norm() < 1e-6,
-        "the driven wheel has to stay on its own axis, but travelled to {:?}",
-        poses[2].translation.vector
-    );
+    assert!((poses[2].translation.vector - Vector3::new(50.0, 0.0, 0.0)).norm() < 1e-6, "the driven wheel has to stay on its own axis, but travelled to {:?}", poses[2].translation.vector);
 }
 
 /// The gear ratio acts as a number, not as a sign: different numbers give different answers.
@@ -165,11 +157,7 @@ fn a_linear_relation_makes_one_slider_travel_twice_the_other() {
     let (poses, rep) = solve_assembly(&p);
     assert!(rep.converged, "a linear relation has to converge: {:.3e}", rep.residual);
     assert!((poses[1].translation.vector.z - 20.0).abs() < 1e-6, "the first slider has to travel the requested 20 mm, but travelled {:.6}", poses[1].translation.vector.z);
-    assert!(
-        (poses[2].translation.vector.z - 40.0).abs() < 1e-4,
-        "the second has to travel twice as far, 40 mm, but travelled {:.6}",
-        poses[2].translation.vector.z
-    );
+    assert!((poses[2].translation.vector.z - 40.0).abs() < 1e-4, "the second has to travel twice as far, 40 mm, but travelled {:.6}", poses[2].translation.vector.z);
     assert_eq!(rep.dof, 0, "the relation has to consume the freedom of the second slider");
 }
 
@@ -219,11 +207,7 @@ fn a_screw_relation_ties_the_angle_and_the_travel_of_one_and_the_same_mate() {
     let (poses, rep) = solve_assembly(&p);
     assert!(rep.converged, "a screw constraint has to converge: {:.3e}", rep.residual);
     assert!((spin_deg(&poses[1]) - 90.0).abs() < 1e-6, "the bolt has to turn by the requested 90°, but turned by {:.6}", spin_deg(&poses[1]));
-    assert!(
-        (poses[1].translation.vector.z - pitch / 4.0).abs() < 1e-4,
-        "a quarter turn at a pitch of 2.5 mm has to move the bolt by 0.625 mm, but it moved {:.6}",
-        poses[1].translation.vector.z
-    );
+    assert!((poses[1].translation.vector.z - pitch / 4.0).abs() < 1e-4, "a quarter turn at a pitch of 2.5 mm has to move the bolt by 0.625 mm, but it moved {:.6}", poses[1].translation.vector.z);
     assert_eq!(rep.dof, 0, "a cylindrical joint has two degrees of freedom: the angle is driven and the screw relation takes the travel");
 }
 
@@ -341,19 +325,11 @@ fn a_gear_relation_in_a_document_drives_the_second_wheel() {
     assert!(p.relation_faults().is_empty(), "a freshly created relation has to be sound: {:?}", p.relation_faults());
     drive_angle(&mut p, ja, 30.0);
     assert!((part_spin_deg(&p, wheel_a) - 30.0).abs() < 1e-4, "the driving wheel has to land at 30°, but landed at {:.6}", part_spin_deg(&p, wheel_a));
-    assert!(
-        (part_spin_deg(&p, wheel_b) - 60.0).abs() < 1e-3,
-        "with a ratio of 2 the driven wheel has to turn by 60°, but turned by {:.6}°",
-        part_spin_deg(&p, wheel_b)
-    );
+    assert!((part_spin_deg(&p, wheel_b) - 60.0).abs() < 1e-3, "with a ratio of 2 the driven wheel has to turn by 60°, but turned by {:.6}°", part_spin_deg(&p, wheel_b));
     // and deleting the relation gives the freedom back
     p.delete_relation(rid);
     drive_angle(&mut p, ja, 45.0);
-    assert!(
-        (part_spin_deg(&p, wheel_b) - 60.0).abs() < 1e-3,
-        "after the relation is deleted the driven wheel has to stay where it was, at 60°, but ended up at {:.6}°",
-        part_spin_deg(&p, wheel_b)
-    );
+    assert!((part_spin_deg(&p, wheel_b) - 60.0).abs() < 1e-3, "after the relation is deleted the driven wheel has to stay where it was, at 60°, but ended up at {:.6}°", part_spin_deg(&p, wheel_b));
 }
 
 /// The reverse flag changes the direction, not the magnitude.
@@ -363,11 +339,7 @@ fn the_reverse_flag_turns_the_second_wheel_the_other_way() {
     let rid = p.add_relation(RelationKind::Gear, ja, 0, jb, 0, 2.0);
     p.relations.iter_mut().find(|r| r.id == rid).expect("relation").reversed = true;
     drive_angle(&mut p, ja, 30.0);
-    assert!(
-        (part_spin_deg(&p, wheel_b) + 60.0).abs() < 1e-3,
-        "with the reverse flag the driven wheel has to go to −60°, but went to {:.6}°",
-        part_spin_deg(&p, wheel_b)
-    );
+    assert!((part_spin_deg(&p, wheel_b) + 60.0).abs() < 1e-3, "with the reverse flag the driven wheel has to go to −60°, but went to {:.6}°", part_spin_deg(&p, wheel_b));
 }
 
 /// Creating a relation moves nothing.
@@ -493,10 +465,7 @@ fn a_pin_slot_travel_can_be_tied_by_a_relation_too() {
     assert!(p.relation_faults().is_empty(), "the relation has to be sound: {:?}", p.relation_faults());
     p.solve_joints();
     let moved = apply12(&p.world_transform(pin), [0.0, 0.0, 0.0]);
-    assert!(
-        (moved[0] - 20.0).abs() < 1e-3,
-        "the carriage travelled 10 mm, so the pin has to travel 20 along the slot, but it is at {moved:?}"
-    );
+    assert!((moved[0] - 20.0).abs() < 1e-3, "the carriage travelled 10 mm, so the pin has to travel 20 along the slot, but it is at {moved:?}");
 }
 
 /// A relation drives the second mate the right way when an anchor is turned around.
@@ -550,10 +519,7 @@ fn a_relation_drives_the_second_mate_the_right_way_on_a_turned_anchor() {
     let now = apply12(&p.world_transform(car2), [0.0, 0.0, 0.0]);
     let d = [now[0] - base[0], now[1] - base[1], now[2] - base[2]];
     let along = d[0] * dir_b[0] + d[1] * dir_b[1] + d[2] * dir_b[2];
-    assert!(
-        (along - 20.0).abs() < 1e-2,
-        "the first carriage travelled 10 mm, so the second has to travel 20 along its own arrow, but travelled {along:.4}"
-    );
+    assert!((along - 20.0).abs() < 1e-2, "the first carriage travelled 10 mm, so the second has to travel 20 along its own arrow, but travelled {along:.4}");
 }
 
 /// A gear relation turns the driven wheel the right way on a turned anchor.
@@ -612,10 +578,7 @@ fn a_gear_relation_turns_the_driven_wheel_the_right_way_on_a_turned_anchor() {
     p.solve_joints();
 
     let d = (spin(&p) - before + 540.0) % 360.0 - 180.0;
-    assert!(
-        (d - 40.0).abs() < 1e-2,
-        "the driving wheel travelled 20°, so the driven one has to travel 40° in the direction of its own gizmo, but travelled {d:.4}°"
-    );
+    assert!((d - 40.0).abs() < 1e-2, "the driving wheel travelled 20°, so the driven one has to travel 40° in the direction of its own gizmo, but travelled {d:.4}°");
 }
 
 /// A TURN FAR FROM THE BODY'S ORIGIN, DRIVEN AND TIED BY A RELATION, CONVERGES. Each wheel's axis stands 100 and 200 mm

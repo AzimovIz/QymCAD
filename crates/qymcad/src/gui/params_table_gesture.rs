@@ -25,13 +25,7 @@ mod tests {
         fn new() -> Self {
             let ctx = egui::Context::default();
             super::super::install_fonts(&ctx);
-            Self {
-                ctx,
-                screen: egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(900.0, 700.0)),
-                events: Vec::new(),
-                name_rects: Vec::new(),
-                drawn: Vec::new(),
-            }
+            Self { ctx, screen: egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(900.0, 700.0)), events: Vec::new(), name_rects: Vec::new(), drawn: Vec::new() }
         }
 
         fn frame(&mut self, app: &mut App) -> &mut Self {
@@ -266,22 +260,11 @@ mod tests {
         use qymcad_core::model::{Constraint, Id};
         let mut app = App::default();
         app.project.new_document();
-        let sid = app.project.add_line_sketch(
-            "Profile",
-            vec![Point2::new(0.0, 0.0), Point2::new(40.0, 0.0), Point2::new(40.0, 20.0), Point2::new(0.0, 20.0)],
-            true,
-        );
+        let sid = app.project.add_line_sketch("Profile", vec![Point2::new(0.0, 0.0), Point2::new(40.0, 0.0), Point2::new(40.0, 20.0), Point2::new(0.0, 20.0)], true);
         let si = app.project.sketch_index(sid).unwrap();
         app.project.add_sketch_node(sid, "Profile");
         let pts: Vec<Id> = app.project.sketches[si].points.iter().map(|q| q.id).collect();
-        app.project.sketches[si].constraints.push(Constraint::Distance {
-            a: pts[0],
-            b: pts[1],
-            d: 40.0,
-            off: 0.0,
-            expr: String::new(),
-            driven: false,
-            axis: 0, at: None });
+        app.project.sketches[si].constraints.push(Constraint::Distance { a: pts[0], b: pts[1], d: 40.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
         assert!(app.project.add_named_dim("len".into(), sid, vec![pts[0], pts[1]]));
 
         let mut t = Table::new();
@@ -316,22 +299,11 @@ mod tests {
         app.project.new_document();
         let comp = app.project.add_part("Body");
         app.enter_component(comp);
-        let sid = app.project.add_line_sketch(
-            "Profile",
-            vec![Point2::new(0.0, 0.0), Point2::new(40.0, 0.0), Point2::new(40.0, 20.0), Point2::new(0.0, 20.0)],
-            true,
-        );
+        let sid = app.project.add_line_sketch("Profile", vec![Point2::new(0.0, 0.0), Point2::new(40.0, 0.0), Point2::new(40.0, 20.0), Point2::new(0.0, 20.0)], true);
         let si = app.project.sketch_index(sid).unwrap();
         app.project.add_sketch_node(sid, "Profile");
         let pts: Vec<Id> = app.project.sketches[si].points.iter().take(2).map(|q| q.id).collect();
-        app.project.sketches[si].constraints.push(Constraint::Distance {
-            a: pts[0],
-            b: pts[1],
-            d: 40.0,
-            off: 0.0,
-            expr: String::new(),
-            driven: false,
-            axis: 0, at: None });
+        app.project.sketches[si].constraints.push(Constraint::Distance { a: pts[0], b: pts[1], d: 40.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
         assert!(app.project.add_named_dim("len".into(), sid, pts));
         // We leave the part so that the jump is visible: it must also ENTER it.
         app.exit_context();
@@ -386,14 +358,7 @@ mod tests {
         app.drain_bg_for_test();
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
 
-        let width = |app: &App| {
-            app.project
-                .bodies
-                .iter()
-                .find_map(|b| b.mesh.bounds())
-                .map(|bb| bb.max.x - bb.min.x)
-                .unwrap_or(0.0)
-        };
+        let width = |app: &App| app.project.bodies.iter().find_map(|b| b.mesh.bounds()).map(|bb| bb.max.x - bb.min.x).unwrap_or(0.0);
         let before = width(&app);
         assert!(before > 80.0 && before < 100.0, "setup: the body must be 90 mm across, and its width is {before:.1}");
 
@@ -413,10 +378,7 @@ mod tests {
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
 
         let after = width(&app);
-        assert!(
-            after > 290.0,
-            "the table says 300 and the body stayed {after:.1} wide — the part did not rebuild after the driver"
-        );
+        assert!(after > 290.0, "the table says 300 and the body stayed {after:.1} wide — the part did not rebuild after the driver");
     }
 
     /// UNNAMED FEATURE NUMBERS STAY OUT OF THE TABLE.

@@ -51,15 +51,30 @@ impl Rng {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Step {
     /// The tool taken by the way into it numbered `entry` in its description.
-    Take { tool: &'static str, entry: usize },
+    Take {
+        tool: &'static str,
+        entry: usize,
+    },
     /// The ordinary click (or pick) numbered `at` of the tool.
-    Click { tool: &'static str, at: usize },
+    Click {
+        tool: &'static str,
+        at: usize,
+    },
     /// The gesture that finishes the tool: the last click of a drawing, Enter of a command.
-    Finish { tool: &'static str },
+    Finish {
+        tool: &'static str,
+    },
     /// `text` typed into the field numbered `field` of the tool - a value it takes, or one it must refuse.
-    Value { tool: &'static str, field: usize, text: String },
+    Value {
+        tool: &'static str,
+        field: usize,
+        text: String,
+    },
     /// `text` typed into the field of words of the tool.
-    Words { tool: &'static str, text: String },
+    Words {
+        tool: &'static str,
+        text: String,
+    },
     Enter,
     Escape,
     /// A click on nothing - an empty corner of the canvas.
@@ -85,10 +100,7 @@ impl Scene {
                 .iter()
                 .copied()
                 .filter(|t| {
-                    matches!(
-                        t.fixture,
-                        Fixture::SketchOnXy | Fixture::RectangleInSketch | Fixture::CircleInSketch | Fixture::ArcInSketch | Fixture::TwoLinesInSketch | Fixture::TwoCirclesInSketch
-                    )
+                    matches!(t.fixture, Fixture::SketchOnXy | Fixture::RectangleInSketch | Fixture::CircleInSketch | Fixture::ArcInSketch | Fixture::TwoLinesInSketch | Fixture::TwoCirclesInSketch)
                 })
                 .collect(),
         }
@@ -223,7 +235,17 @@ pub fn grow(seed: u64, len: usize, scene: Scene) -> Vec<Step> {
         }
         let total: u64 = menu.iter().map(|(w, _)| w).sum();
         let mut roll = rng.next() % total;
-        let step = menu.into_iter().find_map(|(w, step)| if roll < w { Some(step) } else { roll -= w; None }).expect("the roll falls on a step");
+        let step = menu
+            .into_iter()
+            .find_map(|(w, step)| {
+                if roll < w {
+                    Some(step)
+                } else {
+                    roll -= w;
+                    None
+                }
+            })
+            .expect("the roll falls on a step");
         match &step {
             Step::Take { tool: id, .. } => hand = Some(tool(id)),
             // the first Esc may only drop the shape being drawn, the second puts the tool down: which one this was
@@ -709,7 +731,15 @@ mod tests {
     fn a_shrunk_chain_is_written_as_a_probe() {
         let steps = vec![Step::Take { tool: "sketch.polygon", entry: 1 }, Step::Value { tool: "sketch.polygon", field: 0, text: "1\"2".into() }, Step::Undo];
         let probe = super::as_probe(7, Scene::Sketch, &steps);
-        for want in ["probe! {", "fn the_chain_of_the_seed_7()", "use qymcad_acceptance::chains::{replay, Scene, Step};", "replay(Scene::Sketch, &[", "Step::Take { tool: \"sketch.polygon\", entry: 1 },", "Step::Value { tool: \"sketch.polygon\", field: 0, text: \"1\\\"2\".into() },", "Step::Undo,"] {
+        for want in [
+            "probe! {",
+            "fn the_chain_of_the_seed_7()",
+            "use qymcad_acceptance::chains::{replay, Scene, Step};",
+            "replay(Scene::Sketch, &[",
+            "Step::Take { tool: \"sketch.polygon\", entry: 1 },",
+            "Step::Value { tool: \"sketch.polygon\", field: 0, text: \"1\\\"2\".into() },",
+            "Step::Undo,",
+        ] {
             assert!(probe.contains(want), "the probe does not hold {want:?}:\n{probe}");
         }
     }

@@ -4,7 +4,6 @@
 //! real B-rep topology ([`MeshFace`]). From there on the B-rep is the source of truth for extrusions and
 //! booleans.
 
-
 /// The name of the C++ runtime to link, chosen by target - shared with `build.rs`.
 pub mod cxx_runtime;
 pub mod kernel;
@@ -109,7 +108,17 @@ extern "C" {
     fn qym_shape_face_cylinder(s: *const QymShape, fid: u32, origin: *mut c_double, dir: *mut c_double, radius: *mut c_double) -> i32;
     fn qym_shape_split_faces(s: *const QymShape, origin: *const c_double, normal: *const c_double) -> *mut QymShape;
     fn qym_shape_split_by_plane(s: *const QymShape, origin: *const c_double, normal: *const c_double, section: u32) -> *mut QymShapeList;
-    fn qym_shape_draft(s: *const QymShape, idx: *const u32, n: usize, angle_deg: c_double, pull: *const f64, np_origin: *const f64, np_normal: *const f64, sides: *const u32, nsides: usize) -> *mut QymShape;
+    fn qym_shape_draft(
+        s: *const QymShape,
+        idx: *const u32,
+        n: usize,
+        angle_deg: c_double,
+        pull: *const f64,
+        np_origin: *const f64,
+        np_normal: *const f64,
+        sides: *const u32,
+        nsides: usize,
+    ) -> *mut QymShape;
     fn qym_shape_face_splits(s: *const QymShape, out: *mut u32, cap: usize) -> usize;
     fn qym_shape_clear_face_splits(s: *mut QymShape);
     fn qym_shape_absorbed(s: *const QymShape, out: *mut u32, max_pairs: usize) -> usize;
@@ -117,8 +126,31 @@ extern "C" {
     fn qym_shape_edge_face_pairs(s: *const QymShape, out: *mut u32, cap: usize) -> usize;
     fn qym_shape_edge_end_faces(s: *const QymShape, out: *mut u32, cap: usize) -> usize;
     fn qym_shape_rename_edges(s: *mut QymShape, from: *const u32, to: *const u32, n: usize);
-    fn qym_shape_hole_stepped(s: *const QymShape, kind: i32, pl: *const f64, dia: c_double, depth: c_double, dia2: c_double, depth2: c_double, bore: u32, extra: *const u32, n_extra: usize) -> *mut QymShape;
-    fn qym_shape_holes_stepped(s: *const QymShape, kind: i32, pls: *const f64, n_holes: usize, dia: c_double, depth: c_double, dia2: c_double, depth2: c_double, bores: *const u32, extra: *const u32, n_extra: usize) -> *mut QymShape;
+    fn qym_shape_hole_stepped(
+        s: *const QymShape,
+        kind: i32,
+        pl: *const f64,
+        dia: c_double,
+        depth: c_double,
+        dia2: c_double,
+        depth2: c_double,
+        bore: u32,
+        extra: *const u32,
+        n_extra: usize,
+    ) -> *mut QymShape;
+    fn qym_shape_holes_stepped(
+        s: *const QymShape,
+        kind: i32,
+        pls: *const f64,
+        n_holes: usize,
+        dia: c_double,
+        depth: c_double,
+        dia2: c_double,
+        depth2: c_double,
+        bores: *const u32,
+        extra: *const u32,
+        n_extra: usize,
+    ) -> *mut QymShape;
     fn qym_shape_shell_center(s: *const QymShape, t: c_double, idx: *const u32, n: usize) -> *mut QymShape;
     fn qym_shape_face_axis(s: *const QymShape, face_id: u32, origin: *mut f64, dir: *mut f64) -> i32;
     fn qym_shape_face_edge_ids(s: *const QymShape, face_id: u32, out: *mut u32, cap: usize) -> usize;
@@ -128,8 +160,44 @@ extern "C" {
     fn qym_why() -> *const std::os::raw::c_char;
     fn qym_why_clear();
     fn qym_why_set(text: *const std::os::raw::c_char);
-    fn qym_shape_helical_profile(base: *const QymShape, origin: *const f64, dir: *const f64, radius: c_double, prof: *const f64, nprof: usize, length: c_double, lead: c_double, starts: i32, left: i32, mode: i32, lead_in: c_double, lead_out: c_double, gnames: *const u32, gn: usize, rnames: *const u32, rn: usize, crest_relief: c_double) -> *mut QymShape;
-    fn qym_shape_thread(base: *const QymShape, origin: *const f64, dir: *const f64, radius: c_double, length: c_double, pitch: c_double, angle_deg: c_double, depth: c_double, starts: i32, left: i32, internal: i32, form: i32, clearance_crest: c_double, clearance_root: c_double, lead_in: c_double, lead_out: c_double) -> *mut QymShape;
+    fn qym_shape_helical_profile(
+        base: *const QymShape,
+        origin: *const f64,
+        dir: *const f64,
+        radius: c_double,
+        prof: *const f64,
+        nprof: usize,
+        length: c_double,
+        lead: c_double,
+        starts: i32,
+        left: i32,
+        mode: i32,
+        lead_in: c_double,
+        lead_out: c_double,
+        gnames: *const u32,
+        gn: usize,
+        rnames: *const u32,
+        rn: usize,
+        crest_relief: c_double,
+    ) -> *mut QymShape;
+    fn qym_shape_thread(
+        base: *const QymShape,
+        origin: *const f64,
+        dir: *const f64,
+        radius: c_double,
+        length: c_double,
+        pitch: c_double,
+        angle_deg: c_double,
+        depth: c_double,
+        starts: i32,
+        left: i32,
+        internal: i32,
+        form: i32,
+        clearance_crest: c_double,
+        clearance_root: c_double,
+        lead_in: c_double,
+        lead_out: c_double,
+    ) -> *mut QymShape;
     fn qym_shape_volume(s: *const QymShape) -> c_double;
     fn qym_shape_bbox(s: *const QymShape, out: *mut f64) -> i32;
     fn qym_shape_is_valid(s: *const QymShape) -> i32;
@@ -207,7 +275,20 @@ extern "C" {
     fn qym_tree_face_colours(t: *const QymTree, i: usize, ids: *mut u32, rgb: *mut f32, cap: usize) -> usize;
     fn qym_tree_free(t: *mut QymTree);
     #[allow(clippy::too_many_arguments)] // the tree goes over as parallel arrays, one per field of a node
-    fn qym_step_write_tree(n: usize, parents: *const i64, names: *const *const c_char, places: *const f64, shapes: *const *const QymShape, same_as: *const i64, rgb: *const f32, has_rgb: *const i32, face_starts: *const usize, face_ids: *const u32, face_rgb: *const f32, path: *const c_char) -> i32;
+    fn qym_step_write_tree(
+        n: usize,
+        parents: *const i64,
+        names: *const *const c_char,
+        places: *const f64,
+        shapes: *const *const QymShape,
+        same_as: *const i64,
+        rgb: *const f32,
+        has_rgb: *const i32,
+        face_starts: *const usize,
+        face_ids: *const u32,
+        face_rgb: *const f32,
+        path: *const c_char,
+    ) -> i32;
     fn qym_iges_solids(path: *const c_char) -> *mut QymShapeList;
     fn qym_iges_write(shapes: *const *const QymShape, mats: *const f64, n: usize, path: *const c_char, unit: *const c_char) -> i32;
 }
@@ -355,45 +436,114 @@ const SURFACE_NUMBERS: usize = 20;
 /// A surface a face recognised on a mesh lies on; see [`Shape::from_faces`].
 #[derive(Clone, Debug, PartialEq)]
 pub enum FaceSurface {
-    Plane { point: [f64; 3], normal: [f64; 3] },
-    Cylinder { point: [f64; 3], axis: [f64; 3], radius: f64 },
+    Plane {
+        point: [f64; 3],
+        normal: [f64; 3],
+    },
+    Cylinder {
+        point: [f64; 3],
+        axis: [f64; 3],
+        radius: f64,
+    },
     /// `axis` runs from the tip into the cone.
-    Cone { apex: [f64; 3], axis: [f64; 3], half_angle: f64 },
-    Sphere { center: [f64; 3], radius: f64 },
-    Torus { center: [f64; 3], axis: [f64; 3], major: f64, minor: f64 },
+    Cone {
+        apex: [f64; 3],
+        axis: [f64; 3],
+        half_angle: f64,
+    },
+    Sphere {
+        center: [f64; 3],
+        radius: f64,
+    },
+    Torus {
+        center: [f64; 3],
+        axis: [f64; 3],
+        major: f64,
+        minor: f64,
+    },
     /// A free form: the face fills its border and runs through its `points`; `normal` is where it faces out.
-    Free { normal: [f64; 3] },
+    Free {
+        normal: [f64; 3],
+    },
     /// A bicubic B-spline surface on clamped uniform knots, `nu` x `nv` poles given as the face's `points`, row by row
     /// (`nu` along u in a row); u x v points out of the body. `frame` lays a point of the face on its parameters: u =
     /// (q.frame[0..3] - frame[6]) / frame[7], v = (q.frame[3..6] - frame[8]) / frame[9] - its edges are laid so, not
     /// searched for.
-    Spline { nu: usize, nv: usize, frame: [f64; 10] },
+    Spline {
+        nu: usize,
+        nv: usize,
+        frame: [f64; 10],
+    },
     /// A straight profile screwed about the axis through `point` along `axis`: a point at distance r, height z and angle
     /// t from `reference` lies on it where `radial * r + axial * (z - rise * t) = offset`, `axial` positive; its own
     /// normal points the way (`radial`, `axial`) does. The face lies within the angles `turn` (whole turns counted) and
     /// the distances `reach`.
-    Helix { point: [f64; 3], axis: [f64; 3], reference: [f64; 3], rise: f64, radial: f64, axial: f64, offset: f64, turn: [f64; 2], reach: [f64; 2] },
+    Helix {
+        point: [f64; 3],
+        axis: [f64; 3],
+        reference: [f64; 3],
+        rise: f64,
+        radial: f64,
+        axial: f64,
+        offset: f64,
+        turn: [f64; 2],
+        reach: [f64; 2],
+    },
     /// A round wire wound about the axis through `point` along `axis`: its middle runs `radius` from the axis at angle t
     /// from `reference`, `lift + rise * t` along it, and the surface is every point `wire` from that line; its own normal
     /// points away from the line. The face lies within the angles `turn` (whole turns counted).
-    Coil { point: [f64; 3], axis: [f64; 3], reference: [f64; 3], rise: f64, radius: f64, lift: f64, wire: f64, turn: [f64; 2] },
+    Coil {
+        point: [f64; 3],
+        axis: [f64; 3],
+        reference: [f64; 3],
+        rise: f64,
+        radius: f64,
+        lift: f64,
+        wire: f64,
+        turn: [f64; 2],
+    },
     /// A circle screwed about the axis through `point` along `axis`: a point at distance r, height z and angle t from
     /// `reference` lies on it where (r, z - rise * t) lies `round` from (`middle`, `height`), whole turns counted; its own
     /// normal points away from the circle's middle. The face lies within the angles `turn` and the angles round the
     /// circle `reach`, from the way out from the axis towards the axis's own way.
-    RoundHelix { point: [f64; 3], axis: [f64; 3], reference: [f64; 3], rise: f64, middle: f64, height: f64, round: f64, turn: [f64; 2], reach: [f64; 2] },
+    RoundHelix {
+        point: [f64; 3],
+        axis: [f64; 3],
+        reference: [f64; 3],
+        rise: f64,
+        middle: f64,
+        height: f64,
+        round: f64,
+        turn: [f64; 2],
+        reach: [f64; 2],
+    },
 }
 
 /// The curve an edge of such a face runs along.
 #[derive(Clone, Debug, PartialEq)]
 pub enum EdgeCurve {
     /// `dir` is a unit vector the way the edge's points run.
-    Line { point: [f64; 3], dir: [f64; 3] },
-    Circle { center: [f64; 3], axis: [f64; 3], radius: f64 },
+    Line {
+        point: [f64; 3],
+        dir: [f64; 3],
+    },
+    Circle {
+        center: [f64; 3],
+        axis: [f64; 3],
+        radius: f64,
+    },
     /// In the plane through `center` square to `normal`, half-axis `major` along `major_dir` and `minor` across it.
-    Ellipse { center: [f64; 3], normal: [f64; 3], major_dir: [f64; 3], major: f64, minor: f64 },
+    Ellipse {
+        center: [f64; 3],
+        normal: [f64; 3],
+        major_dir: [f64; 3],
+        major: f64,
+        minor: f64,
+    },
     /// A curve through the edge's points: within one tolerance of them where `close`, and within four otherwise.
-    Points { close: bool },
+    Points {
+        close: bool,
+    },
     /// A polyline through the edge's points as they are: an edge beside a region left as mesh, meeting the sides of its
     /// triangles.
     Polyline,
@@ -770,7 +920,26 @@ impl Shape {
     pub fn thread(&self, t: ThreadCut) -> Option<Shape> {
         let ThreadCut { axis, radius, length, pitch, angle_deg, depth, starts, hand, site, form, clearance_crest, clearance_root, lead_in, lead_out } = t;
         let (origin, dir) = (axis.origin, axis.dir);
-        unsafe { Self::wrap(qym_shape_thread(self.ptr, origin.as_ptr(), dir.as_ptr(), radius, length, pitch, angle_deg, depth, starts.max(1) as i32, (hand == Hand::Left) as i32, (site == Site::Bore) as i32, form as i32, clearance_crest, clearance_root, lead_in, lead_out)) }
+        unsafe {
+            Self::wrap(qym_shape_thread(
+                self.ptr,
+                origin.as_ptr(),
+                dir.as_ptr(),
+                radius,
+                length,
+                pitch,
+                angle_deg,
+                depth,
+                starts.max(1) as i32,
+                (hand == Hand::Left) as i32,
+                (site == Site::Bore) as i32,
+                form as i32,
+                clearance_crest,
+                clearance_root,
+                lead_in,
+                lead_out,
+            ))
+        }
     }
     /// The volume of the body, in mm³, through `GProp`, for tests and geometric checks.
     pub fn volume(&self) -> f64 {
@@ -987,13 +1156,7 @@ impl Shape {
                 let circle = (qym_edge_circle(e, i, c.as_mut_ptr()) != 0).then(|| ([c[0], c[1], c[2]], [c[3], c[4], c[5]], c[6]));
                 let mut r = [0f64; 3];
                 let ref_dir = (qym_edge_ref_dir(e, i, r.as_mut_ptr()) != 0).then_some(r);
-                out.push(EdgeInfo {
-                    poly: (0..pc).map(|k| [buf[3 * k], buf[3 * k + 1], buf[3 * k + 2]]).collect(),
-                    id: qym_edge_id(e, i),
-                    circle,
-                    smooth: qym_edge_smooth(e, i) != 0,
-                    ref_dir,
-                });
+                out.push(EdgeInfo { poly: (0..pc).map(|k| [buf[3 * k], buf[3 * k + 1], buf[3 * k + 2]]).collect(), id: qym_edge_id(e, i), circle, smooth: qym_edge_smooth(e, i) != 0, ref_dir });
             }
             qym_edges_free(e);
             out
@@ -1042,7 +1205,11 @@ impl Shape {
     /// name check brought the process down with a segfault. An honest `null` is passed when there are no
     /// names.
     fn opt_ptr(v: &[u32]) -> *const u32 {
-        if v.is_empty() { std::ptr::null() } else { v.as_ptr() }
+        if v.is_empty() {
+            std::ptr::null()
+        } else {
+            v.as_ptr()
+        }
     }
 
     /// Chamfer the selected edges, by zero-based index, by `d`.
@@ -1158,19 +1325,7 @@ impl Shape {
         if face_ids.is_empty() {
             return refuse("draft/asked", "not one face was named to tilt");
         }
-        unsafe {
-            Self::wrap(qym_shape_draft(
-                self.ptr,
-                face_ids.as_ptr(),
-                face_ids.len(),
-                angle_deg,
-                pull.as_ptr(),
-                np_origin.as_ptr(),
-                np_normal.as_ptr(),
-                Self::opt_ptr(sides),
-                sides.len() / 2,
-            ))
-        }
+        unsafe { Self::wrap(qym_shape_draft(self.ptr, face_ids.as_ptr(), face_ids.len(), angle_deg, pull.as_ptr(), np_origin.as_ptr(), np_normal.as_ptr(), Self::opt_ptr(sides), sides.len() / 2)) }
     }
     /// A stepped hole: a tool — the main cylinder plus a counterbore or countersink — cut in the frame `pl`,
     /// which maps local to world. `kind` is 0 for a plain hole, 1 for a counterbore and 2 for a countersink.
@@ -1516,7 +1671,11 @@ impl Shape {
         let Some(b) = self.bbox() else { return 0.0 };
         let (dx, dy, dz) = (b[3] - b[0], b[4] - b[1], b[5] - b[2]);
         let d = (dx * dx + dy * dy + dz * dz).sqrt();
-        if d.is_finite() { d } else { 0.0 }
+        if d.is_finite() {
+            d
+        } else {
+            0.0
+        }
     }
 
     /// Tessellate into bodies, for drawing and for machining.
@@ -1835,7 +1994,18 @@ pub fn document_tree(nodes: &[ImportNode], bodies: &[u64], stem: &str) -> Vec<qy
             _ => stem.to_string(),
         };
         let children = kids[i].iter().map(|&c| nest(c, nodes, kids, bodies, stem, tint)).collect();
-        qymcad_core::model::ImportNode { name, place: n.place, body: n.solid.and_then(|k| bodies.get(k).copied()), solid: n.solid.unwrap_or(0) as u32, color: tint.map(|c| c.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8)), face_colors: n.faces.iter().map(|(id, c)| (*id, c.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8))).collect(), tri_colors: Vec::new(), repeat_of: n.repeat_of.map(|k| k as u32), mesh: false, children }
+        qymcad_core::model::ImportNode {
+            name,
+            place: n.place,
+            body: n.solid.and_then(|k| bodies.get(k).copied()),
+            solid: n.solid.unwrap_or(0) as u32,
+            color: tint.map(|c| c.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8)),
+            face_colors: n.faces.iter().map(|(id, c)| (*id, c.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8))).collect(),
+            tri_colors: Vec::new(),
+            repeat_of: n.repeat_of.map(|k| k as u32),
+            mesh: false,
+            children,
+        }
     }
     tops.into_iter().map(|i| nest(i, nodes, &kids, bodies, stem, None)).collect()
 }
@@ -1883,7 +2053,9 @@ pub fn read_exact_tree(format: ExactFormat, path: &str, deflection: f64) -> Resu
         out
     };
     let nodes = if tree.is_null() {
-        (0..shapes.len()).map(|i| ImportNode { name: String::new(), parent: None, place: qymcad_core::feature::PLACE_IDENTITY, solid: Some(i), color: None, repeat_of: None, faces: Vec::new() }).collect()
+        (0..shapes.len())
+            .map(|i| ImportNode { name: String::new(), parent: None, place: qymcad_core::feature::PLACE_IDENTITY, solid: Some(i), color: None, repeat_of: None, faces: Vec::new() })
+            .collect()
     } else {
         unsafe {
             let n = qym_tree_count(tree);
@@ -1938,7 +2110,22 @@ pub fn write_step_tree(nodes: &[qymcad_core::model::ExportNode], shapes: &[(u64,
         }
     }
     face_starts.push(face_ids.len());
-    let rc = unsafe { qym_step_write_tree(nodes.len(), parents.as_ptr(), name_ptrs.as_ptr(), places.as_ptr(), shape_ptrs.as_ptr(), same_as.as_ptr(), rgb.as_ptr(), has_rgb.as_ptr(), face_starts.as_ptr(), face_ids.as_ptr(), face_rgb.as_ptr(), c.as_ptr()) };
+    let rc = unsafe {
+        qym_step_write_tree(
+            nodes.len(),
+            parents.as_ptr(),
+            name_ptrs.as_ptr(),
+            places.as_ptr(),
+            shape_ptrs.as_ptr(),
+            same_as.as_ptr(),
+            rgb.as_ptr(),
+            has_rgb.as_ptr(),
+            face_starts.as_ptr(),
+            face_ids.as_ptr(),
+            face_rgb.as_ptr(),
+            c.as_ptr(),
+        )
+    };
     if rc != 0 {
         return Err(format!("cad-step-write-failed#{rc}"));
     }

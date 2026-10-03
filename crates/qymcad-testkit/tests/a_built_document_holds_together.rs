@@ -10,11 +10,7 @@ use qymcad_core::model::Project;
 fn part() -> Project {
     let mut p = Project::default();
     p.new_document();
-    let sid = p.add_line_sketch(
-        "Sketch 1",
-        vec![Point2::new(0.0, 0.0), Point2::new(60.0, 0.0), Point2::new(60.0, 40.0), Point2::new(0.0, 40.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("Sketch 1", vec![Point2::new(0.0, 0.0), Point2::new(60.0, 0.0), Point2::new(60.0, 40.0), Point2::new(0.0, 40.0)], true);
     let si = p.sketch_index(sid).expect("the sketch");
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {
@@ -29,12 +25,7 @@ fn part() -> Project {
     let filleted = p.add_fillet(body, 3.0, upright);
     qymcad_testkit::regenerate(&mut p);
 
-    let top = p.regen_faces[&filleted]
-        .iter()
-        .filter(|f| f.normal[2] > 0.9)
-        .max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z))
-        .expect("a top face")
-        .clone();
+    let top = p.regen_faces[&filleted].iter().filter(|f| f.normal[2] > 0.9).max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z)).expect("a top face").clone();
     let key = qymcad_core::feature::FaceKey { index: 0, centroid: [top.centroid.x, top.centroid.y, top.centroid.z], normal: top.normal, id: top.id };
     p.add_hole(filleted, key, 8.0, 5.0);
     qymcad_testkit::regenerate(&mut p);

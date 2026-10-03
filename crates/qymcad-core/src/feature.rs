@@ -19,7 +19,6 @@ pub enum BasePlane {
     YZ,
 }
 
-
 /// Stable key of a planar face of a body (topological naming).
 ///
 /// It carries the positional index of the face at the time the body was created, as a fast path, plus a
@@ -64,11 +63,7 @@ pub struct PlaneFrame {
 impl PlaneFrame {
     /// Lift a 2D sketch point into world coordinates.
     pub fn lift(&self, p: Point2) -> Point3 {
-        Point3::new(
-            self.origin[0] + self.x[0] * p.x + self.y[0] * p.y,
-            self.origin[1] + self.x[1] * p.x + self.y[1] * p.y,
-            self.origin[2] + self.x[2] * p.x + self.y[2] * p.y,
-        )
+        Point3::new(self.origin[0] + self.x[0] * p.x + self.y[0] * p.y, self.origin[1] + self.x[1] * p.x + self.y[1] * p.y, self.origin[2] + self.x[2] * p.x + self.y[2] * p.y)
     }
 
     /// Project a world point into the local 2D coordinates of the frame, along its X and Y axes: the inverse
@@ -89,11 +84,7 @@ impl PlaneFrame {
 
     /// Normal of the plane (X cross Y).
     pub fn normal(&self) -> [f64; 3] {
-        [
-            self.x[1] * self.y[2] - self.x[2] * self.y[1],
-            self.x[2] * self.y[0] - self.x[0] * self.y[2],
-            self.x[0] * self.y[1] - self.x[1] * self.y[0],
-        ]
+        [self.x[1] * self.y[2] - self.x[2] * self.y[1], self.x[2] * self.y[0] - self.x[0] * self.y[2], self.x[0] * self.y[1] - self.x[1] * self.y[0]]
     }
 
     /// Build an orthonormal frame from an origin, a normal and a rotation of X about it, in degrees.
@@ -104,11 +95,7 @@ impl PlaneFrame {
         let n = norm3(normal).unwrap_or([0.0, 0.0, 1.0]);
         // A normal parallel to Z gives axes equal to world X and Y, the natural frame for an XY datum;
         // otherwise X = Z cross n (which lies in the plane) and Y = n cross X.
-        let x0 = if n[2].abs() > 0.999 {
-            [1.0, 0.0, 0.0]
-        } else {
-            norm3(cross3([0.0, 0.0, 1.0], n)).unwrap_or([1.0, 0.0, 0.0])
-        };
+        let x0 = if n[2].abs() > 0.999 { [1.0, 0.0, 0.0] } else { norm3(cross3([0.0, 0.0, 1.0], n)).unwrap_or([1.0, 0.0, 0.0]) };
         let y0 = cross3(n, x0);
         // Rotate the X and Y axes about the normal by `rot_deg`.
         let (s, c) = rot_deg.to_radians().sin_cos();
@@ -116,7 +103,6 @@ impl PlaneFrame {
         let y = [y0[0] * c - x0[0] * s, y0[1] * c - x0[1] * s, y0[2] * c - x0[2] * s];
         PlaneFrame { origin, x, y }
     }
-
 
     /// Frame from an origin, a main axis (the normal) and an explicit secondary axis.
     ///
@@ -206,22 +192,14 @@ impl PlaneFrame {
     /// Rotate a local direction (a face normal, for example) into the world, without translation.
     pub fn rotate_dir(&self, d: [f64; 3]) -> [f64; 3] {
         let n = self.normal();
-        [
-            self.x[0] * d[0] + self.y[0] * d[1] + n[0] * d[2],
-            self.x[1] * d[0] + self.y[1] * d[1] + n[1] * d[2],
-            self.x[2] * d[0] + self.y[2] * d[1] + n[2] * d[2],
-        ]
+        [self.x[0] * d[0] + self.y[0] * d[1] + n[0] * d[2], self.x[1] * d[0] + self.y[1] * d[1] + n[1] * d[2], self.x[2] * d[0] + self.y[2] * d[1] + n[2] * d[2]]
     }
 
     /// Placement as a 3x4 row-major matrix (the X, Y and N axes as columns plus the origin), for a kernel
     /// transform.
     pub fn matrix12(&self) -> [f64; 12] {
         let n = self.normal();
-        [
-            self.x[0], self.y[0], n[0], self.origin[0],
-            self.x[1], self.y[1], n[1], self.origin[1],
-            self.x[2], self.y[2], n[2], self.origin[2],
-        ]
+        [self.x[0], self.y[0], n[0], self.origin[0], self.x[1], self.y[1], n[1], self.origin[1], self.x[2], self.y[2], n[2], self.origin[2]]
     }
 
     /// Whether the frame is the identity (world XY), in which case a body needs no transform.
@@ -660,7 +638,6 @@ impl JointKind {
         }
     }
 
-
     /// Which slots — angle, offset, offset2 — are free degrees of freedom that the solver may vary to close a
     /// loop. Matches `motion`. The offset of a rigid mate is a user-specified gap rather than a degree of
     /// freedom, so it is not varied.
@@ -1092,13 +1069,26 @@ pub enum FeatureKind {
     /// An empty table means a constant radius. Specifying the radius as "at the start of the edge, at the
     /// end" describes one directed edge and is fundamentally incompatible with a set, which has no
     /// direction.
-    Fillet { src: Id, radius: f64, edges: crate::refs::Ref, #[serde(default)] at_vertices: Vec<(crate::refs::Ref, f64)>, body: Id },
+    Fillet {
+        src: Id,
+        radius: f64,
+        edges: crate::refs::Ref,
+        #[serde(default)]
+        at_vertices: Vec<(crate::refs::Ref, f64)>,
+        body: Id,
+    },
     /// Patch: a surface spanned over a chain of edges of body `src`. The edges come as a query and the source
     /// is not consumed.
     ///
     /// `tangent` makes the patch meet the edges smoothly, tangent to the adjacent faces, rather than merely
     /// coinciding in position: otherwise the seam is visible and can be felt.
-    Patch { src: Id, edges: crate::refs::Ref, #[serde(default)] tangent: bool, body: Id },
+    Patch {
+        src: Id,
+        edges: crate::refs::Ref,
+        #[serde(default)]
+        tangent: bool,
+        body: Id,
+    },
     /// Replace faces with a surface. A face taken off the body, edited on its own, is returned to the body
     /// instead of standing next to it. `faces` is a query and `surface` is a sheet body. Both are consumed:
     /// what continues down the timeline is the result.
@@ -1177,13 +1167,28 @@ pub enum FeatureKind {
     /// face of this feature", and the latter keeps up with the model when it gains faces.
     ///
     /// `side` says where the wall goes: into the body, out of it, or half on each side of the face.
-    Shell { src: Id, thickness: f64, faces: crate::refs::Ref, #[serde(default)] side: ShellSide, body: Id },
+    Shell {
+        src: Id,
+        thickness: f64,
+        faces: crate::refs::Ref,
+        #[serde(default)]
+        side: ShellSide,
+        body: Id,
+    },
     /// Draft: tilt the faces named by `faces` on body `src` by `angle` degrees relative to the neutral face
     /// `neutral`, whose line of intersection with them stays fixed. The pull direction is the normal of the
     /// neutral face, reversed by `flip`. Used for cast and stamped draft angles.
     ///
     /// Both references are queries: "every wall of this feature" is as expressible as a hand-picked set.
-    Draft { src: Id, faces: crate::refs::Ref, neutral: crate::refs::Ref, angle: f64, #[serde(default)] flip: bool, body: Id },
+    Draft {
+        src: Id,
+        faces: crate::refs::Ref,
+        neutral: crate::refs::Ref,
+        angle: f64,
+        #[serde(default)]
+        flip: bool,
+        body: Id,
+    },
     /// Linear pattern of body `src`: direction one (`dx,dy,dz` by `count`) plus an optional direction two
     /// (`dx2,dy2,dz2` by `count2`), forming a grid; the copies are united into `body`. A `count2` of one or
     /// less uses the first direction only. Every step is parametric.
@@ -1248,10 +1253,25 @@ pub enum FeatureKind {
     /// `join` names the body to weld the plate onto (0 means no welding). Without it, thickening a sheet
     /// leaves a second body inside the part, visible on screen as a differently coloured piece and breaking
     /// the "one part is one body" rule. A sheet that grew out of a part returns into it.
-    Thicken { src: Id, face: u32, thickness: f64, #[serde(default)] join: Id, body: Id },
+    Thicken {
+        src: Id,
+        face: u32,
+        thickness: f64,
+        #[serde(default)]
+        join: Id,
+        body: Id,
+    },
     /// Split faces by a plane without cutting the body: one body, more faces. The plane is given by a
     /// reference (a datum, or the world plane in `plane`) plus a parametric `offset`, as for a body split.
-    SplitFace { src: Id, plane: u8, datum: Id, offset: f64, body: Id, #[serde(default)] face: Option<(Id, FaceKey)> },
+    SplitFace {
+        src: Id,
+        plane: u8,
+        datum: Id,
+        offset: f64,
+        body: Id,
+        #[serde(default)]
+        face: Option<(Id, FaceKey)>,
+    },
     /// Part instance (a copy inside a component pattern): the body is a one-to-one copy of the active body of
     /// `src_comp`, and the placement comes from the transform of the copied component itself.
     ///
@@ -1268,7 +1288,16 @@ pub enum FeatureKind {
     /// Mirror body `src` about a plane: `plane` selects a world plane (0 XY, 1 XZ, 2 YZ), a non-zero `datum` an
     /// arbitrary datum plane, and `face` the plane of a face of a body, read off it at every rebuild - the one node of
     /// the timeline, rather than a datum plane of its own beside it. `keep` unites the result with the original.
-    Mirror { src: Id, plane: u8, keep: bool, #[serde(default)] datum: Id, body: Id, #[serde(default)] face: Option<(Id, FaceKey)> },
+    Mirror {
+        src: Id,
+        plane: u8,
+        keep: bool,
+        #[serde(default)]
+        datum: Id,
+        body: Id,
+        #[serde(default)]
+        face: Option<(Id, FaceKey)>,
+    },
     /// Hole in body `src`: a cylinder of `diameter` and `depth` cut at the centre of face `face`, so the hole
     /// travels with the face; `point` and `normal` are the fallback fingerprint.
     ///
@@ -1315,7 +1344,7 @@ pub enum FeatureKind {
     Thread {
         src: Id,
         /// Persistent id of the circular edge (the rim) on `src`, which supplies the axis (centre and normal) and
-    /// the radius.
+        /// the radius.
         edge: u32,
         /// Standard, size, fit and rounding (see `qymcad_core::thread`).
         spec: crate::thread::ThreadSpec,
@@ -1357,7 +1386,15 @@ pub enum FeatureKind {
     /// makes the split associative — when the face moves, the split moves with it. `offset` shifts along the
     /// normal (the `offset` feature dimension), so a cut can be made next to the plane rather than on it,
     /// without creating a separate datum for one number.
-    SplitBody { src: Id, plane: u8, datum: Id, offset: f64, bodies: Vec<Id>, #[serde(default)] face: Option<(Id, FaceKey)> },
+    SplitBody {
+        src: Id,
+        plane: u8,
+        datum: Id,
+        offset: f64,
+        bodies: Vec<Id>,
+        #[serde(default)]
+        face: Option<(Id, FaceKey)>,
+    },
     /// Offset a face: planar face `face` of body `src` is moved by `dist` along its own normal, producing
     /// `body`. Parametric like everything else in the timeline — `dist` is edited and recomputed, and the face
     /// reference is a query resolved by recipe rather than matched by similarity.
@@ -1442,20 +1479,12 @@ pub fn mat_mul12(a: &[f64; 12], b: &[f64; 12]) -> [f64; 12] {
 
 /// Apply a 3x4 transform to a point, including the translation.
 pub fn apply12(m: &[f64; 12], p: [f64; 3]) -> [f64; 3] {
-    [
-        m[0] * p[0] + m[1] * p[1] + m[2] * p[2] + m[3],
-        m[4] * p[0] + m[5] * p[1] + m[6] * p[2] + m[7],
-        m[8] * p[0] + m[9] * p[1] + m[10] * p[2] + m[11],
-    ]
+    [m[0] * p[0] + m[1] * p[1] + m[2] * p[2] + m[3], m[4] * p[0] + m[5] * p[1] + m[6] * p[2] + m[7], m[8] * p[0] + m[9] * p[1] + m[10] * p[2] + m[11]]
 }
 
 /// Apply the rotational part of a 3x4 transform to a direction, without the translation.
 pub fn apply12_dir(m: &[f64; 12], d: [f64; 3]) -> [f64; 3] {
-    [
-        m[0] * d[0] + m[1] * d[1] + m[2] * d[2],
-        m[4] * d[0] + m[5] * d[1] + m[6] * d[2],
-        m[8] * d[0] + m[9] * d[1] + m[10] * d[2],
-    ]
+    [m[0] * d[0] + m[1] * d[1] + m[2] * d[2], m[4] * d[0] + m[5] * d[1] + m[6] * d[2], m[8] * d[0] + m[9] * d[1] + m[10] * d[2]]
 }
 
 /// Whether a 3x4 transform is the identity, in which case a body needs no transform into world space.
@@ -1504,16 +1533,18 @@ pub fn rot12_axis(o: [f64; 3], d: [f64; 3], deg: f64) -> [f64; 12] {
     let (s, c) = deg.to_radians().sin_cos();
     let ic = 1.0 - c;
     let m = [
-        c + x * x * ic, x * y * ic - z * s, x * z * ic + y * s,
-        y * x * ic + z * s, c + y * y * ic, y * z * ic - x * s,
-        z * x * ic - y * s, z * y * ic + x * s, c + z * z * ic,
+        c + x * x * ic,
+        x * y * ic - z * s,
+        x * z * ic + y * s,
+        y * x * ic + z * s,
+        c + y * y * ic,
+        y * z * ic - x * s,
+        z * x * ic - y * s,
+        z * y * ic + x * s,
+        c + z * z * ic,
     ];
     // Translation: o - R * o.
-    let ro = [
-        m[0] * o[0] + m[1] * o[1] + m[2] * o[2],
-        m[3] * o[0] + m[4] * o[1] + m[5] * o[2],
-        m[6] * o[0] + m[7] * o[1] + m[8] * o[2],
-    ];
+    let ro = [m[0] * o[0] + m[1] * o[1] + m[2] * o[2], m[3] * o[0] + m[4] * o[1] + m[5] * o[2], m[6] * o[0] + m[7] * o[1] + m[8] * o[2]];
     [m[0], m[1], m[2], o[0] - ro[0], m[3], m[4], m[5], o[1] - ro[1], m[6], m[7], m[8], o[2] - ro[2]]
 }
 
@@ -1528,15 +1559,30 @@ pub fn mat_inv12(m: &[f64; 12]) -> [f64; 12] {
     let id = 1.0 / det;
     // inv(3×3) = adj/det
     let i = [
-        (a4 * a8 - a5 * a7) * id, (a2 * a7 - a1 * a8) * id, (a1 * a5 - a2 * a4) * id,
-        (a5 * a6 - a3 * a8) * id, (a0 * a8 - a2 * a6) * id, (a2 * a3 - a0 * a5) * id,
-        (a3 * a7 - a4 * a6) * id, (a1 * a6 - a0 * a7) * id, (a0 * a4 - a1 * a3) * id,
+        (a4 * a8 - a5 * a7) * id,
+        (a2 * a7 - a1 * a8) * id,
+        (a1 * a5 - a2 * a4) * id,
+        (a5 * a6 - a3 * a8) * id,
+        (a0 * a8 - a2 * a6) * id,
+        (a2 * a3 - a0 * a5) * id,
+        (a3 * a7 - a4 * a6) * id,
+        (a1 * a6 - a0 * a7) * id,
+        (a0 * a4 - a1 * a3) * id,
     ];
     let (tx, ty, tz) = (m[3], m[7], m[11]);
     [
-        i[0], i[1], i[2], -(i[0] * tx + i[1] * ty + i[2] * tz),
-        i[3], i[4], i[5], -(i[3] * tx + i[4] * ty + i[5] * tz),
-        i[6], i[7], i[8], -(i[6] * tx + i[7] * ty + i[8] * tz),
+        i[0],
+        i[1],
+        i[2],
+        -(i[0] * tx + i[1] * ty + i[2] * tz),
+        i[3],
+        i[4],
+        i[5],
+        -(i[3] * tx + i[4] * ty + i[5] * tz),
+        i[6],
+        i[7],
+        i[8],
+        -(i[6] * tx + i[7] * ty + i[8] * tz),
     ]
 }
 
@@ -1934,7 +1980,15 @@ pub trait Kernel {
     /// Lofted boolean: the lofted solid acts as a tool and is combined with body `src` (`op`: 0 cut, 1 union,
     /// 2 intersection). The section parameters are as in `loft`. The default implementation is a fallback.
     #[allow(clippy::too_many_arguments)]
-    fn loft_combine(&self, _bo: crate::model::BodyOp, _sections: &[f64], _offsets: &[usize], _places: &[f64], _walls: LoftWalls, _caps: [u32; 2]) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
+    fn loft_combine(
+        &self,
+        _bo: crate::model::BodyOp,
+        _sections: &[f64],
+        _offsets: &[usize],
+        _places: &[f64],
+        _walls: LoftWalls,
+        _caps: [u32; 2],
+    ) -> Result<(Mesh, Vec<MeshFace>), crate::errors::CoreError> {
         Err(crate::errors::CoreError::KernelRequired(crate::errors::Op::LoftBoolean))
     }
     /// Stepped hole: the tool (a cylinder plus a counterbore or countersink) in frame `pl`. What drills it
@@ -2397,17 +2451,9 @@ impl FeatureKind {
             FeatureKind::SplitFace { offset, .. } => vec![("offset", offset)],
             FeatureKind::SplitBody { offset, .. } => vec![("offset", offset)],
             FeatureKind::CircularArray { angle, .. } => vec![("angle", angle)],
-            FeatureKind::LinearArray { dx, dy, dz, dx2, dy2, dz2, dx3, dy3, dz3, .. } => vec![
-                ("dx", dx),
-                ("dy", dy),
-                ("dz", dz),
-                ("dx2", dx2),
-                ("dy2", dy2),
-                ("dz2", dz2),
-                ("dx3", dx3),
-                ("dy3", dy3),
-                ("dz3", dz3),
-            ],
+            FeatureKind::LinearArray { dx, dy, dz, dx2, dy2, dz2, dx3, dy3, dz3, .. } => {
+                vec![("dx", dx), ("dy", dy), ("dz", dz), ("dx2", dx2), ("dy2", dy2), ("dz2", dz2), ("dx3", dx3), ("dy3", dy3), ("dz3", dz3)]
+            }
             FeatureKind::Hole { diameter, depth, dia2, depth2, .. } => {
                 vec![("diameter", diameter), ("depth", depth), ("dia2", dia2), ("depth2", depth2)]
             }
@@ -2706,7 +2752,12 @@ impl FeatureKind {
             FeatureKind::ComponentPattern { bodies, .. } => {
                 bodies.iter_mut().for_each(m); // the source and the copies are components, remapped separately
             }
-            FeatureKind::PushFace { src, body, .. } | FeatureKind::FaceCopy { src, body, .. } | FeatureKind::OffsetSurface { src, body, .. } | FeatureKind::Patch { src, body, .. } | FeatureKind::MeshSolid { src, body, .. } | FeatureKind::MeshRecognised { src, body, .. } => {
+            FeatureKind::PushFace { src, body, .. }
+            | FeatureKind::FaceCopy { src, body, .. }
+            | FeatureKind::OffsetSurface { src, body, .. }
+            | FeatureKind::Patch { src, body, .. }
+            | FeatureKind::MeshSolid { src, body, .. }
+            | FeatureKind::MeshRecognised { src, body, .. } => {
                 m(src);
                 m(body);
             }

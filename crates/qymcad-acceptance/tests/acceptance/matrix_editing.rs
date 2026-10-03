@@ -32,7 +32,12 @@ fn run_all(all: Vec<Edit>) {
             let got = (sk.lines, sk.arcs, sk.circles);
             assert!(got == c.counts, "the sketch holds {got:?} lines, arcs and circles, not {:?}; the status line says {:?}", c.counts, s.status());
             // what agrees with what is there already may stay as a reference, when the sketch says so in words
-            assert!(sk.redundant == 0 || qymcad_acceptance::says_redundant(&mut s), "the sketch is left over-defined ({} redundant) without a word; the status line says {:?}", sk.redundant, s.status());
+            assert!(
+                sk.redundant == 0 || qymcad_acceptance::says_redundant(&mut s),
+                "the sketch is left over-defined ({} redundant) without a word; the status line says {:?}",
+                sk.redundant,
+                s.status()
+            );
         });
         if !problem.is_empty() {
             failed.push(format!("{}: {problem}", c.what));

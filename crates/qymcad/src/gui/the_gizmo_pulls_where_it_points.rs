@@ -30,13 +30,7 @@ mod tests {
             app.exit_context();
         }
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
-        let mine: Vec<Id> = app
-            .project
-            .components
-            .iter()
-            .filter(|c| c.parent == Some(app.project.root) && !before.contains(&c.id))
-            .map(|c| c.id)
-            .collect();
+        let mine: Vec<Id> = app.project.components.iter().filter(|c| c.parent == Some(app.project.root) && !before.contains(&c.id)).map(|c| c.id).collect();
         assert_eq!(mine.len(), 2, "setup: there should be two parts of our own, and there are {}", mine.len());
         let (a, b) = (mine[0], mine[1]);
         app.project.set_grounded(a, true);
@@ -92,10 +86,7 @@ mod tests {
         let after = apply12(&app.project.world_transform(part), [0.0, 0.0, 0.0]);
         let d = [after[0] - before[0], after[1] - before[1], after[2] - before[2]];
         let travelled = d[0] * dir[0] + d[1] * dir[1] + d[2] * dir[2];
-        assert!(
-            (travelled - 8.0).abs() < 1e-3,
-            "a limit of 8 mm: the drag must stop the part at the mark, and it travelled {travelled:.4} mm"
-        );
+        assert!((travelled - 8.0).abs() < 1e-3, "a limit of 8 mm: the drag must stop the part at the mark, and it travelled {travelled:.4} mm");
     }
 
     /// PULL THE HANDLE ALONG THE DRAWN ARROW — THE PART GOES ALONG THAT SAME ARROW.
@@ -130,10 +121,6 @@ mod tests {
         let len = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
         assert!(len > 1.0, "the part did not move at all: it travelled {len:.4} mm");
         let dot = (d[0] * dir[0] + d[1] * dir[1] + d[2] * dir[2]) / len;
-        assert!(
-            dot > 0.999,
-            "the drag went ALONG the arrow and the part moved the other way: match {dot:.4} (travel {:?}, arrow {dir:?})",
-            [d[0] / len, d[1] / len, d[2] / len]
-        );
+        assert!(dot > 0.999, "the drag went ALONG the arrow and the part moved the other way: match {dot:.4} (travel {:?}, arrow {dir:?})", [d[0] / len, d[1] / len, d[2] / len]);
     }
 }

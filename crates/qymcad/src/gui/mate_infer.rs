@@ -52,8 +52,6 @@ impl App {
         infer_mate_anchor(&self.painting(), rect, pos)
     }
 
-
-
     /// A click on the frame while choosing a mate anchor: infer the anchor and take it.
     pub(super) fn joint_pick_inferred_click(&mut self, rect: Rect, pos: Pos2) {
         // "BY ORIGINS" is not a way of pointing but a deliberate choice of A DIFFERENT anchor: the
@@ -185,10 +183,7 @@ mod tests {
         let j = app.project.joints.last().cloned().expect("two clicks on edges must create a joint");
         for (side, cid) in [("A", j.a), ("B", j.b)] {
             let a = app.project.connector(cid).map(|c| c.anchor.clone());
-            assert!(
-                matches!(a, Some(AnchorRef::EdgeMid(..))),
-                "the click was on the MIDDLE OF AN EDGE, and anchor {side} came out {a:?} — the inference under the cursor did not work"
-            );
+            assert!(matches!(a, Some(AnchorRef::EdgeMid(..))), "the click was on the MIDDLE OF AN EDGE, and anchor {side} came out {a:?} — the inference under the cursor did not work");
         }
         assert!(app.project.joint_faults().is_empty(), "a joint on two edges was born faulty: {:?}", app.project.joint_faults());
     }

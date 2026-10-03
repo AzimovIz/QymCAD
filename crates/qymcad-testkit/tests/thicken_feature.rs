@@ -17,12 +17,7 @@ fn part_with_cube() -> (Project, u64, u32) {
     p.set_active_component(Some(part));
     let body = p.add_box(20.0, 20.0, 20.0);
     let _ = qymcad_testkit::regenerate(&mut p);
-    let face = p
-        .regen_faces
-        .get(&body)
-        .and_then(|fs| fs.iter().filter(|f| f.normal[2] > 0.9).max_by(|a, b| a.centroid.z.partial_cmp(&b.centroid.z).unwrap()))
-        .map(|f| f.id)
-        .expect("the top face");
+    let face = p.regen_faces.get(&body).and_then(|fs| fs.iter().filter(|f| f.normal[2] > 0.9).max_by(|a, b| a.centroid.z.partial_cmp(&b.centroid.z).unwrap())).map(|f| f.id).expect("the top face");
     (p, body, face)
 }
 

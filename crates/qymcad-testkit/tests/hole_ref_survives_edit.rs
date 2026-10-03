@@ -12,11 +12,7 @@ use qymcad_core::model::Project;
 fn plate_with_hole(h: f64) -> (Project, u64, u64) {
     let mut p = Project::default();
     p.new_document();
-    let sid = p.add_line_sketch(
-        "Sketch 1",
-        vec![Point2::new(0.0, 0.0), Point2::new(40.0, 0.0), Point2::new(40.0, 30.0), Point2::new(0.0, 30.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("Sketch 1", vec![Point2::new(0.0, 0.0), Point2::new(40.0, 0.0), Point2::new(40.0, 30.0), Point2::new(0.0, 30.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {
@@ -28,18 +24,8 @@ fn plate_with_hole(h: f64) -> (Project, u64, u64) {
     qymcad_testkit::regenerate(&mut p);
 
     // THE TOP FACE — the way a person would pick it with the mouse: the highest of the upward-facing ones
-    let top = p.regen_faces[&plate]
-        .iter()
-        .filter(|f| f.normal[2] > 0.9)
-        .max_by(|a, b| a.centroid.z.partial_cmp(&b.centroid.z).unwrap())
-        .expect("the plate has a top face")
-        .clone();
-    let key = qymcad_core::feature::FaceKey {
-        index: 0,
-        centroid: [top.centroid.x, top.centroid.y, top.centroid.z],
-        normal: top.normal,
-        id: top.id,
-    };
+    let top = p.regen_faces[&plate].iter().filter(|f| f.normal[2] > 0.9).max_by(|a, b| a.centroid.z.partial_cmp(&b.centroid.z).unwrap()).expect("the plate has a top face").clone();
+    let key = qymcad_core::feature::FaceKey { index: 0, centroid: [top.centroid.x, top.centroid.y, top.centroid.z], normal: top.normal, id: top.id };
     let hole = p.add_hole(plate, key, 8.0, 5.0);
     qymcad_testkit::regenerate(&mut p);
     (p, plate, hole)
@@ -98,8 +84,5 @@ fn a_hole_whose_face_vanished_reports_instead_of_drilling_elsewhere() {
         }
     }
     qymcad_testkit::regenerate(&mut p);
-    assert!(
-        p.regen_errors.contains_key(&hole),
-        "the face is lost and the node says nothing — the silent guess is back"
-    );
+    assert!(p.regen_errors.contains_key(&hole), "the face is lost and the node says nothing — the silent guess is back");
 }

@@ -41,10 +41,7 @@ mod tests {
     fn a_hint_is_readable_next_to_ordinary_text() {
         let (hint, body) = hint_and_body(1.0);
         let share = hint / body;
-        assert!(
-            share >= LEAST_SHARE,
-            "a hint is {hint} points against {body} for ordinary text - {share:.2} of it, and below {LEAST_SHARE} a line stops being read and starts being skipped"
-        );
+        assert!(share >= LEAST_SHARE, "a hint is {hint} points against {body} for ordinary text - {share:.2} of it, and below {LEAST_SHARE} a line stops being read and starts being skipped");
     }
 
     /// AND IT STILL GROWS WITH THE INTERFACE SCALE.
@@ -61,10 +58,7 @@ mod tests {
             hint * zoom
         };
         let (one, big) = (px(1.0), px(1.5));
-        assert!(
-            big > one * 1.4,
-            "raising the scale to 1.5 took the hint from {one} pixels to {big}: the size must be in POINTS, or the scale does not reach it"
-        );
+        assert!(big > one * 1.4, "raising the scale to 1.5 took the hint from {one} pixels to {big}: the size must be in POINTS, or the scale does not reach it");
     }
 
     /// AND IT STAYS READABLE AT EVERY SCALE.

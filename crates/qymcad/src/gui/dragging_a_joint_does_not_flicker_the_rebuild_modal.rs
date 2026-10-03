@@ -27,12 +27,7 @@ mod tests {
     /// A point ON THE BODY that can be clicked: the centre of the topmost face.
     fn aim(app: &App, body: Id) -> [f64; 3] {
         let wt = app.project.body_display_transform(body, qymcad_ui_state::current_ctx_id(&app.active_path, &app.project));
-        let f = app
-            .project
-            .regen_faces
-            .get(&body)
-            .and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z)))
-            .expect("the body has faces");
+        let f = app.project.regen_faces.get(&body).and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z))).expect("the body has faces");
         qymcad_core::feature::apply12(&wt, [f.centroid.x, f.centroid.y, f.centroid.z])
     }
 
@@ -116,10 +111,7 @@ mod tests {
         let (_, moving) = a_slider_by_hand(&mut app);
         leave_one_node_dirty(&mut app);
         let asks = rebuilds_asked_during_a_drag(&mut app, moving);
-        assert_eq!(
-            asks, 0,
-            "a rebuild was asked for {asks} times during one drag — in a live window that is as many flashes of the modal rebuild window"
-        );
+        assert_eq!(asks, 0, "a rebuild was asked for {asks} times during one drag — in a live window that is as many flashes of the modal rebuild window");
     }
 
     /// THE OTHER SIDE OF THE SAME CHANGE: WHERE THE ARRANGEMENT REALLY DRIVES THE GEOMETRY, A REBUILD
@@ -155,9 +147,6 @@ mod tests {
         let asks = rebuilds_asked_during_a_drag(&mut app, moving);
         assert_eq!(asks, 0, "dragging a part does not rebuild the timeline even with an external reference: it was asked for {asks} times");
         // `rebuilds_asked_during_a_drag` ends with the release — now the rebuild must happen
-        assert!(
-            app.regen.wanted,
-            "the part was released and nobody rebuilt the consumer of its face — the top-down associativity is lost"
-        );
+        assert!(app.regen.wanted, "the part was released and nobody rebuilt the consumer of its face — the top-down associativity is lost");
     }
 }

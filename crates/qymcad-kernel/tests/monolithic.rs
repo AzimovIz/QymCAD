@@ -37,8 +37,8 @@ fn fused_stacked_boxes_are_monolithic() {
 #[test]
 fn split_edge_segments_get_distinct_ids() {
     let a = Shape::extrude(&[0.0, 0.0, 10.0, 0.0, 10.0, 10.0, 0.0, 10.0], 20.0).unwrap(); // the base, a 10 mm square extruded 20 up
-    // the second block, translated so that it sits against the face at y = 0, flush at x = 0 and set below
-    // the top
+                                                                                          // the second block, translated so that it sits against the face at y = 0, flush at x = 0 and set below
+                                                                                          // the top
     let b = Shape::extrude(&[0.0, 0.0, 6.0, 0.0, 6.0, 8.0, 0.0, 8.0], 12.0).unwrap();
     let mv = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, -8.0, 0.0, 0.0, 1.0, 2.0];
     let b = b.transformed(&mv).unwrap();

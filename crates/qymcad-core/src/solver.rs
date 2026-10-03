@@ -128,7 +128,11 @@ fn violated_axis_dims(points: &[SketchPoint], constraints: &[Constraint], limit:
             lo = lo.min(p.x).min(p.y);
             hi = hi.max(p.x).max(p.y);
         }
-        if hi > lo { hi - lo } else { 0.0 }
+        if hi > lo {
+            hi - lo
+        } else {
+            0.0
+        }
     };
     let tol = (span * 1e-4).max(1e-6);
     let mut out = Vec::new();
@@ -483,8 +487,6 @@ fn residuals_of(x: &[f64], x0: &[f64], idx: &HashMap<Id, usize>, ridx: &HashMap<
     r
 }
 
-
-
 /// Constraint diagnostics: the residual of each constraint separately, in the order of `constraints`.
 ///
 /// A single residual for the whole sketch says only that something does not fit; finding out which constraints
@@ -670,14 +672,7 @@ pub fn jacobian_mismatch(points: &[SketchPoint], radii: &[RadiusVar], c: &Constr
 ///
 /// Format: `out[k]` is row k of this constraint, a list of `(variable index, ∂r_k/∂x)`. The row order matches
 /// `con_rows` exactly, which the numerical cross-check test verifies for every type.
-fn con_jac(
-    c: &Constraint,
-    x: &[f64],
-    x0: &[f64],
-    idx: &HashMap<Id, usize>,
-    ridx: &HashMap<Id, usize>,
-    out: &mut Vec<Vec<(usize, f64)>>,
-) {
+fn con_jac(c: &Constraint, x: &[f64], x0: &[f64], idx: &HashMap<Id, usize>, ridx: &HashMap<Id, usize>, out: &mut Vec<Vec<(usize, f64)>>) {
     let g = |id: Id| -> (f64, f64) {
         let i = idx[&id];
         (x[2 * i], x[2 * i + 1])
@@ -716,7 +711,15 @@ fn con_jac(
                 let d0 = x0[2 * ia + k] - x0[2 * ib + k];
                 // |Δ| − d away from the degenerate case, where the derivative is the sign of Δ; signed Δ − d at
                 // zero, see `con_rows`
-                let s = if d0.abs() > 1e-9 { if cur < 0.0 { -1.0 } else { 1.0 } } else { 1.0 };
+                let s = if d0.abs() > 1e-9 {
+                    if cur < 0.0 {
+                        -1.0
+                    } else {
+                        1.0
+                    }
+                } else {
+                    1.0
+                };
                 out.push(vec![(2 * ia + k, s), (2 * ib + k, -s)]);
             }
             _ => {
@@ -741,32 +744,14 @@ fn con_jac(
             let ((cx, cy), (dx, dy)) = (g(cc), g(d));
             let (ux, uy) = (bx - ax, by - ay);
             let (wx, wy) = (dx - cx, dy - cy);
-            out.push(vec![
-                (vx(a), -wy),
-                (vy(a), wx),
-                (vx(b), wy),
-                (vy(b), -wx),
-                (vx(cc), uy),
-                (vy(cc), -ux),
-                (vx(d), -uy),
-                (vy(d), ux),
-            ]);
+            out.push(vec![(vx(a), -wy), (vy(a), wx), (vx(b), wy), (vy(b), -wx), (vx(cc), uy), (vy(cc), -ux), (vx(d), -uy), (vy(d), ux)]);
         }
         Constraint::Perpendicular { a, b, c: cc, d } => {
             let ((ax, ay), (bx, by)) = (g(a), g(b));
             let ((cx, cy), (dx, dy)) = (g(cc), g(d));
             let (ux, uy) = (bx - ax, by - ay);
             let (wx, wy) = (dx - cx, dy - cy);
-            out.push(vec![
-                (vx(a), -wx),
-                (vy(a), -wy),
-                (vx(b), wx),
-                (vy(b), wy),
-                (vx(cc), -ux),
-                (vy(cc), -uy),
-                (vx(d), ux),
-                (vy(d), uy),
-            ]);
+            out.push(vec![(vx(a), -wx), (vy(a), -wy), (vx(b), wx), (vy(b), wy), (vx(cc), -ux), (vy(cc), -uy), (vx(d), ux), (vy(d), uy)]);
         }
         Constraint::Equal { a, b, c: cc, d } => {
             let mut row = Vec::new();
@@ -780,14 +765,7 @@ fn con_jac(
             for far in [cc, d] {
                 let (fx, fy) = g(far);
                 let (wx, wy) = (fx - ax, fy - ay);
-                out.push(vec![
-                    (vx(a), -wy + uy),
-                    (vy(a), -ux + wx),
-                    (vx(b), wy),
-                    (vy(b), -wx),
-                    (vx(far), -uy),
-                    (vy(far), ux),
-                ]);
+                out.push(vec![(vx(a), -wy + uy), (vy(a), -ux + wx), (vx(b), wy), (vy(b), -wx), (vx(far), -uy), (vy(far), ux)]);
             }
         }
         Constraint::Midpoint { p, a, b } => {
@@ -801,14 +779,7 @@ fn con_jac(
             let cross = dx * (cy - ay) - dy * (cx - ax);
             let s = if cross < 0.0 { -1.0 } else { 1.0 };
             // f = s·cross/len  →  ∂f = s·(∂cross/len − cross·∂len/len²)
-            let dc = [
-                (vx(a), -(cy - ay) + dy),
-                (vy(a), -dx + (cx - ax)),
-                (vx(b), cy - ay),
-                (vy(b), -(cx - ax)),
-                (vx(cc), -dy),
-                (vy(cc), dx),
-            ];
+            let dc = [(vx(a), -(cy - ay) + dy), (vy(a), -dx + (cx - ax)), (vx(b), cy - ay), (vy(b), -(cx - ax)), (vx(cc), -dy), (vy(cc), dx)];
             let dl = [(vx(a), -dx / len), (vy(a), -dy / len), (vx(b), dx / len), (vy(b), dy / len)];
             let mut row: Vec<(usize, f64)> = dc.iter().map(|&(i, v)| (i, s * v / len)).collect();
             for &(i, v) in &dl {
@@ -823,7 +794,12 @@ fn con_jac(
             let mut row = Vec::new();
             dist_rows(c2, c1, 1.0, &mut row);
             let (r1, r2) = (rv(c1).map(|i| x[i]).unwrap_or(0.0), rv(c2).map(|i| x[i]).unwrap_or(0.0));
-            let (g1, g2) = if external { (-1.0, -1.0) } else { let s = if r1 - r2 < 0.0 { -1.0 } else { 1.0 }; (-s, s) };
+            let (g1, g2) = if external {
+                (-1.0, -1.0)
+            } else {
+                let s = if r1 - r2 < 0.0 { -1.0 } else { 1.0 };
+                (-s, s)
+            };
             if let Some(i) = rv(c1) {
                 row.push((i, g1));
             }
@@ -847,16 +823,7 @@ fn con_jac(
                 (vx(lb), my - lay),
                 (vy(lb), -(mx - lax)),
             ]);
-            out.push(vec![
-                (vx(a), -dx),
-                (vy(a), -dy),
-                (vx(b), dx),
-                (vy(b), dy),
-                (vx(la), -(bx - ax)),
-                (vy(la), -(by - ay)),
-                (vx(lb), bx - ax),
-                (vy(lb), by - ay),
-            ]);
+            out.push(vec![(vx(a), -dx), (vy(a), -dy), (vx(b), dx), (vy(b), dy), (vx(la), -(bx - ax)), (vy(la), -(by - ay)), (vx(lb), bx - ax), (vy(lb), by - ay)]);
         }
         Constraint::Angle { a, b, c: cc, .. } => {
             let ((ax, ay), (bx, by), (cx, cy)) = (g(a), g(b), g(cc));
@@ -899,14 +866,7 @@ fn con_jac(
             let (dx, dy) = (bx - ax, by - ay);
             let len = (dx * dx + dy * dy).sqrt().max(1e-9);
             let cross = dx * (py - ay) - dy * (px - ax);
-            let dc = [
-                (vx(p), -dy),
-                (vy(p), dx),
-                (vx(a), -(py - ay) + dy),
-                (vy(a), -dx + (px - ax)),
-                (vx(b), py - ay),
-                (vy(b), -(px - ax)),
-            ];
+            let dc = [(vx(p), -dy), (vy(p), dx), (vx(a), -(py - ay) + dy), (vy(a), -dx + (px - ax)), (vx(b), py - ay), (vy(b), -(px - ax))];
             let dl = [(vx(a), -dx / len), (vy(a), -dy / len), (vx(b), dx / len), (vy(b), dy / len)];
             let mut row: Vec<(usize, f64)> = dc.iter().map(|&(i, v)| (i, v / len)).collect();
             for &(i, v) in &dl {
@@ -1194,7 +1154,9 @@ fn cons_ok(c: &Constraint, has: &impl Fn(Id) -> bool, is_center: &impl Fn(Id) ->
     match *c {
         Constraint::Fixed { p } => has(p),
         Constraint::Horizontal { a, b } | Constraint::Vertical { a, b } | Constraint::Coincident { a, b } | Constraint::Distance { a, b, .. } => has(a) && has(b),
-        Constraint::Parallel { a, b, c, d } | Constraint::Perpendicular { a, b, c, d } | Constraint::Equal { a, b, c, d } | Constraint::Collinear { a, b, c, d } => has(a) && has(b) && has(c) && has(d),
+        Constraint::Parallel { a, b, c, d } | Constraint::Perpendicular { a, b, c, d } | Constraint::Equal { a, b, c, d } | Constraint::Collinear { a, b, c, d } => {
+            has(a) && has(b) && has(c) && has(d)
+        }
         Constraint::Angle { a, b, c, .. } => has(a) && has(b) && has(c),
         Constraint::Midpoint { p, a, b } => has(p) && has(a) && has(b),
         Constraint::Tangent { a, b, c, .. } => has(a) && has(b) && has(c),

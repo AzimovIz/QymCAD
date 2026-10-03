@@ -53,11 +53,7 @@ mod tests {
         let mut has_way = false;
         for (a, _) in src.match_indices("fn joints_panel") {
             let rest = &src[a..];
-            let end = ["\n    pub(super) fn ", "\n    pub(crate) fn ", "\n    fn ", "\npub(crate) fn ", "\nfn "]
-                .iter()
-                .filter_map(|m| rest.find(m))
-                .min()
-                .unwrap_or(rest.len());
+            let end = ["\n    pub(super) fn ", "\n    pub(crate) fn ", "\n    fn ", "\npub(crate) fn ", "\nfn "].iter().filter_map(|m| rest.find(m)).min().unwrap_or(rest.len());
             let panel = &rest[..end];
             assert!(!panel.contains("add_joint("), "the properties panel creates a mate bypassing the command again");
             assert!(!panel.contains("add_connector("), "the properties panel creates connectors on its own again");

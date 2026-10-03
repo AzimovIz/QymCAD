@@ -10,11 +10,7 @@
 
 /// A drop-down menu of the menu bar that hands the open menu over to itself when the pointer comes to it.
 pub(crate) trait BarMenu {
-    fn bar_menu_button<'a, R>(
-        &mut self,
-        atoms: impl egui::IntoAtoms<'a>,
-        add_contents: impl FnOnce(&mut egui::Ui) -> R,
-    ) -> egui::InnerResponse<Option<R>>;
+    fn bar_menu_button<'a, R>(&mut self, atoms: impl egui::IntoAtoms<'a>, add_contents: impl FnOnce(&mut egui::Ui) -> R) -> egui::InnerResponse<Option<R>>;
 }
 
 /// The titles of one bar: the ones drawn on the previous frame, and the ones being drawn on this one.
@@ -57,11 +53,7 @@ fn hand_over(ctx: &egui::Context, layer: egui::LayerId, titles: &[Title], handed
 }
 
 impl BarMenu for egui::Ui {
-    fn bar_menu_button<'a, R>(
-        &mut self,
-        atoms: impl egui::IntoAtoms<'a>,
-        add_contents: impl FnOnce(&mut egui::Ui) -> R,
-    ) -> egui::InnerResponse<Option<R>> {
+    fn bar_menu_button<'a, R>(&mut self, atoms: impl egui::IntoAtoms<'a>, add_contents: impl FnOnce(&mut egui::Ui) -> R) -> egui::InnerResponse<Option<R>> {
         let ctx = self.ctx().clone();
         // THE MENUS OF THIS BAR, remembered across frames: a title drawn before the open menu must still
         // know that menu is open, and an unrelated popup elsewhere (a combo box) must not count as one.
@@ -82,9 +74,7 @@ impl BarMenu for egui::Ui {
         // away for as long as that fade would last. The title's id is not known before it is drawn; the next
         // automatic id is the one the button takes, and a wrong guess only brings the fade back.
         let handed = ctx.data(|d| d.get_temp::<(egui::Id, f64)>(handed_key));
-        let instant = handed.is_some_and(|(id, at)| {
-            id == self.next_auto_id() && now - at <= 3.0 * f64::from(fade)
-        });
+        let instant = handed.is_some_and(|(id, at)| id == self.next_auto_id() && now - at <= 3.0 * f64::from(fade));
         if instant {
             ctx.global_style_mut(|s| s.animation_time = 0.0);
         }
@@ -202,12 +192,7 @@ mod tests {
 
         fn click(&mut self, at: egui::Pos2) {
             self.hover(at);
-            let button = |pressed| egui::Event::PointerButton {
-                pos: at,
-                button: egui::PointerButton::Primary,
-                pressed,
-                modifiers: egui::Modifiers::NONE,
-            };
+            let button = |pressed| egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE };
             self.frame(vec![button(true)]);
             self.frame(vec![button(false)]);
             self.frame(Vec::new());
@@ -265,10 +250,7 @@ mod tests {
         bar.idle(0.5);
         let shown = &bar.edit_painted[from..];
         let faint: Vec<(usize, Option<u8>)> = shown.iter().copied().enumerate().filter(|&(_, a)| a != full).collect();
-        assert!(
-            faint.is_empty(),
-            "at {hz} Hz, Edit handed over from File by hover must be fully opaque ({full:?}) on every frame - frames that were not: {faint:?}"
-        );
+        assert!(faint.is_empty(), "at {hz} Hz, Edit handed over from File by hover must be fully opaque ({full:?}) on every frame - frames that were not: {faint:?}");
     }
 
     /// THE HAND-OVER TAKES NO FRAME: on the very frame the pointer reaches Edit, Edit is drawn and File is
@@ -311,10 +293,7 @@ mod tests {
     fn the_application_bar_uses_the_walking_menus() {
         let panels = crate::gui::panels_source::PANELS;
         for key in ["menu-file", "menu-edit", "menu-view", "menu-windows", "menu-help"] {
-            assert!(
-                panels.contains(&format!(r#"bar_menu_button(qymcad_i18n::tr("{key}")"#)),
-                "the \"{key}\" menu of the bar must be a `bar_menu_button`, or hover does not move the open menu to it"
-            );
+            assert!(panels.contains(&format!(r#"bar_menu_button(qymcad_i18n::tr("{key}")"#)), "the \"{key}\" menu of the bar must be a `bar_menu_button`, or hover does not move the open menu to it");
         }
     }
 

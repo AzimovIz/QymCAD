@@ -45,7 +45,10 @@ mod tests {
                 egui::Panel::left("tree").show(c, |ui| app.build_tree_for_test(ui));
                 egui::Panel::right("props").show(c, |ui| app.joints_panel_for_test(ui));
                 qymcad_assembly::joint_tool_bar_for_test(&mut app.joint_ctx(), c);
-                { app.side.joint.edit = app.side.joint.edit.or_else(|| app.project.joints.first().map(|j| j.id)); qymcad_assembly::joint_popup(&mut app.joint_ctx(), c, viewport()); }
+                {
+                    app.side.joint.edit = app.side.joint.edit.or_else(|| app.project.joints.first().map(|j| j.id));
+                    qymcad_assembly::joint_popup(&mut app.joint_ctx(), c, viewport());
+                }
             });
             texts.clear();
             for cs in &out.shapes {

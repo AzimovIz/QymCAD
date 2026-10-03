@@ -33,7 +33,13 @@ mod tests {
     /// THE DOCUMENT HOLDS THE FACE'S COLOUR where the painters look for it: face 6 of the first plate's body, which is
     /// its top face in the faces the rebuild gave the body.
     fn the_plate(app: &App) -> u64 {
-        let plate = app.project.components.iter().find(|c| app.project.component_bodies(c.id).len() == 1 && app.project.mesh_index(app.project.component_bodies(c.id)[0]).is_some_and(|i| app.project.mesh_color(i) == [204, 26, 26])).map(|c| app.project.component_bodies(c.id)[0]).expect("a red plate");
+        let plate = app
+            .project
+            .components
+            .iter()
+            .find(|c| app.project.component_bodies(c.id).len() == 1 && app.project.mesh_index(app.project.component_bodies(c.id)[0]).is_some_and(|i| app.project.mesh_color(i) == [204, 26, 26]))
+            .map(|c| app.project.component_bodies(c.id)[0])
+            .expect("a red plate");
         assert_eq!(app.project.face_color(plate, 6), Some(GREEN), "the document does not hold the top face's colour");
         let top = app.project.regen_faces.get(&plate).and_then(|fs| fs.iter().find(|f| f.id == 6)).map(|f| f.centroid.z);
         assert_eq!(top, Some(5.0), "face 6 of the rebuilt plate is not its top face");
@@ -57,9 +63,25 @@ mod tests {
         let app = the_reference();
         let _ = the_plate(&app);
         let (verts, looks) = crate::gui::render_scene::gpu_scene_flat(&app.painting());
-        let green = verts.iter().filter(|v| looks.get(v.body as usize).is_some_and(|l| { let [r, g, b, _] = l.tint.to_le_bytes(); greenish(r, g, b) })).count();
+        let green = verts
+            .iter()
+            .filter(|v| {
+                looks.get(v.body as usize).is_some_and(|l| {
+                    let [r, g, b, _] = l.tint.to_le_bytes();
+                    greenish(r, g, b)
+                })
+            })
+            .count();
         assert!(green >= 6, "no triangle of the scene names a green row of the look table: {green} vertices");
-        let red = verts.iter().filter(|v| looks.get(v.body as usize).is_some_and(|l| { let [r, g, b, _] = l.tint.to_le_bytes(); r > 140 && g < 120 && b < 120 })).count();
+        let red = verts
+            .iter()
+            .filter(|v| {
+                looks.get(v.body as usize).is_some_and(|l| {
+                    let [r, g, b, _] = l.tint.to_le_bytes();
+                    r > 140 && g < 120 && b < 120
+                })
+            })
+            .count();
         assert!(red > green, "the rest of the plates is not red any more: {red} red vertices, {green} green");
     }
 }

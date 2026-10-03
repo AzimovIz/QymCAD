@@ -35,11 +35,7 @@ mod tests {
 
         // the result arrives — and must be rejected as stale
         app.finish_regen_checked(stamp, stale, Vec::new(), Vec::new(), Vec::new(), false);
-        assert_eq!(
-            app.project.components.len(),
-            after_edit,
-            "an edit made during a background rebuild is gone: a stale result overwrote the live document"
-        );
+        assert_eq!(app.project.components.len(), after_edit, "an edit made during a background rebuild is gone: a stale result overwrote the live document");
     }
 
     /// A QUIET REBUILD FOLLOWS THE SAME LAW. It runs WITH no window and no barrier: nobody stops a
@@ -122,18 +118,9 @@ mod tests {
 
         app.finish_regen_checked(stamp, rebuilt, Vec::new(), Vec::new(), Vec::new(), false);
 
-        assert!(
-            app.project.components.iter().any(|c| c.name == "came from the thread"),
-            "the result of the rebuild was thrown away because a person was dragging a part: {}",
-            app.status
-        );
+        assert!(app.project.components.iter().any(|c| c.name == "came from the thread"), "the result of the rebuild was thrown away because a person was dragging a part: {}", app.status);
         let now = app.project.component_transform(comp);
-        assert!(
-            (now[3] - moved[3]).abs() < 1e-9,
-            "the rebuild put the part back where it stood before the drag: x={} was expected, and x={} came out",
-            moved[3],
-            now[3]
-        );
+        assert!((now[3] - moved[3]).abs() < 1e-9, "the rebuild put the part back where it stood before the drag: x={} was expected, and x={} came out", moved[3], now[3]);
     }
 
     /// THE END OF A REBUILD DOES NOT WIPE WHAT THE OPERATION SAID. Reported behaviour: grounding a part says

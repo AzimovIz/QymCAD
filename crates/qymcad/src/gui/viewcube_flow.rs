@@ -299,10 +299,7 @@ mod tests {
         assert!(narrow < wide * 0.8, "the caption must be squeezed together with the face: {wide:.1} -> {narrow:.1}");
         let k_label = narrow / wide;
         let k_face = face_narrow / face_wide;
-        assert!(
-            (k_label - k_face).abs() < 0.12,
-            "the caption must be squeezed TO THE SAME degree as the face: the face {k_face:.2}, the caption {k_label:.2}"
-        );
+        assert!((k_label - k_face).abs() < 0.12, "the caption must be squeezed TO THE SAME degree as the face: the face {k_face:.2}, the caption {k_label:.2}");
     }
 
     /// A SMALL CUBE HAS NO CAPTIONS: 32 px per face give letters of 6 px — mush instead of text.
@@ -313,10 +310,7 @@ mod tests {
     fn the_small_cube_has_no_labels() {
         use crate::gui::render_source::dense;
         let src = dense(include_str!("viewcube.rs"));
-        assert!(
-            src.contains(&dense("cube.size_step > 0")),
-            "the captions must be shown only at the middle and large sizes"
-        );
+        assert!(src.contains(&dense("cube.size_step > 0")), "the captions must be shown only at the middle and large sizes");
     }
 
     /// THE BUILD SHIPS A REAL BOLD FONT. Faking boldness by drawing repeatedly cost five calls per
@@ -353,10 +347,7 @@ mod tests {
     #[test]
     fn the_old_view_buttons_are_gone() {
         let panels = crate::gui::panels_source::PANELS;
-        assert!(
-            !panels.contains("animate_view_to("),
-            "a panel turns the view itself again — that work belongs to the cube, and two ways of doing it will diverge"
-        );
+        assert!(!panels.contains("animate_view_to("), "a panel turns the view itself again — that work belongs to the cube, and two ways of doing it will diverge");
     }
 
     /// THE CUBE IS REALLY DRAWN — not "the geometry adds up" but a frame that builds without a panic.
@@ -432,10 +423,7 @@ mod tests {
             let name = z.label.unwrap_or("?");
 
             // HORIZONTAL: "right" of the text runs along the screen X rather than up and down
-            assert!(
-                right.x.abs() > right.y.abs() * 3.0,
-                "{name}: the caption stood up VERTICALLY — \"right\" of the text went to {right:?}"
-            );
+            assert!(right.x.abs() > right.y.abs() * 3.0, "{name}: the caption stood up VERTICALLY — \"right\" of the text went to {right:?}");
             // NOT MIRRORED: "right" points right indeed (the screen X grows)
             assert!(right.x > 0.0, "{name}: the caption is mirrored — \"right\" of the text went left ({right:?})");
             // NOT UPSIDE DOWN: "up" of the text runs up (the screen Y decreases)
@@ -443,5 +431,4 @@ mod tests {
             assert!(up.y.abs() > up.x.abs() * 3.0, "{name}: \"up\" of the text is tipped sideways ({up:?})");
         }
     }
-
 }

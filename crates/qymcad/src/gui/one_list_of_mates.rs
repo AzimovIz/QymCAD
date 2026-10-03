@@ -42,12 +42,7 @@ mod tests {
     /// A point ON THE BODY that can be clicked: the centre of the topmost face.
     fn aim(app: &App, body: Id) -> [f64; 3] {
         let wt = app.project.body_display_transform(body, qymcad_ui_state::current_ctx_id(&app.active_path, &app.project));
-        let f = app
-            .project
-            .regen_faces
-            .get(&body)
-            .and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z)))
-            .expect("the body has faces");
+        let f = app.project.regen_faces.get(&body).and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z))).expect("the body has faces");
         qymcad_core::feature::apply12(&wt, [f.centroid.x, f.centroid.y, f.centroid.z])
     }
 
@@ -94,7 +89,9 @@ mod tests {
 
         // A RELATION — by the same tool a person uses.
         app.start_relation_pick();
-        if let Some(p) = app.side.joint.relation_pick.as_mut() { p.set(RelationKind::Gear, 2.0); }
+        if let Some(p) = app.side.joint.relation_pick.as_mut() {
+            p.set(RelationKind::Gear, 2.0);
+        }
         qymcad_assembly::relation_pick_click(&mut app.joint_ctx(), first);
         qymcad_assembly::relation_pick_click(&mut app.joint_ctx(), second);
         qymcad_assembly::relation_pick_confirm(&mut app.joint_ctx());
@@ -119,10 +116,7 @@ mod tests {
         // EVERY KIND IS NAMED BY ITS OWN WORD — and all three are in one list.
         for key in [JointKind::Revolute.label(), qymcad_core::feature::ConstraintKind::Group.label(), RelationKind::Gear.label()] {
             let want = crate::i18n::tr(key);
-            assert!(
-                words.iter().any(|t| t.contains(&want)),
-                "the kind \"{want}\" is not drawn in the mates list — so it lives somewhere apart, or does not live at all.\ndrawn: {words:?}"
-            );
+            assert!(words.iter().any(|t| t.contains(&want)), "the kind \"{want}\" is not drawn in the mates list — so it lives somewhere apart, or does not live at all.\ndrawn: {words:?}");
         }
     }
 
@@ -142,9 +136,6 @@ mod tests {
 
         let words = panel_words(&mut app);
         let want = crate::i18n::tr("r-fault-mate-lost");
-        assert!(
-            words.iter().any(|t| t.contains(&want)),
-            "the relation points at a removed joint and the list stays silent: drawn {words:?}"
-        );
+        assert!(words.iter().any(|t| t.contains(&want)), "the relation points at a removed joint and the list stays silent: drawn {words:?}");
     }
 }

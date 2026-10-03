@@ -120,11 +120,7 @@ mod tests {
     #[test]
     fn every_promised_article_is_written() {
         let missing: Vec<&str> = help_map::promised().into_iter().filter(|a| help::article(a).is_none()).collect();
-        assert!(
-            missing.is_empty(),
-            "the tool is there and there is no article for it ({}): {missing:?}\nF1 on it will show that the article is not written yet.",
-            missing.len()
-        );
+        assert!(missing.is_empty(), "the tool is there and there is no article for it ({}): {missing:?}\nF1 on it will show that the article is not written yet.", missing.len());
     }
 
     /// F1 ANSWERS ABOUT ASSEMBLY MODES TOO — they are not timeline commands, but they are what a
@@ -199,7 +195,17 @@ mod tests {
             }
         }
         assert!(hints.len() > 60, "suspiciously few toolbar hints were found: {}", hints.len());
-        let launchers = ["start_feat_cmd(", "BarAsk::FeatCmd(", "start_prim_cmd(", "BarAsk::PrimCmd(", "set_sk_tool(", "BarAsk::SketchTool(", "set_dim_tool(", "set_click_op(", "modify_button("];
+        let launchers = [
+            "start_feat_cmd(",
+            "BarAsk::FeatCmd(",
+            "start_prim_cmd(",
+            "BarAsk::PrimCmd(",
+            "set_sk_tool(",
+            "BarAsk::SketchTool(",
+            "set_dim_tool(",
+            "set_click_op(",
+            "modify_button(",
+        ];
         let mut bad: Vec<String> = Vec::new();
         for h in &hints {
             // the button of a numbered command: its article comes from PART/SKETCH and is checked above

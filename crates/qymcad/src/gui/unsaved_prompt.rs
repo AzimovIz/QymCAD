@@ -140,10 +140,7 @@ mod tests {
         let body = &code[at..end];
         // the dialogue NAMES the save; who carries it out is not the rule here
         assert!(body.contains("WinAsk::Save"), "the save branch is there");
-        assert!(
-            !body.contains(".wait_bg();"),
-            "a blocking wait for the write is back in the dialogue — the window will freeze and a person will decide the program has hung"
-        );
+        assert!(!body.contains(".wait_bg();"), "a blocking wait for the write is back in the dialogue — the window will freeze and a person will decide the program has hung");
         assert!(body.contains("nav_after_save"), "the navigation must WAIT for the end of the write rather than be thrown away");
     }
 

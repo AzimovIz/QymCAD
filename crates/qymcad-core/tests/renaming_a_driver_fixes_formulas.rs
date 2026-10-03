@@ -19,11 +19,7 @@ fn param(p: &mut Project, name: &str, e: &str) {
 
 /// A sketch with one dimension named as a driver. Returns the sketch.
 fn sketch_with_driver(p: &mut Project, name: &str, driver: &str, len: f64) -> Id {
-    let sid = p.add_line_sketch(
-        name,
-        vec![Point2::new(0.0, 0.0), Point2::new(len, 0.0), Point2::new(len, 10.0), Point2::new(0.0, 10.0)],
-        true,
-    );
+    let sid = p.add_line_sketch(name, vec![Point2::new(0.0, 0.0), Point2::new(len, 0.0), Point2::new(len, 10.0), Point2::new(0.0, 10.0)], true);
     let si = p.sketch_index(sid).unwrap();
     let pts: Vec<Id> = p.sketches[si].points.iter().map(|q| q.id).collect();
     p.sketches[si].constraints.push(Constraint::Distance { a: pts[0], b: pts[1], d: len, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });

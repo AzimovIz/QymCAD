@@ -48,7 +48,7 @@ pub static LINE: Tool = Tool {
         ellipses: 0,
         splines: 0,
         texts: 0,
-    notes: 0,
+        notes: 0,
         constraints: None,
         dof: None,
         box_of: None,
@@ -65,7 +65,17 @@ pub static LINE: Tool = Tool {
     refusal: None,
     budget: (10, 2000),
     help: "sketch/01-line",
-    not_applicable: &[(2, "the line has no mode of its own: it draws a chain of segments"), DRAWS_WITHOUT_FIELDS[0], DRAWS_WITHOUT_FIELDS[1], DRAWS_WITHOUT_FIELDS[2], DRAWS_WITHOUT_FIELDS[3], DRAWS_WITHOUT_FIELDS[4], DRAWS_WITHOUT_FIELDS[5], DRAWS_WITHOUT_FIELDS[6], DRAWS_WITHOUT_FIELDS[7]],
+    not_applicable: &[
+        (2, "the line has no mode of its own: it draws a chain of segments"),
+        DRAWS_WITHOUT_FIELDS[0],
+        DRAWS_WITHOUT_FIELDS[1],
+        DRAWS_WITHOUT_FIELDS[2],
+        DRAWS_WITHOUT_FIELDS[3],
+        DRAWS_WITHOUT_FIELDS[4],
+        DRAWS_WITHOUT_FIELDS[5],
+        DRAWS_WITHOUT_FIELDS[6],
+        DRAWS_WITHOUT_FIELDS[7],
+    ],
 };
 
 /// A 40 x 30 rectangle by its two corners.
@@ -78,10 +88,10 @@ const RECT_BY_CORNERS: Outcome = Outcome::Sketch {
     splines: 0,
     texts: 0,
     notes: 0,
-        constraints: None,
-        dof: None,
-        box_of: None,
-        size_of: None,
+    constraints: None,
+    dof: None,
+    box_of: None,
+    size_of: None,
     under: &[(20.0, 0.0, Under::Line), (0.0, 30.0, Under::Point), (20.0, 15.0, Under::Nothing)],
 };
 
@@ -95,10 +105,10 @@ const RECT_FROM_CENTRE: Outcome = Outcome::Sketch {
     splines: 0,
     texts: 0,
     notes: 0,
-        constraints: None,
-        dof: None,
-        box_of: None,
-        size_of: None,
+    constraints: None,
+    dof: None,
+    box_of: None,
+    size_of: None,
     under: &[(0.0, 30.0, Under::Line), (40.0, 30.0, Under::Point), (20.0, 20.0, Under::Nothing)],
 };
 
@@ -112,10 +122,10 @@ const RECT_BY_THREE: Outcome = Outcome::Sketch {
     splines: 0,
     texts: 0,
     notes: 0,
-        constraints: None,
-        dof: None,
-        box_of: None,
-        size_of: None,
+    constraints: None,
+    dof: None,
+    box_of: None,
+    size_of: None,
     under: &[(20.0, 0.0, Under::Line), (0.0, 0.0, Under::Point), (20.0, 10.0, Under::Nothing)],
 };
 
@@ -148,7 +158,16 @@ pub static RECT: Tool = Tool {
     refusal: None,
     budget: (10, 2000),
     help: "sketch/02-rect",
-    not_applicable: &[DRAWS_WITHOUT_FIELDS[0], DRAWS_WITHOUT_FIELDS[1], DRAWS_WITHOUT_FIELDS[2], DRAWS_WITHOUT_FIELDS[3], DRAWS_WITHOUT_FIELDS[4], DRAWS_WITHOUT_FIELDS[5], DRAWS_WITHOUT_FIELDS[6], DRAWS_WITHOUT_FIELDS[7]],
+    not_applicable: &[
+        DRAWS_WITHOUT_FIELDS[0],
+        DRAWS_WITHOUT_FIELDS[1],
+        DRAWS_WITHOUT_FIELDS[2],
+        DRAWS_WITHOUT_FIELDS[3],
+        DRAWS_WITHOUT_FIELDS[4],
+        DRAWS_WITHOUT_FIELDS[5],
+        DRAWS_WITHOUT_FIELDS[6],
+        DRAWS_WITHOUT_FIELDS[7],
+    ],
 };
 
 /// A circle of radius 10 about the origin.
@@ -161,10 +180,10 @@ const CIRCLE_BY_RADIUS: Outcome = Outcome::Sketch {
     splines: 0,
     texts: 0,
     notes: 0,
-        constraints: None,
-        dof: None,
-        box_of: None,
-        size_of: None,
+    constraints: None,
+    dof: None,
+    box_of: None,
+    size_of: None,
     under: &[(10.0, 0.0, Under::Circle), (0.0, 0.0, Under::Point), (5.0, 0.0, Under::Nothing)],
 };
 
@@ -178,10 +197,10 @@ const CIRCLE_BY_TWO: Outcome = Outcome::Sketch {
     splines: 0,
     texts: 0,
     notes: 0,
-        constraints: None,
-        dof: None,
-        box_of: None,
-        size_of: None,
+    constraints: None,
+    dof: None,
+    box_of: None,
+    size_of: None,
     under: &[(10.0, 0.0, Under::Circle), (5.0, 3.0, Under::Nothing)],
 };
 
@@ -215,7 +234,16 @@ pub static CIRCLE: Tool = Tool {
     refusal: None,
     budget: (10, 2000),
     help: "sketch/03-circle",
-    not_applicable: &[DRAWS_WITHOUT_FIELDS[0], DRAWS_WITHOUT_FIELDS[1], DRAWS_WITHOUT_FIELDS[2], DRAWS_WITHOUT_FIELDS[3], DRAWS_WITHOUT_FIELDS[4], DRAWS_WITHOUT_FIELDS[5], DRAWS_WITHOUT_FIELDS[6], DRAWS_WITHOUT_FIELDS[7]],
+    not_applicable: &[
+        DRAWS_WITHOUT_FIELDS[0],
+        DRAWS_WITHOUT_FIELDS[1],
+        DRAWS_WITHOUT_FIELDS[2],
+        DRAWS_WITHOUT_FIELDS[3],
+        DRAWS_WITHOUT_FIELDS[4],
+        DRAWS_WITHOUT_FIELDS[5],
+        DRAWS_WITHOUT_FIELDS[6],
+        DRAWS_WITHOUT_FIELDS[7],
+    ],
 };
 
 /// A POINT: one click puts a node of its own on the sheet.
@@ -240,7 +268,7 @@ pub static POINT: Tool = Tool {
         ellipses: 0,
         splines: 0,
         texts: 0,
-    notes: 0,
+        notes: 0,
         constraints: None,
         dof: None,
         box_of: None,
@@ -281,10 +309,10 @@ const ARC_BY_CENTRE: Outcome = Outcome::Sketch {
     splines: 0,
     texts: 0,
     notes: 0,
-        constraints: None,
-        dof: None,
-        box_of: None,
-        size_of: None,
+    constraints: None,
+    dof: None,
+    box_of: None,
+    size_of: None,
     under: &[(7.07, 7.07, Under::Arc), (0.0, 0.0, Under::Point), (5.0, 5.0, Under::Nothing)],
 };
 
@@ -298,10 +326,10 @@ const ARC_BY_THREE: Outcome = Outcome::Sketch {
     splines: 0,
     texts: 0,
     notes: 0,
-        constraints: None,
-        dof: None,
-        box_of: None,
-        size_of: None,
+    constraints: None,
+    dof: None,
+    box_of: None,
+    size_of: None,
     under: &[(10.0, 5.0, Under::Arc), (20.0, 0.0, Under::Point), (10.0, 0.0, Under::Nothing)],
 };
 
@@ -335,7 +363,16 @@ pub static ARC: Tool = Tool {
     refusal: None,
     budget: (10, 2000),
     help: "sketch/04-arc",
-    not_applicable: &[DRAWS_WITHOUT_FIELDS[0], DRAWS_WITHOUT_FIELDS[1], DRAWS_WITHOUT_FIELDS[2], DRAWS_WITHOUT_FIELDS[3], DRAWS_WITHOUT_FIELDS[4], DRAWS_WITHOUT_FIELDS[5], DRAWS_WITHOUT_FIELDS[6], DRAWS_WITHOUT_FIELDS[7]],
+    not_applicable: &[
+        DRAWS_WITHOUT_FIELDS[0],
+        DRAWS_WITHOUT_FIELDS[1],
+        DRAWS_WITHOUT_FIELDS[2],
+        DRAWS_WITHOUT_FIELDS[3],
+        DRAWS_WITHOUT_FIELDS[4],
+        DRAWS_WITHOUT_FIELDS[5],
+        DRAWS_WITHOUT_FIELDS[6],
+        DRAWS_WITHOUT_FIELDS[7],
+    ],
 };
 
 /// A CIRCLE THROUGH THREE POINTS: the circle of radius 10 about the origin, through (10, 0), (0, 10), (-10, 0).
@@ -360,7 +397,7 @@ pub static CIRCLE3: Tool = Tool {
         ellipses: 0,
         splines: 0,
         texts: 0,
-    notes: 0,
+        notes: 0,
         constraints: None,
         dof: None,
         box_of: None,
@@ -392,11 +429,39 @@ pub static CIRCLE3: Tool = Tool {
 
 /// A polygon of `n` sides about the origin: its corners, the circle they sit on, and the corner clicked at (15, 0).
 const fn polygon_shape(n: usize) -> Outcome {
-    Outcome::Sketch { points: n + 1, lines: n, arcs: 0, circles: 1, ellipses: 0, splines: 0, texts: 0, notes: 0, constraints: None, dof: None, box_of: None, size_of: None, under: &[(15.0, 0.0, Under::Point), (0.0, 0.0, Under::Point)] }
+    Outcome::Sketch {
+        points: n + 1,
+        lines: n,
+        arcs: 0,
+        circles: 1,
+        ellipses: 0,
+        splines: 0,
+        texts: 0,
+        notes: 0,
+        constraints: None,
+        dof: None,
+        box_of: None,
+        size_of: None,
+        under: &[(15.0, 0.0, Under::Point), (0.0, 0.0, Under::Point)],
+    }
 }
 
 /// A hexagon circumscribed about the click: the click is the middle of an edge, a line under it and no point.
-const POLYGON_CIRCUMSCRIBED: Outcome = Outcome::Sketch { points: 7, lines: 6, arcs: 0, circles: 1, ellipses: 0, splines: 0, texts: 0, notes: 0, constraints: None, dof: None, box_of: None, size_of: None, under: &[(15.0, 0.0, Under::Line), (0.0, 0.0, Under::Point)] };
+const POLYGON_CIRCUMSCRIBED: Outcome = Outcome::Sketch {
+    points: 7,
+    lines: 6,
+    arcs: 0,
+    circles: 1,
+    ellipses: 0,
+    splines: 0,
+    texts: 0,
+    notes: 0,
+    constraints: None,
+    dof: None,
+    box_of: None,
+    size_of: None,
+    under: &[(15.0, 0.0, Under::Line), (0.0, 0.0, Under::Point)],
+};
 
 /// A polygon of as many sides as the field above says.
 fn polygon_of(sides: f64) -> Outcome {
@@ -457,7 +522,7 @@ pub static SLOT: Tool = Tool {
         ellipses: 0,
         splines: 0,
         texts: 0,
-    notes: 0,
+        notes: 0,
         constraints: None,
         dof: None,
         box_of: None,
@@ -509,7 +574,7 @@ pub static ELLIPSE: Tool = Tool {
         ellipses: 1,
         splines: 0,
         texts: 0,
-    notes: 0,
+        notes: 0,
         constraints: None,
         dof: None,
         box_of: None,
@@ -561,7 +626,7 @@ pub static SPLINE: Tool = Tool {
         ellipses: 0,
         splines: 1,
         texts: 0,
-    notes: 0,
+        notes: 0,
         constraints: None,
         dof: None,
         box_of: None,
@@ -594,7 +659,8 @@ pub static SPLINE: Tool = Tool {
 };
 
 /// One text on the sheet: its contours are the geometry, and one string is one text, whatever it says.
-const ONE_TEXT: Outcome = Outcome::Sketch { points: 0, lines: 0, arcs: 0, circles: 0, ellipses: 0, splines: 0, texts: 1, notes: 0, constraints: None, dof: None, box_of: None, size_of: None, under: &[] };
+const ONE_TEXT: Outcome =
+    Outcome::Sketch { points: 0, lines: 0, arcs: 0, circles: 0, ellipses: 0, splines: 0, texts: 1, notes: 0, constraints: None, dof: None, box_of: None, size_of: None, under: &[] };
 
 /// A string of text placed on the sheet.
 fn text_of(_string: &str) -> Outcome {
@@ -631,7 +697,18 @@ pub static TEXT: Tool = Tool {
         outcome: text_of,
         enter: false,
     }],
-    fields: &[Field { caption: "opt-height-short", by_placeholder: false, when: When::Before, class: Class::Length, typical: 10.0, lo: 0.1, hi: 1000.0, zero: false, negative: false, outcome: text_of_height }],
+    fields: &[Field {
+        caption: "opt-height-short",
+        by_placeholder: false,
+        when: When::Before,
+        class: Class::Length,
+        typical: 10.0,
+        lo: 0.1,
+        hi: 1000.0,
+        zero: false,
+        negative: false,
+        outcome: text_of_height,
+    }],
     modes: &[&[Mode { word: "opt-note", clicks: None, outcome: Some(NOTE) }]],
     result: ONE_TEXT,
     node: "Sketch",
@@ -679,7 +756,18 @@ pub static DIM_LINEAR: Tool = Tool {
     pick_trial: &[],
     wrong_picks: &[],
     words: &[],
-    fields: &[Field { caption: "sk-expr-example", by_placeholder: true, when: When::After, class: Class::Length, typical: 40.0, lo: 1.0, hi: 1000.0, zero: false, negative: false, outcome: rect_of_width }],
+    fields: &[Field {
+        caption: "sk-expr-example",
+        by_placeholder: true,
+        when: When::After,
+        class: Class::Length,
+        typical: 40.0,
+        lo: 1.0,
+        hi: 1000.0,
+        zero: false,
+        negative: false,
+        outcome: rect_of_width,
+    }],
     modes: &[],
     result: rect_of_width(40.0),
     node: "Sketch",
@@ -737,7 +825,18 @@ pub static DIM_RADIUS: Tool = Tool {
     wrong_picks: &[],
     words: &[],
     // 30 rather than the 20 the circle already has: typing what stands there changes nothing and proves nothing
-    fields: &[Field { caption: "sk-expr-example", by_placeholder: true, when: When::After, class: Class::Radius, typical: 30.0, lo: 1.0, hi: 1000.0, zero: false, negative: false, outcome: circle_of_diameter }],
+    fields: &[Field {
+        caption: "sk-expr-example",
+        by_placeholder: true,
+        when: When::After,
+        class: Class::Radius,
+        typical: 30.0,
+        lo: 1.0,
+        hi: 1000.0,
+        zero: false,
+        negative: false,
+        outcome: circle_of_diameter,
+    }],
     modes: &[],
     result: circle_of_diameter(30.0),
     node: "Sketch",
@@ -764,21 +863,7 @@ pub static DIM_RADIUS: Tool = Tool {
 
 /// The two lines of the fixture with the angle between them set: the lines stay, the angle is one more constraint.
 const fn angle_of(_deg: f64) -> Outcome {
-    Outcome::Sketch {
-        points: 3,
-        lines: 2,
-        arcs: 0,
-        circles: 0,
-        ellipses: 0,
-        splines: 0,
-        texts: 0,
-        notes: 0,
-        constraints: Some(3),
-        dof: Some(3),
-        box_of: None,
-        size_of: None,
-        under: &[],
-    }
+    Outcome::Sketch { points: 3, lines: 2, arcs: 0, circles: 0, ellipses: 0, splines: 0, texts: 0, notes: 0, constraints: Some(3), dof: Some(3), box_of: None, size_of: None, under: &[] }
 }
 
 /// AN ANGULAR DIMENSION: two lines clicked, the dimension placed with a third click, the number typed into it.
@@ -999,9 +1084,34 @@ pub static OFFSET: Tool = Tool {
     words: &[],
     // an inward copy is a negative distance, down to the size of the circle itself; zero copies the circle onto
     // itself, which is no offset
-    fields: &[Field { caption: "opt-distance", by_placeholder: false, when: When::Before, class: Class::Length, typical: 3.0, lo: -9.9, hi: 10000.0, zero: false, negative: true, outcome: offset_ring }],
+    fields: &[Field {
+        caption: "opt-distance",
+        by_placeholder: false,
+        when: When::Before,
+        class: Class::Length,
+        typical: 3.0,
+        lo: -9.9,
+        hi: 10000.0,
+        zero: false,
+        negative: true,
+        outcome: offset_ring,
+    }],
     modes: &[],
-    result: Outcome::Sketch { points: 2, lines: 0, arcs: 0, circles: 2, ellipses: 0, splines: 0, texts: 0, notes: 0, constraints: None, dof: Some(2), box_of: None, size_of: Some([26.0, 26.0]), under: &[] },
+    result: Outcome::Sketch {
+        points: 2,
+        lines: 0,
+        arcs: 0,
+        circles: 2,
+        ellipses: 0,
+        splines: 0,
+        texts: 0,
+        notes: 0,
+        constraints: None,
+        dof: Some(2),
+        box_of: None,
+        size_of: Some([26.0, 26.0]),
+        under: &[],
+    },
     node: "Sketch",
     undo: "tool-offset",
     undo_steps: 1,
@@ -1036,7 +1146,21 @@ fn corner_rounded(r: f64) -> Outcome {
         at.extend([(r / 2.0, 0.0, Under::Nothing), (near, near, Under::Arc)]);
     }
     let under: &'static [(f64, f64, Under)] = Box::leak(at.into_boxed_slice());
-    Outcome::Sketch { points: 5, lines: 2, arcs: 1, circles: 0, ellipses: 0, splines: 0, texts: 0, notes: 0, constraints: None, dof: None, box_of: Some(([0.0, 0.0], [30.0, 30.0])), size_of: None, under }
+    Outcome::Sketch {
+        points: 5,
+        lines: 2,
+        arcs: 1,
+        circles: 0,
+        ellipses: 0,
+        splines: 0,
+        texts: 0,
+        notes: 0,
+        constraints: None,
+        dof: None,
+        box_of: Some(([0.0, 0.0], [30.0, 30.0])),
+        size_of: None,
+        under,
+    }
 }
 
 /// CORNER: the corner of the two lines rounded with the radius the bar holds, a click on the corner itself.
@@ -1055,7 +1179,18 @@ pub static CORNER: Tool = Tool {
     // the click on the corner opens a field at it, as a dimension does, and the radius is typed there. An arc that
     // touches the lines further from the corner than they are long (r > 30) cannot be drawn: 29.9 is the largest
     // radius that fits, and a larger one must be refused
-    fields: &[Field { caption: "g-expr-placeholder", by_placeholder: true, when: When::After, class: Class::Radius, typical: 3.0, lo: 0.01, hi: 29.9, zero: false, negative: false, outcome: corner_rounded }],
+    fields: &[Field {
+        caption: "g-expr-placeholder",
+        by_placeholder: true,
+        when: When::After,
+        class: Class::Radius,
+        typical: 3.0,
+        lo: 0.01,
+        hi: 29.9,
+        zero: false,
+        negative: false,
+        outcome: corner_rounded,
+    }],
     modes: &[],
     result: Outcome::Sketch {
         points: 5,
@@ -1103,7 +1238,21 @@ fn corner_cut(d: f64) -> Outcome {
         at.extend([(d / 4.0, 0.0, Under::Nothing), (d / 2.0, d / 2.0, Under::Line)]);
     }
     let under: &'static [(f64, f64, Under)] = Box::leak(at.into_boxed_slice());
-    Outcome::Sketch { points: 4, lines: 3, arcs: 0, circles: 0, ellipses: 0, splines: 0, texts: 0, notes: 0, constraints: None, dof: None, box_of: Some(([0.0, 0.0], [30.0, 30.0])), size_of: None, under }
+    Outcome::Sketch {
+        points: 4,
+        lines: 3,
+        arcs: 0,
+        circles: 0,
+        ellipses: 0,
+        splines: 0,
+        texts: 0,
+        notes: 0,
+        constraints: None,
+        dof: None,
+        box_of: Some(([0.0, 0.0], [30.0, 30.0])),
+        size_of: None,
+        under,
+    }
 }
 
 /// CORNER_CHAMFER: the same corner cut with a chamfer of 3, the size typed in the field at the corner.
@@ -1120,7 +1269,18 @@ pub static CORNER_CHAMFER: Tool = Tool {
     wrong_picks: &[],
     words: &[],
     // a cut longer than the lines it cuts (d > 30) cannot be drawn
-    fields: &[Field { caption: "g-expr-placeholder", by_placeholder: true, when: When::After, class: Class::Length, typical: 3.0, lo: 0.01, hi: 29.9, zero: false, negative: false, outcome: corner_cut }],
+    fields: &[Field {
+        caption: "g-expr-placeholder",
+        by_placeholder: true,
+        when: When::After,
+        class: Class::Length,
+        typical: 3.0,
+        lo: 0.01,
+        hi: 29.9,
+        zero: false,
+        negative: false,
+        outcome: corner_cut,
+    }],
     modes: &[],
     result: Outcome::Sketch {
         points: 4,
@@ -1221,7 +1381,10 @@ pub static PROJECT_BODY: Tool = Tool {
     wrong_picks: &[],
     words: &[],
     fields: &[],
-    modes: &[&[Mode { word: "opt-edge", clicks: None, outcome: Some(PROJECTED_EDGE) }, Mode { word: "opt-face-outline", clicks: Some(&[(20.0, 15.0)]), outcome: Some(PROJECTED_FACE) }]],
+    modes: &[&[
+        Mode { word: "opt-edge", clicks: None, outcome: Some(PROJECTED_EDGE) },
+        Mode { word: "opt-face-outline", clicks: Some(&[(20.0, 15.0)]), outcome: Some(PROJECTED_FACE) },
+    ]],
     result: PROJECTED_EDGE,
     node: "Sketch",
     undo: "sk-project",
@@ -1236,7 +1399,6 @@ pub static PROJECT_BODY: Tool = Tool {
     help: "sketch/15-project",
     not_applicable: PROJECTS,
 };
-
 
 /// DELETE: the bottom side of the rectangle, picked, taken away. Three sides stay, and the four corners with them:
 /// the two the bottom side ended at still end the sides beside it.
@@ -1834,9 +1996,34 @@ pub static ROTATE: Tool = Tool {
     wrong_picks: &[],
     words: &[],
     // a turn of 0 turns nothing and must not lay a step; a whole turn either way is the most there is
-    fields: &[Field { caption: "sk-angle-placeholder", by_placeholder: true, when: When::After, class: Class::Angle, typical: 90.0, lo: -360.0, hi: 360.0, zero: false, negative: true, outcome: turned_line }],
+    fields: &[Field {
+        caption: "sk-angle-placeholder",
+        by_placeholder: true,
+        when: When::After,
+        class: Class::Angle,
+        typical: 90.0,
+        lo: -360.0,
+        hi: 360.0,
+        zero: false,
+        negative: true,
+        outcome: turned_line,
+    }],
     modes: &[],
-    result: Outcome::Sketch { points: 4, lines: 2, arcs: 0, circles: 0, ellipses: 0, splines: 0, texts: 0, notes: 0, constraints: None, dof: None, box_of: Some(([-20.0, -20.0], [0.0, 30.0])), size_of: None, under: &[(-10.0, 20.0, Under::Line), (20.0, 10.0, Under::Nothing)] },
+    result: Outcome::Sketch {
+        points: 4,
+        lines: 2,
+        arcs: 0,
+        circles: 0,
+        ellipses: 0,
+        splines: 0,
+        texts: 0,
+        notes: 0,
+        constraints: None,
+        dof: None,
+        box_of: Some(([-20.0, -20.0], [0.0, 30.0])),
+        size_of: None,
+        under: &[(-10.0, 20.0, Under::Line), (20.0, 10.0, Under::Nothing)],
+    },
     node: "Sketch",
     undo: "tool-rotate",
     undo_steps: 1,
@@ -1886,7 +2073,21 @@ pub static LINEAR_PATTERN: Tool = Tool {
     words: &[],
     fields: &[],
     modes: &[],
-    result: Outcome::Sketch { points: 8, lines: 4, arcs: 0, circles: 0, ellipses: 0, splines: 0, texts: 0, notes: 0, constraints: None, dof: None, box_of: Some(([0.0, -20.0], [70.0, 20.0])), size_of: None, under: &[(40.0, 10.0, Under::Line), (60.0, 10.0, Under::Line)] },
+    result: Outcome::Sketch {
+        points: 8,
+        lines: 4,
+        arcs: 0,
+        circles: 0,
+        ellipses: 0,
+        splines: 0,
+        texts: 0,
+        notes: 0,
+        constraints: None,
+        dof: None,
+        box_of: Some(([0.0, -20.0], [70.0, 20.0])),
+        size_of: None,
+        under: &[(40.0, 10.0, Under::Line), (60.0, 10.0, Under::Line)],
+    },
     node: "", // the pattern adds to the sketch open, it lays no node of the timeline
     undo: "g-sketch-array",
     undo_steps: 1,
@@ -1925,7 +2126,21 @@ pub static CIRCULAR_PATTERN: Tool = Tool {
     words: &[],
     fields: &[],
     modes: &[],
-    result: Outcome::Sketch { points: 8, lines: 4, arcs: 0, circles: 0, ellipses: 0, splines: 0, texts: 0, notes: 0, constraints: None, dof: None, box_of: Some(([-32.320508, -35.980762], [30.0, 20.0])), size_of: None, under: &[] },
+    result: Outcome::Sketch {
+        points: 8,
+        lines: 4,
+        arcs: 0,
+        circles: 0,
+        ellipses: 0,
+        splines: 0,
+        texts: 0,
+        notes: 0,
+        constraints: None,
+        dof: None,
+        box_of: Some(([-32.320508, -35.980762], [30.0, 20.0])),
+        size_of: None,
+        under: &[],
+    },
     node: "", // the pattern adds to the sketch open, it lays no node of the timeline
     undo: "g-sketch-array",
     undo_steps: 1,
@@ -1963,7 +2178,21 @@ const EDITS: &[(u8, &str)] = &[
 ];
 
 /// A rectangle 40 x 30 with one more side 30 below its bottom: a copy placed, or a cut side put back lower.
-const RECT_AND_SIDE_BELOW: Outcome = Outcome::Sketch { points: 6, lines: 5, arcs: 0, circles: 0, ellipses: 0, splines: 0, texts: 0, notes: 0, constraints: None, dof: None, box_of: Some(([0.0, -30.0], [40.0, 30.0])), size_of: None, under: &[(20.0, -30.0, Under::Line), (20.0, 0.0, Under::Line)] };
+const RECT_AND_SIDE_BELOW: Outcome = Outcome::Sketch {
+    points: 6,
+    lines: 5,
+    arcs: 0,
+    circles: 0,
+    ellipses: 0,
+    splines: 0,
+    texts: 0,
+    notes: 0,
+    constraints: None,
+    dof: None,
+    box_of: Some(([0.0, -30.0], [40.0, 30.0])),
+    size_of: None,
+    under: &[(20.0, -30.0, Under::Line), (20.0, 0.0, Under::Line)],
+};
 
 /// EDIT_COPY: Edit -> Copy on the picked bottom side: the base point on it, the target 30 below - a copy there.
 pub static EDIT_COPY: Tool = Tool {
@@ -2008,7 +2237,21 @@ pub static EDIT_CUT: Tool = Tool {
     words: &[],
     fields: &[],
     modes: &[],
-    result: Outcome::Sketch { points: 4, lines: 3, arcs: 0, circles: 0, ellipses: 0, splines: 0, texts: 0, notes: 0, constraints: None, dof: None, box_of: Some(([0.0, 0.0], [40.0, 30.0])), size_of: None, under: &[(20.0, 0.0, Under::Nothing), (40.0, 15.0, Under::Line)] },
+    result: Outcome::Sketch {
+        points: 4,
+        lines: 3,
+        arcs: 0,
+        circles: 0,
+        ellipses: 0,
+        splines: 0,
+        texts: 0,
+        notes: 0,
+        constraints: None,
+        dof: None,
+        box_of: Some(([0.0, 0.0], [40.0, 30.0])),
+        size_of: None,
+        under: &[(20.0, 0.0, Under::Nothing), (40.0, 15.0, Under::Line)],
+    },
     node: "Sketch",
     undo: "menu-cut",
     undo_steps: 1,
@@ -2036,7 +2279,21 @@ pub static EDIT_INSERT: Tool = Tool {
     words: &[],
     fields: &[],
     modes: &[],
-    result: Outcome::Sketch { points: 6, lines: 4, arcs: 0, circles: 0, ellipses: 0, splines: 0, texts: 0, notes: 0, constraints: None, dof: None, box_of: Some(([0.0, -30.0], [40.0, 30.0])), size_of: None, under: &[(20.0, -30.0, Under::Line), (20.0, 0.0, Under::Nothing)] },
+    result: Outcome::Sketch {
+        points: 6,
+        lines: 4,
+        arcs: 0,
+        circles: 0,
+        ellipses: 0,
+        splines: 0,
+        texts: 0,
+        notes: 0,
+        constraints: None,
+        dof: None,
+        box_of: Some(([0.0, -30.0], [40.0, 30.0])),
+        size_of: None,
+        under: &[(20.0, -30.0, Under::Line), (20.0, 0.0, Under::Nothing)],
+    },
     node: "Sketch",
     undo: "win-insert",
     undo_steps: 1,
@@ -2163,7 +2420,21 @@ fn all_corners_rounded(r: f64) -> Outcome {
     } else {
         &[(20.0, 0.0, Under::Line)]
     };
-    Outcome::Sketch { points: 12, lines: 4, arcs: 4, circles: 0, ellipses: 0, splines: 0, texts: 0, notes: 0, constraints: None, dof: None, box_of: Some(([0.0, 0.0], [40.0, 30.0])), size_of: None, under }
+    Outcome::Sketch {
+        points: 12,
+        lines: 4,
+        arcs: 4,
+        circles: 0,
+        ellipses: 0,
+        splines: 0,
+        texts: 0,
+        notes: 0,
+        constraints: None,
+        dof: None,
+        box_of: Some(([0.0, 0.0], [40.0, 30.0])),
+        size_of: None,
+        under,
+    }
 }
 
 /// FILLET_ALL: a click on the rectangle takes the whole contour, and the radius typed in the field that opens rounds all
@@ -2181,9 +2452,34 @@ pub static FILLET_ALL: Tool = Tool {
     words: &[],
     // the field at the shape, by the words beside it ("R of all corners"); the radius cannot exceed half the short side
     // (15), where two arcs of a side would meet
-    fields: &[Field { caption: "sk-r-all-corners", by_placeholder: false, when: When::After, class: Class::Radius, typical: 5.0, lo: 0.01, hi: 14.9, zero: false, negative: false, outcome: all_corners_rounded }],
+    fields: &[Field {
+        caption: "sk-r-all-corners",
+        by_placeholder: false,
+        when: When::After,
+        class: Class::Radius,
+        typical: 5.0,
+        lo: 0.01,
+        hi: 14.9,
+        zero: false,
+        negative: false,
+        outcome: all_corners_rounded,
+    }],
     modes: &[],
-    result: Outcome::Sketch { points: 12, lines: 4, arcs: 4, circles: 0, ellipses: 0, splines: 0, texts: 0, notes: 0, constraints: None, dof: None, box_of: Some(([0.0, 0.0], [40.0, 30.0])), size_of: None, under: &[(2.5, 0.0, Under::Nothing), (20.0, 0.0, Under::Line)] },
+    result: Outcome::Sketch {
+        points: 12,
+        lines: 4,
+        arcs: 4,
+        circles: 0,
+        ellipses: 0,
+        splines: 0,
+        texts: 0,
+        notes: 0,
+        constraints: None,
+        dof: None,
+        box_of: Some(([0.0, 0.0], [40.0, 30.0])),
+        size_of: None,
+        under: &[(2.5, 0.0, Under::Nothing), (20.0, 0.0, Under::Line)],
+    },
     node: "Sketch",
     undo: "tool-fillet",
     undo_steps: 1,

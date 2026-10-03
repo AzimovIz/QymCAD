@@ -57,10 +57,12 @@ pub(crate) fn menu(pn: &qymcad_ui_state::Painting, resp: &Response, rect: Rect) 
     egui::Area::new(ask_id).order(egui::Order::Foreground).fixed_pos(a.pos).show(&resp.ctx, |ui| {
         egui::Frame::popup(ui.style()).show(ui, |ui| {
             // the caption beside the field, on its line, as every field of the program stands
-            let field = ui.horizontal(|ui| {
-                ui.label(crate::i18n::tr("piece-part-name"));
-                ui.add(egui::TextEdit::singleline(&mut a.name).desired_width(220.0))
-            }).inner;
+            let field = ui
+                .horizontal(|ui| {
+                    ui.label(crate::i18n::tr("piece-part-name"));
+                    ui.add(egui::TextEdit::singleline(&mut a.name).desired_width(220.0))
+                })
+                .inner;
             field.request_focus();
             // an empty name goes on too, to be refused in words - the field stays open for another
             if ui.input(|i| i.key_pressed(egui::Key::Enter)) {

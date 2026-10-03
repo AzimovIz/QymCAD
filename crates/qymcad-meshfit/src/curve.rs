@@ -150,7 +150,11 @@ fn line(a: &Surface, b: &Surface, pts: &[[f64; 3]]) -> Option<Curve> {
                 foot
             } else {
                 let w = u.cross(&n).try_normalize(1e-12)? * (radius * radius - d * d).sqrt();
-                if (foot + w - mid).norm() < (foot - w - mid).norm() { foot + w } else { foot - w }
+                if (foot + w - mid).norm() < (foot - w - mid).norm() {
+                    foot + w
+                } else {
+                    foot - w
+                }
             };
             Some(Curve::Line { point: arr(at), dir: arr(along(u)) })
         }

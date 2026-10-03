@@ -174,4 +174,3 @@ probe! {
         assert!(!std::path::Path::new(&beside).exists(), "the copy beside the project is still there after the work was saved: {beside}");
     }
 }
-

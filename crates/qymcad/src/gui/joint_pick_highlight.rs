@@ -82,10 +82,7 @@ mod tests {
 
         let empty = highlight_shapes(&mut app, None, 1);
         let hovered = highlight_shapes(&mut app, Some(at), 1);
-        assert!(
-            hovered > empty,
-            "an edge under the cursor is not highlighted: {empty} shapes without the cursor, {hovered} with it — a person is aiming blind"
-        );
+        assert!(hovered > empty, "an edge under the cursor is not highlighted: {empty} shapes without the cursor, {hovered} with it — a person is aiming blind");
     }
 
     /// A VERTEX UNDER THE CURSOR IS HIGHLIGHTED.
@@ -143,9 +140,6 @@ mod tests {
 
         crate::gui::set_component_visible(&mut app.project, &mut app.regen, owner, true);
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
-        assert!(
-            highlight_shapes(&mut app, Some(at), 1) > empty,
-            "after hiding and showing the highlight is gone — exactly what is seen as \"picking edges is not drawn\""
-        );
+        assert!(highlight_shapes(&mut app, Some(at), 1) > empty, "after hiding and showing the highlight is gone — exactly what is seen as \"picking edges is not drawn\"");
     }
 }

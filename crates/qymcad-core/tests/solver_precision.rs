@@ -53,12 +53,7 @@ fn reference_line_lands_exactly_on_its_dimension() {
         _ => unreachable!(),
     };
     // the left side of the rectangle, its own points only; the ends of the construction line must not enter
-    let rect_left: Vec<u64> = p.sketches[si]
-        .points
-        .iter()
-        .filter(|q| q.id != a0 && q.id != a1 && (q.x + 129.9991).abs() < 1e-6)
-        .map(|q| q.id)
-        .collect();
+    let rect_left: Vec<u64> = p.sketches[si].points.iter().filter(|q| q.id != a0 && q.id != a1 && (q.x + 129.9991).abs() < 1e-6).map(|q| q.id).collect();
     assert_eq!(rect_left.len(), 2, "the left side of the rectangle has two points");
 
     let s = &mut p.sketches[si];
@@ -74,7 +69,7 @@ fn reference_line_lands_exactly_on_its_dimension() {
     // 2) the rectangle followed it, the collinearity being satisfied: an opening rather than a film
     for id in &rect_left {
         let x = p.sketches[si].points.iter().find(|q| q.id == *id).unwrap().x;
-        assert!((x + 130.0).abs() < 1e-6, "the side of the rectangle sits at {x:.12} and has to sit at -130", );
+        assert!((x + 130.0).abs() < 1e-6, "the side of the rectangle sits at {x:.12} and has to sit at -130",);
     }
     // 3) and no constraint was left unsatisfied
     let worst = p.sketch_residuals(si).into_iter().fold(0.0_f64, f64::max);

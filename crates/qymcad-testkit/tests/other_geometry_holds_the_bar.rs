@@ -19,11 +19,7 @@ use qymcad_core::model::ArrayAxis;
 
 /// Stock: a rectangular sketch turned into a prism. Each case shapes its own part from there.
 fn box_body(p: &mut Project, w: f64, h: f64, up: f64) -> Id {
-    let sid = p.add_line_sketch(
-        "Sketch",
-        vec![Point2::new(0.0, 0.0), Point2::new(w, 0.0), Point2::new(w, h), Point2::new(0.0, h)],
-        true,
-    );
+    let sid = p.add_line_sketch("Sketch", vec![Point2::new(0.0, 0.0), Point2::new(w, 0.0), Point2::new(w, h), Point2::new(0.0, h)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {
@@ -46,10 +42,7 @@ fn area_of(p: &Project, b: Id) -> f64 {
 /// instead of cut away, and an imprinted circle instead of a hole — both were found in this very
 /// suite. So ask for a change in material.
 fn demand_material_changed(title: &str, was: f64, now: f64) {
-    assert!(
-        (now - was).abs() > 0.5,
-        "{title}: the operation left the material untouched — area was {was:.2}, is now {now:.2}"
-    );
+    assert!((now - was).abs() > 0.5, "{title}: the operation left the material untouched — area was {was:.2}, is now {now:.2}");
 }
 
 fn snapshot(p: &Project) -> Vec<(Id, Vec<u32>)> {
@@ -122,8 +115,7 @@ fn demand_the_bar(title: &str, p: &mut Project) {
         p.snap_rebinds.store(0, std::sync::atomic::Ordering::Relaxed);
         let (after, _) = qymcad_testkit::regenerate(p);
         let snaps = p.snap_rebinds.load(std::sync::atomic::Ordering::Relaxed);
-        let reds: Vec<String> =
-            after.errors.iter().filter(|(n, _)| !was.contains(n)).map(|(n, e)| format!("node {n}: {e:?}")).collect();
+        let reds: Vec<String> = after.errors.iter().filter(|(n, _)| !was.contains(n)).map(|(n, e)| format!("node {n}: {e:?}")).collect();
         assert!(reds.is_empty(), "{title}: the sketch edit broke nodes that stood before it:\n  {}", reds.join("\n  "));
         assert_eq!(snaps, 0, "{title}: after the edit {snaps} references resolved BY POSITION instead of by name");
     }
@@ -137,11 +129,7 @@ fn demand_the_bar(title: &str, p: &mut Project) {
 fn a_revolved_part_holds_the_bar() {
     let mut p = Project::default();
     p.new_document();
-    let sid = p.add_line_sketch(
-        "Profile",
-        vec![Point2::new(10.0, 0.0), Point2::new(20.0, 0.0), Point2::new(20.0, 15.0), Point2::new(10.0, 15.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("Profile", vec![Point2::new(10.0, 0.0), Point2::new(20.0, 0.0), Point2::new(20.0, 15.0), Point2::new(10.0, 15.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {
@@ -232,21 +220,14 @@ fn a_threaded_shaft_holds_the_bar() {
     p.new_document();
     let shaft = p.add_cylinder(8.0, 40.0);
     qymcad_testkit::regenerate(&mut p);
-    let rim = p
-        .regen_edges
-        .get(&shaft)
-        .and_then(|e| e.iter().find(|e| (e.radius - 8.0).abs() < 0.05).map(|e| e.id));
+    let rim = p.regen_edges.get(&shaft).and_then(|e| e.iter().find(|e| (e.radius - 8.0).abs() < 0.05).map(|e| e.id));
     let Some(rim) = rim else {
         panic!("the shaft has no rim of radius 8 — the case did not build, nothing to measure");
     };
     let spec = ThreadSpec { standard: ThreadStandard::MetricIso, nominal_d: 16.0, pitch: 2.0, internal: false, fit: 0.2, ..Default::default() };
     let t = p.add_thread(shaft, rim, spec, 20.0, 1.0, 1.0);
     qymcad_testkit::regenerate(&mut p);
-    assert!(
-        p.regen_faces.get(&t).map(|f| f.len() > 10).unwrap_or(false),
-        "the thread did not build: faces {:?}",
-        p.regen_faces.get(&t).map(|f| f.len())
-    );
+    assert!(p.regen_faces.get(&t).map(|f| f.len() > 10).unwrap_or(false), "the thread did not build: faces {:?}", p.regen_faces.get(&t).map(|f| f.len()));
     demand_the_bar("thread on a shaft", &mut p);
 }
 
@@ -272,11 +253,7 @@ fn a_swept_body_holds_the_bar() {
     let path_cid = p.sketches[spath].contour_ids.first().copied().expect("path contour");
     let body = p.add_sweep(prof_sid, vec![prof_cid], path_sid, path_cid);
     qymcad_testkit::regenerate(&mut p);
-    assert!(
-        p.regen_faces.get(&body).map(|f| f.len() >= 3).unwrap_or(false),
-        "the sweep did not build: faces {:?}",
-        p.regen_faces.get(&body).map(|f| f.len())
-    );
+    assert!(p.regen_faces.get(&body).map(|f| f.len() >= 3).unwrap_or(false), "the sweep did not build: faces {:?}", p.regen_faces.get(&body).map(|f| f.len()));
     demand_the_bar("sweep", &mut p);
 }
 
@@ -305,11 +282,7 @@ fn a_lofted_body_holds_the_bar() {
     let c1 = p.sketches[s1].contour_ids.iter().copied().find(|c| p.contour_profile_xy(*c).is_some()).expect("top contour");
     let body = p.add_loft(vec![sid0, sid1], vec![c0, c1], true, 0, 1, false);
     qymcad_testkit::regenerate(&mut p);
-    assert!(
-        p.regen_faces.get(&body).map(|f| f.len() >= 3).unwrap_or(false),
-        "the loft did not build: faces {:?}",
-        p.regen_faces.get(&body).map(|f| f.len())
-    );
+    assert!(p.regen_faces.get(&body).map(|f| f.len() >= 3).unwrap_or(false), "the loft did not build: faces {:?}", p.regen_faces.get(&body).map(|f| f.len()));
     demand_the_bar("loft", &mut p);
 }
 
@@ -323,11 +296,7 @@ fn a_mirrored_part_holds_the_bar() {
     let body = box_body(&mut p, 18.0, 12.0, 8.0);
     let m = p.add_mirror(body, 2, true, 0); // the YZ plane, the original stays
     qymcad_testkit::regenerate(&mut p);
-    assert!(
-        p.regen_faces.get(&m).map(|f| f.len() >= 6).unwrap_or(false),
-        "the mirror did not build: faces {:?}",
-        p.regen_faces.get(&m).map(|f| f.len())
-    );
+    assert!(p.regen_faces.get(&m).map(|f| f.len() >= 6).unwrap_or(false), "the mirror did not build: faces {:?}", p.regen_faces.get(&m).map(|f| f.len()));
     demand_the_bar("mirror keeping the original", &mut p);
 }
 
@@ -337,11 +306,7 @@ fn a_mirrored_part_holds_the_bar() {
 fn a_shelled_revolve_holds_the_bar() {
     let mut p = Project::default();
     p.new_document();
-    let sid = p.add_line_sketch(
-        "Profile",
-        vec![Point2::new(6.0, 0.0), Point2::new(14.0, 0.0), Point2::new(14.0, 18.0), Point2::new(6.0, 18.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("Profile", vec![Point2::new(6.0, 0.0), Point2::new(14.0, 0.0), Point2::new(14.0, 18.0), Point2::new(6.0, 18.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {
@@ -354,18 +319,10 @@ fn a_shelled_revolve_holds_the_bar() {
     // THE FACE IS PICKED THE WAY A PERSON WOULD PICK IT — the largest one. Looking for the "top" by
     // a normal along Z is wrong here: the revolve runs around a different axis and no such face
     // exists, so the case was skipped silently — and a skip does not count as a pass.
-    let open: Vec<u32> = p.regen_faces[&body]
-        .iter()
-        .max_by(|a, b| a.area.total_cmp(&b.area))
-        .map(|f| vec![f.id])
-        .expect("a solid of revolution must have at least one face");
+    let open: Vec<u32> = p.regen_faces[&body].iter().max_by(|a, b| a.area.total_cmp(&b.area)).map(|f| vec![f.id]).expect("a solid of revolution must have at least one face");
     let sh = p.add_shell_mode(body, 1.5, open, qymcad_core::feature::ShellSide::Inward);
     qymcad_testkit::regenerate(&mut p);
-    assert!(
-        p.regen_faces.get(&sh).map(|f| f.len() >= 4).unwrap_or(false),
-        "the shell on a revolve did not build: faces {:?}",
-        p.regen_faces.get(&sh).map(|f| f.len())
-    );
+    assert!(p.regen_faces.get(&sh).map(|f| f.len() >= 4).unwrap_or(false), "the shell on a revolve did not build: faces {:?}", p.regen_faces.get(&sh).map(|f| f.len()));
     demand_the_bar("shell on a solid of revolution", &mut p);
 }
 
@@ -391,15 +348,8 @@ fn holes_from_sketch_points_hold_the_bar() {
     let h = p.add_hole_from_sketch(base, holes_sk, qymcad_core::model::HoleTool { kind: 0, diameter: 4.0, depth: 6.0, dia2: 0.0, depth2: 0.0 }, true);
     qymcad_testkit::regenerate(&mut p);
     let area_after: f64 = p.regen_faces.get(&h).map(|f| f.iter().map(|x| x.area).sum()).unwrap_or(0.0);
-    assert!(
-        area_after > area_before + 1.0,
-        "the drill removed nothing: area was {area_before:.2}, is now {area_after:.2} — an imprint instead of a hole"
-    );
-    assert!(
-        p.regen_faces.get(&h).map(|f| f.len() >= 9).unwrap_or(false),
-        "the three holes were not drilled: faces {:?}",
-        p.regen_faces.get(&h).map(|f| f.len())
-    );
+    assert!(area_after > area_before + 1.0, "the drill removed nothing: area was {area_before:.2}, is now {area_after:.2} — an imprint instead of a hole");
+    assert!(p.regen_faces.get(&h).map(|f| f.len() >= 9).unwrap_or(false), "the three holes were not drilled: faces {:?}", p.regen_faces.get(&h).map(|f| f.len()));
     demand_the_bar("three holes from sketch points", &mut p);
 }
 
@@ -413,11 +363,7 @@ fn a_tube_cut_by_a_body_holds_the_bar() {
     let inner = p.add_cylinder(7.0, 40.0);
     let tube = p.add_body_boolean(outer, inner, 0);
     qymcad_testkit::regenerate(&mut p);
-    assert!(
-        p.regen_faces.get(&tube).map(|f| f.len() >= 4).unwrap_or(false),
-        "the tube was not cut: faces {:?}",
-        p.regen_faces.get(&tube).map(|f| f.len())
-    );
+    assert!(p.regen_faces.get(&tube).map(|f| f.len() >= 4).unwrap_or(false), "the tube was not cut: faces {:?}", p.regen_faces.get(&tube).map(|f| f.len()));
     demand_the_bar("tube cut by a body", &mut p);
 }
 
@@ -428,18 +374,10 @@ fn a_sketch_on_a_face_holds_the_bar() {
     let mut p = Project::default();
     p.new_document();
     let base = box_body(&mut p, 30.0, 20.0, 10.0);
-    let top = p.regen_faces[&base]
-        .iter()
-        .filter(|f| f.normal[2] > 0.9)
-        .max_by(|a, b| a.area.total_cmp(&b.area))
-        .cloned()
-        .expect("top face of the box");
+    let top = p.regen_faces[&base].iter().filter(|f| f.normal[2] > 0.9).max_by(|a, b| a.area.total_cmp(&b.area)).cloned().expect("top face of the box");
     let si = p.new_sketch("on the face");
     let sid = p.sketches[si].id;
-    p.sketches[si].plane = SketchPlane::Face(
-        base,
-        FaceKey { index: 0, centroid: [top.centroid.x, top.centroid.y, top.centroid.z], normal: top.normal, id: top.id },
-    );
+    p.sketches[si].plane = SketchPlane::Face(base, FaceKey { index: 0, centroid: [top.centroid.x, top.centroid.y, top.centroid.z], normal: top.normal, id: top.id });
     p.add_sketch_node(sid, "on the face");
     p.add_circle_entity(si, 0.0, 0.0, 5.0, qymcad_core::feature::Purpose::Real);
     p.regen_sketch(si);
@@ -449,11 +387,7 @@ fn a_sketch_on_a_face_holds_the_bar() {
     // The boss here is a SEPARATE cylindrical body: three faces (side and two caps), and that is
     // correct. What matters is not how many there are but that the sketch stood ON A FACE of another
     // body and that survived the rebuild.
-    assert!(
-        p.regen_faces.get(&boss).map(|f| f.len() >= 3).unwrap_or(false),
-        "the boss on the face did not build: faces {:?}",
-        p.regen_faces.get(&boss).map(|f| f.len())
-    );
+    assert!(p.regen_faces.get(&boss).map(|f| f.len() >= 3).unwrap_or(false), "the boss on the face did not build: faces {:?}", p.regen_faces.get(&boss).map(|f| f.len()));
     assert!(
         matches!(p.sketches.iter().find(|s| s.id == sid).map(|s| &s.plane), Some(SketchPlane::Face(..))),
         "the sketch stopped standing on the face — the case degenerated into an ordinary sketch on a world plane"
@@ -467,11 +401,7 @@ fn a_sketch_on_a_face_holds_the_bar() {
 fn a_partial_revolve_holds_the_bar() {
     let mut p = Project::default();
     p.new_document();
-    let sid = p.add_line_sketch(
-        "Sector",
-        vec![Point2::new(8.0, 0.0), Point2::new(16.0, 0.0), Point2::new(16.0, 12.0), Point2::new(8.0, 12.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("Sector", vec![Point2::new(8.0, 0.0), Point2::new(16.0, 0.0), Point2::new(16.0, 12.0), Point2::new(8.0, 12.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {
@@ -507,18 +437,10 @@ fn a_through_cut_holds_the_bar() {
     let mut p = Project::default();
     p.new_document();
     let base = box_body(&mut p, 30.0, 20.0, 10.0);
-    let top = p.regen_faces[&base]
-        .iter()
-        .filter(|f| f.normal[2] > 0.9)
-        .max_by(|a, b| a.area.total_cmp(&b.area))
-        .cloned()
-        .expect("top face");
+    let top = p.regen_faces[&base].iter().filter(|f| f.normal[2] > 0.9).max_by(|a, b| a.area.total_cmp(&b.area)).cloned().expect("top face");
     let si = p.new_sketch("window");
     let sid = p.sketches[si].id;
-    p.sketches[si].plane = SketchPlane::Face(
-        base,
-        FaceKey { index: 0, centroid: [top.centroid.x, top.centroid.y, top.centroid.z], normal: top.normal, id: top.id },
-    );
+    p.sketches[si].plane = SketchPlane::Face(base, FaceKey { index: 0, centroid: [top.centroid.x, top.centroid.y, top.centroid.z], normal: top.normal, id: top.id });
     p.add_sketch_node(sid, "window");
     p.add_circle_entity(si, 0.0, 0.0, 4.0, qymcad_core::feature::Purpose::Real);
     p.regen_sketch(si);
@@ -531,7 +453,13 @@ fn a_through_cut_holds_the_bar() {
     // hundredth) while op=1 gives 16 faces with the tool sticking out. A "the names changed" check
     // let that pass: they change from a glued-on tool too.
     let top_was = p.regen_faces[&base].iter().filter(|f| f.normal[2] > 0.9).map(|f| f.area).fold(0.0, f64::max);
-    let cut = p.add_combine_on(base, sid, c, qymcad_core::model::CombineSpan { height: 20.0, down: 0.0, extent: qymcad_core::feature::Extent { through: true, reach: qymcad_core::feature::Reach::Backward }, fill: &[] }, 0);
+    let cut = p.add_combine_on(
+        base,
+        sid,
+        c,
+        qymcad_core::model::CombineSpan { height: 20.0, down: 0.0, extent: qymcad_core::feature::Extent { through: true, reach: qymcad_core::feature::Reach::Backward }, fill: &[] },
+        0,
+    );
     qymcad_testkit::regenerate(&mut p);
     let after: std::collections::HashSet<u32> = p.regen_faces.get(&cut).map(|f| f.iter().map(|x| x.id).collect()).unwrap_or_default();
     assert!(after.difference(&before).count() > 0, "the through cut changed nothing — the case is empty");
@@ -540,10 +468,7 @@ fn a_through_cut_holds_the_bar() {
     // the first threshold was set expecting radius 4 and the case failed honestly — the expectation
     // was corrected rather than the threshold fitted).
     let top_now = p.regen_faces.get(&cut).map(|f| f.iter().filter(|x| x.normal[2] > 0.9).map(|x| x.area).fold(0.0, f64::max)).unwrap_or(0.0);
-    assert!(
-        top_now < top_was - 10.0,
-        "the cut removed no material: the top face was {top_was:.2}, is now {top_now:.2}"
-    );
+    assert!(top_now < top_was - 10.0, "the cut removed no material: the top face was {top_was:.2}, is now {top_now:.2}");
     demand_material_changed("extruded cut all the way through", area_before, area_of(&p, cut));
     demand_the_bar("extruded cut all the way through", &mut p);
 }
@@ -554,11 +479,7 @@ fn a_through_cut_holds_the_bar() {
 fn a_fillet_on_a_revolve_holds_the_bar() {
     let mut p = Project::default();
     p.new_document();
-    let sid = p.add_line_sketch(
-        "Profile",
-        vec![Point2::new(6.0, 0.0), Point2::new(16.0, 0.0), Point2::new(16.0, 14.0), Point2::new(6.0, 14.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("Profile", vec![Point2::new(6.0, 0.0), Point2::new(16.0, 0.0), Point2::new(16.0, 14.0), Point2::new(6.0, 14.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {
@@ -568,11 +489,7 @@ fn a_fillet_on_a_revolve_holds_the_bar() {
     let closed: Vec<Id> = p.sketches[si].contour_ids.iter().copied().filter(|c| p.contour_profile_xy(*c).is_some()).collect();
     let body = p.add_revolve_axis(sid, closed, 1, 360.0, 0, 0);
     qymcad_testkit::regenerate(&mut p);
-    let edge = p
-        .regen_edges
-        .get(&body)
-        .and_then(|e| e.iter().filter(|e| e.radius > 1e-9).max_by(|a, b| a.radius.total_cmp(&b.radius)).map(|e| e.id))
-        .expect("a round edge on the solid of revolution");
+    let edge = p.regen_edges.get(&body).and_then(|e| e.iter().filter(|e| e.radius > 1e-9).max_by(|a, b| a.radius.total_cmp(&b.radius)).map(|e| e.id)).expect("a round edge on the solid of revolution");
     let before: std::collections::HashSet<u32> = p.regen_faces[&body].iter().map(|f| f.id).collect();
     let area_before = area_of(&p, body);
     let f = p.add_fillet(body, 1.5, vec![edge]);
@@ -593,12 +510,7 @@ fn a_shell_after_a_pattern_holds_the_bar() {
     let body = box_body(&mut p, 20.0, 14.0, 9.0);
     let arr = p.add_circular_array_axis(body, 3, 300.0, 0);
     qymcad_testkit::regenerate(&mut p);
-    let open: Vec<u32> = p.regen_faces[&arr]
-        .iter()
-        .filter(|f| f.normal[2] > 0.9)
-        .max_by(|a, b| a.area.total_cmp(&b.area))
-        .map(|f| vec![f.id])
-        .expect("top face of the pattern result");
+    let open: Vec<u32> = p.regen_faces[&arr].iter().filter(|f| f.normal[2] > 0.9).max_by(|a, b| a.area.total_cmp(&b.area)).map(|f| vec![f.id]).expect("top face of the pattern result");
     let before: std::collections::HashSet<u32> = p.regen_faces[&arr].iter().map(|f| f.id).collect();
     let area_before = area_of(&p, arr);
     let sh = p.add_shell_mode(arr, 1.5, open, qymcad_core::feature::ShellSide::Inward);
@@ -615,11 +527,7 @@ fn a_shell_after_a_pattern_holds_the_bar() {
 fn a_mirrored_revolve_holds_the_bar() {
     let mut p = Project::default();
     p.new_document();
-    let sid = p.add_line_sketch(
-        "Profile",
-        vec![Point2::new(10.0, 2.0), Point2::new(18.0, 2.0), Point2::new(18.0, 12.0), Point2::new(10.0, 12.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("Profile", vec![Point2::new(10.0, 2.0), Point2::new(18.0, 2.0), Point2::new(18.0, 12.0), Point2::new(10.0, 12.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {
@@ -651,23 +559,12 @@ fn a_split_by_a_tilted_datum_holds_the_bar() {
     p.new_document();
     let body = box_body(&mut p, 24.0, 18.0, 12.0);
     let n = (1.0f64 / 3.0f64.sqrt(), 1.0 / 3.0f64.sqrt(), 1.0 / 3.0f64.sqrt());
-    let pl = p.add_plane(WorkPlane {
-        id: 0,
-        name: "tilted".into(),
-        origin: [12.0, 9.0, 6.0],
-        normal: [n.0, n.1, n.2],
-        rot_deg: 0.0,
-        def: Default::default(),
-    });
+    let pl = p.add_plane(WorkPlane { id: 0, name: "tilted".into(), origin: [12.0, 9.0, 6.0], normal: [n.0, n.1, n.2], rot_deg: 0.0, def: Default::default() });
     let pieces = p.add_split_body(body, 0, pl, 0.0, 2);
     qymcad_testkit::regenerate(&mut p);
     assert_eq!(pieces.len(), 2, "a tilted split must yield two pieces");
     for b in &pieces {
-        assert!(
-            p.regen_faces.get(b).map(|f| !f.is_empty()).unwrap_or(false),
-            "piece {b} of the tilted split is empty: errors {:?}",
-            p.regen_errors
-        );
+        assert!(p.regen_faces.get(b).map(|f| !f.is_empty()).unwrap_or(false), "piece {b} of the tilted split is empty: errors {:?}", p.regen_errors);
     }
     demand_the_bar("split by a tilted datum plane", &mut p);
 }
@@ -683,11 +580,7 @@ fn a_shell_after_a_split_holds_the_bar() {
     qymcad_testkit::regenerate(&mut p);
     assert_eq!(pieces.len(), 2, "the split must yield two pieces");
     let target = pieces[0];
-    let open: Vec<u32> = p.regen_faces[&target]
-        .iter()
-        .max_by(|a, b| a.area.total_cmp(&b.area))
-        .map(|f| vec![f.id])
-        .expect("a face on the split piece");
+    let open: Vec<u32> = p.regen_faces[&target].iter().max_by(|a, b| a.area.total_cmp(&b.area)).map(|f| vec![f.id]).expect("a face on the split piece");
     let before: std::collections::HashSet<u32> = p.regen_faces[&target].iter().map(|f| f.id).collect();
     let area_before = area_of(&p, target);
     let sh = p.add_shell_mode(target, 1.5, open, qymcad_core::feature::ShellSide::Inward);
@@ -709,11 +602,7 @@ fn a_thread_on_a_tube_holds_the_bar() {
     let inner = p.add_cylinder(6.0, 40.0);
     let tube = p.add_body_boolean(outer, inner, 0);
     qymcad_testkit::regenerate(&mut p);
-    let rim = p
-        .regen_edges
-        .get(&tube)
-        .and_then(|e| e.iter().find(|e| (e.radius - 10.0).abs() < 0.05).map(|e| e.id))
-        .expect("outer rim of the tube");
+    let rim = p.regen_edges.get(&tube).and_then(|e| e.iter().find(|e| (e.radius - 10.0).abs() < 0.05).map(|e| e.id)).expect("outer rim of the tube");
     let spec = ThreadSpec { standard: ThreadStandard::MetricIso, nominal_d: 20.0, pitch: 2.0, internal: false, fit: 0.2, ..Default::default() };
     let before: std::collections::HashSet<u32> = p.regen_faces[&tube].iter().map(|f| f.id).collect();
     let area_before = area_of(&p, tube);
@@ -731,11 +620,7 @@ fn a_thread_on_a_tube_holds_the_bar() {
 fn a_pattern_after_a_shelled_revolve_holds_the_bar() {
     let mut p = Project::default();
     p.new_document();
-    let sid = p.add_line_sketch(
-        "Profile",
-        vec![Point2::new(8.0, 0.0), Point2::new(15.0, 0.0), Point2::new(15.0, 16.0), Point2::new(8.0, 16.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("Profile", vec![Point2::new(8.0, 0.0), Point2::new(15.0, 0.0), Point2::new(15.0, 16.0), Point2::new(8.0, 16.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {
@@ -745,11 +630,7 @@ fn a_pattern_after_a_shelled_revolve_holds_the_bar() {
     let closed: Vec<Id> = p.sketches[si].contour_ids.iter().copied().filter(|c| p.contour_profile_xy(*c).is_some()).collect();
     let body = p.add_revolve_axis(sid, closed, 1, 360.0, 0, 0);
     qymcad_testkit::regenerate(&mut p);
-    let open: Vec<u32> = p.regen_faces[&body]
-        .iter()
-        .max_by(|a, b| a.area.total_cmp(&b.area))
-        .map(|f| vec![f.id])
-        .expect("a face of the solid of revolution");
+    let open: Vec<u32> = p.regen_faces[&body].iter().max_by(|a, b| a.area.total_cmp(&b.area)).map(|f| vec![f.id]).expect("a face of the solid of revolution");
     let sh = p.add_shell_mode(body, 1.2, open, qymcad_core::feature::ShellSide::Inward);
     qymcad_testkit::regenerate(&mut p);
     let before: std::collections::HashSet<u32> = p.regen_faces[&sh].iter().map(|f| f.id).collect();
@@ -844,11 +725,7 @@ fn a_fillet_after_a_pattern_holds_the_bar() {
     let arr = p.add_linear_array_grid3(body, [ArrayAxis { d: [20.0, 0.0, 0.0], count: 2 }, ArrayAxis::none(), ArrayAxis::none()]);
     qymcad_testkit::regenerate(&mut p);
     // A VERTICAL EDGE IS PICKED: every copy has one and it survives moving a sketch point.
-    let edge = p
-        .regen_edges
-        .get(&arr)
-        .and_then(|e| e.iter().find(|e| e.dir[2].abs() > 0.9).map(|e| e.id))
-        .expect("a vertical edge on the pattern");
+    let edge = p.regen_edges.get(&arr).and_then(|e| e.iter().find(|e| e.dir[2].abs() > 0.9).map(|e| e.id)).expect("a vertical edge on the pattern");
     let before: std::collections::HashSet<u32> = p.regen_faces[&arr].iter().map(|f| f.id).collect();
     let area_before = area_of(&p, arr);
     let f = p.add_fillet(arr, 1.5, vec![edge]);
@@ -865,11 +742,7 @@ fn a_fillet_after_a_pattern_holds_the_bar() {
 fn holes_on_a_revolve_hold_the_bar() {
     let mut p = Project::default();
     p.new_document();
-    let sid = p.add_line_sketch(
-        "Profile",
-        vec![Point2::new(0.0, 0.0), Point2::new(20.0, 0.0), Point2::new(20.0, 10.0), Point2::new(0.0, 10.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("Profile", vec![Point2::new(0.0, 0.0), Point2::new(20.0, 0.0), Point2::new(20.0, 10.0), Point2::new(0.0, 10.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {
@@ -908,11 +781,7 @@ fn a_thread_after_a_split_holds_the_bar() {
     qymcad_testkit::regenerate(&mut p);
     assert_eq!(pieces.len(), 2, "splitting the shaft must yield two pieces");
     let part = pieces[0];
-    let rim = p
-        .regen_edges
-        .get(&part)
-        .and_then(|e| e.iter().find(|e| (e.radius - 9.0).abs() < 0.05).map(|e| e.id))
-        .expect("a rim on the split piece");
+    let rim = p.regen_edges.get(&part).and_then(|e| e.iter().find(|e| (e.radius - 9.0).abs() < 0.05).map(|e| e.id)).expect("a rim on the split piece");
     let spec = ThreadSpec { standard: ThreadStandard::MetricIso, nominal_d: 18.0, pitch: 2.0, internal: false, fit: 0.2, ..Default::default() };
     let before: std::collections::HashSet<u32> = p.regen_faces[&part].iter().map(|f| f.id).collect();
     let area_before = area_of(&p, part);
@@ -930,11 +799,7 @@ fn a_thread_after_a_split_holds_the_bar() {
 fn a_draft_on_a_revolve_holds_the_bar() {
     let mut p = Project::default();
     p.new_document();
-    let sid = p.add_line_sketch(
-        "Profile",
-        vec![Point2::new(6.0, 0.0), Point2::new(14.0, 0.0), Point2::new(14.0, 20.0), Point2::new(6.0, 20.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("Profile", vec![Point2::new(6.0, 0.0), Point2::new(14.0, 0.0), Point2::new(14.0, 20.0), Point2::new(6.0, 20.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {
@@ -968,11 +833,7 @@ fn a_chamfer_after_a_pattern_holds_the_bar() {
     let body = box_body(&mut p, 14.0, 10.0, 8.0);
     let arr = p.add_linear_array_grid3(body, [ArrayAxis { d: [20.0, 0.0, 0.0], count: 2 }, ArrayAxis::none(), ArrayAxis::none()]);
     qymcad_testkit::regenerate(&mut p);
-    let edge = p
-        .regen_edges
-        .get(&arr)
-        .and_then(|e| e.iter().find(|e| e.dir[2].abs() > 0.9).map(|e| e.id))
-        .expect("a vertical edge on the pattern");
+    let edge = p.regen_edges.get(&arr).and_then(|e| e.iter().find(|e| e.dir[2].abs() > 0.9).map(|e| e.id)).expect("a vertical edge on the pattern");
     let before: std::collections::HashSet<u32> = p.regen_faces[&arr].iter().map(|f| f.id).collect();
     let area_before = area_of(&p, arr);
     let ch = p.add_chamfer(arr, 1.2, vec![edge]);
@@ -1027,12 +888,7 @@ fn a_shell_after_a_shell_holds_the_bar() {
     let open1: Vec<u32> = p.regen_faces[&body].iter().filter(|f| f.normal[2] > 0.9).map(|f| f.id).collect();
     let sh1 = p.add_shell_mode(body, 2.0, open1, qymcad_core::feature::ShellSide::Inward);
     qymcad_testkit::regenerate(&mut p);
-    let open2: Vec<u32> = p.regen_faces[&sh1]
-        .iter()
-        .filter(|f| f.normal[2] < -0.9)
-        .max_by(|a, b| a.area.total_cmp(&b.area))
-        .map(|f| vec![f.id])
-        .expect("bottom face of the first shell");
+    let open2: Vec<u32> = p.regen_faces[&sh1].iter().filter(|f| f.normal[2] < -0.9).max_by(|a, b| a.area.total_cmp(&b.area)).map(|f| vec![f.id]).expect("bottom face of the first shell");
     let before: std::collections::HashSet<u32> = p.regen_faces[&sh1].iter().map(|f| f.id).collect();
     let area_before = area_of(&p, sh1);
     let sh2 = p.add_shell_mode(sh1, 0.8, open2, qymcad_core::feature::ShellSide::Inward);
@@ -1093,11 +949,7 @@ fn a_body_boolean_of_two_shells_holds_the_bar() {
     let sa = p.add_shell_mode(a, 2.0, open_a, qymcad_core::feature::ShellSide::Inward);
     qymcad_testkit::regenerate(&mut p);
     let b = {
-        let sid = p.add_line_sketch(
-            "Second",
-            vec![Point2::new(14.0, 6.0), Point2::new(38.0, 6.0), Point2::new(38.0, 26.0), Point2::new(14.0, 26.0)],
-            true,
-        );
+        let sid = p.add_line_sketch("Second", vec![Point2::new(14.0, 6.0), Point2::new(38.0, 6.0), Point2::new(38.0, 26.0), Point2::new(14.0, 26.0)], true);
         let si = p.sketch_index(sid).unwrap();
         p.regen_sketch(si);
         p.add_sketch_node(sid, "Second");
@@ -1214,10 +1066,7 @@ fn holes_through_a_shell_hold_the_bar() {
     // vanished. Measured: the shell has 11 faces, after two drills 13 — exactly one side face per
     // hole. Ask directly, otherwise the case degenerates into a check of emptiness.
     let area_after: f64 = p.regen_faces.get(&h).map(|f| f.iter().map(|x| x.area).sum()).unwrap_or(0.0);
-    assert!(
-        area_after > area_before + 1.0,
-        "the drill removed nothing: area was {area_before:.2}, is now {area_after:.2} — an imprint instead of a hole"
-    );
+    assert!(area_after > area_before + 1.0, "the drill removed nothing: area was {area_before:.2}, is now {area_after:.2} — an imprint instead of a hole");
     demand_the_bar("holes through a shell", &mut p);
 }
 
@@ -1236,10 +1085,7 @@ fn a_fillet_on_a_split_born_edge_holds_the_bar() {
     }
     let piece = pieces[0];
     // A SECTION edge: it lies in the cutting plane, so all of its points are at x = 14.
-    let edge = p
-        .regen_edges
-        .get(&piece)
-        .and_then(|e| e.iter().find(|e| (e.mid[0] - 14.0).abs() < 1e-6).map(|e| e.id));
+    let edge = p.regen_edges.get(&piece).and_then(|e| e.iter().find(|e| (e.mid[0] - 14.0).abs() < 1e-6).map(|e| e.id));
     let Some(edge) = edge else {
         eprintln!("skip: the piece has no section edge");
         return;
@@ -1264,11 +1110,7 @@ fn a_draft_on_a_boolean_born_face_holds_the_bar() {
     p.new_document();
     let base = box_body(&mut p, 34.0, 24.0, 14.0);
     let cutter = {
-        let sid = p.add_line_sketch(
-            "Pocket",
-            vec![Point2::new(8.0, 6.0), Point2::new(26.0, 6.0), Point2::new(26.0, 18.0), Point2::new(8.0, 18.0)],
-            true,
-        );
+        let sid = p.add_line_sketch("Pocket", vec![Point2::new(8.0, 6.0), Point2::new(26.0, 6.0), Point2::new(26.0, 18.0), Point2::new(8.0, 18.0)], true);
         let si = p.sketch_index(sid).unwrap();
         p.regen_sketch(si);
         p.add_sketch_node(sid, "Pocket");
@@ -1280,11 +1122,8 @@ fn a_draft_on_a_boolean_born_face_holds_the_bar() {
     let pocket = p.add_body_boolean(base, cutter, 0);
     qymcad_testkit::regenerate(&mut p);
     // The pocket walls are the vertical faces INSIDE the outline: the tool produced them.
-    let sides: Vec<u32> = p.regen_faces[&pocket]
-        .iter()
-        .filter(|f| f.normal[2].abs() < 0.1 && f.centroid.x > 7.0 && f.centroid.x < 27.0 && f.centroid.y > 5.0 && f.centroid.y < 19.0)
-        .map(|f| f.id)
-        .collect();
+    let sides: Vec<u32> =
+        p.regen_faces[&pocket].iter().filter(|f| f.normal[2].abs() < 0.1 && f.centroid.x > 7.0 && f.centroid.x < 27.0 && f.centroid.y > 5.0 && f.centroid.y < 19.0).map(|f| f.id).collect();
     let neutral = p.regen_faces[&pocket].iter().find(|f| f.normal[2] > 0.9).map(|f| f.id).unwrap_or(0);
     if sides.is_empty() || neutral == 0 {
         eprintln!("skip: the pocket has no walls or no top");
@@ -1312,11 +1151,7 @@ fn a_shell_after_a_body_boolean_holds_the_bar() {
     p.new_document();
     let base = box_body(&mut p, 30.0, 22.0, 14.0);
     let lug = {
-        let sid = p.add_line_sketch(
-            "Boss",
-            vec![Point2::new(24.0, 8.0), Point2::new(40.0, 8.0), Point2::new(40.0, 16.0), Point2::new(24.0, 16.0)],
-            true,
-        );
+        let sid = p.add_line_sketch("Boss", vec![Point2::new(24.0, 8.0), Point2::new(40.0, 8.0), Point2::new(40.0, 16.0), Point2::new(24.0, 16.0)], true);
         let si = p.sketch_index(sid).unwrap();
         p.regen_sketch(si);
         p.add_sketch_node(sid, "Boss");
@@ -1434,10 +1269,7 @@ fn a_thread_on_an_array_copy_holds_the_bar() {
     qymcad_testkit::regenerate(&mut p);
     let area_before = area_of(&p, arr);
     // The rim of the SECOND copy: a round edge of radius 6 whose centre moved along x by the pattern step.
-    let rim = p
-        .regen_edges
-        .get(&arr)
-        .and_then(|e| e.iter().find(|e| (e.radius - 6.0).abs() < 0.05 && e.mid[0] > 20.0).map(|e| e.id));
+    let rim = p.regen_edges.get(&arr).and_then(|e| e.iter().find(|e| (e.radius - 6.0).abs() < 0.05 && e.mid[0] > 20.0).map(|e| e.id));
     let Some(rim) = rim else {
         eprintln!("skip: the pattern copy has no rim of radius 6");
         return;
@@ -1465,10 +1297,7 @@ fn a_chamfer_on_a_shell_born_edge_holds_the_bar() {
     qymcad_testkit::regenerate(&mut p);
     let area_before = area_of(&p, sh);
     // The rim lies on the top (z = 12) and NOT on the outer outline — so it was born of the shell.
-    let edge = p
-        .regen_edges
-        .get(&sh)
-        .and_then(|e| e.iter().find(|e| (e.mid[2] - 12.0).abs() < 1e-6 && e.mid[0] > 1.0 && e.mid[0] < 25.0 && e.mid[1] > 1.0 && e.mid[1] < 17.0).map(|e| e.id));
+    let edge = p.regen_edges.get(&sh).and_then(|e| e.iter().find(|e| (e.mid[2] - 12.0).abs() < 1e-6 && e.mid[0] > 1.0 && e.mid[0] < 25.0 && e.mid[1] > 1.0 && e.mid[1] < 17.0).map(|e| e.id));
     let Some(edge) = edge else {
         eprintln!("skip: the shell has no inner rim");
         return;
@@ -1671,11 +1500,7 @@ fn holes_through_a_loft_hold_the_bar() {
 fn a_draft_on_a_shelled_revolve_holds_the_bar() {
     let mut p = Project::default();
     p.new_document();
-    let sid = p.add_line_sketch(
-        "Profile",
-        vec![Point2::new(10.0, 0.0), Point2::new(18.0, 0.0), Point2::new(18.0, 14.0), Point2::new(10.0, 14.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("Profile", vec![Point2::new(10.0, 0.0), Point2::new(18.0, 0.0), Point2::new(18.0, 14.0), Point2::new(10.0, 14.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {
@@ -1688,11 +1513,7 @@ fn a_draft_on_a_shelled_revolve_holds_the_bar() {
     // THE REVOLVE RUNS AROUND THE Y AXIS, so "top" here is not along Z: the end caps look along +-Y
     // and the sides are round. Looking for a face with a +Z normal silently SKIPPED the case; a skip
     // does not count as a pass, so faces are picked by the axis the body is actually built around.
-    let open: Vec<u32> = p.regen_faces[&body]
-        .iter()
-        .filter(|f| f.normal[1] > 0.9)
-        .map(|f| f.id)
-        .collect();
+    let open: Vec<u32> = p.regen_faces[&body].iter().filter(|f| f.normal[1] > 0.9).map(|f| f.id).collect();
     assert!(!open.is_empty(), "a solid revolved around Y must have an end cap with a +Y normal");
     let sh = p.add_shell_mode(body, 1.5, open, qymcad_core::feature::ShellSide::Inward);
     qymcad_testkit::regenerate(&mut p);

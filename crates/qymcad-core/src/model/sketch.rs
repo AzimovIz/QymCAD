@@ -50,8 +50,26 @@ impl Project {
             return i;
         }
         let id = self.alloc_id();
-        self.sketches.push(Sketch { id, name: "name-sketch".into(), contour_ids: Vec::new(), source: None, points: Vec::new(), entities: Vec::new(), closed: false, constraints: Vec::new(), splines: Vec::new(), notes: Vec::new(), texts: Vec::new(), patterns: Vec::new(), projections: Vec::new(), plane: crate::feature::SketchPlane::default(), origin: 0, axis_pts: [0, 0],
-            frame: 0, origin_uv: None });
+        self.sketches.push(Sketch {
+            id,
+            name: "name-sketch".into(),
+            contour_ids: Vec::new(),
+            source: None,
+            points: Vec::new(),
+            entities: Vec::new(),
+            closed: false,
+            constraints: Vec::new(),
+            splines: Vec::new(),
+            notes: Vec::new(),
+            texts: Vec::new(),
+            patterns: Vec::new(),
+            projections: Vec::new(),
+            plane: crate::feature::SketchPlane::default(),
+            origin: 0,
+            axis_pts: [0, 0],
+            frame: 0,
+            origin_uv: None,
+        });
         self.sketches.len() - 1
     }
     /// Add an ellipse as a real entity: a centre plus the endpoints of the major and minor semi-axes.
@@ -227,7 +245,8 @@ impl Project {
             splines: Vec::new(),
             notes: Vec::new(),
             texts: Vec::new(),
-            patterns: Vec::new(), projections: Vec::new(),
+            patterns: Vec::new(),
+            projections: Vec::new(),
             plane: crate::feature::SketchPlane::default(),
             origin: 0,
             axis_pts: [0, 0],
@@ -252,7 +271,8 @@ impl Project {
             splines: Vec::new(),
             notes: Vec::new(),
             texts: Vec::new(),
-            patterns: Vec::new(), projections: Vec::new(),
+            patterns: Vec::new(),
+            projections: Vec::new(),
             plane: crate::feature::SketchPlane::default(),
             origin: 0,
             axis_pts: [0, 0],
@@ -304,7 +324,16 @@ impl Project {
     /// is already determined by other constraints. Distance and angle dimensions only.
     pub fn dim_redundant(&self, si: usize, ci: usize) -> bool {
         let Some(s) = self.sketches.get(si) else { return false };
-        if !matches!(s.constraints.get(ci), Some(Constraint::Distance { .. }) | Some(Constraint::Angle { .. }) | Some(Constraint::DistancePL { .. }) | Some(Constraint::AngleLines { .. }) | Some(Constraint::ArcLength { .. }) | Some(Constraint::Diameter { .. }) | Some(Constraint::EdgeDistance { .. })) {
+        if !matches!(
+            s.constraints.get(ci),
+            Some(Constraint::Distance { .. })
+                | Some(Constraint::Angle { .. })
+                | Some(Constraint::DistancePL { .. })
+                | Some(Constraint::AngleLines { .. })
+                | Some(Constraint::ArcLength { .. })
+                | Some(Constraint::Diameter { .. })
+                | Some(Constraint::EdgeDistance { .. })
+        ) {
             return false;
         }
         let intr = self.entity_intrinsics(si);
@@ -695,11 +724,8 @@ impl Project {
             // Protected free points: the system ones (origin and axes) and materialised midpoints. They must
             // not be dropped as orphaned endpoints, or the axes and the dimensions measured from them are
             // lost.
-            let protected: std::collections::HashSet<Id> = s
-                .system_ids()
-                .into_iter()
-                .chain(s.constraints.iter().filter_map(|c| if let Constraint::Midpoint { p, .. } = c { Some(*p) } else { None }))
-                .collect();
+            let protected: std::collections::HashSet<Id> =
+                s.system_ids().into_iter().chain(s.constraints.iter().filter_map(|c| if let Constraint::Midpoint { p, .. } = c { Some(*p) } else { None })).collect();
             s.points.retain(|p| used.contains(&p.id) || protected.contains(&p.id));
             let alive: std::collections::HashSet<Id> = s.points.iter().map(|p| p.id).collect();
             s.constraints.retain(|c| constraint_point_ids(c).iter().all(|id| alive.contains(id)));
@@ -1296,11 +1322,7 @@ impl Project {
         let gap: Vec<f64> = cuts.iter().map(|&ang| to_param(ang)).filter(|&pp| pp > sweep + 1e-6 && pp < TAU - 1e-6).collect();
         // Extending b takes the first cut in the gap just past endpoint b; extending a takes the last one,
         // nearer to a from the other side.
-        let target = if extend_b {
-            gap.into_iter().min_by(|x, y| x.total_cmp(y))
-        } else {
-            gap.into_iter().max_by(|x, y| x.total_cmp(y))
-        };
+        let target = if extend_b { gap.into_iter().min_by(|x, y| x.total_cmp(y)) } else { gap.into_iter().max_by(|x, y| x.total_cmp(y)) };
         let Some(pp) = target else { return false };
         let new_ang = if ccw { a0 + pp } else { a0 - pp };
         let (nx, ny) = (cx + r * new_ang.cos(), cy + r * new_ang.sin());
@@ -1704,7 +1726,9 @@ impl Project {
             }
         };
         let (Some(o1), Some(o2)) = (self.line_other_end(si, t1, arc_eid), self.line_other_end(si, t2, arc_eid)) else { return false };
-        let (Some((o1x, o1y)), Some((t1x, t1y)), Some((o2x, o2y)), Some((t2x, t2y))) = (self.point_xy(si, o1), self.point_xy(si, t1), self.point_xy(si, o2), self.point_xy(si, t2)) else { return false };
+        let (Some((o1x, o1y)), Some((t1x, t1y)), Some((o2x, o2y)), Some((t2x, t2y))) = (self.point_xy(si, o1), self.point_xy(si, t1), self.point_xy(si, o2), self.point_xy(si, t2)) else {
+            return false;
+        };
         // The corner is the intersection of the lines o1 to t1 and o2 to t2.
         let Some((px, py)) = line_intersect_inf([o1x, o1y], [t1x, t1y], [o2x, o2y], [t2x, t2y]) else { return false };
         let l1 = ((o1x - px).powi(2) + (o1y - py).powi(2)).sqrt();
@@ -1975,7 +1999,7 @@ impl Project {
         #[derive(Clone, Copy)]
         enum Sup {
             Line { px: f64, py: f64, ux: f64, uy: f64, len: f64 }, // Vertex point, unit direction towards o,
-                                                                   // and length.
+            // and length.
             Circle { cx: f64, cy: f64, rad: f64, center: Id },
         }
         let support = |me: &Self, eid: Id, other: Id| -> Option<Sup> {
@@ -2224,14 +2248,17 @@ impl Project {
         let Some(s) = self.sketches.get(si) else { return 0.0 };
         let p = |id: Id| s.points.iter().find(|q| q.id == id).map(|q| (q.x, q.y));
         let r_of = |cid: Id| -> f64 {
-            s.entities.iter().find_map(|e| match e.kind {
-                EntityKind::Circle { center, r } if center == cid => Some(r),
-                EntityKind::Arc { center, a, .. } if center == cid => match (p(center), p(a)) {
-                    (Some((cx, cy)), Some((ax, ay))) => Some(((ax - cx).powi(2) + (ay - cy).powi(2)).sqrt()),
+            s.entities
+                .iter()
+                .find_map(|e| match e.kind {
+                    EntityKind::Circle { center, r } if center == cid => Some(r),
+                    EntityKind::Arc { center, a, .. } if center == cid => match (p(center), p(a)) {
+                        (Some((cx, cy)), Some((ax, ay))) => Some(((ax - cx).powi(2) + (ay - cy).powi(2)).sqrt()),
+                        _ => None,
+                    },
                     _ => None,
-                },
-                _ => None,
-            }).unwrap_or(0.0)
+                })
+                .unwrap_or(0.0)
         };
         let (Some((x1, y1)), Some((x2, y2))) = (p(c1), p(c2)) else { return 0.0 };
         let dist = ((x2 - x1).powi(2) + (y2 - y1).powi(2)).sqrt();
@@ -2241,7 +2268,11 @@ impl Project {
     /// chamfers.
     pub fn vertex_edges(&self, si: usize, pid: Id) -> Vec<Id> {
         let Some(s) = self.sketches.get(si) else { return Vec::new() };
-        s.entities.iter().filter(|e| matches!(e.kind, EntityKind::Line { a, b } if a == pid || b == pid) || matches!(e.kind, EntityKind::Arc { a, b, .. } if a == pid || b == pid)).map(|e| e.id).collect()
+        s.entities
+            .iter()
+            .filter(|e| matches!(e.kind, EntityKind::Line { a, b } if a == pid || b == pid) || matches!(e.kind, EntityKind::Arc { a, b, .. } if a == pid || b == pid))
+            .map(|e| e.id)
+            .collect()
     }
     /// Chamfer the corner at vertex `pid`, where exactly two lines meet. Returns whether it succeeded.
     pub fn chamfer_at_vertex(&mut self, si: usize, pid: Id, d: f64) -> bool {
@@ -2434,8 +2465,7 @@ impl Project {
             crate::model::DimTarget::Feature { node, key } => {
                 if let Some(e) = self.feat_dim(*node, key) {
                     if !e.trim().is_empty() {
-                        let vars: std::collections::HashMap<String, f64> =
-                            self.parameters.iter().filter(|p| !p.name.is_empty()).map(|p| (p.name.to_lowercase(), p.value)).collect();
+                        let vars: std::collections::HashMap<String, f64> = self.parameters.iter().filter(|p| !p.name.is_empty()).map(|p| (p.name.to_lowercase(), p.value)).collect();
                         return crate::expr::eval(e, &vars).ok();
                     }
                 }
@@ -2642,10 +2672,14 @@ impl Project {
         let Some(s) = self.sketches.get_mut(si) else { return };
         let pos: std::collections::HashMap<Id, (f64, f64)> = s.points.iter().map(|p| (p.id, (p.x, p.y))).collect();
         // Circle radii by centre, for reference diameter and radius dimensions.
-        let crad: std::collections::HashMap<Id, f64> = s.entities.iter().filter_map(|e| match e.kind {
-            EntityKind::Circle { center, r } => Some((center, r)),
-            _ => None,
-        }).collect();
+        let crad: std::collections::HashMap<Id, f64> = s
+            .entities
+            .iter()
+            .filter_map(|e| match e.kind {
+                EntityKind::Circle { center, r } => Some((center, r)),
+                _ => None,
+            })
+            .collect();
         for c in &mut s.constraints {
             match c {
                 Constraint::Distance { a, b, d, driven: true, axis, .. } => {
@@ -2779,7 +2813,13 @@ impl Project {
             })
             .collect();
         let n_new = new_contours.len();
-        let new_sig: Vec<(Point2, f64, bool)> = new_contours.iter().map(|c| { let (ctr, ar) = sig(&c.points); (ctr, ar, c.closed) }).collect();
+        let new_sig: Vec<(Point2, f64, bool)> = new_contours
+            .iter()
+            .map(|c| {
+                let (ctr, ar) = sig(&c.points);
+                (ctr, ar, c.closed)
+            })
+            .collect();
         let mut assign: Vec<Option<Id>> = vec![None; n_new];
         let mut used_old = vec![false; old.len()];
         // Phase one: match by provenance, that is, by the set of boundary entities. A loop is its entities
@@ -3054,13 +3094,7 @@ impl Project {
         // the origin is a CONSTRAINT, made by clicking it with the constraint tool - not by silently
         // sharing the id.
         let sys = self.sketches[si].system_ids();
-        if let Some(p) = self
-            .sketches[si]
-            .points
-            .iter()
-            .filter(|p| !sys.contains(&p.id))
-            .find(|p| ((p.x - x).powi(2) + (p.y - y).powi(2)).sqrt() <= eps)
-        {
+        if let Some(p) = self.sketches[si].points.iter().filter(|p| !sys.contains(&p.id)).find(|p| ((p.x - x).powi(2) + (p.y - y).powi(2)).sqrt() <= eps) {
             return p.id;
         }
         let id = self.alloc_id();
@@ -3083,9 +3117,7 @@ impl Project {
     /// A radius variable is keyed by centre id (see `solver::RadiusVar`), so two curves cannot share one centre
     /// node without their radii collapsing. Concentricity is a constraint, not a shared node.
     pub(super) fn is_radius_center(&self, si: usize, pid: Id) -> bool {
-        self.sketches.get(si).is_some_and(|s| {
-            s.entities.iter().any(|e| matches!(e.kind, EntityKind::Circle { center, .. } | EntityKind::Arc { center, .. } if center == pid))
-        })
+        self.sketches.get(si).is_some_and(|s| s.entities.iter().any(|e| matches!(e.kind, EntityKind::Circle { center, .. } | EntityKind::Arc { center, .. } if center == pid)))
     }
     /// Centre node of a radius curve (circle, arc, polygon, slot) at (x, y).
     ///
@@ -3269,8 +3301,26 @@ impl Project {
     pub fn add_sketch(&mut self, name: impl Into<String>, contours: Vec<Contour>, source: Option<Id>) -> Id {
         let contour_ids: Vec<Id> = contours.into_iter().map(|c| self.add_contour(c)).collect();
         let id = self.alloc_id();
-        self.sketches.push(Sketch { id, name: name.into(), contour_ids, source, points: Vec::new(), entities: Vec::new(), closed: false, constraints: Vec::new(), splines: Vec::new(), notes: Vec::new(), texts: Vec::new(), patterns: Vec::new(), projections: Vec::new(), plane: crate::feature::SketchPlane::default(), origin: 0, axis_pts: [0, 0],
-            frame: 0, origin_uv: None });
+        self.sketches.push(Sketch {
+            id,
+            name: name.into(),
+            contour_ids,
+            source,
+            points: Vec::new(),
+            entities: Vec::new(),
+            closed: false,
+            constraints: Vec::new(),
+            splines: Vec::new(),
+            notes: Vec::new(),
+            texts: Vec::new(),
+            patterns: Vec::new(),
+            projections: Vec::new(),
+            plane: crate::feature::SketchPlane::default(),
+            origin: 0,
+            axis_pts: [0, 0],
+            frame: 0,
+            origin_uv: None,
+        });
         id
     }
     /// Import a DXF or SVG as an editable sketch: the exact curves (`ProfEdge`) become typed sketcher entities,
@@ -3410,20 +3460,38 @@ impl Project {
         // Endpoints of the entities.
         for e in &s.entities {
             match e.kind {
-                EntityKind::Line { a, b } => { used.insert(a); used.insert(b); }
-                EntityKind::Arc { center, a, b, .. } => { used.insert(center); used.insert(a); used.insert(b); }
-                EntityKind::Circle { center, .. } => { used.insert(center); }
-                EntityKind::Ellipse { c, ma, mi } => { used.insert(c); used.insert(ma); used.insert(mi); }
+                EntityKind::Line { a, b } => {
+                    used.insert(a);
+                    used.insert(b);
+                }
+                EntityKind::Arc { center, a, b, .. } => {
+                    used.insert(center);
+                    used.insert(a);
+                    used.insert(b);
+                }
+                EntityKind::Circle { center, .. } => {
+                    used.insert(center);
+                }
+                EntityKind::Ellipse { c, ma, mi } => {
+                    used.insert(c);
+                    used.insert(ma);
+                    used.insert(mi);
+                }
             }
         }
         // Spline nodes.
         for sp in &s.splines {
-            for &p in &sp.points { used.insert(p); }
+            for &p in &sp.points {
+                used.insert(p);
+            }
         }
         s.points
             .iter()
             .filter(|p| !used.contains(&p.id))
-            .map(|p| { let w = frame.lift(Point2 { x: p.x, y: p.y }); [w.x, w.y, w.z] })
+            .map(|p| {
+                let w = frame.lift(Point2 { x: p.x, y: p.y });
+                [w.x, w.y, w.z]
+            })
             .collect()
     }
     /// Ids of the same isolated points, in the same order as `sketch_isolated_points`. The hole walls are named
@@ -3568,9 +3636,7 @@ impl Project {
             .contour_ids
             .iter()
             .copied()
-            .filter(|cid| {
-                self.contour_index(*cid).is_some_and(|i| self.contours[i].closed && self.contours[i].points.len() >= 3) && self.contour_profile_xy(*cid).is_some()
-            })
+            .filter(|cid| self.contour_index(*cid).is_some_and(|i| self.contours[i].closed && self.contours[i].points.len() >= 3) && self.contour_profile_xy(*cid).is_some())
             .collect();
         if ids.is_empty() {
             return Vec::new();
@@ -3954,12 +4020,7 @@ impl Project {
         // The nesting graph is not in the file either, and waiting for a sketch edit to create it would mean
         // two behaviours for one model. It is computed for every sketch that lacks one; after that it lives with
         // the sketch regeneration.
-        let need: Vec<Vec<Id>> = self
-            .sketches
-            .iter()
-            .map(|s| s.contour_ids.clone())
-            .filter(|ids| !ids.is_empty() && !ids.iter().any(|c| self.contours.parent_of(*c).is_some()))
-            .collect();
+        let need: Vec<Vec<Id>> = self.sketches.iter().map(|s| s.contour_ids.clone()).filter(|ids| !ids.is_empty() && !ids.iter().any(|c| self.contours.parent_of(*c).is_some())).collect();
         for ids in need {
             self.rebuild_contour_nesting(&ids);
         }
@@ -3969,11 +4030,7 @@ impl Project {
         for si in 0..self.sketches.len() {
             let before: Vec<(Id, f64, f64)> = self.sketches[si].points.iter().map(|p| (p.id, p.x, p.y)).collect();
             self.solve_sketch_inner(si, None, 120);
-            let moved = self.sketches[si]
-                .points
-                .iter()
-                .zip(before.iter())
-                .any(|(p, (id, x, y))| p.id != *id || (p.x - x).abs() > 1e-9 || (p.y - y).abs() > 1e-9);
+            let moved = self.sketches[si].points.iter().zip(before.iter()).any(|(p, (id, x, y))| p.id != *id || (p.x - x).abs() > 1e-9 || (p.y - y).abs() > 1e-9);
             if moved {
                 self.regen_sketch(si); // The points moved, so the contours are rebuilt; otherwise the profile
                                        // stays as it was.
@@ -3987,10 +4044,7 @@ impl Project {
             if let Some(b) = c.bbox() {
                 acc = Some(match acc {
                     None => b,
-                    Some(a) => Bbox {
-                        min: crate::geom::Point2::new(a.min.x.min(b.min.x), a.min.y.min(b.min.y)),
-                        max: crate::geom::Point2::new(a.max.x.max(b.max.x), a.max.y.max(b.max.y)),
-                    },
+                    Some(a) => Bbox { min: crate::geom::Point2::new(a.min.x.min(b.min.x), a.min.y.min(b.min.y)), max: crate::geom::Point2::new(a.max.x.max(b.max.x), a.max.y.max(b.max.y)) },
                 });
             }
         }
@@ -4110,11 +4164,7 @@ fn offset_arc_source(arcs: &[(Id, Id, Id, (f64, f64), f64)], lines: &[(Id, Id, (
     if let Some(a) = arcs.iter().find(|a| (a.3 .0 - c.0).hypot(a.3 .1 - c.1) < tol && ((r - a.4).abs() - dist.abs()).abs() < tol) {
         return OffsetSource::Arc { center: a.0, a: a.1, b: a.2 };
     }
-    lines
-        .iter()
-        .flat_map(|l| [(l.0, l.2), (l.1, l.3)])
-        .find(|(_, p)| (p.0 - c.0).hypot(p.1 - c.1) < tol && (r - dist.abs()).abs() < tol)
-        .map_or(OffsetSource::None, |(id, _)| OffsetSource::Corner(id))
+    lines.iter().flat_map(|l| [(l.0, l.2), (l.1, l.3)]).find(|(_, p)| (p.0 - c.0).hypot(p.1 - c.1) < tol && (r - dist.abs()).abs() < tol).map_or(OffsetSource::None, |(id, _)| OffsetSource::Corner(id))
 }
 
 /// THE CONSTRAINTS HOLDING AN OFFSET LOOP TO ITS SOURCE, one for each freedom of the copy and no more - a constraint

@@ -25,24 +25,10 @@ mod tests {
         match t {
             DrawTool::Draw => app.set_sk_tool(1),
             DrawTool::ClickOp => qymcad_ui_state::set_click_op(&mut qymcad_ui_state::tools_of!(app), &mut app.viewing.mode_3d, 1),
-            DrawTool::Modify => qymcad_ui_state::modify_button(
-                qymcad_ui_state::editing_of!(app),
-                &mut qymcad_ui_state::tools_of!(app),
-                app.sk_pat,
-                &app.tool_prefs,
-                1,
-            ),
+            DrawTool::Modify => qymcad_ui_state::modify_button(qymcad_ui_state::editing_of!(app), &mut qymcad_ui_state::tools_of!(app), app.sk_pat, &app.tool_prefs, 1),
             DrawTool::Move => qymcad_part::start_move_tool(&mut qymcad_ui_state::tools_of!(app), &mut app.status, 1),
             DrawTool::Pattern => qymcad_part::start_pattern(&mut qymcad_ui_state::tools_of!(app), &mut app.status, 1),
-            DrawTool::Dimension => qymcad_ui_state::set_dim_tool(
-                &mut qymcad_ui_state::tools_of!(app),
-                &mut app.viewing.mode_3d,
-                &app.project,
-                app.chosen.sel,
-                app.sketch_ses,
-                &mut app.status,
-                1,
-            ),
+            DrawTool::Dimension => qymcad_ui_state::set_dim_tool(&mut qymcad_ui_state::tools_of!(app), &mut app.viewing.mode_3d, &app.project, app.chosen.sel, app.sketch_ses, &mut app.status, 1),
             DrawTool::Command => app.start_feat_cmd(4),
             DrawTool::Measure => qymcad_ui_state::set_measure(&mut qymcad_ui_state::tools_of!(app), true),
             DrawTool::Place => app.start_prim_cmd(1),
@@ -54,7 +40,6 @@ mod tests {
     fn in_hand(app: &mut App) -> Vec<DrawTool> {
         qymcad_ui_state::armed_draw_tools(&qymcad_ui_state::tools_of!(app))
     }
-
 
     /// THE RULER GOES THROUGH A DOOR, and the door takes the tool rather than losing it.
     ///
@@ -74,14 +59,8 @@ mod tests {
         assert!(app.tools.armed.measuring(), "the door did not take the measuring tool");
 
         let bar = include_str!("../../../qymcad-part/src/lib.rs");
-        assert!(
-            crate::gui::render_source::has(bar, "qymcad_ui_state::set_measure(&mut qymcad_ui_state::tools_in!(bc), on)"),
-            "the ruler no longer goes through the door"
-        );
-        assert!(
-            !crate::gui::render_source::has(bar, "bc.measure.on = on"),
-            "the toolbar sets the flag itself again, and a deferred request will put it out"
-        );
+        assert!(crate::gui::render_source::has(bar, "qymcad_ui_state::set_measure(&mut qymcad_ui_state::tools_in!(bc), on)"), "the ruler no longer goes through the door");
+        assert!(!crate::gui::render_source::has(bar, "bc.measure.on = on"), "the toolbar sets the flag itself again, and a deferred request will put it out");
     }
 
     #[test]
@@ -110,10 +89,6 @@ mod tests {
                 }
             }
         }
-        assert!(
-            both.is_empty(),
-            "two drawing tools at once: the click goes to the wrong one while the person is certain they work with the last taken:\n{}",
-            both.join("\n")
-        );
+        assert!(both.is_empty(), "two drawing tools at once: the click goes to the wrong one while the person is certain they work with the last taken:\n{}", both.join("\n"));
     }
 }

@@ -50,11 +50,7 @@ mod tests {
             }
         }
 
-        assert!(
-            wrong.is_empty(),
-            "the program answers to more than one name, and each half works alone - which is why this goes unnoticed:\n{}",
-            wrong.join("\n")
-        );
+        assert!(wrong.is_empty(), "the program answers to more than one name, and each half works alone - which is why this goes unnoticed:\n{}", wrong.join("\n"));
     }
 
     /// AND THE OLD NAMES ARE GONE FROM THE CODE.

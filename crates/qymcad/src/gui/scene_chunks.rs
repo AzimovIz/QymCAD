@@ -299,13 +299,8 @@ mod indexed {
     fn the_triangles_that_come_out_are_the_ones_that_went_in() {
         let (app, pieces) = one_part();
         let mesh = &app.project.bodies.iter().find(|b| b.visible).expect("a visible body").mesh;
-        let want: Vec<[[f32; 3]; 3]> = (0..mesh.tris.len())
-            .map(|t| mesh.triangle(t).map(|p| [p.x as f32, p.y as f32, p.z as f32]))
-            .collect();
-        let got: Vec<[[f32; 3]; 3]> = pieces
-            .iter()
-            .flat_map(|p| p.idx.chunks(3).map(|c| [p.verts[c[0] as usize].pos, p.verts[c[1] as usize].pos, p.verts[c[2] as usize].pos]))
-            .collect();
+        let want: Vec<[[f32; 3]; 3]> = (0..mesh.tris.len()).map(|t| mesh.triangle(t).map(|p| [p.x as f32, p.y as f32, p.z as f32])).collect();
+        let got: Vec<[[f32; 3]; 3]> = pieces.iter().flat_map(|p| p.idx.chunks(3).map(|c| [p.verts[c[0] as usize].pos, p.verts[c[1] as usize].pos, p.verts[c[2] as usize].pos])).collect();
         assert_eq!(got.len(), want.len(), "the number of triangles changed");
         for (n, (g, w)) in got.iter().zip(&want).enumerate() {
             assert_eq!(g, w, "triangle {n} came out of the indices as another triangle");
@@ -364,11 +359,7 @@ mod fast_path {
             for m in &items {
                 let id = app.project.mesh_id(m.index).expect("the body has an id");
                 let dc = app.draw_ctx();
-                assert_eq!(
-                    m.ghost,
-                    qymcad_ui_state::body_is_ghost(&dc, m.index),
-                    "body {id:?} in context {ctx:?}: the scene and the model disagree about the foreign context"
-                );
+                assert_eq!(m.ghost, qymcad_ui_state::body_is_ghost(&dc, m.index), "body {id:?} in context {ctx:?}: the scene and the model disagree about the foreign context");
                 let want = app.project.body_display_transform(id, ctx);
                 assert_eq!(m.world, want, "body {id:?} in context {ctx:?}: the scene placed it by another frame");
             }

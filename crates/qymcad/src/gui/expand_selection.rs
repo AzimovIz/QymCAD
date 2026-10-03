@@ -67,22 +67,8 @@ pub(crate) const EXPANSIONS: &[Expansion] = &[
         // even find the face itself.
         build: |_, n| Query::Oriented { dir: n, tol_deg: 5.0 },
     },
-    Expansion {
-        key: "expand-topmost",
-        on_face: true,
-        on_edge: false,
-        gives_edges: false,
-        gives_many: false,
-        build: |_, _| Query::Extreme { axis: Axis::Z, max: true },
-    },
-    Expansion {
-        key: "expand-largest",
-        on_face: true,
-        on_edge: false,
-        gives_edges: false,
-        gives_many: false,
-        build: |_, _| Query::Largest,
-    },
+    Expansion { key: "expand-topmost", on_face: true, on_edge: false, gives_edges: false, gives_many: false, build: |_, _| Query::Extreme { axis: Axis::Z, max: true } },
+    Expansion { key: "expand-largest", on_face: true, on_edge: false, gives_edges: false, gives_many: false, build: |_, _| Query::Largest },
     Expansion {
         key: "expand-tangent-chain",
         on_face: false,
@@ -172,11 +158,7 @@ impl super::App {
             (None, Some((f, b))) => (f, Some(b)), // without this branch the menu stays silent in the fillet
             _ => return None,
         };
-        let n = body
-            .and_then(|b| self.project.regen_faces.get(&b))
-            .and_then(|fs| fs.iter().find(|x| x.id == f))
-            .map(|x| x.normal)
-            .unwrap_or([0.0, 0.0, 1.0]);
+        let n = body.and_then(|b| self.project.regen_faces.get(&b)).and_then(|fs| fs.iter().find(|x| x.id == f)).map(|x| x.normal).unwrap_or([0.0, 0.0, 1.0]);
         Some((Picked::Face(f), n))
     }
 
@@ -196,10 +178,10 @@ impl super::App {
             return None;
         }
         match self.tools.armed.cmd_kind() {
-            4 | 5 => Some((true, true)),           // fillet, chamfer — a set of EDGES
-            6 | 23 | 26 => Some((false, true)),    // shell, draft, remove face — a set of FACES
-            25 | 28 => Some((false, false)),       // push face, thicken — EXACTLY ONE face
-            _ => None,                             // the rest take no descriptions at all
+            4 | 5 => Some((true, true)),        // fillet, chamfer — a set of EDGES
+            6 | 23 | 26 => Some((false, true)), // shell, draft, remove face — a set of FACES
+            25 | 28 => Some((false, false)),    // push face, thicken — EXACTLY ONE face
+            _ => None,                          // the rest take no descriptions at all
         }
     }
 

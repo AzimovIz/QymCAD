@@ -110,11 +110,8 @@ fn system() -> String {
     static ONCE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     ONCE.get_or_init(|| {
         let arch = std::env::consts::ARCH;
-        let pretty = std::fs::read_to_string("/etc/os-release").ok().and_then(|t| {
-            t.lines()
-                .find_map(|l| l.strip_prefix("PRETTY_NAME=").map(|v| v.trim_matches('"').to_string()))
-                .filter(|v| !v.is_empty())
-        });
+        let pretty =
+            std::fs::read_to_string("/etc/os-release").ok().and_then(|t| t.lines().find_map(|l| l.strip_prefix("PRETTY_NAME=").map(|v| v.trim_matches('"').to_string())).filter(|v| !v.is_empty()));
         match pretty {
             Some(name) => format!("{name} ({} {arch})", std::env::consts::OS),
             None => format!("{} {arch}", std::env::consts::OS),

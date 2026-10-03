@@ -55,8 +55,6 @@ pub(super) fn rot_about_axis(origin: [f64; 3], dir: [f64; 3], deg: f64) -> [f64;
     [r[0], r[1], r[2], origin[0] - ro[0], r[3], r[4], r[5], origin[1] - ro[1], r[6], r[7], r[8], origin[2] - ro[2]]
 }
 
-
-
 /// A 3×4 row-major matrix rotating about the world axis `axis` (0 = X, 1 = Y, 2 = Z) by `deg` degrees.
 pub(super) fn rot_axis_mat(axis: u8, deg: f64) -> [f64; 12] {
     let (s, c) = deg.to_radians().sin_cos();
@@ -311,7 +309,9 @@ pub(super) fn tessellate_sketch_multi(points: &[SketchPoint], entities: &[Sketch
                         let po = pt(other).unwrap_or(pc);
                         let ang = (po.y - pc.y).atan2(po.x - pc.x);
                         let mut d = (back - ang).rem_euclid(std::f64::consts::TAU); // clockwise angle from the back direction
-                        if d < 1e-6 { d += std::f64::consts::TAU; } // the edge we came along goes last in the queue
+                        if d < 1e-6 {
+                            d += std::f64::consts::TAU;
+                        } // the edge we came along goes last in the queue
                         d
                     };
                     cw(k1).partial_cmp(&cw(k2)).unwrap_or(std::cmp::Ordering::Equal)
@@ -407,10 +407,16 @@ pub(super) fn arr_intersect(x: ArrCurve, y: ArrCurve) -> Vec<(f64, f64)> {
         // the same ailment as one piece of knowledge kept in two places: relax one and the other keeps
         // cutting.
         (Line { a, b }, Circle { c, r }) | (Circle { c, r }, Line { a, b }) => seg_circle_t(a.0, a.1, b.0, b.1, c.0, c.1, r).into_iter().map(|t| on_seg(a, b, t)).collect(),
-        (Line { a, b }, Arc { c, r, a0, a1, ccw, .. }) | (Arc { c, r, a0, a1, ccw, .. }, Line { a, b }) => seg_circle_t(a.0, a.1, b.0, b.1, c.0, c.1, r).into_iter().map(|t| on_seg(a, b, t)).filter(|&p| arc_ok(c, a0, a1, ccw, p)).collect(),
+        (Line { a, b }, Arc { c, r, a0, a1, ccw, .. }) | (Arc { c, r, a0, a1, ccw, .. }, Line { a, b }) => {
+            seg_circle_t(a.0, a.1, b.0, b.1, c.0, c.1, r).into_iter().map(|t| on_seg(a, b, t)).filter(|&p| arc_ok(c, a0, a1, ccw, p)).collect()
+        }
         (Circle { c: c1, r: r1 }, Circle { c: c2, r: r2 }) => circle_circle_pts(c1.0, c1.1, r1, c2.0, c2.1, r2),
-        (Circle { c: c1, r: r1 }, Arc { c: c2, r: r2, a0, a1, ccw, .. }) | (Arc { c: c2, r: r2, a0, a1, ccw, .. }, Circle { c: c1, r: r1 }) => circle_circle_pts(c1.0, c1.1, r1, c2.0, c2.1, r2).into_iter().filter(|&p| arc_ok(c2, a0, a1, ccw, p)).collect(),
-        (Arc { c: c1, r: r1, a0: s1, a1: e1, ccw: w1, .. }, Arc { c: c2, r: r2, a0: s2, a1: e2, ccw: w2, .. }) => circle_circle_pts(c1.0, c1.1, r1, c2.0, c2.1, r2).into_iter().filter(|&p| arc_ok(c1, s1, e1, w1, p) && arc_ok(c2, s2, e2, w2, p)).collect(),
+        (Circle { c: c1, r: r1 }, Arc { c: c2, r: r2, a0, a1, ccw, .. }) | (Arc { c: c2, r: r2, a0, a1, ccw, .. }, Circle { c: c1, r: r1 }) => {
+            circle_circle_pts(c1.0, c1.1, r1, c2.0, c2.1, r2).into_iter().filter(|&p| arc_ok(c2, a0, a1, ccw, p)).collect()
+        }
+        (Arc { c: c1, r: r1, a0: s1, a1: e1, ccw: w1, .. }, Arc { c: c2, r: r2, a0: s2, a1: e2, ccw: w2, .. }) => {
+            circle_circle_pts(c1.0, c1.1, r1, c2.0, c2.1, r2).into_iter().filter(|&p| arc_ok(c1, s1, e1, w1, p) && arc_ok(c2, s2, e2, w2, p)).collect()
+        }
     }
 }
 
@@ -494,7 +500,16 @@ pub(super) fn arrangement_regions_prov(points: &[SketchPoint], entities: &[Sketc
     }
     // a directed edge of the arrangement: a line or an arc, where cx, cy, r and ccw describe the direction
     // from `from` to `to`
-    struct DE { from: usize, to: usize, line: bool, cx: f64, cy: f64, r: f64, ccw: bool, ci: usize }
+    struct DE {
+        from: usize,
+        to: usize,
+        line: bool,
+        cx: f64,
+        cy: f64,
+        r: f64,
+        ccw: bool,
+        ci: usize,
+    }
     let mut edges: Vec<DE> = Vec::new();
     let mut seen_line: std::collections::HashSet<(usize, usize)> = std::collections::HashSet::new(); // B28
     for (ci, cu) in curves.iter().enumerate() {
@@ -554,11 +569,19 @@ pub(super) fn arrangement_regions_prov(points: &[SketchPoint], entities: &[Sketc
             ArrCurve::Arc { c, r, a0, ccw, pa, pb, .. } => {
                 let sweep = {
                     let a1 = (pb.1 - c.1).atan2(pb.0 - c.0);
-                    if ccw { (a1 - a0).rem_euclid(TAU) } else { (a0 - a1).rem_euclid(TAU) }
+                    if ccw {
+                        (a1 - a0).rem_euclid(TAU)
+                    } else {
+                        (a0 - a1).rem_euclid(TAU)
+                    }
                 };
                 let to_param = |p: (f64, f64)| {
                     let ang = (p.1 - c.1).atan2(p.0 - c.0);
-                    if ccw { (ang - a0).rem_euclid(TAU) } else { (a0 - ang).rem_euclid(TAU) }
+                    if ccw {
+                        (ang - a0).rem_euclid(TAU)
+                    } else {
+                        (a0 - ang).rem_euclid(TAU)
+                    }
                 };
                 // (parameter along the arc, the actual point): the ends of the arc plus the cuts inside the span
                 let mut aw: Vec<(f64, (f64, f64))> = vec![(0.0, pa), (sweep, pb)];
@@ -675,7 +698,24 @@ pub(super) fn arrangement_regions_prov(points: &[SketchPoint], entities: &[Sketc
             cur = nx;
         }
         if std::env::var("QYM_ARR_DEBUG").is_ok() {
-            let path: Vec<String> = face.iter().map(|&ei| { let e = &edges[ei]; format!("{}->{}{}", e.from, e.to, if e.line { "L" } else if e.ccw { "+" } else { "-" }) }).collect();
+            let path: Vec<String> = face
+                .iter()
+                .map(|&ei| {
+                    let e = &edges[ei];
+                    format!(
+                        "{}->{}{}",
+                        e.from,
+                        e.to,
+                        if e.line {
+                            "L"
+                        } else if e.ccw {
+                            "+"
+                        } else {
+                            "-"
+                        }
+                    )
+                })
+                .collect();
             eprintln!("[arr] walk start={start} ok={ok} len={} path={}", face.len(), path.join(" "));
         }
         if !ok || face.len() < 2 {
@@ -810,4 +850,3 @@ pub(super) fn tessellate_spline_hermite(pts: &[Point2], tangents: &[Option<[f64;
         Contour::open(out)
     }
 }
-

@@ -18,12 +18,7 @@ mod tests {
     /// A point ON THE BODY that can be clicked: the centre of the topmost face.
     fn aim(app: &App, body: Id) -> [f64; 3] {
         let wt = app.project.body_display_transform(body, qymcad_ui_state::current_ctx_id(&app.active_path, &app.project));
-        let f = app
-            .project
-            .regen_faces
-            .get(&body)
-            .and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z)))
-            .expect("the body has faces");
+        let f = app.project.regen_faces.get(&body).and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z))).expect("the body has faces");
         qymcad_core::feature::apply12(&wt, [f.centroid.x, f.centroid.y, f.centroid.z])
     }
 
@@ -145,10 +140,7 @@ mod tests {
 
         let after = travel_vector(&mut app, jid, second, 14.0);
         assert!(length(after) > 1e-3, "after the swap the part stopped moving at all: it travelled {:.4} ({after:?})", length(after));
-        assert!(
-            dot(before, after) < 0.0,
-            "swapping the roles must reverse the reckoning of the travel: before the swap {before:?}, after it {after:?} — the side did not change"
-        );
+        assert!(dot(before, after) < 0.0, "swapping the roles must reverse the reckoning of the travel: before the swap {before:?}, after it {after:?} — the side did not change");
     }
 
     /// SWAPPING THE ROLES LOSES NOTHING BUT THE ORDER.

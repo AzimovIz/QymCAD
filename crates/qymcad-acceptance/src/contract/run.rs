@@ -578,7 +578,10 @@ fn matches(s: &mut Session, want: &Outcome) -> Result<(), String> {
             let sk = doc.sketches.last().ok_or_else(|| "the document holds no sketch".to_string())?.clone();
             let got = (sk.points, sk.lines, sk.arcs, sk.circles, sk.ellipses, sk.splines, sk.texts, sk.notes);
             if got != (points, lines, arcs, circles, ellipses, splines, texts, notes) {
-                return Err(format!("the sketch holds {got:?} (points, lines, arcs, circles, ellipses, splines, texts, notes), it should hold {:?}", (points, lines, arcs, circles, ellipses, splines, texts, notes)));
+                return Err(format!(
+                    "the sketch holds {got:?} (points, lines, arcs, circles, ellipses, splines, texts, notes), it should hold {:?}",
+                    (points, lines, arcs, circles, ellipses, splines, texts, notes)
+                ));
             }
             if constraints.is_some_and(|want| sk.constraints != want) {
                 return Err(format!("the sketch holds {} constraints and dimensions, it should hold {:?}", sk.constraints, constraints));
@@ -1408,10 +1411,8 @@ fn result(tool: &Tool) {
         return;
     }
     // THE ROUND TRIPS OF THE ORACLES on the result: undo and redo, rebuilding everything, saving and opening
-    let problems: Vec<String> = [crate::oracles::undo_redo(&mut s), crate::oracles::rebuild_everything(&mut s), crate::oracles::save_open(&mut s, &scratch(tool, "round-trip"))]
-        .into_iter()
-        .filter_map(Result::err)
-        .collect();
+    let problems: Vec<String> =
+        [crate::oracles::undo_redo(&mut s), crate::oracles::rebuild_everything(&mut s), crate::oracles::save_open(&mut s, &scratch(tool, "round-trip"))].into_iter().filter_map(Result::err).collect();
     assert!(problems.is_empty(), "{}: the result does not survive its round trips:\n{}", tool.id, problems.join("\n"));
 }
 
@@ -1755,5 +1756,11 @@ fn help(tool: &Tool) {
     let window = s.word("help-title");
     let frame = s.widgets().into_iter().find(|w| w.kind == qymcad::Kind::Window && w.label == window).map(|w| w.rect);
     let shown_in_it = frame.is_some_and(|f| s.words_at().iter().any(|(w, r)| *w == title && f.contains(r.center())));
-    assert!(shown_in_it, "{}: F1 with the tool in hand: the help window is {}, and the article {title:?} is not in it; windows open: {:?}", tool.id, if frame.is_some() { "open" } else { "not open" }, s.windows());
+    assert!(
+        shown_in_it,
+        "{}: F1 with the tool in hand: the help window is {}, and the article {title:?} is not in it; windows open: {:?}",
+        tool.id,
+        if frame.is_some() { "open" } else { "not open" },
+        s.windows()
+    );
 }

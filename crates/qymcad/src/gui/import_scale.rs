@@ -60,7 +60,7 @@ pub(crate) fn land_mesh(wc: &mut WinCtx, path: String, format: MeshFormat, piece
     // THE FILE'S GROUPS AS SUBASSEMBLIES: a glTF node that holds others, at its place in the group above it
     let nodes = tops.into_iter().map(|e| e.node(&stem)).collect();
     let created = wc.project.import_tree_as_parts(nodes, source, &stem); // one tested topology operation of the core
-    // a part of the file reads as one already here ("Part 1" of the file beside "Part 1" of the document): numbered
+                                                                         // a part of the file reads as one already here ("Part 1" of the file beside "Part 1" of the document): numbered
     if let Some(root) = created {
         let came: Vec<qymcad_core::model::Id> = std::iter::once(root).chain(wc.project.descendants(root)).collect();
         wc.project.name_apart(&came, &crate::i18n::name);
@@ -82,7 +82,8 @@ pub(crate) fn land_mesh(wc: &mut WinCtx, path: String, format: MeshFormat, piece
     *wc.status = said;
     let meshes = (first..wc.project.bodies.len()).filter_map(|i| wc.project.mesh_id(i)).zip(read).map(|(id, (m, f))| (id, m, f)).collect();
     let unitless = matches!(format, MeshFormat::Stl | MeshFormat::Obj | MeshFormat::Ply);
-    let ask = ImportScale { file: super::file_name(&path), format: super::mesh_entry(format).name().to_string(), unitless, factor: 1.0, applied: 1.0, span, meshes, solids: Vec::new(), places, again: None };
+    let ask =
+        ImportScale { file: super::file_name(&path), format: super::mesh_entry(format).name().to_string(), unitless, factor: 1.0, applied: 1.0, span, meshes, solids: Vec::new(), places, again: None };
     ask_or_keep(wc, ask);
 }
 
@@ -115,14 +116,23 @@ impl Entry {
     fn node(self, stem: &str) -> qymcad_core::model::ImportNode {
         match self {
             Entry::Piece(n) => n,
-            Entry::Group { name, place, kids, .. } => qymcad_core::model::ImportNode { name: if name.is_empty() { stem.to_string() } else { name }, place, children: kids.into_iter().map(|k| k.node(stem)).collect(), ..Default::default() },
+            Entry::Group { name, place, kids, .. } => {
+                qymcad_core::model::ImportNode { name: if name.is_empty() { stem.to_string() } else { name }, place, children: kids.into_iter().map(|k| k.node(stem)).collect(), ..Default::default() }
+            }
         }
     }
 }
 
 /// Lay in the solids read from `path` as the file's tree of subassemblies and parts, then ask about their scale or
 /// keep them as they are.
-pub(crate) fn land_exact(wc: &mut WinCtx, path: String, format: qymcad_kernel::ExactFormat, bodies: Vec<qymcad_kernel::Body>, shapes: Vec<qymcad_kernel::Shape>, nodes: Vec<qymcad_kernel::ImportNode>) {
+pub(crate) fn land_exact(
+    wc: &mut WinCtx,
+    path: String,
+    format: qymcad_kernel::ExactFormat,
+    bodies: Vec<qymcad_kernel::Body>,
+    shapes: Vec<qymcad_kernel::Shape>,
+    nodes: Vec<qymcad_kernel::ImportNode>,
+) {
     keep_pending(wc);
     *wc.dxf_path = Some(path.clone()); // the next file chooser opens where this file was
     let nbodies = bodies.len();

@@ -99,16 +99,34 @@ fn rect_dims_then_fillet_stays_solvable() {
     // degenerate, so geometry is not reddened at all. Only conflicting dimensions are, through
     // `sketch_conflicts`, which is reliable on geometry. A filleted rectangle has no conflicts.
     let has_fillet = p.sketches[si].constraints.iter().any(|c| matches!(c, Constraint::Tangent { .. } | Constraint::CircleTangent { .. }));
-    let flagged: Vec<usize> = red.iter().copied().filter(|&ci| {
-        let c = &p.sketches[si].constraints[ci];
-        let is_dim = matches!(c, Constraint::Distance { .. } | Constraint::Angle { .. } | Constraint::Diameter { .. } | Constraint::DistancePL { .. } | Constraint::AngleLines { .. } | Constraint::ArcLength { .. } | Constraint::EdgeDistance { .. });
-        !is_dim && !has_fillet // geometric redundancy is not reddened where fillets are present
-    }).collect();
+    let flagged: Vec<usize> = red
+        .iter()
+        .copied()
+        .filter(|&ci| {
+            let c = &p.sketches[si].constraints[ci];
+            let is_dim = matches!(
+                c,
+                Constraint::Distance { .. }
+                    | Constraint::Angle { .. }
+                    | Constraint::Diameter { .. }
+                    | Constraint::DistancePL { .. }
+                    | Constraint::AngleLines { .. }
+                    | Constraint::ArcLength { .. }
+                    | Constraint::EdgeDistance { .. }
+            );
+            !is_dim && !has_fillet // geometric redundancy is not reddened where fillets are present
+        })
+        .collect();
     eprintln!("what the interface actually reddens: {flagged:?}");
     assert!(flagged.is_empty(), "no constraint should be reddened on a filleted rectangle: {flagged:?}");
 
     // Extrusion: there has to be a closed contour with an area, or it cannot be extruded.
-    let closed: Vec<_> = p.sketches[si].contour_ids.iter().copied().filter(|cid| p.contour_index(*cid).map(|i| p.contours[i].closed && p.contours[i].points.len() >= 3).unwrap_or(false) && p.contour_profile_xy(*cid).is_some()).collect();
+    let closed: Vec<_> = p.sketches[si]
+        .contour_ids
+        .iter()
+        .copied()
+        .filter(|cid| p.contour_index(*cid).map(|i| p.contours[i].closed && p.contours[i].points.len() >= 3).unwrap_or(false) && p.contour_profile_xy(*cid).is_some())
+        .collect();
     eprintln!("closed contours available for extrusion: {}", closed.len());
     assert!(!closed.is_empty(), "a closed contour exists, so the filleted rectangle can be extruded");
 }

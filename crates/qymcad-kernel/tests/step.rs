@@ -15,9 +15,13 @@ mod enc {
         ProfEdge::Circle { center: Point2::new(cx, cy), r }
     }
     /// A whole profile: the first loop is the outer one and the rest are holes.
-    pub fn prof(loops: &[&[ProfEdge]]) -> Vec<f64> { encode_loops(loops) }
+    pub fn prof(loops: &[&[ProfEdge]]) -> Vec<f64> {
+        encode_loops(loops)
+    }
     /// A single loop without the contour count, as loft sections take it.
-    pub fn one_loop(edges: &[ProfEdge]) -> Vec<f64> { encode_loop(edges) }
+    pub fn one_loop(edges: &[ProfEdge]) -> Vec<f64> {
+        encode_loop(edges)
+    }
 }
 
 #[test]
@@ -135,8 +139,8 @@ fn hole_stepped_counterbore_countersink_cut() {
         Shape::extrude_profile(&d, h).expect("the cube")
     };
     let base = box20(20.0).tessellate(0.4)[0].1.len(); // six faces
-    // the frame sits at the centre of the top face with Z pointing outward, and the tool goes down into the
-    // body
+                                                       // the frame sits at the centre of the top face with Z pointing outward, and the tool goes down into the
+                                                       // body
     let pl = [1.0, 0.0, 0.0, 5.0, 0.0, 1.0, 0.0, 5.0, 0.0, 0.0, 1.0, 20.0];
     let cb = box20(20.0).hole_stepped(qymcad_core::model::HoleTool { kind: 1, diameter: 4.0, depth: 15.0, dia2: 8.0, depth2: 5.0 }, pl, &[]).expect("the counterbore");
     assert!(cb.tessellate(0.4)[0].1.len() > base, "the counterbore added faces");
@@ -169,7 +173,7 @@ fn sweep_square_along_z_makes_prism() {
     // the path: one contour of a single segment from (0,0) to (0,20) in the local plane of the path
     let path = enc::prof(&[&[enc::line(0.0, 0.0, 0.0, 20.0)]]);
     let ident = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]; // the profile in the world XY
-    // the placement of the path sends the local Y to the world +Z, so the segment runs up along Z
+                                                                              // the placement of the path sends the local Y to the world +Z, so the segment runs up along Z
     let path_tf = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
     let s = Shape::sweep_profile(&prof, &ident, &path, &path_tf).expect("the sweep built");
     let (m, _f) = s.tessellate(0.3).remove(0);
@@ -440,7 +444,10 @@ fn draft_tilts_side_face_about_neutral_plane() {
     let span_x = |zlo: f64, zhi: f64| -> f64 {
         let xs: Vec<f64> = m.verts.iter().filter(|p| p.z > zlo && p.z < zhi).map(|p| p.x).collect();
         let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
-        for x in xs { lo = lo.min(x); hi = hi.max(x); }
+        for x in xs {
+            lo = lo.min(x);
+            hi = hi.max(x);
+        }
         hi - lo
     };
     let bottom_w = span_x(-0.5, 0.5);

@@ -95,11 +95,6 @@ mod tests {
                 }
             }
         }
-        assert!(
-            sins.is_empty(),
-            "the project path is assigned past `set_project_path` ({}) — the file will not reach the recent list:\n{}",
-            sins.len(),
-            sins.join("\n")
-        );
+        assert!(sins.is_empty(), "the project path is assigned past `set_project_path` ({}) — the file will not reach the recent list:\n{}", sins.len(), sins.join("\n"));
     }
 }

@@ -30,11 +30,7 @@ fn moving_the_cut_sketch_keeps_the_face_names() {
     // threads, and they are what produce positional faces (32 out of 68), which a plain cut does not
     // produce at all.
     let (_r00, sh00) = qymcad_testkit::regenerate(&mut p);
-    let round = p
-        .regen_edges
-        .get(&body)
-        .and_then(|es| es.iter().find(|e| e.radius > 1e-6).map(|e| e.id))
-        .unwrap_or(0);
+    let round = p.regen_edges.get(&body).and_then(|es| es.iter().find(|e| e.radius > 1e-6).map(|e| e.id)).unwrap_or(0);
     let body = if round != 0 {
         let t = p.add_thread(body, round, qymcad_core::thread::ThreadSpec { nominal_d: 40.0, ..Default::default() }, 10.0, 0.0, 0.0); // M40 on the cylinder of 40
         eprintln!("SETUP: a thread on edge {round}, body {t}");
@@ -94,15 +90,8 @@ fn moving_the_cut_sketch_keeps_the_face_names() {
 
     let (after, named_after) = names_of(&p, watch);
     let survived = before.iter().filter(|x| after.contains(x)).count();
-    eprintln!(
-        "MEASURED: faces {} -> {}, survived {survived}; from the recipe it was {named_before}, now {named_after}",
-        before.len(),
-        after.len()
-    );
-    let lost_named = before
-        .iter()
-        .filter(|x| qymcad_core::names::NameTable::is_named(**x) && !after.contains(x))
-        .count();
+    eprintln!("MEASURED: faces {} -> {}, survived {survived}; from the recipe it was {named_before}, now {named_after}", before.len(), after.len());
+    let lost_named = before.iter().filter(|x| qymcad_core::names::NameTable::is_named(**x) && !after.contains(x)).count();
     eprintln!("     of which RECIPE names lost: {lost_named}");
     assert_eq!(lost_named, 0, "moving a sketch point erased {lost_named} recipe-based face names");
 }

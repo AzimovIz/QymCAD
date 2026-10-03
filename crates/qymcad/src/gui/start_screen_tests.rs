@@ -30,7 +30,10 @@ mod tests {
         assert!(!app.project.timeline.is_empty(), "setup: the timeline must hold something");
 
         app.win.show_start(true);
-        assert!(!crate::gui::start_screen::start_screen_visible(&app.win, &app.project, &app.disk.project_path), "the screen covered a document with geometry — that is how it gets closed without being read");
+        assert!(
+            !crate::gui::start_screen::start_screen_visible(&app.win, &app.project, &app.disk.project_path),
+            "the screen covered a document with geometry — that is how it gets closed without being read"
+        );
     }
 
     /// A FILE IS OPEN, SO THE SCREEN IS GONE. A person came to work, not to choose where to begin.
@@ -50,7 +53,10 @@ mod tests {
         app.win.show_start(false);
         assert!(!crate::gui::start_screen::start_screen_visible(&app.win, &app.project, &app.disk.project_path), "a closed screen must stay closed");
         // and on that same empty document it does not raise itself
-        assert!(!crate::gui::start_screen::start_screen_visible(&app.win, &app.project, &app.disk.project_path), "the screen raised itself — that is how it becomes a modal that gets closed without being read");
+        assert!(
+            !crate::gui::start_screen::start_screen_visible(&app.win, &app.project, &app.disk.project_path),
+            "the screen raised itself — that is how it becomes a modal that gets closed without being read"
+        );
     }
 
     /// THE MENU ITEM FOR THE START SCREEN WORKS. Reported behaviour: clicking it opens nothing.
@@ -66,7 +72,10 @@ mod tests {
         assert!(!crate::gui::start_screen::start_screen_visible(&app.win, &app.project, &app.disk.project_path), "setup: by itself the screen does not raise over work");
 
         app.win.start_asked = true; // the same thing the menu item does
-        assert!(crate::gui::start_screen::start_screen_visible(&app.win, &app.project, &app.disk.project_path), "it was asked for from the menu and the screen did not open; that is the reported complaint");
+        assert!(
+            crate::gui::start_screen::start_screen_visible(&app.win, &app.project, &app.disk.project_path),
+            "it was asked for from the menu and the screen did not open; that is the reported complaint"
+        );
     }
 
     /// ...AND IT CLOSES rather than sticking open over the document.
@@ -100,7 +109,6 @@ mod tests {
         assert_ne!(app.project.active_ctx(), root, "the part must be the active one rather than the root: nothing can be drawn in the root");
     }
 
-
     /// THE SCREEN FITS INSIDE THE WINDOW. Written from a reported screenshot.
     ///
     /// Reported behaviour: pressing the home screen menu item opened something that spilled outside
@@ -133,17 +141,10 @@ mod tests {
         // READ WHAT THE CODE PUBLISHED, not egui's own identifier. Rebuilding that identifier by hand is
         // what broke this check on the upgrade: a window derives it from `Atoms::text()`, which returns an
         // `Option`, and hashing an `Option` is not hashing a string.
-        let rect: egui::Rect = ctx
-            .data(|d| d.get_temp(egui::Id::new(super::super::start_screen::START_RECT)))
-            .expect("the start screen must be on the screen");
+        let rect: egui::Rect = ctx.data(|d| d.get_temp(egui::Id::new(super::super::start_screen::START_RECT))).expect("the start screen must be on the screen");
         let size = rect.size();
         assert!(size.x > 100.0, "the start screen was not drawn at all ({} px)", size.x);
-        assert!(
-            size.x <= screen.width() * 0.75,
-            "the start screen took {} px on a screen of {} — it spills out of the window and the captions clip",
-            size.x,
-            screen.width()
-        );
+        assert!(size.x <= screen.width() * 0.75, "the start screen took {} px on a screen of {} — it spills out of the window and the captions clip", size.x, screen.width());
         assert!(size.y <= screen.height() * 0.9, "the start screen took {} px in height on a screen of {}", size.y, screen.height());
     }
 }

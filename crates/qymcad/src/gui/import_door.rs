@@ -216,7 +216,11 @@ pub(crate) mod tests {
     #[test]
     fn into_an_assembly_the_door_offers_what_can_become_a_part() {
         let names: Vec<String> = import_filters(Want::Part).into_iter().skip(1).map(|(n, _)| n).collect();
-        assert_eq!(names, vec!["STEP".to_string(), "IGES".to_string(), "STL".to_string(), "OBJ".to_string(), "PLY".to_string(), "glTF".to_string(), "3MF".to_string(), "AMF".to_string()], "the assembly's door offers {names:?}");
+        assert_eq!(
+            names,
+            vec!["STEP".to_string(), "IGES".to_string(), "STL".to_string(), "OBJ".to_string(), "PLY".to_string(), "glTF".to_string(), "3MF".to_string(), "AMF".to_string()],
+            "the assembly's door offers {names:?}"
+        );
     }
 
     /// THE FILE MENU HAS ONE DOOR, and the four it replaced are gone.
@@ -312,7 +316,10 @@ pub(crate) mod tests {
         let step = dir.join("cube.step");
         qymcad_kernel::write_step(&[(&cube, qymcad_core::feature::PLACE_IDENTITY)], &step.to_string_lossy()).expect("the STEP is written");
         let obj = dir.join("two-cubes.obj");
-        let cube = |at: f64| qymcad_core::geom::Mesh { verts: [[0.0, 0.0, 0.0], [10.0, 0.0, 0.0], [0.0, 10.0, 0.0], [0.0, 0.0, 10.0]].iter().map(|p| qymcad_core::geom::Point3::new(p[0] + at, p[1], p[2])).collect(), tris: vec![[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]] };
+        let cube = |at: f64| qymcad_core::geom::Mesh {
+            verts: [[0.0, 0.0, 0.0], [10.0, 0.0, 0.0], [0.0, 10.0, 0.0], [0.0, 0.0, 10.0]].iter().map(|p| qymcad_core::geom::Point3::new(p[0] + at, p[1], p[2])).collect(),
+            tris: vec![[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]],
+        };
         qymcad_io::export_obj(&[cube(0.0), cube(30.0)], &obj.to_string_lossy()).expect("the OBJ is written");
         let ply = dir.join("tetra.ply");
         qymcad_io::export_ply(&[cube(0.0)], &ply.to_string_lossy()).expect("the PLY is written");
@@ -322,7 +329,16 @@ pub(crate) mod tests {
         qymcad_io::export_3mf(&[cube(0.0), cube(30.0)], &three.to_string_lossy()).expect("the 3MF is written");
         let amf = dir.join("two-cubes.amf");
         qymcad_io::export_amf(&[cube(0.0), cube(30.0)], &amf.to_string_lossy()).expect("the AMF is written");
-        for (path, says) in [(step.to_string_lossy().into_owned(), "STEP"), (igs.to_string_lossy().into_owned(), "IGES"), (stl.to_string_lossy().into_owned(), "STL"), (obj.to_string_lossy().into_owned(), "OBJ"), (ply.to_string_lossy().into_owned(), "PLY"), (glb.to_string_lossy().into_owned(), "glTF"), (three.to_string_lossy().into_owned(), "3MF"), (amf.to_string_lossy().into_owned(), "AMF")] {
+        for (path, says) in [
+            (step.to_string_lossy().into_owned(), "STEP"),
+            (igs.to_string_lossy().into_owned(), "IGES"),
+            (stl.to_string_lossy().into_owned(), "STL"),
+            (obj.to_string_lossy().into_owned(), "OBJ"),
+            (ply.to_string_lossy().into_owned(), "PLY"),
+            (glb.to_string_lossy().into_owned(), "glTF"),
+            (three.to_string_lossy().into_owned(), "3MF"),
+            (amf.to_string_lossy().into_owned(), "AMF"),
+        ] {
             let (mut app, ctx) = running();
             let before = app.project.bodies.len();
             answer(&mut app, &ctx, Want::Anything, &path);
@@ -474,7 +490,13 @@ pub(crate) mod tests {
         settle(&mut app, &ctx);
         let _ = frame(&mut app, &ctx, key(egui::Key::Enter)); // the window about the unit, as the file has it
         let _ = frame(&mut app, &ctx, Vec::new());
-        let group = app.project.components.iter().find(|c| c.name == "pair" && c.kind == qymcad_core::feature::ComponentKind::Assembly).map(|c| c.id).unwrap_or_else(|| panic!("no subassembly under the file's name; the tree: {:?}", app.project.components.iter().map(|c| &c.name).collect::<Vec<_>>()));
+        let group = app
+            .project
+            .components
+            .iter()
+            .find(|c| c.name == "pair" && c.kind == qymcad_core::feature::ComponentKind::Assembly)
+            .map(|c| c.id)
+            .unwrap_or_else(|| panic!("no subassembly under the file's name; the tree: {:?}", app.project.components.iter().map(|c| &c.name).collect::<Vec<_>>()));
         let parts: Vec<(String, usize)> = app.project.components.iter().filter(|c| c.parent == Some(group)).map(|c| (c.name.clone(), app.project.component_bodies(c.id).len())).collect();
         assert_eq!(parts, [("bolt".to_string(), 1), ("plate".to_string(), 1)], "a piece per part, each holding its body");
         assert_eq!(app.disk.edits.undo.len(), steps + 1, "the import is not one step of undo");
@@ -492,7 +514,12 @@ pub(crate) mod tests {
         settle(&mut app, &ctx);
         let _ = frame(&mut app, &ctx, key(egui::Key::Enter));
         let _ = frame(&mut app, &ctx, Vec::new());
-        let lone = app.project.components.iter().find(|c| c.name == "lone").unwrap_or_else(|| panic!("no part under the file's name; the tree: {:?}", app.project.components.iter().map(|c| &c.name).collect::<Vec<_>>()));
+        let lone = app
+            .project
+            .components
+            .iter()
+            .find(|c| c.name == "lone")
+            .unwrap_or_else(|| panic!("no part under the file's name; the tree: {:?}", app.project.components.iter().map(|c| &c.name).collect::<Vec<_>>()));
         assert_eq!((lone.kind, app.project.component_bodies(lone.id).len()), (qymcad_core::feature::ComponentKind::Part, 1), "one piece is one part");
     }
 
@@ -635,7 +662,10 @@ pub(crate) mod tests {
     }
 
     fn wheel(at: egui::Pos2) -> Vec<egui::Event> {
-        vec![egui::Event::PointerMoved(at), egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: egui::vec2(0.0, 120.0), phase: egui::TouchPhase::Move, modifiers: Default::default() }]
+        vec![
+            egui::Event::PointerMoved(at),
+            egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: egui::vec2(0.0, 120.0), phase: egui::TouchPhase::Move, modifiers: Default::default() },
+        ]
     }
 
     /// A tetrahedron with legs of `side`, as a 3MF in millimetres by its own word.
@@ -670,7 +700,8 @@ pub(crate) mod tests {
             let _ = frame(&mut app, &ctx, vec![egui::Event::PointerMoved(r.center())]); // the hand comes over the view first
             let _ = frame(&mut app, &ctx, wheel(r.center()));
             for _ in 0..10 {
-                let _ = frame(&mut app, &ctx, vec![egui::Event::PointerMoved(r.center())]); // the wheel is smoothed over frames
+                let _ = frame(&mut app, &ctx, vec![egui::Event::PointerMoved(r.center())]);
+                // the wheel is smoothed over frames
             }
             let now = app.viewing.cam.scale;
             assert!(now > fit && now < fit * 2.0, "{name}: one notch of the wheel took the view from {fit} to {now} px/mm");
@@ -704,12 +735,27 @@ pub(crate) mod tests {
     fn a_long_import_shows_its_time_and_can_be_left() {
         let (mut app, ctx) = running();
         let (_tx, rx) = std::sync::mpsc::channel(); // a reading that never answers
-        app.regen.busy = Some(qymcad_ui_state::Busy { started: std::time::Instant::now(), label: crate::i18n::tr1("io-exact-importing", "format", "IGES"), rx, kind: qymcad_ui_state::BgKind::ImportShapes, pulse: None, quiet: false });
+        app.regen.busy = Some(qymcad_ui_state::Busy {
+            started: std::time::Instant::now(),
+            label: crate::i18n::tr1("io-exact-importing", "format", "IGES"),
+            rx,
+            kind: qymcad_ui_state::BgKind::ImportShapes,
+            pulse: None,
+            quiet: false,
+        });
         let _ = frame(&mut app, &ctx, Vec::new()); // the card settles on the second pass, as every window here does
         let texts = frame(&mut app, &ctx, Vec::new());
         let cancel = crate::i18n::tr("io-cancel-import");
-        let at = texts.iter().find(|(t, _)| *t == cancel).map(|(_, r)| r.center()).unwrap_or_else(|| panic!("the card has no way out; it shows: {:?}", texts.iter().map(|(t, _)| t.clone()).collect::<Vec<_>>()));
-        assert!(texts.iter().any(|(t, _)| t.len() >= 4 && t.contains(':') && t.chars().all(|c| c.is_ascii_digit() || c == ':')), "the card does not say how long it has gone: {:?}", texts.iter().map(|(t, _)| t.clone()).collect::<Vec<_>>());
+        let at = texts
+            .iter()
+            .find(|(t, _)| *t == cancel)
+            .map(|(_, r)| r.center())
+            .unwrap_or_else(|| panic!("the card has no way out; it shows: {:?}", texts.iter().map(|(t, _)| t.clone()).collect::<Vec<_>>()));
+        assert!(
+            texts.iter().any(|(t, _)| t.len() >= 4 && t.contains(':') && t.chars().all(|c| c.is_ascii_digit() || c == ':')),
+            "the card does not say how long it has gone: {:?}",
+            texts.iter().map(|(t, _)| t.clone()).collect::<Vec<_>>()
+        );
         let _ = frame(&mut app, &ctx, click(at));
         assert!(app.regen.busy.is_none(), "the import was not left");
         assert_eq!(app.status, crate::i18n::tr("in-import-cancelled"));
@@ -741,7 +787,12 @@ pub(crate) mod tests {
     /// Ctrl+Z as a hand presses it: the key held with Ctrl in the frame's own state, where the program reads it.
     fn undo_by_hand(app: &mut App, ctx: &egui::Context) {
         let command = egui::Modifiers::COMMAND;
-        let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), SCREEN)), modifiers: command, events: vec![egui::Event::Key { key: egui::Key::Z, physical_key: None, pressed: true, repeat: false, modifiers: command }], ..Default::default() };
+        let raw = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), SCREEN)),
+            modifiers: command,
+            events: vec![egui::Event::Key { key: egui::Key::Z, physical_key: None, pressed: true, repeat: false, modifiers: command }],
+            ..Default::default()
+        };
         let _ = ctx.run_ui(raw, |ui| app.draw_frame(ui));
     }
 
@@ -1044,7 +1095,12 @@ pub(crate) mod tests {
             qymcad_core::feature::FeatureKind::MeshSolid { body, .. } => Some(body),
             _ => None,
         });
-        eprintln!("MESH SOLID: node {solid:?}, faces {:?}, volume {:?}, status {:?}", solid.and_then(|b| app.project.regen_faces.get(&b).map(|f| f.len())), solid.and_then(|b| app.live.shapes.get(&b).map(|s| s.volume())), app.status);
+        eprintln!(
+            "MESH SOLID: node {solid:?}, faces {:?}, volume {:?}, status {:?}",
+            solid.and_then(|b| app.project.regen_faces.get(&b).map(|f| f.len())),
+            solid.and_then(|b| app.live.shapes.get(&b).map(|s| s.volume())),
+            app.status
+        );
     }
 
     /// A MESH TURNED INTO A SOLID TAKES A HOLE, the way a person makes one, every step a frame: an STL cube of 10
@@ -1102,7 +1158,12 @@ pub(crate) mod tests {
         let drawn = app.project.sketches[si].entities.len();
         assert!(!ctx.egui_wants_keyboard_input(), "Enter left the radius field holding the keyboard: {}", app.status);
         let command = egui::Modifiers::COMMAND;
-        let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), SCREEN)), modifiers: command, events: vec![egui::Event::Key { key: egui::Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: command }], ..Default::default() };
+        let raw = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), SCREEN)),
+            modifiers: command,
+            events: vec![egui::Event::Key { key: egui::Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: command }],
+            ..Default::default()
+        };
         let _ = ctx.run_ui(raw, |ui| app.draw_frame(ui));
         let _ = frame(&mut app, &ctx, Vec::new());
         assert!(qymcad_ui_state::edit_si(&app.project, &app.sketch_ses).is_none(), "Ctrl+Enter did not leave the sketch of {drawn} entities: {}", app.status);
@@ -1132,7 +1193,12 @@ pub(crate) mod tests {
         let v = app.live.shapes.get(&body).map(|s| s.volume());
         let want = 1000.0 - std::f64::consts::PI * 9.0 * 4.0;
         let drawn = app.project.sketches.last().map(|s| s.entities.len());
-        assert!(v.is_some_and(|v| (v - want).abs() < 1e-3), "the part holds {v:?} mm^3, not {want:.2} with the hole ({drawn:?} entities drawn); errors {:?}, status {}", app.project.regen_errors, app.status);
+        assert!(
+            v.is_some_and(|v| (v - want).abs() < 1e-3),
+            "the part holds {v:?} mm^3, not {want:.2} with the hole ({drawn:?} entities drawn); errors {:?}, status {}",
+            app.project.regen_errors,
+            app.status
+        );
     }
 
     /// A HOLE IN A MESH SOLID, SEEN: the path above by hand, and the view through the graphics device into
@@ -1197,7 +1263,12 @@ pub(crate) mod tests {
         let _ = frame(&mut app, &ctx, key(egui::Key::Enter));
         let _ = frame(&mut app, &ctx, Vec::new());
         let command = egui::Modifiers::COMMAND;
-        let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), SCREEN)), modifiers: command, events: vec![egui::Event::Key { key: egui::Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: command }], ..Default::default() };
+        let raw = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), SCREEN)),
+            modifiers: command,
+            events: vec![egui::Event::Key { key: egui::Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: command }],
+            ..Default::default()
+        };
         let _ = ctx.run_ui(raw, |ui| app.draw_frame(ui));
         let _ = frame(&mut app, &ctx, Vec::new());
 
@@ -1317,7 +1388,15 @@ pub(crate) mod tests {
         let basis = app.viewing.cam.basis();
         let on = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: app.viewing.view_rect, basis: &basis }.at(mid).0;
         let _ = frame(&mut app, &ctx, click(on));
-        assert!(app.params.recognise.src.is_some(), "the click at {on:?} on the mesh about {mid:?} in {:?} took nothing ({} bodies, armed {}, workbench 3D {}): {}", app.viewing.view_rect, app.project.bodies.len(), app.tools.armed.cmd_kind(), app.viewing.mode_3d, app.status);
+        assert!(
+            app.params.recognise.src.is_some(),
+            "the click at {on:?} on the mesh about {mid:?} in {:?} took nothing ({} bodies, armed {}, workbench 3D {}): {}",
+            app.viewing.view_rect,
+            app.project.bodies.len(),
+            app.tools.armed.cmd_kind(),
+            app.viewing.mode_3d,
+            app.status
+        );
         for _ in 0..2000 {
             let _ = frame(&mut app, &ctx, Vec::new());
             if app.params.recognise.ready(|_| ()).is_some() {
@@ -1462,7 +1541,11 @@ pub(crate) mod tests {
         let dir = std::path::PathBuf::from(format!("{}/../../target/import-door", env!("CARGO_MANIFEST_DIR")));
         std::fs::create_dir_all(&dir).expect("a folder for the check");
         let p = dir.join("with-text.dxf");
-        std::fs::write(&p, "0\nSECTION\n2\nENTITIES\n0\nLINE\n8\n0\n10\n0.0\n20\n0.0\n30\n0.0\n11\n10.0\n21\n0.0\n31\n0.0\n0\nTEXT\n8\n0\n10\n0.0\n20\n0.0\n30\n0.0\n40\n2.5\n1\nnote\n0\nENDSEC\n0\nEOF\n").expect("written");
+        std::fs::write(
+            &p,
+            "0\nSECTION\n2\nENTITIES\n0\nLINE\n8\n0\n10\n0.0\n20\n0.0\n30\n0.0\n11\n10.0\n21\n0.0\n31\n0.0\n0\nTEXT\n8\n0\n10\n0.0\n20\n0.0\n30\n0.0\n40\n2.5\n1\nnote\n0\nENDSEC\n0\nEOF\n",
+        )
+        .expect("written");
         answer(&mut app, &ctx, Want::Anything, &p.to_string_lossy());
         let _ = frame(&mut app, &ctx, Vec::new());
         let said = crate::i18n::tr1("import-not-read", "list", "TEXT 1");

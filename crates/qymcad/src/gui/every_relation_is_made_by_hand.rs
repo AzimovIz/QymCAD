@@ -22,12 +22,7 @@ mod tests {
     /// A point ON THE BODY that can be clicked: the centre of the topmost face.
     fn aim(app: &App, body: Id) -> [f64; 3] {
         let wt = app.project.body_display_transform(body, qymcad_ui_state::current_ctx_id(&app.active_path, &app.project));
-        let f = app
-            .project
-            .regen_faces
-            .get(&body)
-            .and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z)))
-            .expect("the body has faces");
+        let f = app.project.regen_faces.get(&body).and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z))).expect("the body has faces");
         qymcad_core::feature::apply12(&wt, [f.centroid.x, f.centroid.y, f.centroid.z])
     }
 
@@ -140,7 +135,9 @@ mod tests {
 
             // THE RELATION TOOL: the kind, the number, clicks on the mates, Enter.
             app.start_relation_pick();
-            if let Some(p) = app.side.joint.relation_pick.as_mut() { p.set(kind, value); }
+            if let Some(p) = app.side.joint.relation_pick.as_mut() {
+                p.set(kind, value);
+            }
             qymcad_assembly::relation_pick_click(&mut app.joint_ctx(), ja);
             if ja != jb {
                 qymcad_assembly::relation_pick_click(&mut app.joint_ctx(), jb);

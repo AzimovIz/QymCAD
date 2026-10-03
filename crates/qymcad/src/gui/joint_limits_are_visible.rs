@@ -85,10 +85,7 @@ mod tests {
             jj.limit_max[1] = Some(30.0);
         }
         let limited = segments(&mut app, j).len();
-        assert!(
-            limited > free,
-            "a limited degree does not draw its range: {free} segments without limits, {limited} with them — a person will run into an invisible wall"
-        );
+        assert!(limited > free, "a limited degree does not draw its range: {free} segments without limits, {limited} with them — a person will run into an invisible wall");
     }
 
     /// THE STOP IS DRAWN WHERE THE PART WILL ACTUALLY STOP.

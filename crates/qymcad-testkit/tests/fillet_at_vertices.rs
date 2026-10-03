@@ -16,11 +16,7 @@ use qymcad_core::refs::{Query, Ref};
 fn plate() -> (Project, u64) {
     let mut p = Project::default();
     p.new_document();
-    let sid = p.add_line_sketch(
-        "Sketch 1",
-        vec![Point2::new(0.0, 0.0), Point2::new(60.0, 0.0), Point2::new(60.0, 40.0), Point2::new(0.0, 40.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("Sketch 1", vec![Point2::new(0.0, 0.0), Point2::new(60.0, 0.0), Point2::new(60.0, 40.0), Point2::new(0.0, 40.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {
@@ -116,11 +112,7 @@ fn a_described_set_can_carry_a_variable_radius() {
 fn neighbours_share_one_radius_at_the_vertex_they_share() {
     let (mut p, body) = plate();
     let top = top_face(&p, body);
-    let corner = p
-        .vertex_pool(body)
-        .into_iter()
-        .find(|c| c.centroid[2] > 11.0 && c.centroid[0] < 1.0 && c.centroid[1] < 1.0)
-        .expect("the top corner at (0,0)");
+    let corner = p.vertex_pool(body).into_iter().find(|c| c.centroid[2] > 11.0 && c.centroid[0] < 1.0 && c.centroid[1] < 1.0).expect("the top corner at (0,0)");
     // the edges that meet at that corner
     let name = p.names.vertex(corner.desc).expect("the vertex name");
     let meeting: Vec<u32> = name.edges.into_iter().filter(|d| *d != 0).collect();

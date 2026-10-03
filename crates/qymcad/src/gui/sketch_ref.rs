@@ -33,19 +33,8 @@ mod tests {
         // a sketch on the TOP face of the box (normal +Z)
         let body1 = app.project.mesh_id(0).expect("the body is there");
         let mi = app.project.mesh_index(body1).expect("the mesh is there");
-        let (fi, face) = app.project.bodies[mi]
-            .faces
-            .iter()
-            .enumerate()
-            .max_by(|a, b| a.1.normal[2].partial_cmp(&b.1.normal[2]).unwrap())
-            .map(|(i, f)| (i, f.clone()))
-            .expect("the faces are there");
-        let key = qymcad_core::feature::FaceKey {
-            index: fi as u32,
-            centroid: [face.centroid.x, face.centroid.y, face.centroid.z],
-            normal: face.normal,
-            id: face.id,
-        };
+        let (fi, face) = app.project.bodies[mi].faces.iter().enumerate().max_by(|a, b| a.1.normal[2].partial_cmp(&b.1.normal[2]).unwrap()).map(|(i, f)| (i, f.clone())).expect("the faces are there");
+        let key = qymcad_core::feature::FaceKey { index: fi as u32, centroid: [face.centroid.x, face.centroid.y, face.centroid.z], normal: face.normal, id: face.id };
         let sk = app.create_sketch_on(qymcad_core::feature::SketchPlane::Face(body1, key));
         app.finish_sketch_edit();
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());

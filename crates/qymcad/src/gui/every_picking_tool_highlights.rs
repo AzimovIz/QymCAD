@@ -36,12 +36,7 @@ mod tests {
     /// A screen point OVER A PART: the centre of its top face.
     fn over_the_part(app: &App, body: Id) -> egui::Pos2 {
         let wt = app.project.body_display_transform(body, qymcad_ui_state::current_ctx_id(&app.active_path, &app.project));
-        let f = app
-            .project
-            .regen_faces
-            .get(&body)
-            .and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z)))
-            .expect("the body has faces");
+        let f = app.project.regen_faces.get(&body).and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z))).expect("the body has faces");
         let w = qymcad_core::feature::apply12(&wt, [f.centroid.x, f.centroid.y, f.centroid.z]);
         let basis = app.viewing.cam.basis();
         qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: viewport(), basis: &basis }.at(w).0
@@ -97,10 +92,6 @@ mod tests {
                 blind.push(format!("\"{name}\": nothing lights up under the cursor ({empty} shapes without it, {hovered} with it)"));
             }
         }
-        assert!(
-            blind.is_empty(),
-            "the tool asks for geometry while the person aims blind:\n{}",
-            blind.join("\n")
-        );
+        assert!(blind.is_empty(), "the tool asks for geometry while the person aims blind:\n{}", blind.join("\n"));
     }
 }

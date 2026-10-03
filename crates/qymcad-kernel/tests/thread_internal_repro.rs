@@ -25,17 +25,28 @@ fn internal_thread_must_cut_into_the_wall_not_into_the_void() {
     let blank = tube();
     let v0 = blank.volume();
     let cut = blank
-        .helical_profile(qymcad_kernel::HelicalCut { axis: qymcad_core::feature::AxisLine { origin: [0.0, 0.0, 5.0], dir: [0.0, 0.0, 1.0] }, radius: 15.0, profile: &encode_edges(&g.groove), length: 100.0, lead: g.lead, starts: 1, hand: qymcad_kernel::Hand::Right, kind: qymcad_kernel::Helix::Groove, lead_in: 1.5, lead_out: 1.5, gnames: &[], rnames: &[], crest_relief: 0.0 })
+        .helical_profile(qymcad_kernel::HelicalCut {
+            axis: qymcad_core::feature::AxisLine { origin: [0.0, 0.0, 5.0], dir: [0.0, 0.0, 1.0] },
+            radius: 15.0,
+            profile: &encode_edges(&g.groove),
+            length: 100.0,
+            lead: g.lead,
+            starts: 1,
+            hand: qymcad_kernel::Hand::Right,
+            kind: qymcad_kernel::Helix::Groove,
+            lead_in: 1.5,
+            lead_out: 1.5,
+            gnames: &[],
+            rnames: &[],
+            crest_relief: 0.0,
+        })
         .expect("the internal thread was built");
     let v1 = cut.volume();
     let removed = v0 - v1;
     // how much material an internal thread has to remove: roughly half the ring between Ø30 and Ø(30+2h)
     let ring = std::f64::consts::PI * ((15.0 + g.depth).powi(2) - 15.0_f64.powi(2)) * 100.0;
     assert!(cut.is_valid(), "the body is valid");
-    assert!(
-        removed > 0.2 * ring,
-        "the internal thread removed almost nothing: {removed:.1} mm³ against a ring of {ring:.1} mm³, so the groove is cutting the void rather than the wall"
-    );
+    assert!(removed > 0.2 * ring, "the internal thread removed almost nothing: {removed:.1} mm³ against a ring of {ring:.1} mm³, so the groove is cutting the void rather than the wall");
     assert!(removed < 1.2 * ring, "and it did not gouge out too much: {removed:.1} against {ring:.1}");
 }
 
@@ -47,7 +58,21 @@ fn long_internal_thread_is_valid_and_not_glacial() {
     let g = user_spec().geometry();
     let t = std::time::Instant::now();
     let cut = tube()
-        .helical_profile(qymcad_kernel::HelicalCut { axis: qymcad_core::feature::AxisLine { origin: [0.0, 0.0, 5.0], dir: [0.0, 0.0, 1.0] }, radius: 15.0, profile: &encode_edges(&g.groove), length: 100.0, lead: g.lead, starts: 1, hand: qymcad_kernel::Hand::Right, kind: qymcad_kernel::Helix::Groove, lead_in: 1.5, lead_out: 1.5, gnames: &[], rnames: &[], crest_relief: 0.0 })
+        .helical_profile(qymcad_kernel::HelicalCut {
+            axis: qymcad_core::feature::AxisLine { origin: [0.0, 0.0, 5.0], dir: [0.0, 0.0, 1.0] },
+            radius: 15.0,
+            profile: &encode_edges(&g.groove),
+            length: 100.0,
+            lead: g.lead,
+            starts: 1,
+            hand: qymcad_kernel::Hand::Right,
+            kind: qymcad_kernel::Helix::Groove,
+            lead_in: 1.5,
+            lead_out: 1.5,
+            gnames: &[],
+            rnames: &[],
+            crest_relief: 0.0,
+        })
         .expect("the 100 mm thread was built");
     let dt = t.elapsed();
     eprintln!("[perf] internal ACME Ø30 P5 over 100 mm, twenty turns: {dt:?}, V={:.1} mm³", cut.volume());
@@ -65,7 +90,21 @@ fn thread_removes_volume_proportional_to_length() {
         let b = tube();
         let v0 = b.volume();
         v0 - b
-            .helical_profile(qymcad_kernel::HelicalCut { axis: qymcad_core::feature::AxisLine { origin: [0.0, 0.0, 5.0], dir: [0.0, 0.0, 1.0] }, radius: 15.0, profile: &prof, length: len, lead: g.lead, starts: 1, hand: qymcad_kernel::Hand::Right, kind: qymcad_kernel::Helix::Groove, lead_in: 0.0, lead_out: 0.0, gnames: &[], rnames: &[], crest_relief: 0.0 })
+            .helical_profile(qymcad_kernel::HelicalCut {
+                axis: qymcad_core::feature::AxisLine { origin: [0.0, 0.0, 5.0], dir: [0.0, 0.0, 1.0] },
+                radius: 15.0,
+                profile: &prof,
+                length: len,
+                lead: g.lead,
+                starts: 1,
+                hand: qymcad_kernel::Hand::Right,
+                kind: qymcad_kernel::Helix::Groove,
+                lead_in: 0.0,
+                lead_out: 0.0,
+                gnames: &[],
+                rnames: &[],
+                crest_relief: 0.0,
+            })
             .expect("it was built")
             .volume()
     };

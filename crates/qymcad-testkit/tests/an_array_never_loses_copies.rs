@@ -15,11 +15,7 @@ use qymcad_core::model::{Id, Project};
 fn hollow_revolve_array(x0: f64, count: u32, angle: f64) -> (Project, Id, Id) {
     let mut p = Project::default();
     p.new_document();
-    let sid = p.add_line_sketch(
-        "Profile",
-        vec![Point2::new(x0, 0.0), Point2::new(15.0, 0.0), Point2::new(15.0, 16.0), Point2::new(8.0, 16.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("Profile", vec![Point2::new(x0, 0.0), Point2::new(15.0, 0.0), Point2::new(15.0, 16.0), Point2::new(8.0, 16.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {
@@ -47,10 +43,7 @@ fn an_array_either_multiplies_or_says_it_failed() {
         let was = p.regen_faces.get(&src).map(|f| f.len()).unwrap_or(0);
         let now = p.regen_faces.get(&arr).map(|f| f.len()).unwrap_or(0);
         let red = p.regen_errors.contains_key(&arr) || p.regen_errors.values().next().is_some();
-        assert!(
-            now > was || red,
-            "pattern x0={x0}, {count} copies, angle {angle}: the source has {was} faces and the pattern {now}, yet the node is green, so copies were lost silently"
-        );
+        assert!(now > was || red, "pattern x0={x0}, {count} copies, angle {angle}: the source has {was} faces and the pattern {now}, yet the node is green, so copies were lost silently");
     }
 }
 

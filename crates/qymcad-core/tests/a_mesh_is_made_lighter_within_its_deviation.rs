@@ -63,7 +63,14 @@ fn cube(side: f64, grid: usize) -> Mesh {
 }
 
 fn volume(m: &Mesh) -> f64 {
-    m.tris.iter().map(|t| { let [a, b, c] = t.map(|v| m.verts[v as usize]); (a.x * (b.y * c.z - b.z * c.y) - a.y * (b.x * c.z - b.z * c.x) + a.z * (b.x * c.y - b.y * c.x)) / 6.0 }).sum::<f64>().abs()
+    m.tris
+        .iter()
+        .map(|t| {
+            let [a, b, c] = t.map(|v| m.verts[v as usize]);
+            (a.x * (b.y * c.z - b.z * c.y) - a.y * (b.x * c.z - b.z * c.x) + a.z * (b.x * c.y - b.y * c.x)) / 6.0
+        })
+        .sum::<f64>()
+        .abs()
 }
 
 /// Every side is a side of exactly two triangles.

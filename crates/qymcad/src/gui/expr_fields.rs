@@ -22,11 +22,7 @@ mod tests {
             let rest = &src[a..];
             // `\npub fn ` is how a free function looks in a crate; without it the body ran past its own
             // end into the next one and counted its fields.
-            let b = ["\n    pub(super) fn ", "\n    pub(crate) fn ", "\n    fn ", "\npub(crate) fn ", "\npub fn ", "\nfn "]
-                .iter()
-                .filter_map(|m| rest.find(m))
-                .min()
-                .unwrap_or(rest.len());
+            let b = ["\n    pub(super) fn ", "\n    pub(crate) fn ", "\n    fn ", "\npub(crate) fn ", "\npub fn ", "\nfn "].iter().filter_map(|m| rest.find(m)).min().unwrap_or(rest.len());
             let n = rest[..b].matches("DragValue").count();
             assert_eq!(
                 n, 0,
@@ -49,9 +45,21 @@ mod tests {
         let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
             egui::CentralPanel::default().show(ui, |ui| {
                 app.bar_exprs.insert("t_count", "n*2".into());
-                got_int = qymcad_ui_state::num_or_expr(&mut qymcad_ui_state::ExprBarCtx { bar_exprs: &mut app.bar_exprs, project: &app.project, scheme: &app.scheme }, ui, "t_count", 1.0, qymcad_ui_state::NumFormat { lo: 1.0, hi: 512.0, integer: true, suffix: "", nonzero: false });
+                got_int = qymcad_ui_state::num_or_expr(
+                    &mut qymcad_ui_state::ExprBarCtx { bar_exprs: &mut app.bar_exprs, project: &app.project, scheme: &app.scheme },
+                    ui,
+                    "t_count",
+                    1.0,
+                    qymcad_ui_state::NumFormat { lo: 1.0, hi: 512.0, integer: true, suffix: "", nonzero: false },
+                );
                 app.bar_exprs.insert("t_rad", "w/2 + 0.5".into());
-                got_real = qymcad_ui_state::num_or_expr(&mut qymcad_ui_state::ExprBarCtx { bar_exprs: &mut app.bar_exprs, project: &app.project, scheme: &app.scheme }, ui, "t_rad", 1.0, qymcad_ui_state::NumFormat { lo: 0.01, hi: 10000.0, integer: false, suffix: " mm", nonzero: false });
+                got_real = qymcad_ui_state::num_or_expr(
+                    &mut qymcad_ui_state::ExprBarCtx { bar_exprs: &mut app.bar_exprs, project: &app.project, scheme: &app.scheme },
+                    ui,
+                    "t_rad",
+                    1.0,
+                    qymcad_ui_state::NumFormat { lo: 0.01, hi: 10000.0, integer: false, suffix: " mm", nonzero: false },
+                );
             });
         });
         assert_eq!(got_int, 6.0, "an integer field: \"n*2\" with n=3 must give 6 (evaluate and round)");
@@ -67,7 +75,13 @@ mod tests {
         let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
             egui::CentralPanel::default().show(ui, |ui| {
                 app.bar_exprs.insert("t_bad", "1/0".into());
-                got = qymcad_ui_state::num_or_expr(&mut qymcad_ui_state::ExprBarCtx { bar_exprs: &mut app.bar_exprs, project: &app.project, scheme: &app.scheme }, ui, "t_bad", 7.0, qymcad_ui_state::NumFormat { lo: 0.0, hi: 100.0, integer: false, suffix: "", nonzero: false });
+                got = qymcad_ui_state::num_or_expr(
+                    &mut qymcad_ui_state::ExprBarCtx { bar_exprs: &mut app.bar_exprs, project: &app.project, scheme: &app.scheme },
+                    ui,
+                    "t_bad",
+                    7.0,
+                    qymcad_ui_state::NumFormat { lo: 0.0, hi: 100.0, integer: false, suffix: "", nonzero: false },
+                );
             });
         });
         assert_eq!(got, 7.0, "a broken expression must leave the previous value instead of substituting rubbish");
@@ -101,11 +115,7 @@ mod tests {
     #[test]
     fn the_sketcher_parses_values_through_one_door() {
         let src = crate::gui::sketch_source::SKETCH;
-        let n = src
-            .lines()
-            .filter(|l| !l.trim_start().starts_with("//"))
-            .filter(|l| l.contains("parse::<f64>()"))
-            .count();
+        let n = src.lines().filter(|l| !l.trim_start().starts_with("//")).filter(|l| l.contains("parse::<f64>()")).count();
         assert_eq!(
             n, 1,
             "parsing a value must go through `parse_num` everywhere except the dimension field (where it is \

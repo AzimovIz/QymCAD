@@ -11,11 +11,7 @@ fn bug4_chamfer_and_edge_topology() {
     // the length of the face exactly now builds, where it used to fail and only 3.99 worked. The chamfer is
     // told apart by the operation code, since matching a substring would go blind on any edit of the text.
     let chamfer_failed = report.errors.iter().any(|(_, e)| {
-        matches!(
-            e,
-            qymcad_core::errors::CoreError::OpFailed(qymcad_core::errors::Op::Chamfer | qymcad_core::errors::Op::ChamferAsym)
-                | qymcad_core::errors::CoreError::ChamferTooBig { .. }
-        )
+        matches!(e, qymcad_core::errors::CoreError::OpFailed(qymcad_core::errors::Op::Chamfer | qymcad_core::errors::Op::ChamferAsym) | qymcad_core::errors::CoreError::ChamferTooBig { .. })
     });
     assert!(!chamfer_failed, "the chamfer of 4.0 from the file builds: {:?}", report.errors);
     let s = shapes.get(&(293u64 as qymcad_core::model::Id)).expect("the body");
@@ -42,13 +38,13 @@ fn bug4_chamfer_and_edge_topology() {
     let mut vert = vec![];
     for (i, &id) in ids.iter().enumerate() {
         let (a, b) = (polys[i].first().unwrap(), polys[i].last().unwrap());
-        if (a[0]-12.0).abs()<0.6 && (a[1]-40.0).abs()<0.6 && (b[0]-12.0).abs()<0.6 && (b[1]-40.0).abs()<0.6 {
-            vert.push((id, (a[2].min(b[2])*10.0).round()/10.0, (a[2].max(b[2])*10.0).round()/10.0));
+        if (a[0] - 12.0).abs() < 0.6 && (a[1] - 40.0).abs() < 0.6 && (b[0] - 12.0).abs() < 0.6 && (b[1] - 40.0).abs() < 0.6 {
+            vert.push((id, (a[2].min(b[2]) * 10.0).round() / 10.0, (a[2].max(b[2]) * 10.0).round() / 10.0));
         }
     }
     eprintln!("vertical edges at x = 12, y = 40: {vert:?}");
     // the defect: the spans 5..14 and 9..14 overlap over z 9..14
-    let has63 = vert.iter().any(|&(_,lo,hi)| (lo-5.0).abs()<0.2 && (hi-14.0).abs()<0.2);
-    let has28 = vert.iter().any(|&(_,lo,hi)| (lo-9.0).abs()<0.2 && (hi-14.0).abs()<0.2);
+    let has63 = vert.iter().any(|&(_, lo, hi)| (lo - 5.0).abs() < 0.2 && (hi - 14.0).abs() < 0.2);
+    let has28 = vert.iter().any(|&(_, lo, hi)| (lo - 9.0).abs() < 0.2 && (hi - 14.0).abs() < 0.2);
     assert!(has63 && has28, "the defect reproduces: doubled, overlapping edges");
 }

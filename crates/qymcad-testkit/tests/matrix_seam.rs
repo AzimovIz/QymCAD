@@ -27,11 +27,7 @@ fn touching_profiles_no_seam_edges() {
     let edges = p.regen_edges.get(&body).map(|e| e.len()).unwrap_or(0);
     assert_eq!(edges, 12, "a single box is 12 edges, not {edges}: the extra ones are seams along the line of contact");
     // and along the line of contact at x = 20 there are no vertical edges at all
-    let seam = p
-        .regen_edges
-        .get(&body)
-        .map(|es| es.iter().filter(|ed| (ed.a[0] - 20.0).abs() < 1e-6 && (ed.b[0] - 20.0).abs() < 1e-6).count())
-        .unwrap_or(0);
+    let seam = p.regen_edges.get(&body).map(|es| es.iter().filter(|ed| (ed.a[0] - 20.0).abs() < 1e-6 && (ed.b[0] - 20.0).abs() < 1e-6).count()).unwrap_or(0);
     assert_eq!(seam, 0, "edges on the former line of contact at x = 20: {seam}");
 }
 

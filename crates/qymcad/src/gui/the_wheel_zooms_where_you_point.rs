@@ -44,7 +44,7 @@ mod tests {
         let mut app = a_part_in_view();
         app.set.zoom_at = ZoomAt::Cursor;
         let cursor = egui::pos2(700.0, 200.0); // well away from the middle, or the two rules agree
-        // the world point that is under the cursor right now, taken in the plane the camera turns about
+                                               // the world point that is under the cursor right now, taken in the plane the camera turns about
         let basis = app.viewing.cam.basis();
         let c = RECT.center();
         let (du, dv) = (((cursor.x - c.x) / app.viewing.cam.scale) as f64, (-(cursor.y - c.y) / app.viewing.cam.scale) as f64);
@@ -147,7 +147,13 @@ mod tests {
             // the cursor sits well off the middle of the window, then the wheel turns under it
             let spot = app.viewing.view_rect.center() + egui::vec2(app.viewing.view_rect.width() * 0.3, -app.viewing.view_rect.height() * 0.3);
             frame(&mut app, vec![egui::Event::PointerMoved(spot)]);
-            frame(&mut app, vec![egui::Event::PointerMoved(spot), egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: egui::vec2(0.0, 120.0), phase: egui::TouchPhase::Move, modifiers: Default::default() }]);
+            frame(
+                &mut app,
+                vec![
+                    egui::Event::PointerMoved(spot),
+                    egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: egui::vec2(0.0, 120.0), phase: egui::TouchPhase::Move, modifiers: Default::default() },
+                ],
+            );
             let travelled = (0..3).map(|a| (app.viewing.cam.target[a] - before[a]).abs()).fold(0.0f64, f64::max);
             if (travelled > 1e-6) != expect_move {
                 moved.push(format!("{at:?}: the camera travelled {travelled:.4} mm, expected {}", if expect_move { "it to follow the cursor" } else { "it to stay" }));
@@ -177,17 +183,24 @@ mod tests {
             let (short, long) = (r.width().min(r.height()) as f64, r.width().max(r.height()) as f64);
             assert!(across > 0.3 * short && across < long, "{side} mm: the sketch is framed {across:.1} px across on a view {short:.0} px high, at {} px/mm", app.viewing.view.scale);
             let fit = app.viewing.view.scale;
-            let wheel = vec![egui::Event::PointerMoved(r.center()), egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: egui::vec2(0.0, 120.0), phase: egui::TouchPhase::Move, modifiers: Default::default() }];
+            let wheel = vec![
+                egui::Event::PointerMoved(r.center()),
+                egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: egui::vec2(0.0, 120.0), phase: egui::TouchPhase::Move, modifiers: Default::default() },
+            ];
             let _ = frame(&mut app, &ctx, vec![egui::Event::PointerMoved(r.center())]); // the hand comes over the view first
             let _ = frame(&mut app, &ctx, wheel);
             for _ in 0..10 {
-                let _ = frame(&mut app, &ctx, vec![egui::Event::PointerMoved(r.center())]); // the wheel is smoothed over frames
+                let _ = frame(&mut app, &ctx, vec![egui::Event::PointerMoved(r.center())]);
+                // the wheel is smoothed over frames
             }
             let now = app.viewing.view.scale;
             assert!(now > fit && now < fit * 2.0, "{side} mm: one notch of the wheel took the flat view from {fit} to {now} px/mm");
             // AND OUT PAST THE FIT: a person zooms out to see what stands around the drawing
             for _ in 0..4 {
-                let out = vec![egui::Event::PointerMoved(r.center()), egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: egui::vec2(0.0, -120.0), phase: egui::TouchPhase::Move, modifiers: Default::default() }];
+                let out = vec![
+                    egui::Event::PointerMoved(r.center()),
+                    egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: egui::vec2(0.0, -120.0), phase: egui::TouchPhase::Move, modifiers: Default::default() },
+                ];
                 let _ = frame(&mut app, &ctx, out);
                 for _ in 0..10 {
                     let _ = frame(&mut app, &ctx, vec![egui::Event::PointerMoved(r.center())]);

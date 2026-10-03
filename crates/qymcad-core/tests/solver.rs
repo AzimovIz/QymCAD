@@ -50,11 +50,7 @@ fn solve_collinear() {
     let si = p.sketch_index(sid).unwrap();
     let ids: Vec<_> = p.sketches[si].points.iter().map(|q| q.id).collect();
     let (a, b, c, d) = (ids[0], ids[1], ids[2], ids[3]);
-    p.sketches[si].constraints = vec![
-        Constraint::Fixed { p: a },
-        Constraint::Fixed { p: b },
-        Constraint::Collinear { a, b, c, d },
-    ];
+    p.sketches[si].constraints = vec![Constraint::Fixed { p: a }, Constraint::Fixed { p: b }, Constraint::Collinear { a, b, c, d }];
     let resid = p.solve_sketch(si);
     assert!(resid < 1e-3, "residual={resid}");
     let pc = p.sketches[si].points.iter().find(|q| q.id == c).unwrap();
@@ -69,11 +65,7 @@ fn solve_midpoint() {
     let si = p.sketch_index(sid).unwrap();
     let ids: Vec<_> = p.sketches[si].points.iter().map(|q| q.id).collect();
     let (a, b, mid) = (ids[0], ids[1], ids[2]);
-    p.sketches[si].constraints = vec![
-        Constraint::Fixed { p: a },
-        Constraint::Fixed { p: b },
-        Constraint::Midpoint { p: mid, a, b },
-    ];
+    p.sketches[si].constraints = vec![Constraint::Fixed { p: a }, Constraint::Fixed { p: b }, Constraint::Midpoint { p: mid, a, b }];
     let resid = p.solve_sketch(si);
     assert!(resid < 1e-3, "residual={resid}");
     let pm = p.sketches[si].points.iter().find(|q| q.id == mid).unwrap();
@@ -88,10 +80,7 @@ fn solve_tangent() {
     let si = p.sketch_index(sid).unwrap();
     let ids: Vec<_> = p.sketches[si].points.iter().map(|q| q.id).collect();
     let (a, b, c) = (ids[0], ids[1], ids[2]);
-    p.sketches[si].constraints = vec![
-        Constraint::Fixed { p: c },
-        Constraint::Tangent { a, b, c, r: 5.0 },
-    ];
+    p.sketches[si].constraints = vec![Constraint::Fixed { p: c }, Constraint::Tangent { a, b, c, r: 5.0 }];
     let resid = p.solve_sketch(si);
     assert!(resid < 1e-2, "residual={resid}");
     let pa = p.sketches[si].points.iter().find(|q| q.id == a).unwrap();
@@ -110,12 +99,7 @@ fn solve_symmetric() {
     let si = p.sketch_index(sid).unwrap();
     let ids: Vec<_> = p.sketches[si].points.iter().map(|q| q.id).collect();
     let (a, b, la, lb) = (ids[0], ids[1], ids[2], ids[3]);
-    p.sketches[si].constraints = vec![
-        Constraint::Fixed { p: a },
-        Constraint::Fixed { p: la },
-        Constraint::Fixed { p: lb },
-        Constraint::Symmetric { a, b, la, lb },
-    ];
+    p.sketches[si].constraints = vec![Constraint::Fixed { p: a }, Constraint::Fixed { p: la }, Constraint::Fixed { p: lb }, Constraint::Symmetric { a, b, la, lb }];
     let resid = p.solve_sketch(si);
     assert!(resid < 1e-2, "residual={resid}");
     let pb = p.sketches[si].points.iter().find(|q| q.id == b).unwrap();
@@ -426,15 +410,34 @@ fn diameter_dimension_drives_circle() {
     let mut p = Project::default();
     let si = p.new_sketch("circ");
     p.add_circle_entity(si, 0.0, 0.0, 5.0, qymcad_core::feature::Purpose::Real); // a circle of r = 5
-    let center = p.sketches[si].entities.iter().find_map(|e| match e.kind { EntityKind::Circle { center, .. } => Some(center), _ => None }).unwrap();
+    let center = p.sketches[si]
+        .entities
+        .iter()
+        .find_map(|e| match e.kind {
+            EntityKind::Circle { center, .. } => Some(center),
+            _ => None,
+        })
+        .unwrap();
     // a diameter dimension of 30 makes r become 15
     let ci = p.ensure_diameter(si, center, true).unwrap();
-    if let Constraint::Diameter { d, .. } = &mut p.sketches[si].constraints[ci] { *d = 30.0; }
+    if let Constraint::Diameter { d, .. } = &mut p.sketches[si].constraints[ci] {
+        *d = 30.0;
+    }
     p.solve_sketch(si);
-    let r = p.sketches[si].entities.iter().find_map(|e| match e.kind { EntityKind::Circle { r, .. } => Some(r), _ => None }).unwrap();
+    let r = p.sketches[si]
+        .entities
+        .iter()
+        .find_map(|e| match e.kind {
+            EntityKind::Circle { r, .. } => Some(r),
+            _ => None,
+        })
+        .unwrap();
     assert!((r - 15.0).abs() < 1e-3, "Ø30 gives r = 15, got {r}");
     // a driven diameter reports the measurement: r = 15 means Ø30
-    if let Constraint::Diameter { driven, d, .. } = &mut p.sketches[si].constraints[ci] { *driven = true; *d = 0.0; }
+    if let Constraint::Diameter { driven, d, .. } = &mut p.sketches[si].constraints[ci] {
+        *driven = true;
+        *d = 0.0;
+    }
     p.solve_sketch(si);
     if let Constraint::Diameter { d, .. } = &p.sketches[si].constraints[ci] {
         assert!((d - 30.0).abs() < 1e-2, "the driven diameter measured 30, got {d}");
@@ -452,7 +455,7 @@ fn angle_between_two_lines() {
     // line1 = ids[0]->ids[1], line2 = ids[2]->ids[3]; after deduplication the shared start may merge
     p.merge_close_points(si, 0.01);
     // find the endpoints by coordinates
-    let at = |p: &Project, x: f64, y: f64| p.sketches[si].points.iter().find(|q| (q.x-x).abs()<0.2 && (q.y-y).abs()<0.2).unwrap().id;
+    let at = |p: &Project, x: f64, y: f64| p.sketches[si].points.iter().find(|q| (q.x - x).abs() < 0.2 && (q.y - y).abs() < 0.2).unwrap().id;
     let (a, b) = (at(&p, 0.0, 0.0), at(&p, 10.0, 0.0));
     let (c, d) = (at(&p, 0.0, 0.0), at(&p, 10.0, 2.0));
     p.sketches[si].constraints.push(Constraint::Fixed { p: a });
@@ -498,7 +501,14 @@ fn tangent_solves_circle_radius() {
     let si = p.new_sketch("t");
     // a circle centred at (0,0) with an arbitrary r = 5, and a horizontal line along y = 8
     p.add_circle_entity(si, 0.0, 0.0, 5.0, qymcad_core::feature::Purpose::Real);
-    let center = p.sketches[si].entities.iter().find_map(|e| match e.kind { EntityKind::Circle { center, .. } => Some(center), _ => None }).unwrap();
+    let center = p.sketches[si]
+        .entities
+        .iter()
+        .find_map(|e| match e.kind {
+            EntityKind::Circle { center, .. } => Some(center),
+            _ => None,
+        })
+        .unwrap();
     p.add_line_entity(si, -10.0, 8.0, 10.0, 8.0, qymcad_core::feature::Purpose::Real);
     let la = p.sketch_point_at(si, -10.0, 8.0, 1e-6);
     let lb = p.sketch_point_at(si, 10.0, 8.0, 1e-6);
@@ -508,7 +518,14 @@ fn tangent_solves_circle_radius() {
     // tangency forces the radius to become the distance from the centre to the line, i.e. 8
     p.sketches[si].constraints.push(Constraint::Tangent { a: la, b: lb, c: center, r: 5.0 });
     p.solve_sketch(si);
-    let r = p.sketches[si].entities.iter().find_map(|e| match e.kind { EntityKind::Circle { r, .. } => Some(r), _ => None }).unwrap();
+    let r = p.sketches[si]
+        .entities
+        .iter()
+        .find_map(|e| match e.kind {
+            EntityKind::Circle { r, .. } => Some(r),
+            _ => None,
+        })
+        .unwrap();
     assert!((r - 8.0).abs() < 1e-2, "tangency drove the radius to 8, got {r}");
 }
 
@@ -519,13 +536,28 @@ fn equal_radius_links_circles() {
     let si = p.new_sketch("eq");
     p.add_circle_entity(si, 0.0, 0.0, 5.0, qymcad_core::feature::Purpose::Real);
     p.add_circle_entity(si, 30.0, 0.0, 12.0, qymcad_core::feature::Purpose::Real);
-    let centers: Vec<u64> = p.sketches[si].entities.iter().filter_map(|e| match e.kind { EntityKind::Circle { center, .. } => Some(center), _ => None }).collect();
+    let centers: Vec<u64> = p.sketches[si]
+        .entities
+        .iter()
+        .filter_map(|e| match e.kind {
+            EntityKind::Circle { center, .. } => Some(center),
+            _ => None,
+        })
+        .collect();
     let (c1, c2) = (centers[0], centers[1]);
     // fix the radius of the first circle at 5 and tie the radii together
     p.sketches[si].constraints.push(Constraint::Diameter { c: c1, d: 5.0, off: 0.0, expr: String::new(), driven: false, diam: false, at: None });
     p.sketches[si].constraints.push(Constraint::EqualRadius { c1, c2 });
     p.solve_sketch(si);
-    let radii: Vec<f64> = p.sketches[si].entities.iter().filter_map(|e| match e.kind { EntityKind::Circle { center, r } => Some((center, r)), _ => None }).map(|(_, r)| r).collect();
+    let radii: Vec<f64> = p.sketches[si]
+        .entities
+        .iter()
+        .filter_map(|e| match e.kind {
+            EntityKind::Circle { center, r } => Some((center, r)),
+            _ => None,
+        })
+        .map(|(_, r)| r)
+        .collect();
     assert!((radii[0] - radii[1]).abs() < 1e-2, "the radii are equal: {radii:?}");
     assert!((radii[0] - 5.0).abs() < 1e-2, "both are 5: {radii:?}");
 }
@@ -536,7 +568,14 @@ fn circle_radius_counts_in_dof() {
     let mut p = Project::default();
     let si = p.new_sketch("d");
     p.add_circle_entity(si, 0.0, 0.0, 5.0, qymcad_core::feature::Purpose::Real);
-    let center = p.sketches[si].entities.iter().find_map(|e| match e.kind { EntityKind::Circle { center, .. } => Some(center), _ => None }).unwrap();
+    let center = p.sketches[si]
+        .entities
+        .iter()
+        .find_map(|e| match e.kind {
+            EntityKind::Circle { center, .. } => Some(center),
+            _ => None,
+        })
+        .unwrap();
     p.sketches[si].constraints.push(Constraint::Fixed { p: center });
     // the centre is anchored, removing two degrees of freedom, and the free radius leaves one
     let (dof, _) = p.sketch_dof(si);
@@ -556,8 +595,14 @@ fn arc_endpoints_stay_on_one_circle() {
     let mut p = Project::default();
     let si = p.new_sketch("arc");
     p.add_arc_entity(si, Point2::new(0.0, 0.0), Point2::new(10.0, 0.0), Point2::new(0.0, 5.0), qymcad_core::feature::Winding::Ccw, qymcad_core::feature::Purpose::Real);
-    let (center, a, b) = p.sketches[si].entities.iter().find_map(|e| match e.kind {
-        EntityKind::Arc { center, a, b, .. } => Some((center, a, b)), _ => None }).unwrap();
+    let (center, a, b) = p.sketches[si]
+        .entities
+        .iter()
+        .find_map(|e| match e.kind {
+            EntityKind::Arc { center, a, b, .. } => Some((center, a, b)),
+            _ => None,
+        })
+        .unwrap();
     p.sketches[si].constraints.push(Constraint::Fixed { p: center });
     p.sketches[si].constraints.push(Constraint::Fixed { p: a });
     p.solve_sketch(si);
@@ -591,7 +636,14 @@ fn tangent_line_to_arc_drives_arc_radius() {
     let mut p = Project::default();
     let si = p.new_sketch("ta");
     p.add_arc_entity(si, Point2::new(0.0, 0.0), Point2::new(5.0, 0.0), Point2::new(0.0, 5.0), qymcad_core::feature::Winding::Ccw, qymcad_core::feature::Purpose::Real); // centre (0,0), r = 5
-    let center = p.sketches[si].entities.iter().find_map(|e| match e.kind { EntityKind::Arc { center, .. } => Some(center), _ => None }).unwrap();
+    let center = p.sketches[si]
+        .entities
+        .iter()
+        .find_map(|e| match e.kind {
+            EntityKind::Arc { center, .. } => Some(center),
+            _ => None,
+        })
+        .unwrap();
     p.add_line_entity(si, -10.0, 8.0, 10.0, 8.0, qymcad_core::feature::Purpose::Real);
     let la = p.sketch_point_at(si, -10.0, 8.0, 1e-6);
     let lb = p.sketch_point_at(si, 10.0, 8.0, 1e-6);
@@ -601,7 +653,14 @@ fn tangent_line_to_arc_drives_arc_radius() {
     p.sketches[si].constraints.push(Constraint::Tangent { a: la, b: lb, c: center, r: 5.0 });
     p.solve_sketch(si);
     let pos = |id| p.sketches[si].points.iter().find(|q| q.id == id).map(|q| (q.x, q.y)).unwrap();
-    let aend = p.sketches[si].entities.iter().find_map(|e| match e.kind { EntityKind::Arc { a, .. } => Some(a), _ => None }).unwrap();
+    let aend = p.sketches[si]
+        .entities
+        .iter()
+        .find_map(|e| match e.kind {
+            EntityKind::Arc { a, .. } => Some(a),
+            _ => None,
+        })
+        .unwrap();
     let (cx, cy) = pos(center);
     let (ax, ay) = pos(aend);
     let r = ((ax - cx).powi(2) + (ay - cy).powi(2)).sqrt();
@@ -614,7 +673,14 @@ fn point_on_circle_constraint() {
     let mut p = Project::default();
     let si = p.new_sketch("poc");
     p.add_circle_entity(si, 0.0, 0.0, 10.0, qymcad_core::feature::Purpose::Real);
-    let center = p.sketches[si].entities.iter().find_map(|e| match e.kind { EntityKind::Circle { center, .. } => Some(center), _ => None }).unwrap();
+    let center = p.sketches[si]
+        .entities
+        .iter()
+        .find_map(|e| match e.kind {
+            EntityKind::Circle { center, .. } => Some(center),
+            _ => None,
+        })
+        .unwrap();
     let pid = p.alloc_id();
     p.sketches[si].points.push(SketchPoint { id: pid, x: 20.0, y: 0.0 }); // outside the circle
     p.sketches[si].constraints.push(Constraint::Fixed { p: center });
@@ -633,7 +699,14 @@ fn concentric_aligns_centers() {
     let si = p.new_sketch("conc");
     p.add_circle_entity(si, 0.0, 0.0, 10.0, qymcad_core::feature::Purpose::Real);
     p.add_circle_entity(si, 30.0, 5.0, 4.0, qymcad_core::feature::Purpose::Real);
-    let cs: Vec<u64> = p.sketches[si].entities.iter().filter_map(|e| match e.kind { EntityKind::Circle { center, .. } => Some(center), _ => None }).collect();
+    let cs: Vec<u64> = p.sketches[si]
+        .entities
+        .iter()
+        .filter_map(|e| match e.kind {
+            EntityKind::Circle { center, .. } => Some(center),
+            _ => None,
+        })
+        .collect();
     p.sketches[si].constraints.push(Constraint::Fixed { p: cs[0] });
     p.sketches[si].constraints.push(Constraint::Concentric { c1: cs[0], c2: cs[1] });
     p.solve_sketch(si);
@@ -655,11 +728,15 @@ fn parametric_polygon_stays_regular() {
     assert_eq!(sides.len(), 6, "six sides");
     // move the centre, which is a free degree of freedom, and solve: the polygon has to stay regular
     if let Some(q) = p.sketches[si].points.iter_mut().find(|q| q.id == center) {
-        q.x += 7.0; q.y -= 3.0;
+        q.x += 7.0;
+        q.y -= 3.0;
     }
     p.solve_sketch(si);
     // the lengths of all sides
-    let pt = |id: u64| { let q = p.sketches[si].points.iter().find(|q| q.id == id).unwrap(); (q.x, q.y) };
+    let pt = |id: u64| {
+        let q = p.sketches[si].points.iter().find(|q| q.id == id).unwrap();
+        (q.x, q.y)
+    };
     let mut lens = Vec::new();
     for &e in &sides {
         if let EntityKind::Line { a, b } = p.sketches[si].entities.iter().find(|x| x.id == e).unwrap().kind {
@@ -673,7 +750,14 @@ fn parametric_polygon_stays_regular() {
     }
     // every vertex sits at radius R from the centre, held by the circumscribed circle
     let (cx, cy) = pt(center);
-    let r = p.sketches[si].entities.iter().find_map(|e| match e.kind { EntityKind::Circle { center: cc, r } if cc == center => Some(r), _ => None }).unwrap();
+    let r = p.sketches[si]
+        .entities
+        .iter()
+        .find_map(|e| match e.kind {
+            EntityKind::Circle { center: cc, r } if cc == center => Some(r),
+            _ => None,
+        })
+        .unwrap();
     for &e in &sides {
         if let EntityKind::Line { a, .. } = p.sketches[si].entities.iter().find(|x| x.id == e).unwrap().kind {
             let (ax, ay) = pt(a);
@@ -696,11 +780,20 @@ fn parametric_ellipse_axes_perpendicular_and_sized() {
     let center = p.add_ellipse_entity(si, Point2::new(0.0, 0.0), 10.0, 4.0, 30f64.to_radians(), qymcad_core::feature::Purpose::Real);
     // a free ellipse has five degrees of freedom: centre (2), major, minor and rotation
     assert_eq!(p.sketch_dof(si), (5, 0), "a free ellipse has five degrees of freedom");
-    let (ma, mi) = p.sketches[si].entities.iter().find_map(|e| match e.kind {
-        EntityKind::Ellipse { c, ma, mi } if c == center => Some((ma, mi)), _ => None }).unwrap();
+    let (ma, mi) = p.sketches[si]
+        .entities
+        .iter()
+        .find_map(|e| match e.kind {
+            EntityKind::Ellipse { c, ma, mi } if c == center => Some((ma, mi)),
+            _ => None,
+        })
+        .unwrap();
     // the axes have to stay perpendicular after the solve
     p.solve_sketch(si);
-    let pt = |p: &Project, id: u64| { let q = p.sketches[si].points.iter().find(|q| q.id == id).unwrap(); (q.x, q.y) };
+    let pt = |p: &Project, id: u64| {
+        let q = p.sketches[si].points.iter().find(|q| q.id == id).unwrap();
+        (q.x, q.y)
+    };
     let (cx, cy) = pt(&p, center);
     let (max, may) = pt(&p, ma);
     let (mix, miy) = pt(&p, mi);
@@ -736,7 +829,9 @@ fn point_on_line_distance_keeps_side() {
     let perp = (dx * (5.0 - 0.0)) / 20.0; // = +5
     p.sketches[si].constraints.push(Constraint::DistancePL { p: pid, a: la, b: lb, d: perp, off: 0.0, expr: String::new(), driven: false, at: None });
     // perturb the point downwards and solve: it has to return to its own side, y > 0, not to -5
-    if let Some(q) = p.sketches[si].points.iter_mut().find(|q| q.id == pid) { q.y = 1.0; }
+    if let Some(q) = p.sketches[si].points.iter_mut().find(|q| q.id == pid) {
+        q.y = 1.0;
+    }
     p.solve_sketch(si);
     let q = p.sketches[si].points.iter().find(|q| q.id == pid).unwrap();
     assert!(q.y > 0.0, "the point stayed on its own side, above the line, y={}", q.y);
@@ -775,16 +870,28 @@ fn arc_length_dimension_drives_arc() {
     let mut p = Project::default();
     let si = p.new_sketch("al");
     p.add_arc_entity(si, Point2::new(0.0, 0.0), Point2::new(10.0, 0.0), Point2::new(0.0, 10.0), qymcad_core::feature::Winding::Ccw, qymcad_core::feature::Purpose::Real); // centre (0,0), a (10,0), b (0,10), ccw
-    let (c, a, b) = p.sketches[si].entities.iter().find_map(|e| match e.kind {
-        EntityKind::Arc { center, a, b, .. } => Some((center, a, b)), _ => None }).unwrap();
+    let (c, a, b) = p.sketches[si]
+        .entities
+        .iter()
+        .find_map(|e| match e.kind {
+            EntityKind::Arc { center, a, b, .. } => Some((center, a, b)),
+            _ => None,
+        })
+        .unwrap();
     p.sketches[si].constraints.push(Constraint::Fixed { p: c });
     p.sketches[si].constraints.push(Constraint::Fixed { p: a });
     let arc_eid = p.sketches[si].entities[0].id;
     let ci = p.ensure_arc_length(si, arc_eid).unwrap();
-    if let Constraint::ArcLength { len, .. } = &mut p.sketches[si].constraints[ci] { *len = 10.0; }
+    if let Constraint::ArcLength { len, .. } = &mut p.sketches[si].constraints[ci] {
+        *len = 10.0;
+    }
     p.solve_sketch(si);
-    let pt = |id: u64| { let q = p.sketches[si].points.iter().find(|q| q.id == id).unwrap(); (q.x, q.y) };
-    let (cx, cy) = pt(c); let (bx, by) = pt(b);
+    let pt = |id: u64| {
+        let q = p.sketches[si].points.iter().find(|q| q.id == id).unwrap();
+        (q.x, q.y)
+    };
+    let (cx, cy) = pt(c);
+    let (bx, by) = pt(b);
     let rad = ((bx - cx).powi(2) + (by - cy).powi(2)).sqrt();
     let theta = (by - cy).atan2(bx - cx).rem_euclid(std::f64::consts::TAU); // a starts at angle 0
     assert!((rad - 10.0).abs() < 0.1, "the endpoint stayed at radius 10: {rad}");
@@ -845,7 +952,10 @@ fn circle_tangent_external_pulls_to_sum_of_radii() {
     p.sketches[si].constraints.push(Constraint::Diameter { c: c2, d: 2.0, off: 0.0, expr: String::new(), driven: false, diam: false, at: None });
     p.sketches[si].constraints.push(Constraint::CircleTangent { c1, c2, external: true });
     p.solve_sketch(si);
-    let g = |id: u64| { let q = p.sketches[si].points.iter().find(|q| q.id == id).unwrap(); (q.x, q.y) };
+    let g = |id: u64| {
+        let q = p.sketches[si].points.iter().find(|q| q.id == id).unwrap();
+        (q.x, q.y)
+    };
     let (a, b) = (g(c1), g(c2));
     let d = ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt();
     assert!((d - 5.0).abs() < 1e-2, "external tangency: the centre distance is R1 + R2 = 5, got {d}");
@@ -893,7 +1003,10 @@ fn edge_distance_between_circle_edges() {
     // a gap of 2 between the nearest rims means a centre distance of 3 + 2 + 2 = 7
     p.sketches[si].constraints.push(Constraint::EdgeDistance { c1, c2, d: 2.0, m1: -1, m2: -1, off: 0.0, expr: String::new(), driven: false, at: None });
     p.solve_sketch(si);
-    let g = |id: u64| { let q = p.sketches[si].points.iter().find(|q| q.id == id).unwrap(); (q.x, q.y) };
+    let g = |id: u64| {
+        let q = p.sketches[si].points.iter().find(|q| q.id == id).unwrap();
+        (q.x, q.y)
+    };
     let (a, b) = (g(c1), g(c2));
     let dist = ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt();
     assert!((dist - 7.0).abs() < 2e-2, "rim gap of 2: the centre distance is R1 + R2 + gap = 7, got {dist}");

@@ -75,10 +75,7 @@ fn the_middle_axis_stays_put_while_the_top_one_travels() {
         assert!((dh[2] - 60.0).abs() < 1e-6, "the head did not travel the requested 60 mm (nested={nested}): {dh:?}");
 
         let sideways = (dc[0] * dc[0] + dc[1] * dc[1] + dc[2] * dc[2]).sqrt();
-        assert!(
-            sideways < 1e-6,
-            "the head was driven along Z and the carriage crept {sideways:.4} mm (nested={nested}): {dc:?}; nothing touched that free degree of freedom"
-        );
+        assert!(sideways < 1e-6, "the head was driven along Z and the carriage crept {sideways:.4} mm (nested={nested}): {dc:?}; nothing touched that free degree of freedom");
         // And the head itself travels cleanly along its own axis: the sideways drift is the scrap this check
         // exists for.
         let head_sideways = (dh[0] * dh[0] + dh[1] * dh[1]).sqrt();

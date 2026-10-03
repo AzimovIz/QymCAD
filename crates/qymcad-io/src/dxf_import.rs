@@ -164,7 +164,14 @@ fn read(drawing: &Drawing, entities: &[&Entity], place: &Place, depth: usize, cu
                     for col in 0..ins.column_count.max(1) {
                         // the block's base to its origin, scaled, shifted along its rows and columns, turned, and put down
                         let (ox, oy) = (col as f64 * ins.column_spacing, row as f64 * ins.row_spacing);
-                        let local = Place { a: ins.x_scale_factor, b: 0.0, c: 0.0, d: ins.y_scale_factor, tx: -block.base_point.x * ins.x_scale_factor + ox, ty: -block.base_point.y * ins.y_scale_factor + oy };
+                        let local = Place {
+                            a: ins.x_scale_factor,
+                            b: 0.0,
+                            c: 0.0,
+                            d: ins.y_scale_factor,
+                            tx: -block.base_point.x * ins.x_scale_factor + ox,
+                            ty: -block.base_point.y * ins.y_scale_factor + oy,
+                        };
                         let turned = Place { a: cos, b: -sin, c: sin, d: cos, tx: ins.location.x, ty: ins.location.y };
                         read(drawing, &inner, &place.then(&turned.then(&local)), depth + 1, curves, skipped);
                     }
@@ -228,7 +235,13 @@ fn spline(sp: &dxf::entities::Spline, place: &Place, curves: &mut Vec<ProfEdge>)
             while span + 1 < ctrl.len() && knots[span + 1] <= t {
                 span += 1;
             }
-            let mut d: Vec<(f64, f64, f64)> = (0..=p).map(|j| { let (x, y) = ctrl[span - p + j]; let wj = w[span - p + j]; (x * wj, y * wj, wj) }).collect();
+            let mut d: Vec<(f64, f64, f64)> = (0..=p)
+                .map(|j| {
+                    let (x, y) = ctrl[span - p + j];
+                    let wj = w[span - p + j];
+                    (x * wj, y * wj, wj)
+                })
+                .collect();
             for r in 1..=p {
                 for j in (r..=p).rev() {
                     let i = span - p + j;
@@ -265,7 +278,9 @@ fn placed_polyline(verts: &[(Point2, f64)], closed: bool, place: &Place, curves:
     for c in local {
         match (c, place.uniform()) {
             (ProfEdge::Line { a, b }, _) => curves.push(ProfEdge::Line { a: place.at(a.x, a.y), b: place.at(b.x, b.y) }),
-            (ProfEdge::Arc { a, b, center, ccw }, Some((_, mirrored))) => curves.push(ProfEdge::Arc { a: place.at(a.x, a.y), b: place.at(b.x, b.y), center: place.at(center.x, center.y), ccw: ccw != mirrored }),
+            (ProfEdge::Arc { a, b, center, ccw }, Some((_, mirrored))) => {
+                curves.push(ProfEdge::Arc { a: place.at(a.x, a.y), b: place.at(b.x, b.y), center: place.at(center.x, center.y), ccw: ccw != mirrored })
+            }
             (ProfEdge::Arc { a, b, center, ccw }, None) => {
                 let r = center.dist(a);
                 let (from, mut to) = ((a.y - center.y).atan2(a.x - center.x), (b.y - center.y).atan2(b.x - center.x));

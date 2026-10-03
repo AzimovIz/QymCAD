@@ -13,11 +13,7 @@ mod tests {
     use qymcad_core::model::Constraint;
 
     fn frame(events: Vec<egui::Event>) -> egui::RawInput {
-        egui::RawInput {
-            screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(900.0, 700.0))),
-            events,
-            ..Default::default()
-        }
+        egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(900.0, 700.0))), events, ..Default::default() }
     }
 
     fn press(at: egui::Pos2, down: bool) -> egui::Event {
@@ -32,14 +28,7 @@ mod tests {
         let si = app.create_sketch_on(qymcad_core::feature::SketchPlane::default());
         let sid = app.project.sketches[si].id;
         app.project.add_rect_entity(si, 0.0, 0.0, 40.0, 25.0, qymcad_core::feature::Purpose::Real);
-        let pt = |app: &App, x: f64, y: f64| {
-            app.project.sketches[si]
-                .points
-                .iter()
-                .find(|p| (p.x - x).abs() < 1e-6 && (p.y - y).abs() < 1e-6)
-                .map(|p| p.id)
-                .expect("a point of the rectangle")
-        };
+        let pt = |app: &App, x: f64, y: f64| app.project.sketches[si].points.iter().find(|p| (p.x - x).abs() < 1e-6 && (p.y - y).abs() < 1e-6).map(|p| p.id).expect("a point of the rectangle");
         let (a, b) = (pt(&app, 0.0, 0.0), pt(&app, 40.0, 0.0));
         app.project.sketches[si].constraints.push(Constraint::Distance { a, b, d: 40.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
         app.project.solve_sketch(si);
@@ -111,10 +100,7 @@ mod tests {
 
         assert!(grabbed, "the dimension caption was not taken by the mouse: there is nothing to drag the leader aside with, and the dimensions keep crawling over each other");
         let after = label_offset(&app, si);
-        assert!(
-            (after - before).abs() > 1e-6,
-            "the caption was taken but the offset did not change: it was {before}, it became {after} — the label did not follow the cursor"
-        );
+        assert!((after - before).abs() > 1e-6, "the caption was taken but the offset did not change: it was {before}, it became {after} — the label did not follow the cursor");
         assert!(after.is_finite(), "the offset stopped being a number: {after}");
         assert!(matches!(app.tools.drag, super::super::Dragging::None), "after the release the grab must be let go");
     }

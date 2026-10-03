@@ -5,7 +5,10 @@
 
 use std::process::ExitCode;
 
-pub use gui::session::{pos2, vec2, Chooser, Datum, Document, FaceKinds, Feature, Gizmo, Inspection, JointInfo, Key, Kept, Kind, Machine, Modifiers, Parameter, Part, Picture, PointerButton, Pos2, Rect, Session, SketchInfo, SketchPick, Solid, Vec2, Widget};
+pub use gui::session::{
+    pos2, vec2, Chooser, Datum, Document, FaceKinds, Feature, Gizmo, Inspection, JointInfo, Key, Kept, Kind, Machine, Modifiers, Parameter, Part, Picture, PointerButton, Pos2, Rect, Session,
+    SketchInfo, SketchPick, Solid, Vec2, Widget,
+};
 
 /// START THE PROGRAM: open the window and run it until it closes; a start that fails is told to the person.
 pub fn run() -> ExitCode {
@@ -24,7 +27,6 @@ pub fn run() -> ExitCode {
         }
     }
 }
-
 
 #[cfg(test)]
 mod comment_ratchet;
@@ -73,5 +75,3 @@ mod viewport_gpu;
 mod start_notice;
 mod system;
 mod wide_signature_ratchet;
-
-

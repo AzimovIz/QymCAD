@@ -154,7 +154,10 @@ mod tests {
         // and not by the path it is reached through: the path changed twice already.
         let src = include_str!("../../../qymcad-pick/src/lib.rs");
         assert!(src.contains("pal.shade_floor_body"), "the floor of the shading must come from the scheme");
-        assert!(src.contains("pal.body_lighten") && src.contains("pal.body_saturate"), "both the lightness and the saturation must come from the scheme: without saturation a part turns white rather than light");
+        assert!(
+            src.contains("pal.body_lighten") && src.contains("pal.body_saturate"),
+            "both the lightness and the saturation must come from the scheme: without saturation a part turns white rather than light"
+        );
         assert!(crate::gui::render_source::has(src, "fn shade_tri(pal: &") && src.contains("Palette"), "the shading must SEE the scheme (as an argument, since the function takes no &self)");
     }
 
@@ -256,12 +259,7 @@ mod tests {
             }
             rest = &after[12..];
         }
-        assert!(
-            naked.is_empty(),
-            "wrapping is not forbidden in a drop-down menu ({}) — a menu item is a command, not a paragraph:\n{}",
-            naked.len(),
-            naked.join("\n")
-        );
+        assert!(naked.is_empty(), "wrapping is not forbidden in a drop-down menu ({}) — a menu item is a command, not a paragraph:\n{}", naked.len(), naked.join("\n"));
     }
 
     /// NOT ONE COLOUR WRITTEN AS A NUMBER IN THE INTERFACE LAYER.

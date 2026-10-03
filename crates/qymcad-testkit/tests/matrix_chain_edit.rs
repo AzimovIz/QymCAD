@@ -44,9 +44,7 @@ fn stretch(p: &mut Project, sid: u64, from: f64, to: f64) {
 /// Vertical edge of the box at corner (cx,cy).
 fn vert_edge(p: &Project, body: u64, cx: f64, cy: f64) -> Option<u32> {
     p.regen_edges.get(&body).and_then(|es| {
-        es.iter()
-            .find(|e| (e.a[0] - cx).abs() < 1e-6 && (e.a[1] - cy).abs() < 1e-6 && (e.b[0] - cx).abs() < 1e-6 && (e.b[1] - cy).abs() < 1e-6 && (e.a[2] - e.b[2]).abs() > 1.0)
-            .map(|e| e.id)
+        es.iter().find(|e| (e.a[0] - cx).abs() < 1e-6 && (e.a[1] - cy).abs() < 1e-6 && (e.b[0] - cx).abs() < 1e-6 && (e.b[1] - cy).abs() < 1e-6 && (e.a[2] - e.b[2]).abs() > 1.0).map(|e| e.id)
     })
 }
 

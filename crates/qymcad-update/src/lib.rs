@@ -70,11 +70,7 @@ impl Install {
     /// the runtime put there. What cannot be told apart honestly falls through to `Portable`, which asks
     /// the question anyway and points at the release page - the safe end of being wrong.
     pub fn from_env() -> Install {
-        install_from(
-            std::env::var("APPIMAGE").ok().as_deref(),
-            std::path::Path::new("/.flatpak-info").exists(),
-            std::env::current_exe().ok().as_deref(),
-        )
+        install_from(std::env::var("APPIMAGE").ok().as_deref(), std::path::Path::new("/.flatpak-info").exists(), std::env::current_exe().ok().as_deref())
     }
 }
 
@@ -346,18 +342,14 @@ mod tests {
     /// altogether. All three mean the same thing and the program has to agree.
     #[test]
     fn empty_and_null_and_absent_are_one_and_the_same() {
-        let full = parse(
-            r#"{"latest":"v0.2.0-dev.20260920","url":"https://example.invalid/r","published":"2026-09-20","notes":"a line","notice":"read this","broken_below":"v0.1.0-dev.20260101"}"#,
-        )
-        .expect("a complete answer reads");
+        let full = parse(r#"{"latest":"v0.2.0-dev.20260920","url":"https://example.invalid/r","published":"2026-09-20","notes":"a line","notice":"read this","broken_below":"v0.1.0-dev.20260101"}"#)
+            .expect("a complete answer reads");
         assert_eq!(full.latest, "v0.2.0-dev.20260920");
         assert_eq!(full.notice.as_deref(), Some("read this"));
 
         let bare = parse(r#"{"latest":"v0.2.0-dev.20260920","url":"https://example.invalid/r"}"#).expect("the two required fields are enough");
-        let nulls = parse(r#"{"latest":"v0.2.0-dev.20260920","url":"https://example.invalid/r","notes":null,"notice":null,"broken_below":null}"#)
-            .expect("nulls read");
-        let empty = parse(r#"{"latest":"v0.2.0-dev.20260920","url":"https://example.invalid/r","notes":"","notice":"   ","broken_below":""}"#)
-            .expect("empty strings read");
+        let nulls = parse(r#"{"latest":"v0.2.0-dev.20260920","url":"https://example.invalid/r","notes":null,"notice":null,"broken_below":null}"#).expect("nulls read");
+        let empty = parse(r#"{"latest":"v0.2.0-dev.20260920","url":"https://example.invalid/r","notes":"","notice":"   ","broken_below":""}"#).expect("empty strings read");
         assert_eq!(bare, nulls, "an absent field and a null one came out different");
         assert_eq!(bare, empty, "an absent field and an empty one came out different");
         assert_eq!(bare.notes, None);

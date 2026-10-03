@@ -25,6 +25,10 @@ fn a_smooth_edge_left_out_takes_its_name_with_it() {
     let second = p.add_fillet(round, 1.0, vec![tangent, other]);
     let (report, _) = qymcad_testkit::regenerate(&mut p);
     assert!(report.errors.is_empty(), "the second rounding did not build: {:?}", report.errors);
-    let blends: Vec<u64> = p.regen_faces.get(&second).map(|fs| fs.iter().filter_map(|f| p.names.get(f.id)).filter(|g| g.feature == second && format!("{:?}", g.role) == "Blend").map(|g| g.src).collect()).unwrap_or_default();
+    let blends: Vec<u64> = p
+        .regen_faces
+        .get(&second)
+        .map(|fs| fs.iter().filter_map(|f| p.names.get(f.id)).filter(|g| g.feature == second && format!("{:?}", g.role) == "Blend").map(|g| g.src).collect())
+        .unwrap_or_default();
     assert_eq!(blends, vec![other as u64], "the blend of the second rounding is named after edges {blends:?}, its own edge is {other:#x} and the tangent one left out {tangent:#x}");
 }

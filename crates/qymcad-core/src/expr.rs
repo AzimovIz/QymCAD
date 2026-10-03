@@ -221,9 +221,7 @@ impl<'a> Parser<'a> {
                     // Without parentheses this is a name, not a function. `UnknownFn` used to be returned
                     // here, so a bare `w` in a formula answered "unknown function: w" — advice about the wrong
                     // thing, since a parameter was meant.
-                    constant(&name)
-                        .or_else(|| self.vars.get(&name).copied())
-                        .ok_or_else(|| ExprError::UnknownName(name.clone()))
+                    constant(&name).or_else(|| self.vars.get(&name).copied()).ok_or_else(|| ExprError::UnknownName(name.clone()))
                 }
             }
             // The end of input is not a token. `format!("{other:?}")` on `None` produced "Unexpected token
@@ -316,7 +314,11 @@ pub fn fmt_num(v: f64) -> String {
     let s = s.trim_end_matches('0').trim_end_matches('.');
     // A minus sign on zero is not shown: it comes from the sign of a small quantity that this very code
     // rounded away, and reads as a negative zero, that is, as an error.
-    if s.is_empty() || s == "-" || s == "-0" { "0".into() } else { s.to_string() }
+    if s.is_empty() || s == "-" || s == "-0" {
+        "0".into()
+    } else {
+        s.to_string()
+    }
 }
 
 pub fn mentions(expr: &str, name: &str) -> bool {

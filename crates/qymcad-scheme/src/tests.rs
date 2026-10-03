@@ -37,15 +37,8 @@ fn shaded(c: [u8; 3], k: f32) -> [u8; 3] {
 #[test]
 fn every_colour_field_is_listed_in_entries() {
     let src = include_str!("lib.rs");
-    let decl = src
-        .split("impl Default for Palette")
-        .next()
-        .expect("the declaration of the struct comes before impl Default");
-    let declared: Vec<&str> = decl
-        .lines()
-        .filter_map(|l| l.trim().strip_suffix(": [u8; 3],"))
-        .filter_map(|l| l.strip_prefix("pub "))
-        .collect();
+    let decl = src.split("impl Default for Palette").next().expect("the declaration of the struct comes before impl Default");
+    let declared: Vec<&str> = decl.lines().filter_map(|l| l.trim().strip_suffix(": [u8; 3],")).filter_map(|l| l.strip_prefix("pub ")).collect();
     let listed: Vec<&str> = dark().entries().into_iter().map(|(k, _)| k).collect();
 
     for f in &declared {
@@ -53,7 +46,6 @@ fn every_colour_field_is_listed_in_entries() {
     }
     assert_eq!(declared.len(), listed.len(), "{} colours are declared and {} are listed", declared.len(), listed.len());
 }
-
 
 /// THE EDITOR SHOWS EVERY COLOUR AND NOT ONE SPARE.
 ///
@@ -108,11 +100,25 @@ fn every_colour_and_section_is_translated_in_every_language() {
 #[test]
 fn the_scheme_editor_buttons_are_translated_in_every_language() {
     const KEYS: &[&str] = &[
-        "scheme-edit", "scheme-duplicate", "scheme-delete", "scheme-save", "scheme-name", "scheme-rename",
-        "scheme-name-taken", "scheme-is-light", "scheme-shading",
-        "scheme-shade-body", "scheme-shade-body-hint", "scheme-shade-mesh", "scheme-shade-mesh-hint",
-        "scheme-shade-viewcube", "scheme-shade-viewcube-hint", "scheme-body-lighten", "scheme-body-lighten-hint",
-        "scheme-body-saturate", "scheme-body-saturate-hint",
+        "scheme-edit",
+        "scheme-duplicate",
+        "scheme-delete",
+        "scheme-save",
+        "scheme-name",
+        "scheme-rename",
+        "scheme-name-taken",
+        "scheme-is-light",
+        "scheme-shading",
+        "scheme-shade-body",
+        "scheme-shade-body-hint",
+        "scheme-shade-mesh",
+        "scheme-shade-mesh-hint",
+        "scheme-shade-viewcube",
+        "scheme-shade-viewcube-hint",
+        "scheme-body-lighten",
+        "scheme-body-lighten-hint",
+        "scheme-body-saturate",
+        "scheme-body-saturate-hint",
     ];
     let prev = qymcad_i18n::language();
     for (code, _) in qymcad_i18n::available() {
@@ -138,7 +144,6 @@ fn the_scheme_editor_buttons_are_translated_in_every_language() {
     }
     qymcad_i18n::set_language(&prev);
 }
-
 
 /// THE DARK SCHEME IS A TRANSFER, NOT A REDESIGN.
 ///
@@ -171,8 +176,7 @@ fn every_colour_is_legible_on_its_own_background() {
         // the view cube is a surface of its own: its faces are separated from the canvas by their own
         // edge rather than by luminance. What LIES on them is checked by a test of its own below, against
         // their native background rather than the canvas
-        "viewcube_face", "viewcube_edge",
-        // a ghost fades TOWARDS this colour rather than being drawn in it: it is supposed to be close to
+        "viewcube_face", "viewcube_edge", // a ghost fades TOWARDS this colour rather than being drawn in it: it is supposed to be close to
         // the canvas
         "ghost_target",
         // the colour of a body is not a mark on the canvas but the surface itself: it reads by its shading
@@ -349,12 +353,7 @@ fn every_glyph_is_legible_on_its_translucent_backing() {
     const DISC_ALPHA: u8 = 225; // as in draw_joints and draw_grounded_glyphs
     for p in builtin() {
         let disc = blend(p.glyph_backing, p.viewport_bg, DISC_ALPHA);
-        for (what, mark) in [
-            ("the anchor", p.grounded),
-            ("a selected joint", p.active),
-            ("a joint under the cursor", p.joint_hover),
-            ("an ordinary joint", p.joint_idle),
-        ] {
+        for (what, mark) in [("the anchor", p.grounded), ("a selected joint", p.active), ("a joint under the cursor", p.joint_hover), ("an ordinary joint", p.joint_idle)] {
             let diff = (luma(mark) - luma(disc)).abs();
             assert!(diff > 60.0, "in the scheme \"{}\" the glyph of {what} {mark:?} merges into its backing {disc:?} (a difference of {diff:.0})", p.name);
         }

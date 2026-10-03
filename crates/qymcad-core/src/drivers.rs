@@ -261,13 +261,7 @@ impl Project {
             .parameters
             .iter()
             .filter(|p| !p.name.is_empty())
-            .map(|p| DriverRef {
-                name: p.name.clone(),
-                path: String::new(),
-                value: Some(p.value),
-                kind: DriverKind::Parameter,
-                ambiguous: dup(&p.name),
-            })
+            .map(|p| DriverRef { name: p.name.clone(), path: String::new(), value: Some(p.value), kind: DriverKind::Parameter, ambiguous: dup(&p.name) })
             .collect();
         out.extend(self.named_dims.iter().filter(|n| !n.name.is_empty()).map(|nd| DriverRef {
             name: nd.name.clone(),

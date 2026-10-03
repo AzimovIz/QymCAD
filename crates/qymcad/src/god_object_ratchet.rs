@@ -183,7 +183,8 @@ mod tests {
              A method on `App` sees everything at once and cannot move to a crate of its own."
         );
         assert_eq!(
-            lines_in, APP_SIZE_CEILING,
+            lines_in,
+            APP_SIZE_CEILING,
             "the size of `impl App` in word characters has moved off the mark of {APP_SIZE_CEILING}: now {lines_in}.\n\
              MORE means drawing or logic was written into the god object rather than beside it.\n\
              FEWER means progress: lower the mark in the same commit.\n\

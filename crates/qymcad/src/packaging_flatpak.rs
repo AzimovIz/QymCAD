@@ -98,10 +98,7 @@ mod tests {
         let commit = yml.lines().find_map(|l| l.trim().strip_prefix("commit: ")).expect("the source names no commit at all");
         assert_eq!(commit.len(), 40, "\"{commit}\" is not a full commit hash");
         assert!(commit.chars().all(|c| c.is_ascii_hexdigit()), "\"{commit}\" is not hexadecimal");
-        assert!(
-            !yml.lines().any(|l| l.trim().starts_with("tag: ")),
-            "a tag is named beside the commit: the build stops if the two ever disagree"
-        );
+        assert!(!yml.lines().any(|l| l.trim().starts_with("tag: ")), "a tag is named beside the commit: the build stops if the two ever disagree");
     }
 
     /// THE DESKTOP ENTRY AND THE METAINFO POINT AT EACH OTHER.
@@ -139,12 +136,7 @@ mod tests {
 
         // `dest: cargo/vendor/<name>-<version>` is where each crate is unpacked, so the list of names is
         // read from there rather than from the urls, which are escaped and split across fields.
-        let declared: Vec<String> = sources
-            .lines()
-            .filter_map(|l| l.trim().strip_prefix("\"dest\": \"cargo/vendor/"))
-            .filter_map(|l| l.split('"').next())
-            .map(str::to_string)
-            .collect();
+        let declared: Vec<String> = sources.lines().filter_map(|l| l.trim().strip_prefix("\"dest\": \"cargo/vendor/")).filter_map(|l| l.split('"').next()).map(str::to_string).collect();
         assert!(declared.len() > 500, "the list of crate sources reads as almost empty: {} entries", declared.len());
 
         // the lock file's own records: name + version, minus our own crates, which are not fetched
@@ -186,24 +178,15 @@ mod tests {
             return; // a published copy of the tree: nothing here to measure
         }
         let xml = read("packaging/flatpak/tech.qymis.cad.metainfo.xml");
-        let images: Vec<&str> = xml
-            .lines()
-            .filter_map(|l| l.trim().strip_prefix("<image>").and_then(|l| l.strip_suffix("</image>")))
-            .collect();
+        let images: Vec<&str> = xml.lines().filter_map(|l| l.trim().strip_prefix("<image>").and_then(|l| l.strip_suffix("</image>"))).collect();
         assert!(images.len() >= 3, "a store listing with fewer than three pictures: {}", images.len());
 
         for url in &images {
-            assert!(
-                !url.contains("/main/") && !url.contains("/master/"),
-                "the picture is linked from a BRANCH, and a branch moves: {url}"
-            );
+            assert!(!url.contains("/main/") && !url.contains("/master/"), "the picture is linked from a BRANCH, and a branch moves: {url}");
             // A COMMIT, not a tag. Naming the tag closed a circle: the address would name the tag, and
             // the tag has to stand on a commit whose file already carries that address. The pictures do
             // not change from release to release, so the commit that added them is the ref.
-            assert!(
-                url.split('/').any(|part| part.len() == 40 && part.chars().all(|c| c.is_ascii_hexdigit())),
-                "the picture is linked from something that is not a commit: {url}"
-            );
+            assert!(url.split('/').any(|part| part.len() == 40 && part.chars().all(|c| c.is_ascii_hexdigit())), "the picture is linked from something that is not a commit: {url}");
             // the file itself, taken from the tail of the address
             let rel = url.split("/docs/").nth(1).unwrap_or_else(|| panic!("the address does not point into docs/: {url}"));
             let path = root().join("docs").join(rel);

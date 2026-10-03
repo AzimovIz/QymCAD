@@ -21,10 +21,7 @@ mod tests {
         app.set.show_interference = true;
         app.interference.rev = u64::MAX; // the cache is stale, so compute
         crate::gui::refresh_interference(qymcad_ui_state::body_view_of!(app), qymcad_ui_state::scene_drag_of!(app), &mut app.interference, &app.live, &app.set, app.workbench);
-        assert!(
-            !app.interference.pairs.is_empty(),
-            "the parts overlap and no interference was found: the checkbox does nothing again"
-        );
+        assert!(!app.interference.pairs.is_empty(), "the parts overlap and no interference was found: the checkbox does nothing again");
 
         // separate them: the second part moves far away
         let bodies: Vec<_> = (0..app.project.bodies.len()).filter_map(|mi| app.project.mesh_id(mi)).collect();

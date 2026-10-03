@@ -44,25 +44,15 @@ pub fn export_svg(edges: &[ProfEdge], path: &str) -> Result<(), String> {
     let stroke = (w.max(h) * 0.003).max(0.1);
 
     let mut s = String::new();
-    s.push_str(&format!(
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{w:.3}mm\" height=\"{h:.3}mm\" viewBox=\"0 0 {w:.3} {h:.3}\">\n"
-    ));
-    s.push_str(&format!(
-        "  <g fill=\"none\" stroke=\"black\" stroke-width=\"{stroke:.3}\">\n"
-    ));
+    s.push_str(&format!("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{w:.3}mm\" height=\"{h:.3}mm\" viewBox=\"0 0 {w:.3} {h:.3}\">\n"));
+    s.push_str(&format!("  <g fill=\"none\" stroke=\"black\" stroke-width=\"{stroke:.3}\">\n"));
     for e in edges {
         match *e {
             ProfEdge::Line { a, b } => {
-                s.push_str(&format!(
-                    "    <line x1=\"{:.4}\" y1=\"{:.4}\" x2=\"{:.4}\" y2=\"{:.4}\"/>\n",
-                    sx(a.x), sy(a.y), sx(b.x), sy(b.y)
-                ));
+                s.push_str(&format!("    <line x1=\"{:.4}\" y1=\"{:.4}\" x2=\"{:.4}\" y2=\"{:.4}\"/>\n", sx(a.x), sy(a.y), sx(b.x), sy(b.y)));
             }
             ProfEdge::Circle { center, r } => {
-                s.push_str(&format!(
-                    "    <circle cx=\"{:.4}\" cy=\"{:.4}\" r=\"{:.4}\"/>\n",
-                    sx(center.x), sy(center.y), r
-                ));
+                s.push_str(&format!("    <circle cx=\"{:.4}\" cy=\"{:.4}\" r=\"{:.4}\"/>\n", sx(center.x), sy(center.y), r));
             }
             ProfEdge::Arc { a, b, center, ccw } => {
                 let r = ((a.x - center.x).powi(2) + (a.y - center.y).powi(2)).sqrt();
@@ -76,15 +66,10 @@ pub fn export_svg(edges: &[ProfEdge], path: &str) -> Result<(), String> {
                 // inverting Y reverses the on-screen direction, so a counter-clockwise CAD arc becomes
                 // clockwise on screen and the sweep flag is 1
                 let sflag = if ccw { 1 } else { 0 };
-                s.push_str(&format!(
-                    "    <path d=\"M {:.4} {:.4} A {:.4} {:.4} 0 {} {} {:.4} {:.4}\"/>\n",
-                    sx(a.x), sy(a.y), r, r, large, sflag, sx(b.x), sy(b.y)
-                ));
+                s.push_str(&format!("    <path d=\"M {:.4} {:.4} A {:.4} {:.4} 0 {} {} {:.4} {:.4}\"/>\n", sx(a.x), sy(a.y), r, r, large, sflag, sx(b.x), sy(b.y)));
             }
         }
     }
     s.push_str("  </g>\n</svg>\n");
-    std::fs::File::create(path)
-        .and_then(|mut f| f.write_all(s.as_bytes()))
-        .map_err(|e| format!("io-svg-write-failed#{e}"))
+    std::fs::File::create(path).and_then(|mut f| f.write_all(s.as_bytes())).map_err(|e| format!("io-svg-write-failed#{e}"))
 }

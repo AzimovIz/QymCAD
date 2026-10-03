@@ -16,7 +16,7 @@ fn square(z: f32, c: Color32) -> [RasterTri; 2] {
 fn two_ghost_faces_one_behind_the_other_blend_once() {
     let back = Color32::from_rgba_premultiplied(20, 20, 20, 255);
     let ghost = Color32::from_rgba_premultiplied(60, 60, 60, 128); // half-translucent, premultiplied
-    // one pane over the background: what the eye expects of a ghost
+                                                                   // one pane over the background: what the eye expects of a ghost
     let mut once = vec![back; 16];
     raster_band_blend(&mut once, &[1.0; 16], 4, 0, 4, &square(0.5, ghost));
     // the same ghost with a second face of it behind the first - a wall of a hole behind the front face

@@ -170,7 +170,14 @@ mod tests {
     /// A MENU ITEM IS NAMED WITHOUT ITS KEYS AND ITS ARROW, and a name that only looks like keys is kept.
     #[test]
     fn a_menu_item_is_named_without_its_keys() {
-        for (label, name) in [("Save Ctrl+S", "Save"), ("Redo Ctrl+Shift+Z", "Redo"), ("Export project \u{23f5}", "Export project"), ("STL\u{2026}", "STL\u{2026}"), ("Help F1", "Help"), ("F1 lesson", "F1 lesson")] {
+        for (label, name) in [
+            ("Save Ctrl+S", "Save"),
+            ("Redo Ctrl+Shift+Z", "Redo"),
+            ("Export project \u{23f5}", "Export project"),
+            ("STL\u{2026}", "STL\u{2026}"),
+            ("Help F1", "Help"),
+            ("F1 lesson", "F1 lesson"),
+        ] {
             assert_eq!(super::item_name(label), name, "the item {label:?}");
         }
     }

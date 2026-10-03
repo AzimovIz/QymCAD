@@ -342,10 +342,7 @@ mod tests {
         // An anchor lives in the local space of its body; its world axes must follow the body, or an
         // axis-alignment constraint compares things that are not comparable.
         let a = Anchor::from_axes(0, Vector3::zeros(), Vector3::z(), Vector3::x()).expect("axes");
-        let turned = Pose::from_parts(
-            Translation3::new(0.0, 0.0, 0.0),
-            nalgebra::UnitQuaternion::from_axis_angle(&Vector3::x_axis(), std::f64::consts::FRAC_PI_2),
-        );
+        let turned = Pose::from_parts(Translation3::new(0.0, 0.0, 0.0), nalgebra::UnitQuaternion::from_axis_angle(&Vector3::x_axis(), std::f64::consts::FRAC_PI_2));
         assert!((a.world_z(&turned) - (-Vector3::y())).norm() < 1e-12, "the main axis must rotate with the body");
     }
 }

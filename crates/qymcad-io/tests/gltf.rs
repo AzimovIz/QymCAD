@@ -131,12 +131,15 @@ fn a_scene_tree_places_its_meshes() {
 fn a_buffer_beside_the_file_is_read_and_a_missing_one_named() {
     let bin = floats(&[0.0, 0.0, 0.0, 0.001, 0.0, 0.0, 0.0, 0.001, 0.0]);
     file("beside.bin", Some(&bin));
-    let doc = |uri: &str| serde_json::json!({
-        "asset": {"version": "2.0"}, "nodes": [{"mesh": 0}],
-        "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
-        "accessors": [{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"}],
-        "bufferViews": [{"buffer": 0, "byteLength": 36}], "buffers": [{"byteLength": 36, "uri": uri}]
-    }).to_string();
+    let doc = |uri: &str| {
+        serde_json::json!({
+            "asset": {"version": "2.0"}, "nodes": [{"mesh": 0}],
+            "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
+            "accessors": [{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"}],
+            "bufferViews": [{"buffer": 0, "byteLength": 36}], "buffers": [{"byteLength": 36, "uri": uri}]
+        })
+        .to_string()
+    };
     let back = import_gltf(&file("beside.gltf", Some(doc("beside.bin").as_bytes()))).expect("reads");
     assert_eq!(back[0].mesh.tris.len(), 1);
     let err = import_gltf(&file("lost.gltf", Some(doc("nowhere.bin").as_bytes()))).err();
@@ -156,7 +159,8 @@ fn a_broken_file_is_refused_by_name() {
         "accessors": [{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"}, {"bufferView": 1, "componentType": 5121, "count": 3, "type": "SCALAR"}],
         "bufferViews": [{"buffer": 0, "byteLength": 36}, {"buffer": 0, "byteOffset": 36, "byteLength": 3}],
         "buffers": [{"byteLength": 39, "uri": format!("data:application/octet-stream;base64,{}", b64(&[bin, vec![0, 1, 9]].concat()))}]
-    }).to_string();
+    })
+    .to_string();
     assert_eq!(import_gltf(&file("bad-index.gltf", Some(bad.as_bytes()))).err().as_deref(), Some("io-gltf-bad-index"));
     assert!(export_glb(&[], &file("nothing.glb", None)).is_err(), "an empty set was written as a file");
 }
@@ -201,7 +205,15 @@ fn a_tree_goes_out_as_nodes_with_names_and_colours() {
     use qymcad_core::model::ExportNode;
     let p = file("tree.glb", None);
     let at = |x: f64, z: f64| [1.0, 0.0, 0.0, x, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, z];
-    let node = |name: &str, parent: Option<usize>, place: [f64; 12], body: Option<u64>, same_as: Option<usize>, color: Option<[u8; 3]>| ExportNode { name: name.into(), parent, place, body, same_as, color, face_colors: Vec::new() };
+    let node = |name: &str, parent: Option<usize>, place: [f64; 12], body: Option<u64>, same_as: Option<usize>, color: Option<[u8; 3]>| ExportNode {
+        name: name.into(),
+        parent,
+        place,
+        body,
+        same_as,
+        color,
+        face_colors: Vec::new(),
+    };
     let (red, blue) = (Some([204, 26, 26]), Some([26, 51, 230]));
     let nodes = [
         node("head", None, at(0.0, 0.0), None, None, None),
@@ -263,7 +275,12 @@ fn a_tree_comes_back_as_its_groups() {
     let p = file("groups.glb", None);
     let at = |x: f64, z: f64| [1.0, 0.0, 0.0, x, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, z];
     let node = |name: &str, parent: Option<usize>, place: [f64; 12], body: Option<u64>| ExportNode { name: name.into(), parent, place, body, same_as: None, color: None, face_colors: Vec::new() };
-    let nodes = [node("head", None, at(0.0, 0.0), None), node("plate", Some(0), at(30.0, 0.0), Some(1)), node("unit", Some(0), at(0.0, 50.0), None), node("pin", Some(2), at(5.0, 0.0), Some(2))];
+    let nodes = [
+        node("head", None, at(0.0, 0.0), None),
+        node("plate", Some(0), at(30.0, 0.0), Some(1)),
+        node("unit", Some(0), at(0.0, 50.0), None),
+        node("pin", Some(2), at(5.0, 0.0), Some(2)),
+    ];
     export_glb_tree(&nodes, &[(1, tetra(0.0, 0.0), Vec::new()), (2, tetra(0.0, 0.0), Vec::new())], &p).expect("the tree is written");
     let back = import_gltf(&p).expect("the tree reads back");
     let chain = |k: usize| back[k].within.iter().map(|(_, n, _)| n.as_str()).collect::<Vec<_>>();

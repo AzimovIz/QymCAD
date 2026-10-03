@@ -12,8 +12,7 @@
 pub(crate) use qymcad_ui_state::{lineage_of};
 use super::*;
 
-impl App {
-}
+impl App {}
 
 #[cfg(test)]
 mod tests {
@@ -27,11 +26,7 @@ mod tests {
     /// layout by hand, and a month later half the kinds have a form of their own again.
     #[test]
     fn every_properties_card_starts_with_the_shared_header() {
-        let files: [(&str, &str); 3] = [
-            ("panels.rs", crate::gui::panels_source::PANELS),
-            ("gui.rs", include_str!("../gui.rs")),
-            ("sketching.rs", crate::gui::sketch_source::SKETCH),
-        ];
+        let files: [(&str, &str); 3] = [("panels.rs", crate::gui::panels_source::PANELS), ("gui.rs", include_str!("../gui.rs")), ("sketching.rs", crate::gui::sketch_source::SKETCH)];
         // the CAD kinds of selection; the CAM cards (machine, tool, setup, operation) are not included
         // here — that module has fallen behind and will be rewritten
         let cards = ["feature_props", "mesh_props", "face_props", "contour_props", "sketch_props", "plane_props", "datum_point_props", "datum_axis_props", "component_props"];
@@ -45,11 +40,7 @@ mod tests {
                     found = true;
                     where_ = (*fname).to_string();
                     let rest = &src[a..];
-                    let end = ["\n    pub(super) fn ", "\n    pub(crate) fn ", "\n    fn ", "\npub(crate) fn ", "\nfn "]
-                        .iter()
-                        .filter_map(|m| rest.find(m))
-                        .min()
-                        .unwrap_or(rest.len());
+                    let end = ["\n    pub(super) fn ", "\n    pub(crate) fn ", "\n    fn ", "\npub(crate) fn ", "\nfn "].iter().filter_map(|m| rest.find(m)).min().unwrap_or(rest.len());
                     has_header |= rest[..end].contains("props_header(");
                 }
             }

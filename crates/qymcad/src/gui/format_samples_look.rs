@@ -122,7 +122,8 @@ mod tests {
         let _ = pass(app); // the first pass only settles the canvas rectangle
         if app.viewing.view_rect.width() > 1.0 {
             crate::gui::fit3d(&mut app.viewing.cam, &app.project, app.viewing.view_rect);
-            qymcad_ui_state::fit(&app.project, &mut app.viewing.view, app.viewing.view_rect); // a drawing in its sketch, framed whole
+            qymcad_ui_state::fit(&app.project, &mut app.viewing.view, app.viewing.view_rect);
+            // a drawing in its sketch, framed whole
         }
         app.cache.label_tex.borrow_mut().clear();
         let img = pass(app);
@@ -143,9 +144,30 @@ mod tests {
         use qymcad_core::geom::{Mesh, Point3};
         use qymcad_meshfit::{prepare, regions, weld_tolerance, Surface, Tolerance};
         const PALETTE: [[u8; 3]; 24] = [
-            [230, 25, 75], [60, 180, 75], [255, 225, 25], [0, 130, 200], [245, 130, 48], [145, 30, 180], [70, 240, 240], [240, 50, 230],
-            [210, 245, 60], [250, 190, 212], [0, 128, 128], [220, 190, 255], [170, 110, 40], [255, 250, 200], [128, 0, 0], [170, 255, 195],
-            [128, 128, 0], [255, 215, 180], [0, 0, 128], [255, 160, 0], [100, 60, 255], [0, 255, 120], [255, 90, 160], [90, 200, 255],
+            [230, 25, 75],
+            [60, 180, 75],
+            [255, 225, 25],
+            [0, 130, 200],
+            [245, 130, 48],
+            [145, 30, 180],
+            [70, 240, 240],
+            [240, 50, 230],
+            [210, 245, 60],
+            [250, 190, 212],
+            [0, 128, 128],
+            [220, 190, 255],
+            [170, 110, 40],
+            [255, 250, 200],
+            [128, 0, 0],
+            [170, 255, 195],
+            [128, 128, 0],
+            [255, 215, 180],
+            [0, 0, 128],
+            [255, 160, 0],
+            [100, 60, 255],
+            [0, 255, 120],
+            [255, 90, 160],
+            [90, 200, 255],
         ];
         let Ok(dir) = std::env::var("QYM_SAMPLES") else { return };
         let dir = std::path::PathBuf::from(dir);
@@ -208,10 +230,15 @@ mod tests {
                     };
                     groups.entry(colour).or_default().extend(region.tris.iter().map(|&t| p.mesh.tris[t as usize]));
                 }
-                let verts: Vec<Point3> = p.mesh.verts.iter().map(|v| {
-                    let w = apply12(&wt, [v.x, v.y, v.z]);
-                    Point3::new(w[0], w[1], w[2])
-                }).collect();
+                let verts: Vec<Point3> = p
+                    .mesh
+                    .verts
+                    .iter()
+                    .map(|v| {
+                        let w = apply12(&wt, [v.x, v.y, v.z]);
+                        Point3::new(w[0], w[1], w[2])
+                    })
+                    .collect();
                 app.project.bodies[i].visible = false;
                 for (colour, tris) in groups {
                     app.project.add_mesh(Mesh { verts: verts.clone(), tris });
@@ -274,8 +301,18 @@ mod tests {
         use qymcad_kernel::recognise::recognise as solid;
         use qymcad_meshfit::{boundaries, curves, prepare, regions, weld_tolerance, Tolerance};
         const COLOURS: [[u8; 3]; 12] = [
-            [230, 25, 75], [60, 180, 75], [255, 225, 25], [0, 130, 200], [245, 130, 48], [145, 30, 180],
-            [70, 240, 240], [240, 50, 230], [210, 245, 60], [250, 190, 212], [0, 128, 128], [170, 110, 40],
+            [230, 25, 75],
+            [60, 180, 75],
+            [255, 225, 25],
+            [0, 130, 200],
+            [245, 130, 48],
+            [145, 30, 180],
+            [70, 240, 240],
+            [240, 50, 230],
+            [210, 245, 60],
+            [250, 190, 212],
+            [0, 128, 128],
+            [170, 110, 40],
         ];
         let Ok(dir) = std::env::var("QYM_SAMPLES") else { return };
         let dir = std::path::PathBuf::from(dir);
@@ -317,10 +354,14 @@ mod tests {
                 let (body, built, free) = (made.shape, made.areas.iter().flatten().count(), made.free_edges);
                 app.project.bodies[i].visible = false;
                 for (mesh, faces) in body.tessellate(body.bbox_diag() * 2e-4) {
-                    let verts: Vec<Point3> = mesh.verts.iter().map(|v| {
-                        let w = apply12(&wt, [v.x, v.y, v.z]);
-                        Point3::new(w[0], w[1], w[2])
-                    }).collect();
+                    let verts: Vec<Point3> = mesh
+                        .verts
+                        .iter()
+                        .map(|v| {
+                            let w = apply12(&wt, [v.x, v.y, v.z]);
+                            Point3::new(w[0], w[1], w[2])
+                        })
+                        .collect();
                     let mut groups: std::collections::BTreeMap<usize, Vec<[u32; 3]>> = std::collections::BTreeMap::new();
                     for (k, face) in faces.iter().enumerate() {
                         groups.entry(k % COLOURS.len()).or_default().extend(face.triangles.iter().map(|&t| mesh.tris[t as usize]));
@@ -330,7 +371,13 @@ mod tests {
                         app.project.set_mesh_color(app.project.bodies.len() - 1, COLOURS[k]);
                     }
                 }
-                said.push(format!("{} regions -> {built} faces, {}, free sides {free}, volume {:.3} against the mesh's {:.3}", found.len(), if body.is_sheet() { "a shell" } else { "a solid" }, body.volume(), p.mesh.volume()));
+                said.push(format!(
+                    "{} regions -> {built} faces, {}, free sides {free}, volume {:.3} against the mesh's {:.3}",
+                    found.len(),
+                    if body.is_sheet() { "a shell" } else { "a solid" },
+                    body.volume(),
+                    p.mesh.volume()
+                ));
             }
             eprintln!("BODY {name}: {}", said.join("; "));
             both_sides(&mut app, &shots, &name, ".body");
@@ -373,13 +420,8 @@ mod tests {
             for i in before..came {
                 let Some(id) = app.project.mesh_id(i) else { continue };
                 let p = prepare(&app.project.bodies[i].mesh, weld_tolerance(&app.project.bodies[i].mesh));
-                let torn: Vec<bool> = (0..p.mesh.tris.len())
-                    .map(|t| p.neighbours[t].contains(&NO_NEIGHBOUR) || p.slivers.contains(&(t as u32)))
-                    .collect();
-                let pick = |want: bool| Mesh {
-                    verts: p.mesh.verts.clone(),
-                    tris: p.mesh.tris.iter().zip(&torn).filter(|(_, b)| **b == want).map(|(t, _)| *t).collect(),
-                };
+                let torn: Vec<bool> = (0..p.mesh.tris.len()).map(|t| p.neighbours[t].contains(&NO_NEIGHBOUR) || p.slivers.contains(&(t as u32))).collect();
+                let pick = |want: bool| Mesh { verts: p.mesh.verts.clone(), tris: p.mesh.tris.iter().zip(&torn).filter(|(_, b)| **b == want).map(|(t, _)| *t).collect() };
                 torn_all += torn.iter().filter(|b| **b).count();
                 all += torn.len();
                 let wt = app.project.body_world_transform(id);
@@ -409,7 +451,8 @@ mod tests {
         let shots = dir.join("shots");
         std::fs::create_dir_all(&shots).expect("a folder for the pictures");
         let only = std::env::var("QYM_SAMPLE").ok();
-        let mut files: Vec<std::path::PathBuf> = std::fs::read_dir(&dir).expect("the folder reads").flatten().map(|e| e.path()).filter(|p| p.is_file() && qymcad_io::Format::of_path(&p.to_string_lossy()).is_some()).collect();
+        let mut files: Vec<std::path::PathBuf> =
+            std::fs::read_dir(&dir).expect("the folder reads").flatten().map(|e| e.path()).filter(|p| p.is_file() && qymcad_io::Format::of_path(&p.to_string_lossy()).is_some()).collect();
         if let Some(sub) = std::fs::read_dir(&dir).ok() {
             for e in sub.flatten().filter(|e| e.path().is_dir() && e.file_name() != "shots") {
                 files.extend(std::fs::read_dir(e.path()).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| qymcad_io::Format::of_path(&p.to_string_lossy()).is_some()));

@@ -471,12 +471,7 @@ mod tests {
                 }
             }
         }
-        assert!(
-            worst < 1e-6,
-            "analytic derivative differs from the numerical one by {worst:.3e} (equation {}, unknown {}): the formula is wrong",
-            worst_at.0,
-            worst_at.1
-        );
+        assert!(worst < 1e-6, "analytic derivative differs from the numerical one by {worst:.3e} (equation {}, unknown {}): the formula is wrong", worst_at.0, worst_at.1);
     }
 
     #[test]

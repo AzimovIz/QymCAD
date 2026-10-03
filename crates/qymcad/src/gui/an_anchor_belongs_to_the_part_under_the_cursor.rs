@@ -103,10 +103,7 @@ mod tests {
         // TRAP GUARD: the neighbour's snap point really is CLOSER — otherwise the check catches
         // nothing and its green colour means nothing.
         let (d_mine, d_neighbour) = (nearest_snap(&app, mine, at), nearest_snap(&app, neighbour, at));
-        assert!(
-            d_neighbour < d_mine,
-            "GUARD: the neighbour's snap must be closer to the cursor ({d_neighbour:.1} px) than our own ({d_mine:.1} px) — otherwise there is nothing to steal"
-        );
+        assert!(d_neighbour < d_mine, "GUARD: the neighbour's snap must be closer to the cursor ({d_neighbour:.1} px) than our own ({d_mine:.1} px) — otherwise there is nothing to steal");
         // And the part under the cursor must be OUR OWN, otherwise the aim went elsewhere.
         let under = app.pick_part_face_at(viewport(), at).map(|(b, _)| b);
         assert_eq!(under, Some(mine), "GUARD: the wrong part turned up under the cursor ({under:?}) — the aim missed");
@@ -116,12 +113,7 @@ mod tests {
             AnchorRef::FaceCenter(b, _) | AnchorRef::EdgeMid(b, _) | AnchorRef::Vertex(b, _, _) => Some(*b),
             _ => None,
         };
-        assert_eq!(
-            owner,
-            Some(mine),
-            "the pointing was at part {mine} and the anchor was inferred on {owner:?} — the neighbouring part took the anchor away: {:?}",
-            got.1
-        );
+        assert_eq!(owner, Some(mine), "the pointing was at part {mine} and the anchor was inferred on {owner:?} — the neighbouring part took the anchor away: {:?}", got.1);
     }
 
     #[test]

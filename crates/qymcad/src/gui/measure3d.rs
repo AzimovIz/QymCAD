@@ -41,8 +41,6 @@ impl App {
         self.status = if self.side.m3.picks.is_empty() { crate::i18n::tr("m3-hint") } else { self.measure_text() };
     }
 
-
-
     /// WHAT THE CURSOR HIT: vertex -> edge -> face.
     ///
     /// The order is exactly that (from small to large), as in every CAD: a vertex lies ON an edge and
@@ -82,7 +80,10 @@ impl App {
                 if id == 0 {
                     continue;
                 }
-                let pts: Vec<Pos2> = poly.iter().map(|p| qymcad_ui_state::Screen { cam: &self.viewing.cam, set: &self.set, rect: rect, basis: &basis }.at(apply12(&wt, [p[0] as f64, p[1] as f64, p[2] as f64])).0).collect();
+                let pts: Vec<Pos2> = poly
+                    .iter()
+                    .map(|p| qymcad_ui_state::Screen { cam: &self.viewing.cam, set: &self.set, rect: rect, basis: &basis }.at(apply12(&wt, [p[0] as f64, p[1] as f64, p[2] as f64])).0)
+                    .collect();
                 for w in pts.windows(2) {
                     let d = super::screen_dist_seg(pos, w[0], w[1]);
                     if best.is_none_or(|(bd, _, _)| d < bd) {

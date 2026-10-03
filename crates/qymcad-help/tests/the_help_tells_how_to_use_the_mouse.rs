@@ -71,10 +71,7 @@ fn the_bindings_the_help_promises_are_the_ones_the_code_has() {
     let src = std::fs::read_to_string(root.join("qymcad-ui-state/src/lib.rs")).expect("the view module reads");
     let pan = src.split("pub fn pan_sheet_2d").nth(1).expect("panning the sheet is a function of the view module");
     let body = &pan[..pan.find("\n}\n").map(|i| i + 2).unwrap_or(pan.len())];
-    assert!(
-        body.contains("pointer.middle_down()"),
-        "the help says the middle button pans a sketch, and panning the sheet no longer asks about that button"
-    );
+    assert!(body.contains("pointer.middle_down()"), "the help says the middle button pans a sketch, and panning the sheet no longer asks about that button");
 }
 
 /// AND THE HELP SAYS THE BINDINGS ARE A CHOICE, because they became one.
@@ -85,13 +82,11 @@ fn the_bindings_the_help_promises_are_the_ones_the_code_has() {
 #[test]
 fn the_help_says_which_button_navigates_is_a_setting() {
     let t = article("en");
-    assert!(
-        t.contains("Mouse navigation"),
-        "the bindings are a setting now, and the article still describes one set as the only behaviour"
-    );
+    assert!(t.contains("Mouse navigation"), "the bindings are a setting now, and the article still describes one set as the only behaviour");
     let src = std::fs::read_to_string(qymcad_i18n::ratchet::crates_root().join("qymcad/src/gui/viewport_3d.rs")).expect("the 3D viewport reads");
     assert!(
-        src.contains("qymcad_ui_state::turn_view(crate::gui::orbit_about::pivot(&self.painting(), rect, ctx, resp), &mut self.viewing.cam, self.set.mouse_nav, ctx, resp)") && src.contains("qymcad_ui_state::pan_now(self.set.mouse_nav, ctx, resp)"),
+        src.contains("qymcad_ui_state::turn_view(crate::gui::orbit_about::pivot(&self.painting(), rect, ctx, resp), &mut self.viewing.cam, self.set.mouse_nav, ctx, resp)")
+            && src.contains("qymcad_ui_state::pan_now(self.set.mouse_nav, ctx, resp)"),
         "the help promises a choice of navigation and the viewport no longer asks for it"
     );
     // AND THE NAMES IN THE ARTICLE ARE LAYOUTS THAT EXIST. A list of habits that names one the program does

@@ -113,7 +113,14 @@ pub static CYLINDER: Tool = Tool {
     refusal: None,
     budget: (30, 2000),
     help: "part/19-primitives",
-    not_applicable: &[NOT_APPLICABLE[0], NOT_APPLICABLE[1], NOT_APPLICABLE[2], NOT_APPLICABLE[3], NOT_APPLICABLE[4], (17, "every size the fields take builds a cylinder: what cannot be built is refused by the fields themselves (see 6)")],
+    not_applicable: &[
+        NOT_APPLICABLE[0],
+        NOT_APPLICABLE[1],
+        NOT_APPLICABLE[2],
+        NOT_APPLICABLE[3],
+        NOT_APPLICABLE[4],
+        (17, "every size the fields take builds a cylinder: what cannot be built is refused by the fields themselves (see 6)"),
+    ],
 };
 
 /// A SPHERE of radius `r` about the origin: one face, the seam and its two poles.
@@ -149,7 +156,14 @@ pub static SPHERE: Tool = Tool {
     refusal: None,
     budget: (30, 2000),
     help: "part/19-primitives",
-    not_applicable: &[NOT_APPLICABLE[0], NOT_APPLICABLE[1], NOT_APPLICABLE[2], NOT_APPLICABLE[3], NOT_APPLICABLE[4], (17, "every radius the field takes builds a sphere: what cannot be built is refused by the field itself (see 6)")],
+    not_applicable: &[
+        NOT_APPLICABLE[0],
+        NOT_APPLICABLE[1],
+        NOT_APPLICABLE[2],
+        NOT_APPLICABLE[3],
+        NOT_APPLICABLE[4],
+        (17, "every radius the field takes builds a sphere: what cannot be built is refused by the field itself (see 6)"),
+    ],
 };
 
 /// A CONE from `r1` at the bottom to `r2` at the top over `h`, standing on the table about the origin: a frustum has
@@ -200,7 +214,14 @@ pub static CONE: Tool = Tool {
     refusal: None,
     budget: (30, 2000),
     help: "part/19-primitives",
-    not_applicable: &[NOT_APPLICABLE[0], NOT_APPLICABLE[1], NOT_APPLICABLE[2], NOT_APPLICABLE[3], NOT_APPLICABLE[4], (17, "every size the fields take builds a cone: two radii of nothing are refused by the fields themselves (see 6)")],
+    not_applicable: &[
+        NOT_APPLICABLE[0],
+        NOT_APPLICABLE[1],
+        NOT_APPLICABLE[2],
+        NOT_APPLICABLE[3],
+        NOT_APPLICABLE[4],
+        (17, "every size the fields take builds a cone: two radii of nothing are refused by the fields themselves (see 6)"),
+    ],
 };
 
 /// A TORUS of ring `ring` and tube `tube` about the origin, lying on the table: one face, two seams.
@@ -309,5 +330,12 @@ pub static PRISM: Tool = Tool {
     refusal: None,
     budget: (30, 2000),
     help: "part/19-primitives",
-    not_applicable: &[NOT_APPLICABLE[0], NOT_APPLICABLE[1], NOT_APPLICABLE[2], NOT_APPLICABLE[3], NOT_APPLICABLE[4], (17, "every size the fields take builds a prism: what cannot be built is refused by the fields themselves (see 6)")],
+    not_applicable: &[
+        NOT_APPLICABLE[0],
+        NOT_APPLICABLE[1],
+        NOT_APPLICABLE[2],
+        NOT_APPLICABLE[3],
+        NOT_APPLICABLE[4],
+        (17, "every size the fields take builds a prism: what cannot be built is refused by the fields themselves (see 6)"),
+    ],
 };

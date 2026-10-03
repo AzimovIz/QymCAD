@@ -28,7 +28,10 @@ fn pocket(x0: f64, y0: f64, x1: f64, y1: f64) -> (Project, u64) {
 
 /// The upright edge of body `body` at (x, y).
 fn upright(p: &Project, body: u64, x: f64, y: f64) -> u32 {
-    p.regen_edges.get(&body).and_then(|es| es.iter().find(|e| (e.mid[0] - x).abs() < 1e-3 && (e.mid[1] - y).abs() < 1e-3 && (e.a[2] - e.b[2]).abs() > 1.0).map(|e| e.id)).unwrap_or_else(|| panic!("no upright edge at ({x}, {y})"))
+    p.regen_edges
+        .get(&body)
+        .and_then(|es| es.iter().find(|e| (e.mid[0] - x).abs() < 1e-3 && (e.mid[1] - y).abs() < 1e-3 && (e.a[2] - e.b[2]).abs() > 1.0).map(|e| e.id))
+        .unwrap_or_else(|| panic!("no upright edge at ({x}, {y})"))
 }
 
 /// The faces of the body, all of them - the tessellated list leaves a strip too narrow to draw out.

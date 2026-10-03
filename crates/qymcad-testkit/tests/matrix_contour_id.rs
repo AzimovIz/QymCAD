@@ -18,12 +18,7 @@ fn feature_follows_its_loop_when_loops_swap_places() {
     let _b_ids = p.add_rect_entity(si, 40.0, 0.0, 60.0, 20.0, qymcad_core::feature::Purpose::Real);
     p.regen_sketch(si);
     // the contour of square A is the one whose centroid is at x = 10
-    let cid_a = p.sketches[si]
-        .contour_ids
-        .iter()
-        .copied()
-        .find(|&c| p.contour_index(c).map(|ci| (p.contours[ci].centroid().x - 10.0).abs() < 1.0).unwrap_or(false))
-        .expect("the contour of A");
+    let cid_a = p.sketches[si].contour_ids.iter().copied().find(|&c| p.contour_index(c).map(|ci| (p.contours[ci].centroid().x - 10.0).abs() < 1.0).unwrap_or(false)).expect("the contour of A");
     let e = p.add_extrude_multi(sid, vec![cid_a], 10.0, qymcad_core::feature::Reach::Forward, 0.0, vec![]);
     let body = p.finish_base_body(e, 1);
     let (_, shapes) = qymcad_testkit::regenerate(&mut p);
@@ -49,11 +44,7 @@ fn feature_follows_its_loop_when_loops_swap_places() {
     let (report, shapes) = qymcad_testkit::regenerate(&mut p);
     // ALL OF THEM AT ONCE, not the first. A matrix check reports every failure of the pass in one go -
     // panicking on the first hides the rest and turns one run into as many runs as there are faults.
-    assert!(
-        report.errors.is_empty(),
-        "the rebuild after the edit failed: {}",
-        report.errors.iter().map(|(id, e)| format!("{id}: {e}")).collect::<Vec<_>>().join("; ")
-    );
+    assert!(report.errors.is_empty(), "the rebuild after the edit failed: {}", report.errors.iter().map(|(id, e)| format!("{id}: {e}")).collect::<Vec<_>>().join("; "));
     // the column has to stand over the new position of A, x in [40, 60], which a probe checks
     let s = shapes.get(&body).expect("there is a body");
     let outer = qymcad_core::geom::Contour::closed(vec![

@@ -122,13 +122,7 @@ pub fn text_outline_contours(font: &[u8], index: u32, text: &str, height: f64, o
 /// list of installed fonts would show one family per weight.
 pub fn face_name(font: &[u8], index: u32) -> Option<(String, String)> {
     let face = ttf_parser::Face::parse(font, index).ok()?;
-    let pick = |want: u16| {
-        face.names()
-            .into_iter()
-            .find(|n| n.name_id == want && n.is_unicode())
-            .and_then(|n| n.to_string())
-            .filter(|s| !s.trim().is_empty())
-    };
+    let pick = |want: u16| face.names().into_iter().find(|n| n.name_id == want && n.is_unicode()).and_then(|n| n.to_string()).filter(|s| !s.trim().is_empty());
     let family = pick(ttf_parser::name_id::TYPOGRAPHIC_FAMILY).or_else(|| pick(ttf_parser::name_id::FAMILY))?;
     let style = pick(ttf_parser::name_id::TYPOGRAPHIC_SUBFAMILY).or_else(|| pick(ttf_parser::name_id::SUBFAMILY)).unwrap_or_else(|| "Regular".into());
     Some((family, style))

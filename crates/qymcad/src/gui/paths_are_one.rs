@@ -15,12 +15,7 @@ mod tests {
             return; // a system with no notion of per-user folders keeps nothing to compare
         };
         let Some(dirs) = qymcad_paths::dirs() else { return };
-        assert!(
-            file.starts_with(dirs.data_dir()),
-            "the settings are kept apart from everything else: {} against {}",
-            file.display(),
-            dirs.data_dir().display()
-        );
+        assert!(file.starts_with(dirs.data_dir()), "the settings are kept apart from everything else: {} against {}", file.display(), dirs.data_dir().display());
     }
 
     /// EVERYTHING A PERSON'S IN ONE FOLDER: the settings, the schemes, the templates, the parts library and the crash
@@ -30,7 +25,12 @@ mod tests {
     fn schemes_templates_library_and_reports_lie_with_the_settings() {
         let Some(settings) = qymcad_paths::settings_file() else { return };
         let home = settings.parent().expect("the settings lie in a folder").to_path_buf();
-        for (what, dir) in [("schemes", qymcad_paths::config("schemes")), ("templates", qymcad_paths::config("templates")), ("the parts library", qymcad_paths::data("library/parts")), ("crash reports", qymcad_paths::data("crashes"))] {
+        for (what, dir) in [
+            ("schemes", qymcad_paths::config("schemes")),
+            ("templates", qymcad_paths::config("templates")),
+            ("the parts library", qymcad_paths::data("library/parts")),
+            ("crash reports", qymcad_paths::data("crashes")),
+        ] {
             let dir = dir.unwrap_or_else(|| panic!("{what} have no folder"));
             assert!(dir.starts_with(&home), "{what} lie in {}, apart from the settings in {}", dir.display(), home.display());
         }
@@ -50,10 +50,7 @@ mod tests {
             !code.contains("eframe::storage_dir("),
             "the folder of the settings is chosen by the framework again - it derives it from the application id, and on Windows and macOS that is not the folder the rest of a person's things live in"
         );
-        assert!(
-            code.contains("persistence_path: qymcad_paths::settings_file()"),
-            "the settings are not pointed at the program's own folder: `persistence_path` is left unset"
-        );
+        assert!(code.contains("persistence_path: qymcad_paths::settings_file()"), "the settings are not pointed at the program's own folder: `persistence_path` is left unset");
     }
 }
 

@@ -145,7 +145,14 @@ mod tests {
             ("08-arc-and-lines", || {
                 let (mut app, si) = empty();
                 app.project.add_line_entity(si, -30.0, -10.0, 0.0, -10.0, qymcad_core::feature::Purpose::Real);
-                app.project.add_arc_entity(si, qymcad_core::geom::Point2::new(0.0, 0.0), qymcad_core::geom::Point2::new(0.0, -10.0), qymcad_core::geom::Point2::new(10.0, 0.0), qymcad_core::feature::Winding::Ccw, qymcad_core::feature::Purpose::Real);
+                app.project.add_arc_entity(
+                    si,
+                    qymcad_core::geom::Point2::new(0.0, 0.0),
+                    qymcad_core::geom::Point2::new(0.0, -10.0),
+                    qymcad_core::geom::Point2::new(10.0, 0.0),
+                    qymcad_core::feature::Winding::Ccw,
+                    qymcad_core::feature::Purpose::Real,
+                );
                 app.project.add_line_entity(si, 10.0, 0.0, 30.0, 0.0, qymcad_core::feature::Purpose::Real);
                 app.project.regen_sketch(si);
                 let p = point_at(&app, si, -30.0, -10.0);

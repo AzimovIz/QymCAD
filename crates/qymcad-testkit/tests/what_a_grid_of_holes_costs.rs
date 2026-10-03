@@ -60,11 +60,7 @@ fn plate_with_holes(n: usize) -> (Project, f64) {
     let (took, cpu) = (t.elapsed().as_secs_f64() * 1000.0, cpu_ms() - cpu0);
     assert!(report.errors.is_empty(), "the plate with {n} holes did not build: {:?}", report.errors);
     let cut_us: u128 = report.spent.iter().filter(|(_, name, _)| name.contains("combine")).map(|(_, _, us)| us).sum();
-    eprintln!(
-        "  {n} holes: the whole rebuild {took:.0} ms, of it the cut {:.0} ms; processor time {cpu:.0} ms, that is {:.2} cores",
-        cut_us as f64 / 1000.0,
-        cpu / took.max(1.0)
-    );
+    eprintln!("  {n} holes: the whole rebuild {took:.0} ms, of it the cut {:.0} ms; processor time {cpu:.0} ms, that is {:.2} cores", cut_us as f64 / 1000.0, cpu / took.max(1.0));
     (p, took)
 }
 

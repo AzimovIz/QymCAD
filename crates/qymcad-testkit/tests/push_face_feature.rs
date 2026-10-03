@@ -15,12 +15,7 @@ fn part_with_cube() -> (Project, u64, FaceKey) {
     let body = p.add_box(20.0, 20.0, 20.0);
     let _ = qymcad_testkit::regenerate(&mut p);
     // the top face of the cube
-    let f = p
-        .regen_faces
-        .get(&body)
-        .and_then(|fs| fs.iter().filter(|f| f.normal[2] > 0.9).max_by(|a, b| a.centroid.z.partial_cmp(&b.centroid.z).unwrap()))
-        .cloned()
-        .expect("there is a top face");
+    let f = p.regen_faces.get(&body).and_then(|fs| fs.iter().filter(|f| f.normal[2] > 0.9).max_by(|a, b| a.centroid.z.partial_cmp(&b.centroid.z).unwrap())).cloned().expect("there is a top face");
     let key = FaceKey { index: 0, centroid: [f.centroid.x, f.centroid.y, f.centroid.z], normal: f.normal, id: f.id };
     (p, body, key)
 }

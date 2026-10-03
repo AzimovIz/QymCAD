@@ -13,13 +13,7 @@ fn live(p: &Project, part: Id) -> Vec<Id> {
 fn one_body_per_part(name: &str) {
     let path = format!("{}/../../examples/{name}", env!("CARGO_MANIFEST_DIR"));
     let p = qymcad_io::load_project(&path).unwrap_or_else(|e| panic!("the example {name} opens: {e:?}"));
-    let many: Vec<(Id, Vec<Id>)> = p
-        .components
-        .iter()
-        .filter(|c| c.kind == qymcad_core::feature::ComponentKind::Part)
-        .map(|c| (c.id, live(&p, c.id)))
-        .filter(|(_, b)| b.len() > 1)
-        .collect();
+    let many: Vec<(Id, Vec<Id>)> = p.components.iter().filter(|c| c.kind == qymcad_core::feature::ComponentKind::Part).map(|c| (c.id, live(&p, c.id))).filter(|(_, b)| b.len() > 1).collect();
     assert!(many.is_empty(), "parts of {name} holding more than one body: {many:?}");
 }
 

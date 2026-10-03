@@ -78,12 +78,7 @@ fn a_mate_whose_anchor_is_lost_is_marked_faulty_in_the_same_list() {
 
     let list = p.mate_timeline(p.root);
     let e = list.iter().find(|e| e.id == hinge).expect("a dead joint has to stay in the list: it needs repairing, not hiding");
-    assert_eq!(
-        e.state,
-        MateState::Faulty("j-fault-connector-lost"),
-        "the joint lost a connector, yet the list calls it {:?}, so there is no way to see what needs repairing",
-        e.state
-    );
+    assert_eq!(e.state, MateState::Faulty("j-fault-connector-lost"), "the joint lost a connector, yet the list calls it {:?}, so there is no way to see what needs repairing", e.state);
 }
 
 #[test]

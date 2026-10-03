@@ -171,7 +171,11 @@ mod tests {
         assert!(app.regen.busy.is_some(), "setup: the rebuild is running");
         crate::gui::cancel_regen(&app.regen, &mut app.status);
         app.drain_busy_for_test();
-        assert!(app.regen.paused.is_some() || app.status.contains(&crate::i18n::tr1("io-rebuild-cancelled-undone", "what", "")[..8]), "the request to stop did not arrive: the rebuild does not count as stopped; status: {}", app.status.clone());
+        assert!(
+            app.regen.paused.is_some() || app.status.contains(&crate::i18n::tr1("io-rebuild-cancelled-undone", "what", "")[..8]),
+            "the request to stop did not arrive: the rebuild does not count as stopped; status: {}",
+            app.status.clone()
+        );
     }
     /// A FAILING NODE DOES NOT MAKE THE PROGRAM COMPUTE WITHOUT STOPPING.
     ///
@@ -213,10 +217,7 @@ mod tests {
         app.regen.ui_running = true; // as in a live window: a heavy rebuild is taken into a thread
         app.regen.wanted = false;
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
-        assert!(
-            !app.regen.wanted,
-            "nothing changed and the scheduler asks for a rebuild again — that is the window flashing on every frame"
-        );
+        assert!(!app.regen.wanted, "nothing changed and the scheduler asks for a rebuild again — that is the window flashing on every frame");
 
         // AND ON A REAL EDIT it does ask, otherwise the cure is worse than the illness
         app.project.mark_sketch_dirty(app.project.sketches[0].id);

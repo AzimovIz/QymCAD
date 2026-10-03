@@ -12,7 +12,12 @@ struct E(u32, u32, &'static str, usize, String);
 fn iges(unit: (u32, &str), ents: &[E]) -> String {
     let mut out = String::new();
     out.push_str(&format!("{:<72}S{:>7}\n", "a drawing for the check", 1));
-    let g = format!("1H,,1H;,5Hcheck,9Hcheck.igs,5Hcheck,5Hcheck,32,38,6,308,15,5Hcheck,1.,{},{}H{},1,0.1,15H20260913.000000,0.001,1000.,5Hcheck,5Hcheck,11,0,15H20260913.000000;", unit.0, unit.1.len(), unit.1);
+    let g = format!(
+        "1H,,1H;,5Hcheck,9Hcheck.igs,5Hcheck,5Hcheck,32,38,6,308,15,5Hcheck,1.,{},{}H{},1,0.1,15H20260913.000000,0.001,1000.,5Hcheck,5Hcheck,11,0,15H20260913.000000;",
+        unit.0,
+        unit.1.len(),
+        unit.1
+    );
     let gl: Vec<String> = g.as_bytes().chunks(72).map(|c| String::from_utf8_lossy(c).into_owned()).collect();
     for (k, l) in gl.iter().enumerate() {
         out.push_str(&format!("{:<72}G{:>7}\n", l, k + 1));
@@ -58,12 +63,15 @@ fn near(a: f64, b: f64) -> bool {
 /// A LINE, AN ARC, A CIRCLE AND A CLOSED POLYLINE come in as a line, an arc, a circle and four lines.
 #[test]
 fn lines_arcs_circles_and_polylines_come_in_as_drawn() {
-    let text = iges((2, "MM"), &[
-        E(110, 0, TOP, 0, "0.,0.,0.,10.,0.,0.".into()),
-        E(100, 0, TOP, 0, "0.,0.,0.,5.,0.,0.,5.".into()),
-        E(100, 0, TOP, 0, "0.,20.,0.,23.,0.,23.,0.".into()),
-        E(106, 63, TOP, 0, "1,4,0.,30.,0.,40.,0.,40.,10.,30.,10.".into()),
-    ]);
+    let text = iges(
+        (2, "MM"),
+        &[
+            E(110, 0, TOP, 0, "0.,0.,0.,10.,0.,0.".into()),
+            E(100, 0, TOP, 0, "0.,0.,0.,5.,0.,0.,5.".into()),
+            E(100, 0, TOP, 0, "0.,20.,0.,23.,0.,23.,0.".into()),
+            E(106, 63, TOP, 0, "1,4,0.,30.,0.,40.,0.,40.,10.,30.,10.".into()),
+        ],
+    );
     let d = read("kinds.igs", &text).expect("the drawing reads");
     assert_eq!(d.curves.len(), 7, "a line, an arc, a circle and a closed four-sided polyline: {:?}", d.curves);
     assert!(matches!(d.curves[1], ProfEdge::Arc { a, b, center, ccw: true } if near(a.x, 5.0) && near(b.y, 5.0) && near(center.x, 0.0)), "the arc: {:?}", d.curves[1]);
@@ -84,12 +92,15 @@ fn a_file_in_microns_comes_in_in_millimetres() {
 /// definition itself is not drawn at its own place.
 #[test]
 fn subfigures_are_placed_where_their_instances_say() {
-    let text = iges((2, "MM"), &[
-        E(110, 0, PART, 0, "0.,0.,0.,1.,0.,0.".into()),                    // DE 1: the member
-        E(308, 0, "00020201", 0, "0,4Hunit,1,1".into()),                    // DE 3: the definition
-        E(408, 0, TOP, 0, "3,100.,0.,0.,2.".into()),                        // DE 5: placed at x 100, twice the size
-        E(412, 0, TOP, 0, "3,1.,0.,50.,0.,3,1,10.,0.,0.,0".into()),        // DE 7: three copies, 10 apart, at y 50
-    ]);
+    let text = iges(
+        (2, "MM"),
+        &[
+            E(110, 0, PART, 0, "0.,0.,0.,1.,0.,0.".into()),             // DE 1: the member
+            E(308, 0, "00020201", 0, "0,4Hunit,1,1".into()),            // DE 3: the definition
+            E(408, 0, TOP, 0, "3,100.,0.,0.,2.".into()),                // DE 5: placed at x 100, twice the size
+            E(412, 0, TOP, 0, "3,1.,0.,50.,0.,3,1,10.,0.,0.,0".into()), // DE 7: three copies, 10 apart, at y 50
+        ],
+    );
     let d = read("subfigures.igs", &text).expect("reads");
     let mut got = lines(&d.curves);
     got.sort_by(|a, b| (a[1], a[0]).partial_cmp(&(b[1], b[0])).expect("numbers"));
@@ -99,12 +110,15 @@ fn subfigures_are_placed_where_their_instances_say() {
 /// A LIBRARY PLACES NOTHING: its cells are shown, and it says so - not the parts the cells are made of.
 #[test]
 fn a_library_shows_its_cells_and_says_so() {
-    let text = iges((2, "MM"), &[
-        E(110, 0, PART, 0, "0.,0.,0.,1.,0.,0.".into()),       // DE 1: a member of the part
-        E(308, 0, "00020201", 0, "0,4Hpart,1,1".into()),       // DE 3: a part...
-        E(408, 0, PART, 0, "3,5.,0.,0.".into()),               // DE 5: ...placed inside the cell
-        E(308, 0, "00020201", 0, "1,4Hcell,1,5".into()),       // DE 7: the cell, placed nowhere
-    ]);
+    let text = iges(
+        (2, "MM"),
+        &[
+            E(110, 0, PART, 0, "0.,0.,0.,1.,0.,0.".into()),  // DE 1: a member of the part
+            E(308, 0, "00020201", 0, "0,4Hpart,1,1".into()), // DE 3: a part...
+            E(408, 0, PART, 0, "3,5.,0.,0.".into()),         // DE 5: ...placed inside the cell
+            E(308, 0, "00020201", 0, "1,4Hcell,1,5".into()), // DE 7: the cell, placed nowhere
+        ],
+    );
     let d = read("library.igs", &text).expect("reads");
     assert!(d.definitions_only, "a file of definitions was not told apart from a drawing");
     assert_eq!(lines(&d.curves), vec![[5.0, 0.0, 6.0, 0.0]], "the cell, with its part in place, and nothing else");
@@ -113,14 +127,17 @@ fn a_library_shows_its_cells_and_says_so() {
 /// A TRANSFORM MOVES WHAT IT CARRIES; a turn or a mirror keeps an arc an arc, and a mirror turns it round.
 #[test]
 fn a_transform_moves_what_it_carries_and_keeps_arcs_arcs() {
-    let text = iges((2, "MM"), &[
-        E(124, 0, "00010000", 0, "1.,0.,0.,5.,0.,1.,0.,7.,0.,0.,1.,0.".into()),   // DE 1: a shift
-        E(110, 0, TOP, 1, "0.,0.,0.,10.,0.,0.".into()),
-        E(124, 0, "00010000", 0, "0.,-1.,0.,0.,1.,0.,0.,0.,0.,0.,1.,0.".into()),  // DE 5: a quarter turn
-        E(100, 0, TOP, 5, "0.,0.,0.,5.,0.,0.,5.".into()),
-        E(124, 0, "00010000", 0, "-1.,0.,0.,0.,0.,1.,0.,0.,0.,0.,1.,0.".into()), // DE 9: a mirror
-        E(100, 0, TOP, 9, "0.,0.,0.,5.,0.,0.,5.".into()),
-    ]);
+    let text = iges(
+        (2, "MM"),
+        &[
+            E(124, 0, "00010000", 0, "1.,0.,0.,5.,0.,1.,0.,7.,0.,0.,1.,0.".into()), // DE 1: a shift
+            E(110, 0, TOP, 1, "0.,0.,0.,10.,0.,0.".into()),
+            E(124, 0, "00010000", 0, "0.,-1.,0.,0.,1.,0.,0.,0.,0.,0.,1.,0.".into()), // DE 5: a quarter turn
+            E(100, 0, TOP, 5, "0.,0.,0.,5.,0.,0.,5.".into()),
+            E(124, 0, "00010000", 0, "-1.,0.,0.,0.,0.,1.,0.,0.,0.,0.,1.,0.".into()), // DE 9: a mirror
+            E(100, 0, TOP, 9, "0.,0.,0.,5.,0.,0.,5.".into()),
+        ],
+    );
     let d = read("transforms.igs", &text).expect("reads");
     assert_eq!(lines(&d.curves), vec![[5.0, 7.0, 15.0, 7.0]], "the shifted line");
     assert!(matches!(d.curves[1], ProfEdge::Arc { a, b, ccw: true, .. } if near(a.x, 0.0) && near(a.y, 5.0) && near(b.x, -5.0) && near(b.y, 0.0)), "the turned arc: {:?}", d.curves[1]);

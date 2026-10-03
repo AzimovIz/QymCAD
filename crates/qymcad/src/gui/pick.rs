@@ -10,17 +10,11 @@ pub(crate) use qymcad_ui_state::{shown_bodies, PickCtx}; // the visible bodies l
 use super::*;
 
 impl App {
-
-
-
-
     /// The vertex (an end of an edge) under the cursor among ALL the visible bodies -> (the body, the id
     /// of the edge, which end).
     pub(super) fn pick_vertex_any(&self, rect: Rect, pos: Pos2) -> Option<(Id, u32, bool)> {
         pick_vertex_any(&self.painting(), rect, pos)
     }
-
-
 
     /// THE FACE OF A PART UNDER THE CURSOR — a base plane does NOT intercept it.
     ///
@@ -32,38 +26,26 @@ impl App {
         pick_part_face_at(&self.painting(), rect, screen)
     }
 
-
-
-
     /// THE ONE PLACE THE BORROWS ARE SPLIT for picking: three shared borrows instead of the application.
     pub(super) fn pick_ctx(&self) -> PickCtx<'_> {
         PickCtx { project: &self.project, set: &self.set, view: &self.viewing.view }
     }
 
-
-
-
     /// The DATUM POINT under the cursor -> (its Id, its world position). For a two-point axis (kept
     /// parametric through `TwoPoints`).
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     /// A CLICK ON A VERTEX IN THE FILLET: create or remove its radius field. `true` means a hit.
     pub(super) fn pick_fillet_vertex(&mut self, rect: Rect, screen: Pos2) -> bool {
-        let Some((desc, p)) = fillet_vertex_at(&qymcad_ui_state::Screen { cam: &self.viewing.cam, set: &self.set, rect, basis: &self.viewing.cam.basis() }, &self.tools.armed, &self.edges, &self.tools.gsel, &mut self.project, screen) else { return false };
+        let Some((desc, p)) = fillet_vertex_at(
+            &qymcad_ui_state::Screen { cam: &self.viewing.cam, set: &self.set, rect, basis: &self.viewing.cam.basis() },
+            &self.tools.armed,
+            &self.edges,
+            &self.tools.gsel,
+            &mut self.project,
+            screen,
+        ) else {
+            return false;
+        };
         let key = format!("at{desc}");
         if let Some(i) = self.tools.cmd.params.iter().position(|p| p.key == key) {
             self.tools.cmd.params.remove(i);
@@ -93,7 +75,6 @@ impl App {
         true
     }
 
-
     /// A click on a FACE of a body in the chamfer or the fillet -> select or clear ALL the edges of that
     /// face (a click on a face of a cube gives its 4 edges). It toggles: if every edge of the face is
     /// already selected they are cleared, otherwise they are added. `true` means a face was hit.
@@ -105,10 +86,7 @@ impl App {
         // is not described by one.
         if let Some(first) = self.tools.gsel.between_first.take() {
             if fid != first {
-                let q = qymcad_core::refs::Query::Between(
-                    Box::new(qymcad_core::refs::Query::Id(first)),
-                    Box::new(qymcad_core::refs::Query::Id(fid)),
-                );
+                let q = qymcad_core::refs::Query::Between(Box::new(qymcad_core::refs::Query::Id(first)), Box::new(qymcad_core::refs::Query::Id(fid)));
                 self.apply_expansion("expand-between-done", q);
                 return true;
             }
@@ -146,44 +124,26 @@ impl App {
             self.tools.gsel.last_face = Some((fid, body)); // the expand-the-selection menu will ask about it
             self.tools.gsel.last_edge = None; // a face was asked about, not an edge
         }
-        self.status = crate::i18n::trn("pk-face-edges", &[("n", &eids.len().to_string()), ("what", &if all_sel { crate::i18n::tr("pk-removed") } else { crate::i18n::tr("pk-added") }), ("total", &self.tools.gsel.edges.len().to_string())]);
+        self.status = crate::i18n::trn(
+            "pk-face-edges",
+            &[
+                ("n", &eids.len().to_string()),
+                ("what", &if all_sel { crate::i18n::tr("pk-removed") } else { crate::i18n::tr("pk-added") }),
+                ("total", &self.tools.gsel.edges.len().to_string()),
+            ],
+        );
         true
     }
-
-
-
-
-
-
-
-
-
 
     /// Choose a font of one's own (TTF or OTF) — the bytes go into the cache.
     pub(super) fn pick_font(&mut self) {
         self.ask_open_file(rfd::AsyncFileDialog::new().add_filter(crate::i18n::tr("pk-font"), &["ttf", "otf", "TTF", "OTF"]), font_answer);
     }
 
-
     /// Bring a file in through the one door (see `import_door`).
     pub(super) fn pick_import(&mut self, want: qymcad_ui_state::Want) {
         self.ask_open_file(super::import_door::import_dialog(want), super::import_door::import_answer(want));
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     /// Picking the target of a thread — a cylindrical face gives the source body plus the circular rim edge
     /// (the axis and the radius by fact), plus a heuristic for inner or outer (by the direction of the
@@ -206,19 +166,9 @@ impl App {
         // to the click" gives the wrong one — the thread is built on the wrong surface, and the report was
         // that a thread cannot be drawn where there is a chamfer. This also catches a click on the chamfer
         // itself: on a cone the radius changes along the axis and the spread is large.
-        let face_tris = self
-            .project
-            .mesh_index(body)
-            .and_then(|mi| self.project.bodies.get(mi).and_then(|b| b.faces.iter().find(|f| f.id == fid)).map(|f| (mi, f.triangles.clone())));
-        let candidates: Vec<_> = self
-            .project
-            .regen_edges
-            .get(&body)
-            .map(|es| es.iter().filter(|e| e.is_circular() && eids.contains(&e.id)).cloned().collect())
-            .unwrap_or_default();
-        let face_r = face_tris.as_ref().and_then(|(mi, tris)| {
-            candidates.first().and_then(|e| qymcad_core::geom::cyl_face_radius(&self.project.bodies[*mi].mesh, tris, e.center, e.axis))
-        });
+        let face_tris = self.project.mesh_index(body).and_then(|mi| self.project.bodies.get(mi).and_then(|b| b.faces.iter().find(|f| f.id == fid)).map(|f| (mi, f.triangles.clone())));
+        let candidates: Vec<_> = self.project.regen_edges.get(&body).map(|es| es.iter().filter(|e| e.is_circular() && eids.contains(&e.id)).cloned().collect()).unwrap_or_default();
+        let face_r = face_tris.as_ref().and_then(|(mi, tris)| candidates.first().and_then(|e| qymcad_core::geom::cyl_face_radius(&self.project.bodies[*mi].mesh, tris, e.center, e.axis)));
         if let Some((_, spread)) = face_r {
             if spread > 0.08 {
                 self.status = crate::i18n::tr("pk-not-a-cylinder");
@@ -238,7 +188,9 @@ impl App {
             self.status = crate::i18n::tr("pk-no-round-rim");
             return;
         };
-        if qymcad_part::thread_let_go(&mut self.part_ctx(), body, eid) { return; }
+        if qymcad_part::thread_let_go(&mut self.part_ctx(), body, eid) {
+            return;
+        }
         // The axis is turned ALONG THE CHOSEN FACE: a thread runs where the cylinder itself lies. Computing
         // it over the whole mesh ("where there are more vertices") will not do — with a chamfer at the end
         // the rim ends up at its base, and on a part such as a boss the thread ran INTO THE AIR, towards the
@@ -270,18 +222,6 @@ impl App {
             ],
         );
     }
-
-
-
-
-
-
-
-
-
-
-
-
 
     pub(super) fn pick_face_3d(&mut self, rect: Rect, screen: Pos2) {
         let basis = self.viewing.cam.basis();
@@ -344,7 +284,14 @@ impl App {
                 let (pc, dc) = scr.at(wc);
                 if point_in_tri(screen, pa, pb, pc) {
                     let depth = tri_depth_at(screen, pa, da, pb, db, pc, dc);
-                    if qymcad_ui_state::nearer_hit(depth, self.project.bodies[mi].sheet, best.map(|(bd, bm, _)| (bd, self.project.bodies[bm].sheet)), self.tools.armed.cmd_kind() == 33 || (self.tools.armed.cmd_kind() == 31 && !self.tools.gsel.faces.is_empty() && self.params.repl_surface.is_none()) || self.tools.armed.cmd_kind() == 34) {
+                    if qymcad_ui_state::nearer_hit(
+                        depth,
+                        self.project.bodies[mi].sheet,
+                        best.map(|(bd, bm, _)| (bd, self.project.bodies[bm].sheet)),
+                        self.tools.armed.cmd_kind() == 33
+                            || (self.tools.armed.cmd_kind() == 31 && !self.tools.gsel.faces.is_empty() && self.params.repl_surface.is_none())
+                            || self.tools.armed.cmd_kind() == 34,
+                    ) {
                         best = Some((depth, mi, ti));
                     }
                 }
@@ -371,7 +318,8 @@ impl App {
                 // hand - where a corner or an edge under the cursor goes first; other commands take THE BODY.
                 let want_face = matches!(self.tools.armed.cmd_kind(), 6 | 7 | 23 | 25 | 26 | 28 | 30 | 31 | 36) || !self.tools.armed.commanding();
                 let fi = if want_face { self.project.bodies.get(mi).and_then(|b| b.faces.iter().position(|f| f.triangles.contains(&(ti as u32)))) } else { None };
-                let grip = qymcad_pick::edge_or_corner_under(&self.painting(), rect, screen); qymcad_part::take_under_click(&mut self.part_ctx(), mi, fi, grip);
+                let grip = qymcad_pick::edge_or_corner_under(&self.painting(), rect, screen);
+                qymcad_part::take_under_click(&mut self.part_ctx(), mi, fi, grip);
                 // The shell and the draft: multi-selection of faces strictly within ONE body — the ids of
                 // faces are local to a body (OCCT numbers them from zero in each). A click on a face of
                 // ANOTHER body starts the selection afresh on it, otherwise the ids of neighbouring bodies
@@ -398,7 +346,8 @@ impl App {
                 if matches!(self.tools.armed.cmd_kind(), 7 | 25 | 26 | 28 | 30 | 36) {
                     let id = fi.and_then(|fi| self.project.bodies.get(mi).and_then(|b| b.faces.get(fi))).map(|f| f.id);
                     let only_one = matches!(self.tools.armed.cmd_kind(), 7 | 25 | 28);
-                    qymcad_part::toggle_face(&mut self.part_ctx(), id, only_one); qymcad_part::place_hole_at(&mut self.part_ctx(), rect, screen);
+                    qymcad_part::toggle_face(&mut self.part_ctx(), id, only_one);
+                    qymcad_part::place_hole_at(&mut self.part_ctx(), rect, screen);
                 }
                 // REMOVE FACE: a multi-selection — a feature may consist of several faces (a stepped hole,
                 // a boss with a chamfer). A click adds or removes.
@@ -466,9 +415,6 @@ impl App {
             qymcad_part::click_on_nothing(&mut self.part_ctx());
         }
     }
-
-
-
 }
 
 /// WHAT THE ANSWER OF THE FILE CHOOSER DOES FOR A FONT: the bytes are read and become the font of the text tool.

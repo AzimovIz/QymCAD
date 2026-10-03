@@ -25,11 +25,7 @@ fn base_with_fillet(w: f64) -> (Project, u64, u64) {
 #[test]
 fn face_ids_are_stable_across_a_sketch_edit() {
     let (mut p, sid, body) = base_with_fillet(30.0);
-    let before: Vec<(u32, [f64; 3])> = p
-        .regen_faces
-        .get(&body)
-        .map(|fs| fs.iter().map(|f| (f.id, f.normal)).collect())
-        .unwrap_or_default();
+    let before: Vec<(u32, [f64; 3])> = p.regen_faces.get(&body).map(|fs| fs.iter().map(|f| (f.id, f.normal)).collect()).unwrap_or_default();
     assert!(!before.is_empty(), "the base body has faces");
     eprintln!("before the edit: {} faces, ids {:?}", before.len(), before.iter().map(|(i, _)| *i).collect::<Vec<_>>());
 
@@ -62,9 +58,7 @@ fn face_ids_are_stable_across_a_sketch_edit() {
 fn face_ids_survive_a_topology_change_in_the_sketch() {
     let (mut p, sid, body) = base_with_fillet(30.0);
     let si = p.sketch_index(sid).unwrap();
-    let by_normal = |p: &Project| -> Vec<([f64; 3], u32)> {
-        p.regen_faces.get(&body).map(|fs| fs.iter().map(|f| (f.normal, f.id)).collect()).unwrap_or_default()
-    };
+    let by_normal = |p: &Project| -> Vec<([f64; 3], u32)> { p.regen_faces.get(&body).map(|fs| fs.iter().map(|f| (f.normal, f.id)).collect()).unwrap_or_default() };
     let before = by_normal(&p);
     let n_before = before.len();
     eprintln!("before: {:?}", before.iter().map(|(n, i)| (format!("{:.0},{:.0},{:.0}", n[0], n[1], n[2]), *i)).collect::<Vec<_>>());
@@ -102,13 +96,7 @@ fn face_ids_survive_a_topology_change_in_the_sketch() {
 fn wall_names_follow_sketch_entities_not_edge_order() {
     let (mut p, sid, body) = base_with_fillet(30.0);
     let si = p.sketch_index(sid).unwrap();
-    let wall = |p: &Project, nx: f64, ny: f64| -> Option<u32> {
-        p.regen_faces
-            .get(&body)?
-            .iter()
-            .find(|f| (f.normal[0] - nx).abs() < 1e-6 && (f.normal[1] - ny).abs() < 1e-6)
-            .map(|f| f.id)
-    };
+    let wall = |p: &Project, nx: f64, ny: f64| -> Option<u32> { p.regen_faces.get(&body)?.iter().find(|f| (f.normal[0] - nx).abs() < 1e-6 && (f.normal[1] - ny).abs() < 1e-6).map(|f| f.id) };
     let right_before = wall(&p, 1.0, 0.0).expect("right wall");
     let left_before = wall(&p, -1.0, 0.0).expect("left wall");
     eprintln!("before: right={right_before}, left={left_before}");
@@ -163,12 +151,7 @@ fn a_hole_wall_keeps_its_name_when_the_sketch_gains_entities() {
     let (_r, _s) = qymcad_testkit::regenerate(&mut p);
     // the hole wall is looked up BY NAME: the name is derived from the recipe (1000 + sketch entity
     // id), so it can be predicted in advance — that is the whole point of topological names.
-    let circle_eid = p.sketches[si]
-        .entities
-        .iter()
-        .find(|e| matches!(e.kind, qymcad_core::model::EntityKind::Circle { .. }))
-        .map(|e| e.id)
-        .expect("circle in the sketch");
+    let circle_eid = p.sketches[si].entities.iter().find(|e| matches!(e.kind, qymcad_core::model::EntityKind::Circle { .. })).map(|e| e.id).expect("circle in the sketch");
     // the name is PREDICTABLE from the recipe: "wall of feature `body` from entity `circle_eid`"
     let expect = p.names.intern_face(qymcad_core::names::GeoName::new(body, qymcad_core::names::Role::Wall, circle_eid));
     let has = |p: &Project, id: u32| p.regen_faces.get(&body).is_some_and(|fs| fs.iter().any(|f| f.id == id));

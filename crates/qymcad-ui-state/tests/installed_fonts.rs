@@ -44,10 +44,7 @@ fn the_places_to_look_include_the_ones_a_sandbox_uses() {
     for want in ["/run/host/fonts", "/run/host/local-fonts", "/run/host/user-fonts"] {
         assert!(dirs.iter().any(|d| d == want), "the fonts of the host inside Flatpak are not looked for: {want} is missing from {dirs:?}");
     }
-    assert!(
-        dirs.iter().any(|d| d.contains("hostfs")),
-        "the fonts of the host inside Snap are not looked for: nothing under /var/lib/snapd/hostfs in {dirs:?}"
-    );
+    assert!(dirs.iter().any(|d| d.contains("hostfs")), "the fonts of the host inside Snap are not looked for: nothing under /var/lib/snapd/hostfs in {dirs:?}");
 }
 
 /// THE SEARCH NARROWS THE LIST BY FAMILY AND BY STYLE, whatever the case.
@@ -99,10 +96,7 @@ fn opening_the_list_does_not_freeze_the_window() {
     let started = std::time::Instant::now();
     picker.start_scan();
     let took = started.elapsed();
-    assert!(
-        took < std::time::Duration::from_millis(50),
-        "starting the walk took {took:?} - it is being done in the frame, and the whole walk is around half a second"
-    );
+    assert!(took < std::time::Duration::from_millis(50), "starting the walk took {took:?} - it is being done in the frame, and the whole walk is around half a second");
     assert!(picker.scanning() || !picker.faces.is_empty(), "the walk was neither started nor already done");
 
     let waiting = std::time::Instant::now();

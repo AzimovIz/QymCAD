@@ -14,22 +14,11 @@ mod tests {
 
     /// A sketch with a rectangle and one distance dimension. Returns (si, ci).
     fn sketch_with_dim(app: &mut App) -> (usize, usize) {
-        let sid = app.project.add_line_sketch(
-            "Profile",
-            vec![Point2::new(0.0, 0.0), Point2::new(40.0, 0.0), Point2::new(40.0, 20.0), Point2::new(0.0, 20.0)],
-            true,
-        );
+        let sid = app.project.add_line_sketch("Profile", vec![Point2::new(0.0, 0.0), Point2::new(40.0, 0.0), Point2::new(40.0, 20.0), Point2::new(0.0, 20.0)], true);
         let si = app.project.sketch_index(sid).unwrap();
         app.project.add_sketch_node(sid, "Profile");
         let pts: Vec<Id> = app.project.sketches[si].points.iter().map(|q| q.id).collect();
-        app.project.sketches[si].constraints.push(Constraint::Distance {
-            a: pts[0],
-            b: pts[1],
-            d: 40.0,
-            off: 0.0,
-            expr: String::new(),
-            driven: false,
-            axis: 0, at: None });
+        app.project.sketches[si].constraints.push(Constraint::Distance { a: pts[0], b: pts[1], d: 40.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
         let ci = app.project.sketches[si].constraints.len() - 1;
         app.chosen.sel = Sel::Sketch(si);
         app.tools.inline = InlineEdit::Dim(ci);
@@ -48,21 +37,15 @@ mod tests {
         fn new() -> Self {
             let ctx = egui::Context::default();
             super::super::install_fonts(&ctx);
-            Self {
-                ctx,
-                rect: egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(900.0, 700.0)),
-                events: Vec::new(),
-                drawn: Vec::new(),
-                name_rect: egui::Rect::NOTHING,
-            }
+            Self { ctx, rect: egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(900.0, 700.0)), events: Vec::new(), drawn: Vec::new(), name_rect: egui::Rect::NOTHING }
         }
 
         fn frame(&mut self, app: &mut App, si: usize, ci: usize) -> &mut Self {
             let input = egui::RawInput { screen_rect: Some(self.rect), events: std::mem::take(&mut self.events), ..Default::default() };
             let rect = self.rect;
             let out = self.ctx.run_ui(input, |ui| {
-            // The frame hands in the root `Ui` now; the context comes from it.
-            let ctx = &ui.ctx().clone();
+                // The frame hands in the root `Ui` now; the context comes from it.
+                let ctx = &ui.ctx().clone();
                 egui::CentralPanel::default().show(ui, |_ui| {});
                 // THE PRODUCTION ORDER: the frame's keys are handled BEFORE anything is drawn (`update` calls
                 // `handle_key_commands` and only then paints). Drawing the popup alone checks a program that
@@ -175,10 +158,7 @@ mod tests {
         assert!(p.shows("width"), "setup: the list must be open before Escape, drawn: {:?}", p.drawn);
 
         p.key(egui::Key::Escape).frame(&mut app, si, ci);
-        assert!(
-            matches!(app.tools.inline, InlineEdit::Dim(_)),
-            "Escape with the list open closed the whole dimension popup instead of the list — the edit is lost"
-        );
+        assert!(matches!(app.tools.inline, InlineEdit::Dim(_)), "Escape with the list open closed the whole dimension popup instead of the list — the edit is lost");
 
         p.frame(&mut app, si, ci);
         assert!(!p.shows("width"), "the list stayed open after Escape: {:?}", p.drawn);

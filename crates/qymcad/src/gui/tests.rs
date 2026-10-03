@@ -285,12 +285,7 @@ mod command_flow_tests {
         app.apply_feat_cmd();
         let consumed = qymcad_ui_state::consumed_bodies(&app.project);
         let body = *app.live.shapes.keys().find(|b| !consumed.contains(b)).expect("the shaft's body");
-        let eid = app
-            .project
-            .regen_edges
-            .get(&body)
-            .and_then(|es| es.iter().find(|e| (e.radius - d * 0.5).abs() < 0.05).map(|e| e.id))
-            .expect("the shaft's circular rim");
+        let eid = app.project.regen_edges.get(&body).and_then(|es| es.iter().find(|e| (e.radius - d * 0.5).abs() < 0.05).map(|e| e.id)).expect("the shaft's circular rim");
         (body, eid)
     }
 
@@ -299,11 +294,7 @@ mod command_flow_tests {
     /// measured with it.
     fn live_volume(app: &App) -> f64 {
         let consumed = qymcad_ui_state::consumed_bodies(&app.project);
-        app.live.shapes
-            .iter()
-            .filter(|(b, _)| !consumed.contains(b))
-            .map(|(_, s)| s.tessellate(0.02).iter().map(|b| b.0.volume()).sum::<f64>())
-            .sum()
+        app.live.shapes.iter().filter(|(b, _)| !consumed.contains(b)).map(|(_, s)| s.tessellate(0.02).iter().map(|b| b.0.volume()).sum::<f64>()).sum()
     }
 
     /// Run the thread command on a shaft through the FULL GUI flow and return the volume removed.
@@ -369,7 +360,11 @@ mod command_flow_tests {
             assert!(cands.contains(&got.unwrap()), "what was picked is a LINE from the candidates, not one of its ends");
         }
         // a click into empty space picks nothing (otherwise the axis would jump on a miss)
-        assert_eq!(crate::gui::pick::nearest_line_id(&app.pick_ctx(), rect, (qymcad_ui_state::Sheet { view: app.viewing.view, rect: rect }).at(Point2::new(150.0, 150.0)), si, &cands), None, "a miss picks no line");
+        assert_eq!(
+            crate::gui::pick::nearest_line_id(&app.pick_ctx(), rect, (qymcad_ui_state::Sheet { view: app.viewing.view, rect: rect }).at(Point2::new(150.0, 150.0)), si, &cands),
+            None,
+            "a miss picks no line"
+        );
 
         // PICKING AN AXIS IN 3D: a datum axis built inside a part must both be drawn and be catchable by a click.
         app.params.rev.pick_line = false;
@@ -674,13 +669,8 @@ mod command_flow_tests {
     fn fillet_button_flow() {
         let mut app = App::default();
         let cube = build_cube(&mut app);
-        let eid = app
-            .project
-            .regen_edges
-            .get(&cube)
-            .and_then(|es| es.iter().find(|e| e.a[0].abs() < 1e-6 && e.a[1].abs() < 1e-6 && (e.a[2] - e.b[2]).abs() > 1.0))
-            .map(|e| e.id)
-            .expect("a vertical edge");
+        let eid =
+            app.project.regen_edges.get(&cube).and_then(|es| es.iter().find(|e| e.a[0].abs() < 1e-6 && e.a[1].abs() < 1e-6 && (e.a[2] - e.b[2]).abs() > 1.0)).map(|e| e.id).expect("a vertical edge");
         app.start_feat_cmd(4);
         assert_eq!(app.tools.armed.cmd_kind(), 4, "the fillet started: {}", app.status);
         app.tools.gsel.edges.insert(eid);
@@ -702,13 +692,7 @@ mod command_flow_tests {
     fn edit_fillet_shows_selected_edges() {
         let mut app = App::default();
         let cube = build_cube(&mut app);
-        let eid = app
-            .project
-            .regen_edges
-            .get(&cube)
-            .and_then(|es| es.iter().find(|e| (e.a[2] - e.b[2]).abs() > 10.0))
-            .map(|e| e.id)
-            .expect("an edge");
+        let eid = app.project.regen_edges.get(&cube).and_then(|es| es.iter().find(|e| (e.a[2] - e.b[2]).abs() > 10.0)).map(|e| e.id).expect("an edge");
         app.start_feat_cmd(4);
         app.tools.gsel.edges.insert(eid);
         app.edges.body = Some(cube);
@@ -717,13 +701,7 @@ mod command_flow_tests {
             p.txt = "3".into();
         }
         app.apply_feat_cmd();
-        let fid = app
-            .project
-            .timeline
-            .iter()
-            .find(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::Fillet { .. }))
-            .map(|n| n.id)
-            .expect("the fillet's node");
+        let fid = app.project.timeline.iter().find(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::Fillet { .. })).map(|n| n.id).expect("the fillet's node");
         crate::gui::commands::start_feat_cmd_edit(&mut app.part_ctx(), fid);
         crate::gui::commands::refresh_edges(&mut app.part_ctx()); // a UI frame: the edges must stay those of THE SOURCE and the selection must stay alive
         assert_eq!(app.edges.body, Some(cube), "the edges aim at the SOURCE body, not at the fillet's output");
@@ -736,13 +714,7 @@ mod command_flow_tests {
         let mut app = App::default();
         let _cube = build_cube(&mut app);
         let nodes_before = app.project.timeline.len();
-        let fid = app
-            .project
-            .timeline
-            .iter()
-            .find(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::Extrude { .. }))
-            .map(|n| n.id)
-            .expect("the extrude's node");
+        let fid = app.project.timeline.iter().find(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::Extrude { .. })).map(|n| n.id).expect("the extrude's node");
         crate::gui::commands::start_feat_cmd_edit(&mut app.part_ctx(), fid);
         assert!(app.tools.cmd.edit.is_some(), "the edit mode is open: {}", app.status);
         if let Some(p) = app.tools.cmd.params.iter_mut().find(|p| p.key == "height") {
@@ -770,12 +742,7 @@ mod command_flow_tests {
             p.txt = "5".into();
         }
         app.apply_feat_cmd();
-        let cut_ti = app
-            .project
-            .timeline
-            .iter()
-            .position(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::Combine { .. }))
-            .expect("the cut's node");
+        let cut_ti = app.project.timeline.iter().position(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::Combine { .. })).expect("the cut's node");
         crate::gui::commands::delete_feature(&mut app.part_ctx(), cut_ti, false);
         qymcad_ui_state::regenerate_all(&mut app.rebuild_ctx());
         let consumed = qymcad_ui_state::consumed_bodies(&app.project);
@@ -1255,10 +1222,7 @@ mod command_flow_tests {
         assert!((mz - 20.0).abs() < 0.1, "the mesh rolled back to a height of 20: max z = {mz}");
         // and the B-rep is where the defect lived: the cache must match what is on the screen
         let vu = app.live.shapes.get(&body).map(|s| s.volume()).unwrap_or(0.0);
-        assert!(
-            (vu - 8000.0).abs() < 80.0,
-            "after an undo the live B-rep must be the pre-edit one: V={vu:.0} (expected 8000; 12000 means the cache stayed from the undone edit)"
-        );
+        assert!((vu - 8000.0).abs() < 80.0, "after an undo the live B-rep must be the pre-edit one: V={vu:.0} (expected 8000; 12000 means the cache stayed from the undone edit)");
     }
 
     /// The basic undo and redo cycle through the command layer: edit a sketch, undo, redo.
@@ -1307,7 +1271,7 @@ mod command_flow_tests {
     fn deleting_feature_does_not_rebuild_whole_project() {
         let mut app = App::default();
         let keep = build_cube(&mut app); // part one, which is left alone
-        // part two with a body of its own (this is the one that gets deleted)
+                                         // part two with a body of its own (this is the one that gets deleted)
         let part2 = app.project.add_part("Part two");
         app.enter_component(part2);
         let before: std::collections::HashSet<Id> = app.live.shapes.keys().copied().collect();
@@ -1331,12 +1295,7 @@ mod command_flow_tests {
         }
 
         // delete part two's node
-        let ti = app
-            .project
-            .timeline
-            .iter()
-            .position(|n| n.kind.body() == Some(victim))
-            .expect("the node of part two's body");
+        let ti = app.project.timeline.iter().position(|n| n.kind.body() == Some(victim)).expect("the node of part two's body");
         crate::gui::commands::delete_feature(&mut app.part_ctx(), ti, false);
 
         assert!(app.project.mesh_index(victim).is_none() && !app.live.shapes.contains_key(&victim), "the deleted body went away entirely");
@@ -1363,10 +1322,7 @@ mod command_flow_tests {
         app.side.section.plane = Some(([0.0, 0.0, 10.0], [0.0, 0.0, 1.0]));
         let caps = crate::gui::render_scene::section_caps_for_frame(&app.painting());
         assert!(!caps.is_empty(), "the cap is there without a B-rep too");
-        let area: f64 = caps
-            .iter()
-            .flat_map(|m| (0..m.tris.len()).map(|i| m.tri_normal_area(i).1))
-            .sum();
+        let area: f64 = caps.iter().flat_map(|m| (0..m.tris.len()).map(|i| m.tri_normal_area(i).1)).sum();
         assert!((area - 400.0).abs() < 1e-6, "the cap's area equals the block's 20x20 section: {area}");
         for m in caps.iter() {
             for v in &m.verts {
@@ -1497,12 +1453,7 @@ mod command_flow_tests {
         {
             let mut app = App::default();
             let cube = build_cube(&mut app);
-            let eid = app
-                .project
-                .regen_edges
-                .get(&cube)
-                .and_then(|es| es.iter().find(|e| e.a[0].abs() < 1e-6 && e.a[1].abs() < 1e-6 && (e.a[2] - e.b[2]).abs() > 1.0))
-                .map(|e| e.id);
+            let eid = app.project.regen_edges.get(&cube).and_then(|es| es.iter().find(|e| e.a[0].abs() < 1e-6 && e.a[1].abs() < 1e-6 && (e.a[2] - e.b[2]).abs() > 1.0)).map(|e| e.id);
             if let Some(eid) = eid {
                 app.start_feat_cmd(4); // an edge fillet
                 app.tools.gsel.edges.insert(eid);
@@ -1640,13 +1591,7 @@ mod command_flow_tests {
         }
         app.apply_feat_cmd();
         let nodes_before = app.project.timeline.len();
-        let fid = app
-            .project
-            .timeline
-            .iter()
-            .find(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::Combine { .. }))
-            .map(|n| n.id)
-            .expect("the cut's node");
+        let fid = app.project.timeline.iter().find(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::Combine { .. })).map(|n| n.id).expect("the cut's node");
         crate::gui::commands::start_feat_cmd_edit(&mut app.part_ctx(), fid);
         if let Some(p) = app.tools.cmd.params.iter_mut().find(|p| p.key == "height") {
             p.val = 10.0;
@@ -1683,13 +1628,7 @@ mod command_flow_tests {
     fn shell_button_flow() {
         let mut app = App::default();
         let cube = build_cube(&mut app);
-        let top = app
-            .project
-            .regen_faces
-            .get(&cube)
-            .and_then(|fs| fs.iter().find(|f| f.normal[2] > 0.9))
-            .map(|f| f.id)
-            .expect("the top face");
+        let top = app.project.regen_faces.get(&cube).and_then(|fs| fs.iter().find(|f| f.normal[2] > 0.9)).map(|f| f.id).expect("the top face");
         app.start_feat_cmd(6);
         assert_eq!(app.tools.armed.cmd_kind(), 6, "the shell started: {}", app.status);
         app.tools.gsel.faces.insert(top);
@@ -2090,7 +2029,7 @@ mod command_flow_tests {
         let datum_id = app.project.add_plane(wp);
         app.project.active_component = Some(app.project.root);
         app.params.mirror.part = Some(asm); // the pick mode is active
-        // from THE ROOT: the Part (the datum's owner) is not the current context, so it is hidden
+                                            // from THE ROOT: the Part (the datum's owner) is not the current context, so it is hidden
         assert!(qymcad_ui_state::datum_render_transform(&app.painting(), datum_id).is_none(), "another component's datum is not visible from the root");
         // from the Assembly (the Part's direct parent, but NOT the owner itself) it is hidden too
         app.active_path = vec![app.project.root, asm];
@@ -2155,7 +2094,7 @@ mod section_drag_tests {
     fn no_jump_at_grab_regardless_of_arrow_length() {
         let s0 = Pos2::new(400.0, 300.0); // the screen projection of o0 (offset=0)
         let s1 = Pos2::new(450.0, 300.0); // the projection of o0 plus the normal (50px = 1 mm along the normal on screen)
-        // the cursor is GRABBED far from s0 (at the arrow, with 30 mm of offset already accumulated plus the arrow's 80px)
+                                          // the cursor is GRABBED far from s0 (at the arrow, with 30 mm of offset already accumulated plus the arrow's 80px)
         let p0 = Pos2::new(1200.0, 300.0);
         let off0 = 30.0;
         let new_off = section_drag_delta_offset(off0, p0, s0, s1, p0).expect("not degenerate");
@@ -2295,7 +2234,12 @@ mod gizmo_math_tests {
         let line = [[0.0f32, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0], [4.0, 0.0, 0.0]];
         assert!(is_straight_poly(&line), "collinear points make a straight line");
         // a quarter arc of R=10 is NOT an axis (its chord would become a false one)
-        let arc: Vec<[f32; 3]> = (0..=8).map(|i| { let a = std::f64::consts::FRAC_PI_2 * i as f64 / 8.0; [10.0 * a.cos() as f32, 10.0 * a.sin() as f32, 0.0] }).collect();
+        let arc: Vec<[f32; 3]> = (0..=8)
+            .map(|i| {
+                let a = std::f64::consts::FRAC_PI_2 * i as f64 / 8.0;
+                [10.0 * a.cos() as f32, 10.0 * a.sin() as f32, 0.0]
+            })
+            .collect();
         assert!(!is_straight_poly(&arc), "an arc is not straight");
         // the degenerate cases (one point, or zero length) are not axes
         assert!(!is_straight_poly(&[[1.0f32, 1.0, 1.0]]));
@@ -2518,7 +2462,11 @@ mod brep_warmup_tests {
             JobResult::Regenerated { stamp, project, shapes, built, errors, cancelled } => app.finish_regen_checked(stamp, *project, shapes, built, errors, cancelled),
             _ => panic!("a rebuild result was expected"),
         }
-        assert!(app.live.ready, "the live B-rep is built and the cache is ready: {} bodies without a shape", app.project.timeline.iter().filter_map(|n| n.kind.body()).filter(|b| !app.live.shapes.contains_key(b)).count());
+        assert!(
+            app.live.ready,
+            "the live B-rep is built and the cache is ready: {} bodies without a shape",
+            app.project.timeline.iter().filter_map(|n| n.kind.body()).filter(|b| !app.live.shapes.contains_key(b)).count()
+        );
         crate::gui::io_jobs::ensure_brep(&mut app.rebuild_ctx());
         assert!(!app.regen.wanted, "a ready cache asks for nothing more");
     }

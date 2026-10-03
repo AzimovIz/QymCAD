@@ -13,7 +13,6 @@ impl App {
         DrawCtx { cam: &self.viewing.cam, set: &self.set, scheme: &self.scheme, project: &self.project, active_path: &self.active_path }
     }
 
-
     pub(super) fn draw_contours(&self, painter: &egui::Painter, rect: Rect) {
         draw_contours(&self.painting(), painter, rect)
     }
@@ -27,7 +26,6 @@ impl App {
     pub(super) fn draw_sketch_constraints(&self, painter: &egui::Painter, rect: Rect, si: usize) {
         draw_sketch_constraints(&self.painting(), painter, rect, si)
     }
-
 
     pub(super) fn draw_sketch_preview(&self, painter: &egui::Painter, rect: Rect) {
         draw_sketch_preview(&self.painting(), painter, rect)
@@ -46,16 +44,11 @@ impl App {
         draw_pattern_preview(&self.painting(), painter, rect)
     }
 
-
-
-
-
     /// Waiting for a base point after Ctrl+C/X: the selected geometry is lit green (a hint that this is what
     /// will be copied) and a green crosshair is drawn under the cursor (a hint to click the base point).
     pub(super) fn draw_clip_pending(&self, painter: &egui::Painter, rect: Rect) {
         draw_clip_pending(&self.painting(), painter, rect)
     }
-
 
     pub(super) fn draw_move_preview(&self, painter: &egui::Painter, rect: Rect) {
         draw_move_preview(&self.painting(), painter, rect)
@@ -66,142 +59,17 @@ impl App {
         draw_sketch_dims(&self.painting(), painter, rect, si)
     }
 
-
     pub(super) fn draw_mesh(&self, painter: &egui::Painter, rect: Rect) {
         draw_mesh(&self.painting(), painter, rect)
     }
 
-
     pub(super) fn draw_3d(&self, painter: &egui::Painter, rect: Rect) {
         draw_3d(&self.painting(), painter, rect)
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 }
 
 /// THE PADDING INSIDE THE REBUILD CARD, and the room its parts take. Named once, because the size of the
 /// card and the places of its pieces have to agree - when they did not, the text stood outside the card.
-
 
 /// THE ONE PLACE THE BORROWS ARE SPLIT for drawing in three dimensions.
 ///
@@ -217,7 +85,10 @@ pub(crate) fn draw_3d_gpu(pn: &qymcad_ui_state::Painting, painter: &egui::Painte
     let gt = pn.scheme.pal.ghost_target;
     let shade = crate::viewport_gpu::ShadeRaw {
         // the same light the raster uses, so the two pictures agree
-        light: { let l = qymcad_ui_state::scene_light(); [l[0] as f32, l[1] as f32, l[2] as f32] },
+        light: {
+            let l = qymcad_ui_state::scene_light();
+            [l[0] as f32, l[1] as f32, l[2] as f32]
+        },
         floor: pn.scheme.pal.shade_floor_body,
         ghost_alpha: pn.set.ghost_alpha as f32 / 255.0,
         ghost_target: [gt[0] as f32 / 255.0, gt[1] as f32 / 255.0, gt[2] as f32 / 255.0],
@@ -241,7 +112,6 @@ pub(crate) fn draw_3d(pn: &Painting, painter: &egui::Painter, rect: Rect) {
     let basis = pn.cam.basis();
     let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
     let p3 = |p: [f64; 3]| scr.at(p).0;
-
 
     // THE FLOOR GRID at Z=0 is the bearing in the 3D view (NOT the machine table: that one sits under
     // cam_mode). A minor line every `step`, a major one every 5; drawn UNDER the geometry (before the
@@ -300,7 +170,6 @@ pub(crate) fn draw_3d(pn: &Painting, painter: &egui::Painter, rect: Rect) {
         painter.line_segment([p3([0.0, cy - lim, 0.0]), p3([0.0, cy + lim, 0.0])], Stroke::new(1.6, pn.scheme.pal.grid_axis_y()));
         painter.line_segment([p3([0.0, 0.0, 0.0]), p3([0.0, 0.0, step * 4.0])], Stroke::new(1.8, pn.scheme.pal.grid_axis_z()));
     }
-
 
     // the mesh: either the GPU pass (wgpu, a depth buffer) or the CPU fallback (software rasterisation
     // with a Z buffer - an exact per-pixel order, with none of the painter's-algorithm artefacts on
@@ -746,7 +615,7 @@ pub(crate) fn draw_3d(pn: &Painting, painter: &egui::Painter, rect: Rect) {
     // added inside each of them: those would drift apart, the way the popups once did.
     draw_face_arrow(pn, painter, rect, &basis);
     draw_fillet_vertices(pn, painter, rect); // the points a per-vertex radius is set at
-    // the wireframe preview of the primitive being created
+                                             // the wireframe preview of the primitive being created
     draw_prim_preview(pn, painter, rect);
     draw_array_preview(pn, painter, rect);
     draw_comp_array_preview(pn, painter, rect);
@@ -765,7 +634,11 @@ pub(crate) fn draw_3d(pn: &Painting, painter: &egui::Painter, rect: Rect) {
         let ident = qymcad_core::feature::is_identity12(&wt);
         let o = if ident { pl.origin } else { qymcad_core::feature::apply12(&wt, pl.origin) };
         let n = qymcad_ui_state::v_norm(if ident { pl.normal } else { qymcad_core::feature::apply12_dir(&wt, pl.normal) });
-        let ax = if n[0].abs() < 0.9 { qymcad_ui_state::v_norm(qymcad_ui_state::v_cross(n, [1.0, 0.0, 0.0])) } else { qymcad_ui_state::v_norm(qymcad_ui_state::v_cross(n, [0.0, 1.0, 0.0])) };
+        let ax = if n[0].abs() < 0.9 {
+            qymcad_ui_state::v_norm(qymcad_ui_state::v_cross(n, [1.0, 0.0, 0.0]))
+        } else {
+            qymcad_ui_state::v_norm(qymcad_ui_state::v_cross(n, [0.0, 1.0, 0.0]))
+        };
         let ay = qymcad_ui_state::v_cross(n, ax);
         let s = 25.0;
         let corner = |sx: f64, sy: f64| [o[0] + ax[0] * sx + ay[0] * sy, o[1] + ax[1] * sx + ay[1] * sy, o[2] + ax[2] * sx + ay[2] * sy];
@@ -920,7 +793,18 @@ fn draw_open_borders(pn: &Painting, painter: &egui::Painter, scr: &qymcad_ui_sta
         for &mi in &open {
             let mesh = &pn.project.bodies[mi].mesh;
             let p = qymcad_meshfit::prepare(mesh, qymcad_meshfit::weld_tolerance(mesh));
-            let loops: Vec<Vec<[f64; 3]>> = p.holes.iter().map(|l| l.iter().map(|&v| { let q = p.mesh.verts[v as usize]; [q.x, q.y, q.z] }).collect()).collect();
+            let loops: Vec<Vec<[f64; 3]>> = p
+                .holes
+                .iter()
+                .map(|l| {
+                    l.iter()
+                        .map(|&v| {
+                            let q = p.mesh.verts[v as usize];
+                            [q.x, q.y, q.z]
+                        })
+                        .collect()
+                })
+                .collect();
             found.insert(mi, loops);
         }
         pn.cache.open_borders.borrow_mut().put(key, found);

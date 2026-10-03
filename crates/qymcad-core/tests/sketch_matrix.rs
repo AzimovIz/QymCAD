@@ -179,8 +179,8 @@ fn matrix_tangent_dumbbell_trim() {
     p.add_line_entity(si, mx, -my, sx, -sy, qymcad_core::feature::Purpose::Real); // lower right
     p.add_line_entity(si, -mx, my, -sx, sy, qymcad_core::feature::Purpose::Real); // upper left
     p.add_line_entity(si, -mx, -my, -sx, -sy, qymcad_core::feature::Purpose::Real); // lower left
-    // Trimming the interior. On the central circle the eastern span is removed by clicking (20,0) and the
-    // western one by clicking (−20,0).
+                                                                                    // Trimming the interior. On the central circle the eastern span is removed by clicking (20,0) and the
+                                                                                    // western one by clicking (−20,0).
     if !p.trim_curve(si, c_mid, rr, 0.0) {
         fails.push("dumbbell: trim of the central circle to the east returned false; the cut at the tangency was not found".into());
     }
@@ -189,13 +189,15 @@ fn matrix_tangent_dumbbell_trim() {
     let mid2 = p.sketches[si]
         .entities
         .iter()
-        .find(|e| matches!(e.kind, qymcad_core::model::EntityKind::Arc { .. } | qymcad_core::model::EntityKind::Circle { .. }) && {
-            let pid = match e.kind {
-                qymcad_core::model::EntityKind::Arc { center, .. } => center,
-                qymcad_core::model::EntityKind::Circle { center, .. } => center,
-                _ => unreachable!(),
-            };
-            p.sketches[si].points.iter().any(|q| q.id == pid && q.x.abs() < 1e-6 && q.y.abs() < 1e-6)
+        .find(|e| {
+            matches!(e.kind, qymcad_core::model::EntityKind::Arc { .. } | qymcad_core::model::EntityKind::Circle { .. }) && {
+                let pid = match e.kind {
+                    qymcad_core::model::EntityKind::Arc { center, .. } => center,
+                    qymcad_core::model::EntityKind::Circle { center, .. } => center,
+                    _ => unreachable!(),
+                };
+                p.sketches[si].points.iter().any(|q| q.id == pid && q.x.abs() < 1e-6 && q.y.abs() < 1e-6)
+            }
         })
         .map(|e| e.id);
     match mid2 {
@@ -294,10 +296,23 @@ fn matrix_trim_no_orphan_points() {
     let mut used: std::collections::HashSet<u64> = Default::default();
     for e in &s.entities {
         match e.kind {
-            qymcad_core::model::EntityKind::Line { a, b } => { used.insert(a); used.insert(b); }
-            qymcad_core::model::EntityKind::Arc { center, a, b, .. } => { used.insert(center); used.insert(a); used.insert(b); }
-            qymcad_core::model::EntityKind::Circle { center, .. } => { used.insert(center); }
-            qymcad_core::model::EntityKind::Ellipse { c, ma, mi } => { used.insert(c); used.insert(ma); used.insert(mi); }
+            qymcad_core::model::EntityKind::Line { a, b } => {
+                used.insert(a);
+                used.insert(b);
+            }
+            qymcad_core::model::EntityKind::Arc { center, a, b, .. } => {
+                used.insert(center);
+                used.insert(a);
+                used.insert(b);
+            }
+            qymcad_core::model::EntityKind::Circle { center, .. } => {
+                used.insert(center);
+            }
+            qymcad_core::model::EntityKind::Ellipse { c, ma, mi } => {
+                used.insert(c);
+                used.insert(ma);
+                used.insert(mi);
+            }
         }
     }
     let sys: std::collections::HashSet<u64> = s.system_ids().into_iter().collect();

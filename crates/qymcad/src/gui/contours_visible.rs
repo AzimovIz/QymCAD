@@ -24,20 +24,12 @@ mod tests {
         // THE ROOT OF THE ASSEMBLY: sketches of nested parts must count as its own
         let root = app.project.root;
         app.enter_component(root);
-        assert_eq!(
-            qymcad_pick::foreign_contour_ids(&app.painting()).len(),
-            0,
-            "at the root of an assembly the sketches of nested parts are ITS OWN; otherwise the Contours checkbox shows nothing"
-        );
+        assert_eq!(qymcad_pick::foreign_contour_ids(&app.painting()).len(), 0, "at the root of an assembly the sketches of nested parts are ITS OWN; otherwise the Contours checkbox shows nothing");
 
         // INSIDE A PART: its own sketch is visible, a neighbour's is not (the isolation is intact)
         let body = app.project.mesh_id(0).expect("the body");
         let owner = app.project.body_owner(body).expect("the owner");
         app.enter_component(owner);
-        assert_eq!(
-            qymcad_pick::foreign_contour_ids(&app.painting()).len(),
-            1,
-            "inside a part a NEIGHBOURING sketch must stay foreign: the isolation between parts holds"
-        );
+        assert_eq!(qymcad_pick::foreign_contour_ids(&app.painting()).len(), 1, "inside a part a NEIGHBOURING sketch must stay foreign: the isolation between parts holds");
     }
 }

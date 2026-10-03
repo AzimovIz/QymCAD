@@ -17,11 +17,7 @@ fn shaft_with_chamfer(d: f64, h: f64, c: f64) -> (Project, u64, u32) {
     let body = p.add_cylinder(d * 0.5, h);
     let _ = qymcad_testkit::regenerate(&mut p);
     // the upper rim, which is what the chamfer is taken off
-    let top = p
-        .regen_edges
-        .get(&body)
-        .and_then(|es| es.iter().filter(|e| e.radius > 1e-9).max_by(|a, b| a.center[2].total_cmp(&b.center[2])).map(|e| e.id))
-        .expect("the upper rim");
+    let top = p.regen_edges.get(&body).and_then(|es| es.iter().filter(|e| e.radius > 1e-9).max_by(|a, b| a.center[2].total_cmp(&b.center[2])).map(|e| e.id)).expect("the upper rim");
     let ch = p.add_chamfer(body, c, vec![top]);
     let _ = qymcad_testkit::regenerate(&mut p);
     // after the chamfer the rim of the thread is the circle of the cylinder radius at the base of that chamfer
@@ -51,9 +47,6 @@ fn thread_on_a_chamfered_shaft_cuts_into_the_body() {
     // of it
     let ring = std::f64::consts::PI * ((d * 0.5).powi(2) - (d * 0.5 - g.depth).powi(2)) * len;
     eprintln!("a Ø{d} shaft with a chamfer of {c}: removed {removed:.1} mm³ against a ring of {ring:.1}");
-    assert!(
-        removed > 0.2 * ring,
-        "the thread ran clear of the body: {removed:.1} mm³ removed against a ring of {ring:.1}, so the direction from the rim was not taken along the cylinder"
-    );
+    assert!(removed > 0.2 * ring, "the thread ran clear of the body: {removed:.1} mm³ removed against a ring of {ring:.1}, so the direction from the rim was not taken along the cylinder");
     assert!(removed < 1.2 * ring, "and it did not eat away too much: {removed:.1} against {ring:.1}");
 }

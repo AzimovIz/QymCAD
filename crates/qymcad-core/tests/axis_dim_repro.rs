@@ -6,9 +6,18 @@ use qymcad_core::model::{Constraint, Project};
 
 fn dpl_to_axis(p: &mut Project, si: usize, pid: u64, which: usize) -> usize {
     let (o, ax) = p.ensure_axis(si, which);
-    let (px, py) = { let q = p.sketches[si].points.iter().find(|q| q.id == pid).unwrap(); (q.x, q.y) };
-    let (ox, oy) = { let q = p.sketches[si].points.iter().find(|q| q.id == o).unwrap(); (q.x, q.y) };
-    let (bx, by) = { let q = p.sketches[si].points.iter().find(|q| q.id == ax).unwrap(); (q.x, q.y) };
+    let (px, py) = {
+        let q = p.sketches[si].points.iter().find(|q| q.id == pid).unwrap();
+        (q.x, q.y)
+    };
+    let (ox, oy) = {
+        let q = p.sketches[si].points.iter().find(|q| q.id == o).unwrap();
+        (q.x, q.y)
+    };
+    let (bx, by) = {
+        let q = p.sketches[si].points.iter().find(|q| q.id == ax).unwrap();
+        (q.x, q.y)
+    };
     let (dx, dy) = (bx - ox, by - oy);
     let len = (dx * dx + dy * dy).sqrt().max(1e-9);
     let d = (dx * (py - oy) - dy * (px - ox)) / len;

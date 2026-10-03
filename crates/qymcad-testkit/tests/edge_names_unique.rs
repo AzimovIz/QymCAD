@@ -20,11 +20,7 @@ use qymcad_core::model::Project;
 fn through_shell() -> (Project, u64) {
     let mut p = Project::default();
     p.new_document();
-    let sid = p.add_line_sketch(
-        "Sketch 1",
-        vec![Point2::new(0.0, 0.0), Point2::new(40.0, 0.0), Point2::new(40.0, 30.0), Point2::new(0.0, 30.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("Sketch 1", vec![Point2::new(0.0, 0.0), Point2::new(40.0, 0.0), Point2::new(40.0, 30.0), Point2::new(0.0, 30.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {
@@ -76,12 +72,7 @@ fn a_reference_to_one_rim_edge_resolves_to_one_edge() {
         let d = [e.b[0] - e.a[0], e.b[1] - e.a[1], e.b[2] - e.a[2]];
         (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt()
     };
-    let outer = p.regen_edges[&shell]
-        .iter()
-        .filter(|e| (e.a[2] - top_z).abs() < 1e-6 && (e.b[2] - top_z).abs() < 1e-6)
-        .max_by(|a, b| len(a).total_cmp(&len(b)))
-        .expect("the outer rim edge")
-        .id;
+    let outer = p.regen_edges[&shell].iter().filter(|e| (e.a[2] - top_z).abs() < 1e-6 && (e.b[2] - top_z).abs() < 1e-6).max_by(|a, b| len(a).total_cmp(&len(b))).expect("the outer rim edge").id;
 
     let r = qymcad_core::refs::Ref::picks(&[outer]);
     let got = p.resolve_edge_refs(shell, &r, "ref-what-fillet-edge").expect("the reference resolved");

@@ -68,11 +68,7 @@ fn the_long_side_is_the_long_one() {
     assert!(r.errors.is_empty(), "the plate did not build: {:?}", r.errors);
 
     // The 40x20 side face (normal along -Y): the long side is X.
-    let f = p
-        .regen_faces
-        .get(&body)
-        .and_then(|fs| fs.iter().find(|f| f.normal[1] < -0.99).cloned())
-        .expect("the 40x20 side face");
+    let f = p.regen_faces.get(&body).and_then(|fs| fs.iter().find(|f| f.normal[1] < -0.99).cloned()).expect("the 40x20 side face");
     let k = FaceKey { index: 0, centroid: [f.centroid.x, f.centroid.y, f.centroid.z], normal: f.normal, id: f.id };
     let d = p.face_principal_dir(body, &k).expect("the side face has a long side");
     assert!(d[0].abs() > 0.999, "the long side of a 40x20 face runs along X, and {d:?} came out");

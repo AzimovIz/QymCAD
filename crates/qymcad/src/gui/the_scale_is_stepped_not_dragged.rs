@@ -72,11 +72,7 @@ mod tests {
             drawn = frame(&mut app, &ctx, Vec::new()); // the window settles into its size
         }
         // The number itself is where a hand would have grabbed the old field.
-        let at = drawn
-            .iter()
-            .find(|(t, _)| t == "1.00")
-            .map(|(_, r)| r.center())
-            .unwrap_or_else(|| panic!("the scale field is not on screen: {:?}", drawn.iter().map(|(t, _)| t).collect::<Vec<_>>()));
+        let at = drawn.iter().find(|(t, _)| t == "1.00").map(|(_, r)| r.center()).unwrap_or_else(|| panic!("the scale field is not on screen: {:?}", drawn.iter().map(|(t, _)| t).collect::<Vec<_>>()));
         (app, ctx, at)
     }
 
@@ -107,11 +103,7 @@ mod tests {
                 moved.push(format!("{dx} points -> {:.2}", app.set.ui_scale));
             }
         }
-        assert!(
-            moved.is_empty(),
-            "the scale still answers a drag, and a setting applied live cannot: the field resizes under the pointer and the drag feeds on its own output - {}",
-            moved.join(", ")
-        );
+        assert!(moved.is_empty(), "the scale still answers a drag, and a setting applied live cannot: the field resizes under the pointer and the drag feeds on its own output - {}", moved.join(", "));
     }
 
     /// AND THE BUTTONS STEP IT BY 0.05, up and down.
@@ -145,11 +137,7 @@ mod tests {
     /// Where the button labelled `label` sits in the row.
     fn button(app: &mut App, ctx: &egui::Context, label: &str) -> egui::Pos2 {
         let drawn = frame(app, ctx, Vec::new());
-        drawn
-            .iter()
-            .find(|(t, _)| t == label)
-            .map(|(_, r)| r.center())
-            .unwrap_or_else(|| panic!("the button \"{label}\" is not on screen: {:?}", drawn.iter().map(|(t, _)| t).collect::<Vec<_>>()))
+        drawn.iter().find(|(t, _)| t == label).map(|(_, r)| r.center()).unwrap_or_else(|| panic!("the button \"{label}\" is not on screen: {:?}", drawn.iter().map(|(t, _)| t).collect::<Vec<_>>()))
     }
 
     /// One click at `at`.

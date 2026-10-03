@@ -120,11 +120,7 @@ mod tests {
                 }
             }
         }
-        assert!(
-            missing.is_empty(),
-            "the package would build without libraries the program opens by name, and start only on a machine that happens to have them:\n{}",
-            missing.join("\n")
-        );
+        assert!(missing.is_empty(), "the package would build without libraries the program opens by name, and start only on a machine that happens to have them:\n{}", missing.join("\n"));
     }
 
     /// AND THE SYSTEM'S HALF OF THE GRAPHICS STACK IS NOT CARRIED.
@@ -148,10 +144,7 @@ mod tests {
 
         let sh = script();
         let after = sh.split("--appimage-extract").nth(1).expect("something follows the extraction");
-        assert!(
-            after.contains("NEVER_CARRY"),
-            "the finished package is never searched for the libraries that must not be in it, so one dragged in as a dependency would ship"
-        );
+        assert!(after.contains("NEVER_CARRY"), "the finished package is never searched for the libraries that must not be in it, so one dragged in as a dependency would ship");
     }
 
     /// THE FINISHED PACKAGE IS OPENED AND LOOKED INSIDE.
@@ -190,9 +183,6 @@ mod tests {
         if !git(&["ls-files", "--error-unmatch", "Cargo.lock"]).0 {
             absent.push("Cargo.lock".into());
         }
-        assert!(
-            absent.is_empty(),
-            "the published sources would not carry {absent:?}, and every packaging check would fail for whoever downloaded them - having proved nothing about their machine"
-        );
+        assert!(absent.is_empty(), "the published sources would not carry {absent:?}, and every packaging check would fail for whoever downloaded them - having proved nothing about their machine");
     }
 }

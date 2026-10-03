@@ -164,7 +164,8 @@ fn a_repeated_product_is_read_once() {
 /// THE FLAT LIST NESTS BY ITS PARENTS, in the file's order, and a named node keeps its name.
 #[test]
 fn the_flat_list_nests_by_its_parents() {
-    let t = document_tree(&[read("head", None, None), read("plate", Some(0), Some(0)), read("unit", Some(0), None), read("pin", Some(2), Some(1)), read("plate", Some(0), Some(2))], &[10, 11, 12], "file");
+    let t =
+        document_tree(&[read("head", None, None), read("plate", Some(0), Some(0)), read("unit", Some(0), None), read("pin", Some(2), Some(1)), read("plate", Some(0), Some(2))], &[10, 11, 12], "file");
     assert_eq!(t.len(), 1, "one root");
     let names = |n: &qymcad_core::model::ImportNode| n.children.iter().map(|c| c.name.clone()).collect::<Vec<_>>();
     assert_eq!(names(&t[0]), ["plate", "unit", "plate"]);

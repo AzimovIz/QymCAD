@@ -10,7 +10,6 @@ pub(crate) use qymcad_ui_state::{HotkeyRow, HOTKEYS};
 use super::App;
 use crate::gui::WinKind;
 
-
 /// What the key does - in the language of the person. A free function rather than a method: the row is a
 /// record and lives in the state crate, and the WORDS are chosen here, where the dictionary is.
 pub(crate) fn hotkey_what(row: &HotkeyRow) -> String {
@@ -24,7 +23,6 @@ pub(crate) fn hotkey_what(row: &HotkeyRow) -> String {
 /// list does not would have its keys shown nowhere, silently. The check below holds the set against the
 /// catalogue; only the order stays a matter of taste.
 pub(crate) const AREAS: [&str; 4] = ["general", "part", "sketch", "assembly"];
-
 
 /// WHETHER A KEY IS REBINDABLE. The general area is not, and that is not laziness.
 ///
@@ -42,7 +40,6 @@ impl App {
         hotkeys_window(&mut self.win_ctx(&mut asks), ctx);
         self.do_win_asks(asks, ctx);
     }
-
 }
 
 /// THE HOTKEY WINDOW. A reference that can be edited: every key of a workbench is a button, pressing it puts
@@ -116,7 +113,8 @@ fn capture_hotkey(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Context) {
         wc.hotkeys.action = None;
         return;
     };
-    let pressed: Option<egui::Key> = ctx.input(|i| i.events.iter().find_map(|e| matches!(e, egui::Event::Key { pressed: true, .. }).then(|| if let egui::Event::Key { key, .. } = e { Some(*key) } else { None }).flatten()));
+    let pressed: Option<egui::Key> =
+        ctx.input(|i| i.events.iter().find_map(|e| matches!(e, egui::Event::Key { pressed: true, .. }).then(|| if let egui::Event::Key { key, .. } = e { Some(*key) } else { None }).flatten()));
     let Some(key) = pressed else { return };
     if key == egui::Key::Escape {
         wc.hotkeys.action = None; // leaving the mode rather than assigning Esc
@@ -141,7 +139,6 @@ fn capture_hotkey(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Context) {
     wc.hotkeys.action = None;
     wc.hotkeys.note.clear();
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -218,10 +215,7 @@ mod tests {
     fn every_handled_action_is_documented() {
         for (area, sig, src, _) in handler_sources() {
             for a in actions_in(body_of(src, sig)) {
-                assert!(
-                    HOTKEYS.iter().any(|r| r.area == area && r.action == a),
-                    "the action {a} is handled in \"{area}\" and is not in the reference — the hotkey window will lie"
-                );
+                assert!(HOTKEYS.iter().any(|r| r.area == area && r.action == a), "the action {a} is handled in \"{area}\" and is not in the reference — the hotkey window will lie");
             }
         }
     }
@@ -292,11 +286,8 @@ mod tests {
         // the WORKING part of the file only: the guard is about the reference table, not about what
         // the tests below happen to quote
         let code = src.split("#[cfg(test)]").next().expect("the working part");
-        let cyr: Vec<&str> = code
-            .lines()
-            .filter(|l| !l.trim_start().starts_with("//"))
-            .filter(|l| l.contains('"') && l.chars().any(|c| ('а'..='я').contains(&c) || ('А'..='Я').contains(&c)))
-            .collect();
+        let cyr: Vec<&str> =
+            code.lines().filter(|l| !l.trim_start().starts_with("//")).filter(|l| l.contains('"') && l.chars().any(|c| ('а'..='я').contains(&c) || ('А'..='Я').contains(&c))).collect();
         assert!(cyr.is_empty(), "a phrase has appeared in the reference instead of a key again:\n{}", cyr.join("\n"));
     }
 
@@ -324,9 +315,6 @@ mod areas_are_complete {
         let mut shown: Vec<&str> = super::AREAS.to_vec();
         shown.sort_unstable();
         assert!(!from_catalogue.is_empty(), "the catalogue was not read at all");
-        assert_eq!(
-            shown, from_catalogue,
-            "an area of hotkeys is in the catalogue and in no panel (or the other way round): its keys are shown nowhere"
-        );
+        assert_eq!(shown, from_catalogue, "an area of hotkeys is in the catalogue and in no panel (or the other way round): its keys are shown nowhere");
     }
 }

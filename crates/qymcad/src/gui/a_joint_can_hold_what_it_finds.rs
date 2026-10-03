@@ -40,7 +40,8 @@ mod tests {
         // an egui popup settles on the SECOND frame — draw it twice
         for _ in 0..2 {
             let out = ctx.run_ui(egui::RawInput { screen_rect: Some(viewport()), ..Default::default() }, |c| {
-                { app.side.joint.edit = app.side.joint.edit.or_else(|| app.project.joints.first().map(|j| j.id)); qymcad_assembly::joint_popup(&mut app.joint_ctx(), c, viewport()); }
+                app.side.joint.edit = app.side.joint.edit.or_else(|| app.project.joints.first().map(|j| j.id));
+                qymcad_assembly::joint_popup(&mut app.joint_ctx(), c, viewport());
             });
             texts.clear();
             for cs in &out.shapes {
@@ -50,17 +51,11 @@ mod tests {
         // the twist field in the popup is captioned by the key of the slot itself, not by the
         // angle caption from the creation bar
         let want = crate::i18n::tr("j-angle-lower");
-        assert!(
-            texts.iter().any(|t| t.contains(&want)),
-            "the rigid joint has no twist field \"{want}\": drawn {texts:?}"
-        );
+        assert!(texts.iter().any(|t| t.contains(&want)), "the rigid joint has no twist field \"{want}\": drawn {texts:?}");
         // AND THE JOINT NAME IS A WORD, NOT A CATALOGUE CODE. This is where that surfaced: the popup
         // read "joint-kind-rigid 3", because the name was assembled as "key space number" while the
         // name translator only parses "key#argument".
-        assert!(
-            !texts.iter().any(|t| t.contains("joint-kind-")),
-            "the popup shows a CODE instead of the joint name: {texts:?}"
-        );
+        assert!(!texts.iter().any(|t| t.contains("joint-kind-")), "the popup shows a CODE instead of the joint name: {texts:?}");
     }
 
     /// "HOLD IT AS IT STANDS" IS IN THE JOINT POPUP AND WORKS FROM THERE (as-built).
@@ -85,7 +80,8 @@ mod tests {
         // an egui popup settles on the SECOND frame — draw it twice
         for _ in 0..2 {
             let out = ctx.run_ui(egui::RawInput { screen_rect: Some(viewport()), ..Default::default() }, |c| {
-                { app.side.joint.edit = app.side.joint.edit.or_else(|| app.project.joints.first().map(|j| j.id)); qymcad_assembly::joint_popup(&mut app.joint_ctx(), c, viewport()); }
+                app.side.joint.edit = app.side.joint.edit.or_else(|| app.project.joints.first().map(|j| j.id));
+                qymcad_assembly::joint_popup(&mut app.joint_ctx(), c, viewport());
             });
             texts.clear();
             for cs in &out.shapes {
@@ -101,5 +97,4 @@ mod tests {
         let o = apply12(&app.project.world_transform(wheel_a), [0.0, 0.0, 0.0]);
         assert!((o[0] - 40.0).abs() < 1e-3, "after the declaration the part must stay at 40 mm, and it ended up at {o:?}");
     }
-
 }

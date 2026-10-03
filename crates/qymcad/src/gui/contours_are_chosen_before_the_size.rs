@@ -53,10 +53,7 @@ mod tests {
         app.start_feat_cmd(1);
 
         assert!(app.tools.armed.cmd_kind() == 1, "GUARD: the extrude command must be open");
-        assert!(
-            !app.viewing.mode_3d,
-            "the command went straight to the 3D preview over both contours: the person is shown a body built out of everything and has to guess that a button changes it"
-        );
+        assert!(!app.viewing.mode_3d, "the command went straight to the 3D preview over both contours: the person is shown a body built out of everything and has to guess that a button changes it");
     }
 
     /// ONE CONTOUR: nothing to choose, so no picker - straight to the size.
@@ -96,11 +93,7 @@ mod tests {
 
         app.apply_feat_cmd(); // the second Enter: the feature is made
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
-        assert!(
-            app.project.timeline.iter().any(|n| n.kind.body().is_some()),
-            "the second Enter must make the feature: status says \"{}\"",
-            app.status
-        );
+        assert!(app.project.timeline.iter().any(|n| n.kind.body().is_some()), "the second Enter must make the feature: status says \"{}\"", app.status);
     }
 
     /// EDITING AN EXISTING FEATURE DOES NOT ASK AGAIN.

@@ -63,35 +63,25 @@ mod tests {
         // NOT "if it drew nothing, there is nothing to check": a guard that passes by drawing no reason at all
         // is the blindness this file was rewritten to escape. The field holds a broken expression, so the
         // reason MUST be on the screen.
-        let (text, r, clip) = texts
-            .into_iter()
-            .find(|(t, _, _)| t.contains(&whole))
-            .expect("the popup must show the reason while the field holds a broken expression");
-        assert!(
-            r.max.x <= clip.max.x + 0.5,
-            "the reason in the popup is painted past the edge it is clipped to: text {text:?} ends at x={:.1}, the clip ends at x={:.1}",
-            r.max.x,
-            clip.max.x
-        );
+        let (text, r, clip) = texts.into_iter().find(|(t, _, _)| t.contains(&whole)).expect("the popup must show the reason while the field holds a broken expression");
+        assert!(r.max.x <= clip.max.x + 0.5, "the reason in the popup is painted past the edge it is clipped to: text {text:?} ends at x={:.1}, the clip ends at x={:.1}", r.max.x, clip.max.x);
     }
 
     /// The whole reason is inside the window, not running off its edge.
     #[test]
     fn the_reason_an_expression_failed_is_painted_whole() {
         let mut app = App::default();
-        app.project.parameters = vec![
-            qymcad_core::model::Param { name: "w".into(), expr: "60".into(), value: 60.0 },
-            qymcad_core::model::Param { name: "bad".into(), expr: "w/".into(), value: 0.0 },
-        ];
+        app.project.parameters = vec![qymcad_core::model::Param { name: "w".into(), expr: "60".into(), value: 60.0 }, qymcad_core::model::Param { name: "bad".into(), expr: "w/".into(), value: 0.0 }];
         app.project.eval_parameters();
         app.win.open(WinKind::Params);
         let whole = crate::gui::error_words::expr_error_text(&app.project.eval_expr("w/").expect_err("the expression is broken"));
 
-        let texts = painted(&mut app, |a, ui| { let mut asks = Vec::new(); crate::gui::panels_windows::params_window(&mut a.win_ctx(&mut asks), ui.ctx()); a.do_win_asks(asks, ui.ctx()); });
-        let (text, rect, clip) = texts
-            .into_iter()
-            .find(|(t, _, _)| t.contains(&whole))
-            .unwrap_or_else(|| panic!("the reason {whole:?} never reached the screen at all"));
+        let texts = painted(&mut app, |a, ui| {
+            let mut asks = Vec::new();
+            crate::gui::panels_windows::params_window(&mut a.win_ctx(&mut asks), ui.ctx());
+            a.do_win_asks(asks, ui.ctx());
+        });
+        let (text, rect, clip) = texts.into_iter().find(|(t, _, _)| t.contains(&whole)).unwrap_or_else(|| panic!("the reason {whole:?} never reached the screen at all"));
         assert!(
             rect.max.x <= clip.max.x + 0.5,
             "the reason is painted past the edge it is clipped to and comes out cut: text {text:?} ends at x={:.1}, the clip ends at x={:.1}",

@@ -65,10 +65,6 @@ fn what_the_waves_look_like() {
         };
         let widest = shape.iter().copied().max().unwrap_or(0);
         let ceiling = nodes as f64 / shape.len().max(1) as f64;
-        eprintln!(
-            "MEASURED {path}\n  nodes {nodes}, waves {}, the widest {widest}, the ceiling of any speed-up {ceiling:.1}x\n  the waves: {:?}",
-            shape.len(),
-            &shape[..shape.len().min(40)]
-        );
+        eprintln!("MEASURED {path}\n  nodes {nodes}, waves {}, the widest {widest}, the ceiling of any speed-up {ceiling:.1}x\n  the waves: {:?}", shape.len(), &shape[..shape.len().min(40)]);
     }
 }

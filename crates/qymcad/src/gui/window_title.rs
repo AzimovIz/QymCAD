@@ -63,10 +63,7 @@ mod tests {
         let mut app = crate::gui::screen_keys::tests::populated();
         let ctx = egui::Context::default();
         crate::gui::install_fonts(&ctx);
-        let raw = || egui::RawInput {
-            screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(800.0, 600.0))),
-            ..Default::default()
-        };
+        let raw = || egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(800.0, 600.0))), ..Default::default() };
         let titles = |out: &egui::FullOutput| -> Vec<String> {
             out.viewport_output
                 .values()

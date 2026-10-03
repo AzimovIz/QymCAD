@@ -43,7 +43,6 @@ fn every_example_opens_settled() {
     assert!(moved.is_empty(), "examples that change when settled after being read: {moved:?}");
 }
 
-
 /// A SKETCH SOLVED ONCE STAYS WHERE IT IS WHEN SOLVED AGAIN: every sketch of every example, solved after the document
 /// settled, moves no point. Reported behaviour: nine sketches of a sample moved points by up to 0.0023 mm on every
 /// solve, so any rebuild changed the document and the sample opened unsaved after it.

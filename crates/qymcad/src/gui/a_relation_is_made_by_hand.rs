@@ -34,13 +34,7 @@ pub(in crate::gui) mod tests {
             app.exit_context();
         }
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
-        let parts: Vec<Id> = app
-            .project
-            .components
-            .iter()
-            .filter(|c| c.parent == Some(app.project.root) && !before.contains(&c.id))
-            .map(|c| c.id)
-            .collect();
+        let parts: Vec<Id> = app.project.components.iter().filter(|c| c.parent == Some(app.project.root) && !before.contains(&c.id)).map(|c| c.id).collect();
         assert_eq!(parts.len(), 4, "setup: there should be four parts of our own, and there are {}", parts.len());
         let (hub_a, wheel_a, hub_b, wheel_b) = (parts[0], parts[1], parts[2], parts[3]);
         app.project.set_grounded(hub_a, true);
@@ -80,7 +74,9 @@ pub(in crate::gui) mod tests {
 
         app.start_relation_pick();
         assert!(app.side.joint.relation_pick.is_some(), "the relation tool was not taken up");
-        if let Some(p) = app.side.joint.relation_pick.as_mut() { p.set(RelationKind::Gear, 2.0); }
+        if let Some(p) = app.side.joint.relation_pick.as_mut() {
+            p.set(RelationKind::Gear, 2.0);
+        }
 
         qymcad_assembly::relation_pick_click(&mut app.joint_ctx(), ja);
         assert_eq!(app.side.joint.relation_pick.as_ref().map_or(0, |p| p.picks.len()), 1, "after the first click the selection should hold one degree");
@@ -124,10 +120,7 @@ pub(in crate::gui) mod tests {
 
         let texts = panel_text(&mut app);
         let want = crate::i18n::tr("relation-kind-gear");
-        assert!(
-            texts.iter().any(|t| t.contains(&want)),
-            "the panel does not show the relation: \"{want}\" was looked for, and what is drawn is {texts:?}"
-        );
+        assert!(texts.iter().any(|t| t.contains(&want)), "the panel does not show the relation: \"{want}\" was looked for, and what is drawn is {texts:?}");
 
         app.project.delete_relation(app.project.relations[0].id);
         let texts = panel_text(&mut app);
@@ -144,10 +137,7 @@ pub(in crate::gui) mod tests {
         app.project.delete_joint(jb);
         let want = crate::i18n::tr("r-fault-mate-lost");
         let texts = panel_text(&mut app);
-        assert!(
-            texts.iter().any(|t| t.contains(&want)),
-            "the panel says nothing about a broken relation: \"{want}\" was looked for, and what is drawn is {texts:?}"
-        );
+        assert!(texts.iter().any(|t| t.contains(&want)), "the panel says nothing about a broken relation: \"{want}\" was looked for, and what is drawn is {texts:?}");
     }
 
     /// CHANGING THE KIND DROPS THE SELECTION.
@@ -160,10 +150,14 @@ pub(in crate::gui) mod tests {
         let mut app = App::default();
         let ([ja, _], _) = two_hinges(&mut app);
         app.start_relation_pick();
-        if let Some(p) = app.side.joint.relation_pick.as_mut() { p.set(RelationKind::Gear, 2.0); }
+        if let Some(p) = app.side.joint.relation_pick.as_mut() {
+            p.set(RelationKind::Gear, 2.0);
+        }
         qymcad_assembly::relation_pick_click(&mut app.joint_ctx(), ja);
         assert_eq!(app.side.joint.relation_pick.as_ref().map_or(0, |p| p.picks.len()), 1, "setup: one degree is taken");
-        if let Some(p) = app.side.joint.relation_pick.as_mut() { p.set(RelationKind::Linear, 2.0); }
+        if let Some(p) = app.side.joint.relation_pick.as_mut() {
+            p.set(RelationKind::Linear, 2.0);
+        }
         assert_eq!(app.side.joint.relation_pick.as_ref().map_or(0, |p| p.picks.len()), 0, "changing the kind must drop the selection");
     }
 
@@ -176,7 +170,9 @@ pub(in crate::gui) mod tests {
         let mut app = App::default();
         let ([ja, _], _) = two_hinges(&mut app);
         app.start_relation_pick();
-        if let Some(p) = app.side.joint.relation_pick.as_mut() { p.set(RelationKind::Linear, 2.0); }
+        if let Some(p) = app.side.joint.relation_pick.as_mut() {
+            p.set(RelationKind::Linear, 2.0);
+        }
         qymcad_assembly::relation_pick_click(&mut app.joint_ctx(), ja);
         assert_eq!(app.side.joint.relation_pick.as_ref().map_or(0, |p| p.picks.len()), 0, "a hinge has no travel — there was nothing to take");
         let want = crate::i18n::tr("j-relation-need-travel");

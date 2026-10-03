@@ -17,37 +17,82 @@ use std::collections::{HashMap, HashSet, VecDeque};
 /// A surface a region lies on.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Surface {
-    Plane { point: [f64; 3], normal: [f64; 3] },
+    Plane {
+        point: [f64; 3],
+        normal: [f64; 3],
+    },
     /// `point` lies on the axis, `axis` is a unit vector.
-    Cylinder { point: [f64; 3], axis: [f64; 3], radius: f64 },
-    Sphere { center: [f64; 3], radius: f64 },
+    Cylinder {
+        point: [f64; 3],
+        axis: [f64; 3],
+        radius: f64,
+    },
+    Sphere {
+        center: [f64; 3],
+        radius: f64,
+    },
     /// `apex` is the tip, `axis` a unit vector from the tip into the cone, `half_angle` in radians.
-    Cone { apex: [f64; 3], axis: [f64; 3], half_angle: f64 },
+    Cone {
+        apex: [f64; 3],
+        axis: [f64; 3],
+        half_angle: f64,
+    },
     /// `axis` is a unit vector square to the torus's middle plane through `center`; `major` is the radius of the
     /// tube's centre line, `minor` the tube's.
-    Torus { center: [f64; 3], axis: [f64; 3], major: f64, minor: f64 },
+    Torus {
+        center: [f64; 3],
+        axis: [f64; 3],
+        major: f64,
+        minor: f64,
+    },
     /// A SMOOTH WALL FITTED BY ONE B-SPLINE SURFACE through the corners of the whole region - a free form known to the
     /// last pole, where `Free` leaves it to the kernel to fill the border.
     Spline(Box<crate::bspline::BSpline>),
     /// No surface of the kinds above: a smooth free form, its triangles all facing within a right angle of `normal`, the
     /// mean of them, which points out. What it is exactly the kernel finds, filling the face's own border.
-    Free { normal: [f64; 3] },
+    Free {
+        normal: [f64; 3],
+    },
     /// A straight profile screwed about an axis: the flank of a thread, an auger's flight. `point` lies on the axis;
     /// `axis` and `reference` are unit vectors square to each other. A point at distance r from the axis, height z along
     /// it from `point` and angle t from `reference`, turning right-handed about `axis`, lies on it where
     /// `radial * r + axial * (z - rise * t) = offset` with t taken some whole number of turns on: `rise` is the height
     /// gained per radian, negative for a left-hand screw, and (`radial`, `axial`) the unit normal of the profile's line
     /// in the cut through the axis, `axial` positive. Its own normal points the way (`radial`, `axial`) does.
-    Helix { point: [f64; 3], axis: [f64; 3], reference: [f64; 3], rise: f64, radial: f64, axial: f64, offset: f64 },
+    Helix {
+        point: [f64; 3],
+        axis: [f64; 3],
+        reference: [f64; 3],
+        rise: f64,
+        radial: f64,
+        axial: f64,
+        offset: f64,
+    },
     /// A circle screwed about an axis: a rounded edge of an auger's flight, the root of a thread drawn round. As `Helix`,
     /// but a point lies on it where, taken the whole turns that bring z - rise * t nearest `height`, its distance from the
     /// axis and z - rise * t lie `round` from (`middle`, `height`). Its own normal points away from the circle's middle.
-    RoundHelix { point: [f64; 3], axis: [f64; 3], reference: [f64; 3], rise: f64, middle: f64, height: f64, round: f64 },
+    RoundHelix {
+        point: [f64; 3],
+        axis: [f64; 3],
+        reference: [f64; 3],
+        rise: f64,
+        middle: f64,
+        height: f64,
+        round: f64,
+    },
     /// A round wire wound about an axis: a spring's coil. `point` lies on the axis; `axis` and `reference` are unit
     /// vectors square to each other. The wire's middle runs `radius` from the axis at angle t from `reference`, turning
     /// right-handed about `axis`, `lift + rise * t` along it; the surface is every point `wire` from that line. Its own
     /// normal points away from the line.
-    Coil { point: [f64; 3], axis: [f64; 3], reference: [f64; 3], rise: f64, radius: f64, lift: f64, wire: f64 },
+    Coil {
+        point: [f64; 3],
+        axis: [f64; 3],
+        reference: [f64; 3],
+        rise: f64,
+        radius: f64,
+        lift: f64,
+        wire: f64,
+    },
 }
 
 impl Surface {
@@ -578,7 +623,13 @@ fn wall_surface(p: &Prepared, piece: &[usize], tol: f64, sag: f64) -> Option<cra
     }
     let mut corners: Vec<u32> = at.keys().copied().collect();
     corners.sort_unstable();
-    let mut pts: Vec<[f64; 3]> = corners.iter().map(|&v| { let q = p.mesh.verts[v as usize]; [q.x, q.y, q.z] }).collect();
+    let mut pts: Vec<[f64; 3]> = corners
+        .iter()
+        .map(|&v| {
+            let q = p.mesh.verts[v as usize];
+            [q.x, q.y, q.z]
+        })
+        .collect();
     let mut nrm: Vec<[f64; 3]> = corners.iter().map(|v| at[v].try_normalize(1e-300).map(Into::into).unwrap_or([0.0, 0.0, 1.0])).collect();
     // A BIG TRIANGLE IS SAMPLED ACROSS, not at its middle alone: a surface held at its corners and middle still bowed
     // between them - measured on a cube with a dent in its top, 69 mm^3 of a flat face gone. Points every fortieth of
@@ -654,7 +705,13 @@ fn halves(g: &Grower, piece: &[usize]) -> [Vec<usize>; 2] {
     let helper = if mean.x.abs() < 0.9 { Vector3::x() } else { Vector3::y() };
     let e1 = mean.cross(&helper).normalize();
     let e2 = mean.cross(&e1);
-    let flat: Vec<(f64, f64)> = piece.iter().map(|&t| { let c = g.centroid(t); (c.dot(&e1), c.dot(&e2)) }).collect();
+    let flat: Vec<(f64, f64)> = piece
+        .iter()
+        .map(|&t| {
+            let c = g.centroid(t);
+            (c.dot(&e1), c.dot(&e2))
+        })
+        .collect();
     let span = |k: fn(&(f64, f64)) -> f64| flat.iter().map(k).fold(f64::MAX, f64::min) - flat.iter().map(k).fold(f64::MIN, f64::max);
     let along: fn(&(f64, f64)) -> f64 = if span(|q| q.0).abs() >= span(|q| q.1).abs() { |q| q.0 } else { |q| q.1 };
     let mut keys: Vec<f64> = flat.iter().map(along).collect();
@@ -662,7 +719,11 @@ fn halves(g: &Grower, piece: &[usize]) -> [Vec<usize>; 2] {
     let median = *keys.select_nth_unstable_by(mid, f64::total_cmp).1;
     let (mut a, mut b) = (Vec::new(), Vec::new());
     for (&t, q) in piece.iter().zip(&flat) {
-        if along(q) < median { a.push(t) } else { b.push(t) }
+        if along(q) < median {
+            a.push(t)
+        } else {
+            b.push(t)
+        }
     }
     [a, b]
 }
@@ -677,7 +738,9 @@ fn halves(g: &Grower, piece: &[usize]) -> [Vec<usize>; 2] {
 fn unwind(g: &Grower, out: &mut Vec<Region>, owner: &mut [u32]) {
     for r in 0..out.len() {
         let (on, a) = match out[r].surface {
-            Some(Surface::Cylinder { point, axis, .. }) | Some(Surface::Torus { center: point, axis, .. }) | Some(Surface::Cone { apex: point, axis, .. }) => (Vector3::from(point), Vector3::from(axis)),
+            Some(Surface::Cylinder { point, axis, .. }) | Some(Surface::Torus { center: point, axis, .. }) | Some(Surface::Cone { apex: point, axis, .. }) => {
+                (Vector3::from(point), Vector3::from(axis))
+            }
             _ => continue,
         };
         let (x, y) = across(&a);
@@ -1089,7 +1152,8 @@ fn absorb_once(g: &Grower, out: &mut [Region], owner: &mut [u32]) -> bool {
             continue;
         }
         let tris = out[r].tris.clone();
-        let mut near: Vec<usize> = tris.iter().flat_map(|&t| g.p.neighbours[t as usize]).filter(|&u| u != NO_NEIGHBOUR).map(|u| owner[u as usize] as usize).filter(|&h| h != r && out[h].tris.len() > tris.len()).collect();
+        let mut near: Vec<usize> =
+            tris.iter().flat_map(|&t| g.p.neighbours[t as usize]).filter(|&u| u != NO_NEIGHBOUR).map(|u| owner[u as usize] as usize).filter(|&h| h != r && out[h].tris.len() > tris.len()).collect();
         near.sort_unstable();
         near.dedup();
         // A TRIANGLE WHOSE NORMAL THE TOLERANCE CAN TURN PAST THE ANGLE is judged by its corners alone: at the owner's
@@ -1405,12 +1469,15 @@ fn helix_about(g: &Grower, tris: &[u32], on: &Vector3<f64>, a: &Vector3<f64>, gu
         return None;
     }
     let tau = 2.0 * std::f64::consts::PI;
-    let mut rzt: Vec<(f64, f64, f64)> = pts.iter().map(|p| {
-        let d = p - on;
-        let z = d.dot(a);
-        let e = d - a * z;
-        (e.norm(), z, e.dot(&y).atan2(e.dot(&x)))
-    }).collect();
+    let mut rzt: Vec<(f64, f64, f64)> = pts
+        .iter()
+        .map(|p| {
+            let d = p - on;
+            let z = d.dot(a);
+            let e = d - a * z;
+            (e.norm(), z, e.dot(&y).atan2(e.dot(&x)))
+        })
+        .collect();
     match guide {
         Some(h @ (Surface::Helix { .. } | Surface::RoundHelix { .. })) => {
             for (c, p) in rzt.iter_mut().zip(&pts) {
@@ -1505,10 +1572,13 @@ fn round_about(g: &Grower, tris: &[u32], pts: &[Vector3<f64>], rzt: &[(f64, f64,
         return None;
     }
     let first = rzt[0].1 - rise * rzt[0].2;
-    let profile: Vec<(f64, f64)> = rzt.iter().map(|&(r, z, t)| {
-        let lifted = z - rise * t;
-        (r, lifted - pitch * ((lifted - first) / pitch).round())
-    }).collect();
+    let profile: Vec<(f64, f64)> = rzt
+        .iter()
+        .map(|&(r, z, t)| {
+            let lifted = z - rise * t;
+            (r, lifted - pitch * ((lifted - first) / pitch).round())
+        })
+        .collect();
     let (mut m, mut v) = (Matrix3::<f64>::zeros(), Vector3::<f64>::zeros());
     for &(r, q) in &profile {
         let row = Vector3::new(r, q, 1.0);
@@ -2095,11 +2165,13 @@ fn across(a: &Vector3<f64>) -> (Vector3<f64>, Vector3<f64>) {
 
 /// Each corner as (height along the axis, distance from it).
 fn profile(pts: &[Vector3<f64>], a: &Vector3<f64>, on: &Vector3<f64>) -> Vec<(f64, f64)> {
-    pts.iter().map(|p| {
-        let d = p - on;
-        let z = d.dot(a);
-        (z, (d - a * z).norm())
-    }).collect()
+    pts.iter()
+        .map(|p| {
+            let d = p - on;
+            let z = d.dot(a);
+            (z, (d - a * z).norm())
+        })
+        .collect()
 }
 
 /// The size of what the corners span, for judging a first fit before refining it.
@@ -2268,7 +2340,15 @@ fn refined<const N: usize>(q: &mut [f64; N], pts: &[Vector3<f64>], miss: &impl F
 /// derivatives by small steps. The corners of a CAD mesh lie on the surface, so the minimum is the exact surface;
 /// a first guess from the triangles' middles is off by the tessellation's own sag. At most `most` corners are
 /// used, evenly picked, for at most `steps` steps, stopping once the root mean square miss is within `enough`.
-fn refine<const N: usize>(q: &mut [f64; N], pts: &[Vector3<f64>], miss: &impl Fn(&[f64; N], &Vector3<f64>) -> (f64, [f64; N]), steps: usize, most: usize, give_up: Option<(usize, f64)>, enough: f64) -> f64 {
+fn refine<const N: usize>(
+    q: &mut [f64; N],
+    pts: &[Vector3<f64>],
+    miss: &impl Fn(&[f64; N], &Vector3<f64>) -> (f64, [f64; N]),
+    steps: usize,
+    most: usize,
+    give_up: Option<(usize, f64)>,
+    enough: f64,
+) -> f64 {
     let step = pts.len().div_ceil(most).max(1);
     let pts: Vec<&Vector3<f64>> = pts.iter().step_by(step).collect();
     let cost = |q: &[f64; N]| pts.iter().map(|p| miss(q, p).0.powi(2)).sum::<f64>();
@@ -2344,10 +2424,12 @@ mod tests {
     /// under a slanted cut stand: an arc of 60 deg of a cylinder of 10, at heights 0 and 20.
     #[test]
     fn a_cylinder_is_refined_onto_its_corners() {
-        let pts: Vec<Vector3<f64>> = (0..26).map(|k| {
-            let a = (60.0 + 60.0 * k as f64 / 25.0f64).to_radians();
-            Vector3::new(10.0 * a.cos(), 10.0 * a.sin(), if k % 2 == 0 { 0.0 } else { 20.0 + 0.02 * k as f64 })
-        }).collect();
+        let pts: Vec<Vector3<f64>> = (0..26)
+            .map(|k| {
+                let a = (60.0 + 60.0 * k as f64 / 25.0f64).to_radians();
+                Vector3::new(10.0 * a.cos(), 10.0 * a.sin(), if k % 2 == 0 { 0.0 } else { 20.0 + 0.02 * k as f64 })
+            })
+            .collect();
         let normals: Vec<Vector3<f64>> = pts.iter().map(|p| Vector3::new(p.x, p.y, 0.0).normalize() + Vector3::new(0.0, 0.0, 2e-4)).collect();
         let fitted = fit_cylinder(&pts, &normals, 0.00035).expect("a cylinder");
         let worst = pts.iter().map(|p| distance(&fitted, p)).fold(0.0, f64::max);

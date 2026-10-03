@@ -60,7 +60,8 @@ pub fn trial_refusal(pc: &mut PartCtx, ctx: &egui::Context) -> Trial {
             qymcad_ui_state::trial_is_current(ctx);
             let got = answer.lock().ok().and_then(|a| a.clone()).map(|(t, _)| t);
             if got.is_none() {
-                ctx.request_repaint_after(std::time::Duration::from_millis(30)); // a frame when the answer lands
+                ctx.request_repaint_after(std::time::Duration::from_millis(30));
+                // a frame when the answer lands
             }
             return got.unwrap_or(Trial::Checking);
         }
@@ -200,8 +201,43 @@ fn gather(pc: &PartCtx) -> TrialJob {
 /// of the context, for the preview.
 fn run_trial(job: TrialJob) -> (Option<String>, Vec<[[f64; 3]; 3]>) {
     let TrialJob {
-        mut project, bodies, mut armed, mut cmd, mut gsel, mut sel, mut split, mut opts, mut feat, mut mirror, mut loft, mut chamfer, mut arr, mut datum, mut stitch_parts, mut prim, mut draft, mut hole, mut sweep,
-        mut repl_surface, mut thread, mut params_seen, mut boolean, mut bar_exprs, mut rev, mut carr, mut view, mut view_restore, mut cam, mut picking, set, active_path, comp_giz, mut mode_3d, mut body_giz, joint, workbench,
+        mut project,
+        bodies,
+        mut armed,
+        mut cmd,
+        mut gsel,
+        mut sel,
+        mut split,
+        mut opts,
+        mut feat,
+        mut mirror,
+        mut loft,
+        mut chamfer,
+        mut arr,
+        mut datum,
+        mut stitch_parts,
+        mut prim,
+        mut draft,
+        mut hole,
+        mut sweep,
+        mut repl_surface,
+        mut thread,
+        mut params_seen,
+        mut boolean,
+        mut bar_exprs,
+        mut rev,
+        mut carr,
+        mut view,
+        mut view_restore,
+        mut cam,
+        mut picking,
+        set,
+        active_path,
+        comp_giz,
+        mut mode_3d,
+        mut body_giz,
+        joint,
+        workbench,
         mut sketch_ses,
     } = job;
     let before: std::collections::HashSet<Id> = project.timeline.iter().map(|n| n.id).collect();

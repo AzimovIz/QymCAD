@@ -89,8 +89,7 @@ pub fn crates_root() -> std::path::PathBuf {
 /// The count is asserted rather than trusted: a walk that quietly found one directory is exactly the
 /// failure this exists to end, and it fails green.
 pub fn every_crate_src() -> Vec<std::path::PathBuf> {
-    let v: Vec<std::path::PathBuf> =
-        std::fs::read_dir(crates_root()).expect("the crates read").flatten().map(|e| e.path().join("src")).filter(|p| p.is_dir()).collect();
+    let v: Vec<std::path::PathBuf> = std::fs::read_dir(crates_root()).expect("the crates read").flatten().map(|e| e.path().join("src")).filter(|p| p.is_dir()).collect();
     assert!(v.len() > 1, "a source guard must walk every crate, not the one it lives in: found {}", v.len());
     v
 }
@@ -107,7 +106,19 @@ pub fn is_working_code(path: &std::path::Path) -> bool {
         && !n.ends_with("_tests.rs")
         && !n.ends_with("_flow.rs")
         && !n.ends_with("_memory.rs")
-        && !["audit.rs", "fuzz.rs", "sketch_paint.rs", "sketch_reopen.rs", "frame_cost.rs", "delete_feature_view.rs", "view_state.rs", "props_readonly.rs", "one_extrude.rs", "sketch_ref.rs"].contains(&n.as_str())
+        && ![
+            "audit.rs",
+            "fuzz.rs",
+            "sketch_paint.rs",
+            "sketch_reopen.rs",
+            "frame_cost.rs",
+            "delete_feature_view.rs",
+            "view_state.rs",
+            "props_readonly.rs",
+            "one_extrude.rs",
+            "sketch_ref.rs",
+        ]
+        .contains(&n.as_str())
 }
 
 pub fn working_part(text: &str) -> &str {
@@ -151,8 +162,6 @@ pub mod tests {
 
     /// The files that are counted: the working code of the application. Tests are not counted — they
     /// describe behaviour and are read by whoever works on the code.
-    
-
 
     fn count_all() -> (usize, Vec<(String, usize)>) {
         // the root of the workspace: .../crates/qymcad -> .../crates
@@ -192,7 +201,8 @@ pub mod tests {
         // be a pair of `<=` and `>=`, which at a mark of zero both degenerate: nothing can fall below zero,
         // so the second one could never fire and only looked like a guard.
         assert_eq!(
-            total, CEILING,
+            total,
+            CEILING,
             "the count of Russian strings in the code has moved off its mark of {CEILING}: now {total}.\n\
              MORE means new interface bypassed the language catalogue - it must go through it from the start.\n\
              FEWER means strings were translated: lower the CEILING mark to {total} in the same commit, or the\n\
@@ -200,5 +210,4 @@ pub mod tests {
             top.join("\n")
         );
     }
-
 }

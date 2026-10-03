@@ -84,10 +84,7 @@ fn the_information_and_the_errors_each_get_a_line() {
 
     assert!(!notes.contains(&0), "what the tool says shares the row of controls: {:?}", rows[0].iter().map(|t| &t.0).collect::<Vec<_>>());
     assert!(!wrongs.contains(&0), "what is wrong shares the row of controls");
-    assert!(
-        wrongs.iter().min() > notes.iter().max(),
-        "the errors must come after what the tool says, on a line of their own: information on rows {notes:?}, errors on rows {wrongs:?}"
-    );
+    assert!(wrongs.iter().min() > notes.iter().max(), "the errors must come after what the tool says, on a line of their own: information on rows {notes:?}, errors on rows {wrongs:?}");
 }
 
 /// AND THEY ARE WRITTEN AT THE ORDINARY SIZE.

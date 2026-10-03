@@ -53,10 +53,7 @@ mod tests {
         let mut app = a_sketch_under_edit();
         for n in 1..=3 {
             press(&mut app, Key::Escape, Modifiers::NONE);
-            assert!(
-                app.sketch_ses.editing.is_some(),
-                "Esc number {n} closed the sketch: Esc puts a tool down, it does not finish a context - that is Ctrl+Enter"
-            );
+            assert!(app.sketch_ses.editing.is_some(), "Esc number {n} closed the sketch: Esc puts a tool down, it does not finish a context - that is Ctrl+Enter");
         }
     }
 

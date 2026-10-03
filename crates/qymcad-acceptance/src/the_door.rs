@@ -44,24 +44,22 @@ fn has_word(code: &str, word: &str) -> bool {
 fn ways_around(code: &str) -> Vec<String> {
     // the application object, and the crates of the inside a check would read or drive it through
     const WORDS: [&str; 15] = [
-        "App",
-        "unsafe",
-        "egui",
-        "eframe",
-        "qymcad_core",
-        "qymcad_kernel",
-        "qymcad_io",
-        "qymcad_ui_state",
-        "qymcad_sketch",
-        "qymcad_part",
-        "qymcad_assembly",
-        "qymcad_i18n",
-        "qymcad_testkit",
-        "qymcad_paths",
-        "qymcad_render",
+        "App", "unsafe", "egui", "eframe", "qymcad_core", "qymcad_kernel", "qymcad_io", "qymcad_ui_state", "qymcad_sketch", "qymcad_part", "qymcad_assembly", "qymcad_i18n", "qymcad_testkit",
+        "qymcad_paths", "qymcad_render",
     ];
     // handlers the window calls itself, rebuilds it starts itself, and facades made for checks
-    const PIECES: [&str; 10] = ["_for_test", "start_feat_cmd", "apply_feat_cmd", "viewport_3d_click_at", "regenerate", "rebuild_if_dirty", "resync_after", "drain_bg", "wait_bg", "std::process::Command"];
+    const PIECES: [&str; 10] = [
+        "_for_test",
+        "start_feat_cmd",
+        "apply_feat_cmd",
+        "viewport_3d_click_at",
+        "regenerate",
+        "rebuild_if_dirty",
+        "resync_after",
+        "drain_bg",
+        "wait_bg",
+        "std::process::Command",
+    ];
     let mut out: Vec<String> = WORDS.iter().filter(|w| has_word(code, w)).map(|w| format!("the word `{w}`")).collect();
     out.extend(PIECES.iter().filter(|p| code.contains(*p)).map(|p| format!("`{p}`")));
     out

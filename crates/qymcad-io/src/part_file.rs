@@ -205,8 +205,7 @@ mod tests {
         let c = host.components.iter().find(|c| c.id == ins).unwrap();
         assert_eq!(c.kind, ComponentKind::Part, "a part was inserted");
         // the sketch and the extrusion arrived
-        let kinds: Vec<bool> = host.timeline.iter().filter(|n| n.parent == Some(ins))
-            .map(|n| matches!(n.kind, FeatureKind::Sketch { .. } | FeatureKind::Extrude { .. })).collect();
+        let kinds: Vec<bool> = host.timeline.iter().filter(|n| n.parent == Some(ins)).map(|n| matches!(n.kind, FeatureKind::Sketch { .. } | FeatureKind::Extrude { .. })).collect();
         assert_eq!(kinds.len(), 2, "the inserted part has a sketch and an extrusion");
         // the feature dimension survived the disk and the insertion
         let nb = host.timeline.iter().filter(|n| n.parent == Some(ins)).find_map(|n| n.kind.body()).unwrap();

@@ -54,9 +54,7 @@ mod live_session {
 
         // 2. A FILLET of a vertical edge, R3
         let body = app.project.timeline.iter().rev().find_map(|n| n.kind.body()).unwrap_or(0);
-        let eid = app.project.regen_edges.get(&body).and_then(|es| {
-            es.iter().find(|e| (e.a[0] - e.b[0]).abs() < 1e-6 && (e.a[1] - e.b[1]).abs() < 1e-6 && (e.a[2] - e.b[2]).abs() > 5.0).map(|e| e.id)
-        });
+        let eid = app.project.regen_edges.get(&body).and_then(|es| es.iter().find(|e| (e.a[0] - e.b[0]).abs() < 1e-6 && (e.a[1] - e.b[1]).abs() < 1e-6 && (e.a[2] - e.b[2]).abs() > 5.0).map(|e| e.id));
         match eid {
             None => fails.push("2. the fillet: no vertical edge of the plate was found in the edge cache".into()),
             Some(eid) => {
@@ -97,7 +95,12 @@ mod live_session {
                 let v3 = vol(&app);
                 let want = vol(&app) + 0.0; // measured below by the difference
                 let _ = want;
-                check(&mut fails, "3. a through cut 10 mm across", v3 < v1 - 700.0, format!("V={v3:.1}, expected roughly 785 less than the plate ({:.1}); the status line: {}", v1 - 785.0, app.status));
+                check(
+                    &mut fails,
+                    "3. a through cut 10 mm across",
+                    v3 < v1 - 700.0,
+                    format!("V={v3:.1}, expected roughly 785 less than the plate ({:.1}); the status line: {}", v1 - 785.0, app.status),
+                );
             }
         }
 
@@ -114,7 +117,12 @@ mod live_session {
         app.project.regen_sketch(si);
         app.finish_sketch_edit();
         let after = vol(&app);
-        check(&mut fails, "4. an edit of the base sketch, 40 -> 50", after > before + 2500.0, format!("V {before:.1} -> {after:.1}, expected +3000; errors in the timeline: {}", app.project.regen_errors.len()));
+        check(
+            &mut fails,
+            "4. an edit of the base sketch, 40 -> 50",
+            after > before + 2500.0,
+            format!("V {before:.1} -> {after:.1}, expected +3000; errors in the timeline: {}", app.project.regen_errors.len()),
+        );
         check(&mut fails, "4b. the timeline is free of errors after the edit", app.project.regen_errors.is_empty(), format!("{:?}", app.project.regen_errors.values().next()));
 
         // 5. SAVING AND OPENING: the volume must match
@@ -361,21 +369,51 @@ mod live_session {
         // what must be extinguished after entering any tool
         fn tail(app: &App) -> Vec<&'static str> {
             let mut t = Vec::new();
-            if app.tools.armed.modify() != 0 { t.push("the modify mode") }
-            if !app.tools.tool.pts.is_empty() { t.push("the points clicked") }
-            if app.tools.tool.circ_tan.is_some() { t.push("the tangency of a circle") }
-            if app.tools.armed.click_op() != 0 { t.push("the click operation") }
-            if app.tools.armed.move_op() != 0 || app.tools.tool.move_base.is_some() { t.push("the move") }
-            if app.tools.dim.first.is_some() { t.push("the first reference of a dimension") }
-            if app.tools.place.dim.is_some() { t.push("the dimension being placed") }
-            if app.tools.pending_import.draw_pts.is_some() { t.push("the unfinished import") }
-            if app.tools.corner.at.is_some() || app.tools.corner.only.is_some() { t.push("the corner popup") }
-            if app.tools.armed.measuring() || !app.tools.measure.pts.is_empty() { t.push("the measurement") }
-            if app.tools.armed.pat_op() != 0 { t.push("the array") }
-            if app.tools.sel_sk.constraint.is_some() || app.tools.sel_sk.modify.is_some() { t.push("the highlight of a constraint") }
-            if !matches!(app.tools.picking, Picking::None) { t.push("the pick of a shape") }
-            if !matches!(app.tools.drag, super::super::Dragging::None) { t.push("the drag") }
-            if !matches!(app.tools.inline, super::super::InlineEdit::None) { t.push("the edit in place") }
+            if app.tools.armed.modify() != 0 {
+                t.push("the modify mode")
+            }
+            if !app.tools.tool.pts.is_empty() {
+                t.push("the points clicked")
+            }
+            if app.tools.tool.circ_tan.is_some() {
+                t.push("the tangency of a circle")
+            }
+            if app.tools.armed.click_op() != 0 {
+                t.push("the click operation")
+            }
+            if app.tools.armed.move_op() != 0 || app.tools.tool.move_base.is_some() {
+                t.push("the move")
+            }
+            if app.tools.dim.first.is_some() {
+                t.push("the first reference of a dimension")
+            }
+            if app.tools.place.dim.is_some() {
+                t.push("the dimension being placed")
+            }
+            if app.tools.pending_import.draw_pts.is_some() {
+                t.push("the unfinished import")
+            }
+            if app.tools.corner.at.is_some() || app.tools.corner.only.is_some() {
+                t.push("the corner popup")
+            }
+            if app.tools.armed.measuring() || !app.tools.measure.pts.is_empty() {
+                t.push("the measurement")
+            }
+            if app.tools.armed.pat_op() != 0 {
+                t.push("the array")
+            }
+            if app.tools.sel_sk.constraint.is_some() || app.tools.sel_sk.modify.is_some() {
+                t.push("the highlight of a constraint")
+            }
+            if !matches!(app.tools.picking, Picking::None) {
+                t.push("the pick of a shape")
+            }
+            if !matches!(app.tools.drag, super::super::Dragging::None) {
+                t.push("the drag")
+            }
+            if !matches!(app.tools.inline, super::super::InlineEdit::None) {
+                t.push("the edit in place")
+            }
             t
         }
 
@@ -430,16 +468,28 @@ mod live_session {
 
         app.start_feat_cmd(9); // the loft — another command, the targeting must go out
         let mut tail = Vec::new();
-        if app.params.sweep.prof_sid != 0 || app.params.sweep.path_sid != 0 || app.params.sweep.pick_path { tail.push("the sweep") }
-        if app.params.loft.pick { tail.push("the loft") }
-        if app.params.draft.pick_neutral { tail.push("the draft") }
-        if app.params.mirror.plane.is_some() { tail.push("the mirror") }
-        if app.side.datum.plane_pick.is_some() { tail.push("the datum") }
+        if app.params.sweep.prof_sid != 0 || app.params.sweep.path_sid != 0 || app.params.sweep.pick_path {
+            tail.push("the sweep")
+        }
+        if app.params.loft.pick {
+            tail.push("the loft")
+        }
+        if app.params.draft.pick_neutral {
+            tail.push("the draft")
+        }
+        if app.params.mirror.plane.is_some() {
+            tail.push("the mirror")
+        }
+        if app.side.datum.plane_pick.is_some() {
+            tail.push("the datum")
+        }
         // A COMMAND'S OWN WAIT IS NOT INHERITED TARGETING. The loft was started with no sketch selected, so
         // it asks for one - `SketchFor(9)`, its own kind. What this guard is about is the PREVIOUS
         // command's aim surviving, and `FilletAll` set above is gone either way; anything else in hand
         // that does not belong to this command still counts.
-        if !matches!(app.tools.picking, Picking::None) && app.tools.picking.sketch_for() != Some(9) { tail.push("the pick of a shape") }
+        if !matches!(app.tools.picking, Picking::None) && app.tools.picking.sketch_for() != Some(9) {
+            tail.push("the pick of a shape")
+        }
         assert!(tail.is_empty(), "the new command inherited the targeting: {}", tail.join(", "));
 
         // References are collected INSIDE a command (the contract of the tools), so a command must open

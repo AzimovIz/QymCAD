@@ -278,53 +278,49 @@ fn the_menu_marks_the_chosen_item() {
     assert!(render.contains("ui.selectable_label(on, crate::i18n::tr(key))"), "the item must be drawn with a mark of its state");
 }
 
-    /// REPRODUCTION: a shell, then a fillet on its face — a segfault in the program.
-    #[test]
-    fn shell_then_fillet_on_its_face_does_not_crash() {
-        let mut app = super::super::App::default();
-        let si = app.create_sketch_on(qymcad_core::feature::SketchPlane::default());
-        app.project.add_rect_entity(si, 0.0, 0.0, 40.0, 30.0, qymcad_core::feature::Purpose::Real);
-        app.project.regen_sketch(si);
-        app.finish_sketch_edit();
-        app.chosen.sel = super::super::Sel::Sketch(si);
-        app.start_feat_cmd(1);
-        if let Some(p) = app.tools.cmd.params.iter_mut().find(|p| p.key == "height") {
-            p.val = 20.0;
-            p.txt = "20".into();
-        }
-        app.apply_feat_cmd();
-        qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
-        let base = app.project.timeline.iter().rev().find_map(|n| n.kind.body()).expect("the body");
-
-        // THE SHELL through the command
-        let top = app.project.regen_faces[&base].iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z)).expect("the top").id;
-        qymcad_ui_state::select_body(&mut app.project, &mut app.chosen.sel, &mut app.viewing.view, base);
-        app.start_feat_cmd(6);
-        app.tools.gsel.faces.insert(top);
-        app.tools.gsel.faces_body = Some(base);
-        app.apply_feat_cmd();
-        qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
-        let shell = app.project.timeline.iter().rev().find_map(|n| n.kind.body()).expect("the shell");
-        eprintln!("the shell is built: {}", app.project.regen_faces.contains_key(&shell));
-
-        // THE FILLET on a face of the shell — through the command, refreshing the edges as the program does
-        qymcad_ui_state::select_body(&mut app.project, &mut app.chosen.sel, &mut app.viewing.view, shell);
-        app.start_feat_cmd(4);
-        crate::gui::commands::refresh_edges(&mut app.part_ctx());
-        let f = app.project.regen_faces[&shell].iter().max_by(|a, b| a.area.total_cmp(&b.area)).expect("the face").id;
-        let eids: Vec<u32> = app
-            .project
-            .regen_edges
-            .get(&shell)
-            .map(|es| es.iter().filter(|e| app.project.names.edge(e.id).is_some_and(|n| n.faces.contains(&f))).map(|e| e.id).collect())
-            .unwrap_or_default();
-        eprintln!("edges of the face: {}", eids.len());
-        app.tools.gsel.edges = eids.into_iter().collect();
-        app.tools.gsel.describe_edges_of_face(f);
-        app.apply_feat_cmd();
-        qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
-        eprintln!("the fillet is applied, nodes {}", app.project.timeline.len());
+/// REPRODUCTION: a shell, then a fillet on its face — a segfault in the program.
+#[test]
+fn shell_then_fillet_on_its_face_does_not_crash() {
+    let mut app = super::super::App::default();
+    let si = app.create_sketch_on(qymcad_core::feature::SketchPlane::default());
+    app.project.add_rect_entity(si, 0.0, 0.0, 40.0, 30.0, qymcad_core::feature::Purpose::Real);
+    app.project.regen_sketch(si);
+    app.finish_sketch_edit();
+    app.chosen.sel = super::super::Sel::Sketch(si);
+    app.start_feat_cmd(1);
+    if let Some(p) = app.tools.cmd.params.iter_mut().find(|p| p.key == "height") {
+        p.val = 20.0;
+        p.txt = "20".into();
     }
+    app.apply_feat_cmd();
+    qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
+    let base = app.project.timeline.iter().rev().find_map(|n| n.kind.body()).expect("the body");
+
+    // THE SHELL through the command
+    let top = app.project.regen_faces[&base].iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z)).expect("the top").id;
+    qymcad_ui_state::select_body(&mut app.project, &mut app.chosen.sel, &mut app.viewing.view, base);
+    app.start_feat_cmd(6);
+    app.tools.gsel.faces.insert(top);
+    app.tools.gsel.faces_body = Some(base);
+    app.apply_feat_cmd();
+    qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
+    let shell = app.project.timeline.iter().rev().find_map(|n| n.kind.body()).expect("the shell");
+    eprintln!("the shell is built: {}", app.project.regen_faces.contains_key(&shell));
+
+    // THE FILLET on a face of the shell — through the command, refreshing the edges as the program does
+    qymcad_ui_state::select_body(&mut app.project, &mut app.chosen.sel, &mut app.viewing.view, shell);
+    app.start_feat_cmd(4);
+    crate::gui::commands::refresh_edges(&mut app.part_ctx());
+    let f = app.project.regen_faces[&shell].iter().max_by(|a, b| a.area.total_cmp(&b.area)).expect("the face").id;
+    let eids: Vec<u32> =
+        app.project.regen_edges.get(&shell).map(|es| es.iter().filter(|e| app.project.names.edge(e.id).is_some_and(|n| n.faces.contains(&f))).map(|e| e.id).collect()).unwrap_or_default();
+    eprintln!("edges of the face: {}", eids.len());
+    app.tools.gsel.edges = eids.into_iter().collect();
+    app.tools.gsel.describe_edges_of_face(f);
+    app.apply_feat_cmd();
+    qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
+    eprintln!("the fillet is applied, nodes {}", app.project.timeline.len());
+}
 
 /// THE TREE SHOWS HOW THE SET WAS DEFINED — in words rather than as a number.
 ///
@@ -427,10 +423,7 @@ fn the_seam_asks_for_the_second_face() {
 
     // the second pick — now the reference does get assembled
     let side = app.project.regen_faces[&body].iter().find(|f| f.normal[2].abs() < 0.1).expect("a side face").id;
-    let q2 = qymcad_core::refs::Query::Between(
-        Box::new(qymcad_core::refs::Query::Id(top)),
-        Box::new(qymcad_core::refs::Query::Id(side)),
-    );
+    let q2 = qymcad_core::refs::Query::Between(Box::new(qymcad_core::refs::Query::Id(top)), Box::new(qymcad_core::refs::Query::Id(side)));
     app.tools.gsel.between_first = None;
     app.apply_expansion("expand-between-done", q2);
     match app.tools.gsel.described {
@@ -459,7 +452,6 @@ fn a_half_finished_seam_does_not_leak_into_the_next_command() {
     assert!(app.tools.gsel.between_first.is_none(), "the wait for a second face must end together with the command");
     assert!(app.tools.gsel.last_edge.is_none() && app.tools.gsel.last_face.is_none(), "and so must the memory of what was pointed at");
 }
-
 
 /// THE WHOLE POINT, END TO END: describe "all the edges of the top face" -> edit the sketch -> the
 /// fillet picks up the new edge.
@@ -543,12 +535,7 @@ fn a_description_picks_up_an_edge_that_appeared_after_a_sketch_edit() {
         })
         .expect("the fillet is in place");
     let after = app.project.resolve_edge_refs(fillet.0, &fillet.1, "ref-what-fillet-edge").expect("the description must resolve after the edit too");
-    assert!(
-        after.len() > before.len(),
-        "there are more edges now — the description must PICK THEM UP, while a snapshot would not: there were {}, there are {}",
-        before.len(),
-        after.len()
-    );
+    assert!(after.len() > before.len(), "there are more edges now — the description must PICK THEM UP, while a snapshot would not: there were {}, there are {}", before.len(), after.len());
     assert!(matches!(fillet.1.query, Query::Adjacent(_)), "the timeline must hold A DESCRIPTION rather than a list: {:?}", fillet.1.query);
     assert!(!app.project.regen_errors.values().any(|_| true), "the part must stay built: {:?}", app.project.regen_errors);
 }
@@ -566,15 +553,15 @@ fn the_right_button_still_orbits_the_camera() {
     assert!(render.contains("resp.context_menu(|ui|"), "the menu must hang on the CLICK (context_menu) rather than on the press");
     // THE ORBIT STILL LIVES ON THE DRAG, and now it asks the mouse LAYOUT which drag. What this guard is
     // about is unchanged - the menu on a click, the orbit on a drag - and the layouts answer with drags.
-    assert!(render.contains("qymcad_ui_state::turn_view(crate::gui::orbit_about::pivot(&self.painting(), rect, ctx, resp), &mut self.viewing.cam, self.set.mouse_nav, ctx, resp)"), "the orbit must live on the DRAG");
+    assert!(
+        render.contains("qymcad_ui_state::turn_view(crate::gui::orbit_about::pivot(&self.painting(), rect, ctx, resp), &mut self.viewing.cam, self.set.mouse_nav, ctx, resp)"),
+        "the orbit must live on the DRAG"
+    );
     // AND OUR OWN LAYOUT MUST TAKE ANY BUTTON. This is the half that was nearly lost: naming the left
     // button would have been a faithful-looking transcription and would have taken the camera away from the
     // right button, which has turned it here since the beginning. Caught by this guard, which is what it is
     // for.
-    assert!(
-        qymcad_ui_state::MouseNav::QymCad.rotate().any_button,
-        "our layout must orbit on ANY drag, or the right button loses the camera it has always turned"
-    );
+    assert!(qymcad_ui_state::MouseNav::QymCad.rotate().any_button, "our layout must orbit on ANY drag, or the right button loses the camera it has always turned");
     let turns = std::fs::read_to_string(qymcad_i18n::ratchet::crates_root().join("qymcad-ui-state/src/lib.rs")).expect("the ui state reads");
     assert!(turns.contains("cam.yaw -= d.x as f64 * 0.01;"), "and really turn the camera");
     // and the menu must not dare open in response to a drag

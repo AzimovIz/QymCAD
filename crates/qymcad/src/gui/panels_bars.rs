@@ -11,14 +11,6 @@ impl App {
     pub(crate) fn feat_command_bar(&mut self, ui: &mut egui::Ui) {
         crate::gui::panels_bars::feat_command_bar(&mut self.part_ctx(), ui);
     }
-
-
-
-
-
-
-
-
 }
 
 pub(crate) fn menu_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
@@ -28,9 +20,9 @@ pub(crate) fn menu_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
     let ctx = &ui.ctx().clone();
     // The menu items belonging to CAM (the machine, the tools, the G-code, the setup, the rapids) appear only
     // when the machining module is enabled. That module is under development and hidden by default.
-            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
     egui::MenuBar::new().ui(ui, |ui| {
-            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
         ui.bar_menu_button(qymcad_i18n::tr("menu-file"), |ui| {
             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
             // A NEW PROJECT IS AN EMPTY ASSEMBLY: a part is made by "New part" of the start screen or of the assembly,
@@ -185,7 +177,11 @@ pub(crate) fn menu_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
             let rows: Vec<(String, String, bool)> = bc.scheme.all.iter().map(|p| (p.id.clone(), p.title(), p.light)).collect();
             for (id, title, light) in rows {
                 let icon = if qymcad_scheme::store::is_builtin(&id) {
-                    if light { ph::SUN } else { ph::MOON }
+                    if light {
+                        ph::SUN
+                    } else {
+                        ph::MOON
+                    }
                 } else {
                     ph::PENCIL_SIMPLE
                 };

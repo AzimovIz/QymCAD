@@ -73,7 +73,14 @@ fn a_heavy_mesh_becomes_a_lighter_solid_of_its_volume() {
     let body = p.add_mesh_solid(src, 0.01);
     let (_report, shapes) = qymcad_testkit::regenerate(&mut p);
     let solid = shapes.get(&body).unwrap_or_else(|| panic!("no live solid for the node; the rebuild says {:?}", p.regen_errors));
-    let want: f64 = fine.tris.iter().map(|t| { let [a, b, c] = t.map(|v| fine.verts[v as usize]); (a.x * (b.y * c.z - b.z * c.y) - a.y * (b.x * c.z - b.z * c.x) + a.z * (b.x * c.y - b.y * c.x)) / 6.0 }).sum();
+    let want: f64 = fine
+        .tris
+        .iter()
+        .map(|t| {
+            let [a, b, c] = t.map(|v| fine.verts[v as usize]);
+            (a.x * (b.y * c.z - b.z * c.y) - a.y * (b.x * c.z - b.z * c.x) + a.z * (b.x * c.y - b.y * c.x)) / 6.0
+        })
+        .sum();
     let faces = p.regen_faces.get(&body).map(|f| f.len()).unwrap_or(0);
     assert!(faces * 3 <= fine.tris.len(), "the solid has {faces} faces of a mesh of {} triangles", fine.tris.len());
     assert!((solid.volume() - want).abs() < 0.005 * want, "the solid holds {} against the mesh's {want}", solid.volume());

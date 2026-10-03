@@ -56,7 +56,5 @@ pub fn export_dxf(edges: &[ProfEdge], path: &str) -> Result<(), String> {
         }
     }
     s.push_str("0\nENDSEC\n0\nEOF\n");
-    std::fs::File::create(path)
-        .and_then(|mut f| f.write_all(s.as_bytes()))
-        .map_err(|e| format!("io-dxf-write-failed#{e}"))
+    std::fs::File::create(path).and_then(|mut f| f.write_all(s.as_bytes())).map_err(|e| format!("io-dxf-write-failed#{e}"))
 }

@@ -15,16 +15,7 @@ mod tests {
     use qymcad_core::model::Id;
 
     /// ALL EIGHT KINDS — that is how many the joint bar has, and that is how many must be here.
-    const KINDS: [JointKind; 8] = [
-        JointKind::Rigid,
-        JointKind::Revolute,
-        JointKind::Slider,
-        JointKind::Cylindrical,
-        JointKind::Planar,
-        JointKind::Ball,
-        JointKind::PinSlot,
-        JointKind::Parallel,
-    ];
+    const KINDS: [JointKind; 8] = [JointKind::Rigid, JointKind::Revolute, JointKind::Slider, JointKind::Cylindrical, JointKind::Planar, JointKind::Ball, JointKind::PinSlot, JointKind::Parallel];
 
     /// Two parts in the root: a grounded one and a free one. Returns their bodies.
     fn two_parts(app: &mut App) -> (Id, Id) {
@@ -49,9 +40,7 @@ mod tests {
         let wt = app.project.body_display_transform(body, qymcad_ui_state::current_ctx_id(&app.active_path, &app.project));
         let p = |q: [f64; 3]| qymcad_core::feature::apply12(&wt, q);
         if mode == 0 || mode == 3 {
-            let f = app.project.regen_faces.get(&body).and_then(|fs| {
-                fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z)).map(|f| [f.centroid.x, f.centroid.y, f.centroid.z])
-            });
+            let f = app.project.regen_faces.get(&body).and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z)).map(|f| [f.centroid.x, f.centroid.y, f.centroid.z]));
             return p(f.expect("the body has faces"));
         }
         let cached = crate::gui::pick::body_edges_cached(&app.cache, &app.live, &app.regen, body).expect("the body has edges in the live B-rep");

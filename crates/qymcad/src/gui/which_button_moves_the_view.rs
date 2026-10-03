@@ -89,7 +89,12 @@ mod tests {
         let was = app.viewing.cam.scale;
         let held = egui::Modifiers { ctrl: true, shift: true, command: true, ..Default::default() };
         let at = |y: f32| egui::pos2(700.0, y);
-        let moved = |p: egui::Pos2| egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), SCREEN)), events: vec![egui::Event::PointerMoved(p)], modifiers: held, ..Default::default() };
+        let moved = |p: egui::Pos2| egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), SCREEN)),
+            events: vec![egui::Event::PointerMoved(p)],
+            modifiers: held,
+            ..Default::default()
+        };
         for k in 0..=6 {
             let _ = ctx.run_ui(moved(at(400.0 - k as f32 * 20.0)), |c| app.viewport(c));
         }
@@ -200,11 +205,7 @@ mod tests {
             let _ = ctx.run_ui(frame(vec![egui::Event::PointerMoved(egui::pos2(title.x + k as f32 * 20.0, title.y))]), |c| draw(&mut app, c));
         }
 
-        assert!(
-            (app.viewing.cam.yaw - before).abs() < 1e-9,
-            "the window was dragged by its title bar and the camera turned with it, by {}",
-            (app.viewing.cam.yaw - before).abs()
-        );
+        assert!((app.viewing.cam.yaw - before).abs() < 1e-9, "the window was dragged by its title bar and the camera turned with it, by {}", (app.viewing.cam.yaw - before).abs());
     }
 
     /// EVERY SET HAS WORDS IN EVERY LANGUAGE - a name and a line saying what it does.
@@ -238,7 +239,8 @@ mod tests {
     fn the_viewport_asks_the_layout() {
         let src = std::fs::read_to_string(qymcad_i18n::ratchet::crates_root().join("qymcad/src/gui/viewport_3d.rs")).expect("the 3D viewport reads");
         assert!(
-            src.contains("qymcad_ui_state::pan_now(self.set.mouse_nav, ctx, resp)") && src.contains("qymcad_ui_state::turn_view(crate::gui::orbit_about::pivot(&self.painting(), rect, ctx, resp), &mut self.viewing.cam, self.set.mouse_nav, ctx, resp)"),
+            src.contains("qymcad_ui_state::pan_now(self.set.mouse_nav, ctx, resp)")
+                && src.contains("qymcad_ui_state::turn_view(crate::gui::orbit_about::pivot(&self.painting(), rect, ctx, resp), &mut self.viewing.cam, self.set.mouse_nav, ctx, resp)"),
             "the 3D viewport decides for itself which button moves the view, so the setting is a dead control"
         );
     }
@@ -439,7 +441,10 @@ mod tests {
             }
             let drift = (0..3).map(|k| (app.viewing.cam.target[k] - target0[k]).abs()).fold(0.0, f64::max);
             if drift > 1e-6 || (app.viewing.cam.yaw - yaw0).abs() > 1e-9 || (app.viewing.cam.pitch - pitch0).abs() > 1e-9 {
-                wrong.push(format!("{projection:?}: five turns there and back moved the centre by {drift:.3e} and left yaw {} / pitch {} (were {yaw0} / {pitch0})", app.viewing.cam.yaw, app.viewing.cam.pitch));
+                wrong.push(format!(
+                    "{projection:?}: five turns there and back moved the centre by {drift:.3e} and left yaw {} / pitch {} (were {yaw0} / {pitch0})",
+                    app.viewing.cam.yaw, app.viewing.cam.pitch
+                ));
             }
             // UP TO THE STOP OF THE TILT AND ON: the tilt stands still there, and the point must not go anywhere
             let mut worst = 0.0f32;

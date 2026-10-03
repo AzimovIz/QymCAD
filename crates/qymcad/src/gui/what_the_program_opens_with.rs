@@ -32,10 +32,7 @@ mod tests {
 
         assert_eq!(p.root, root, "the root of the document must be the component that was made");
         assert_eq!(p.components.len(), 1, "an empty document holds the root ALONE, and it holds {} components", p.components.len());
-        assert!(
-            p.components.iter().all(|c| c.kind != qymcad_core::feature::ComponentKind::Part),
-            "a part nobody asked for is in the empty document - that is the report word for word"
-        );
+        assert!(p.components.iter().all(|c| c.kind != qymcad_core::feature::ComponentKind::Part), "a part nobody asked for is in the empty document - that is the report word for word");
         assert!(p.timeline.is_empty(), "and nothing in the timeline");
     }
 

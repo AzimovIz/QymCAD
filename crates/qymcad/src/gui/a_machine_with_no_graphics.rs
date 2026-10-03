@@ -44,10 +44,7 @@ mod tests {
         assert!(text.contains(reason), "the report does not say why it would not start: {text}");
         assert!(text.contains("Could not start"), "the report does not say that it never started: {text}");
         assert!(text.starts_with("QymCAD "), "the report does not name the build, which is what a report is for: {text}");
-        assert!(
-            crate::crash::unseen_reports().iter().any(|p| p == &path),
-            "the report is not among the ones the next run shows - written and then invisible is the same as not written"
-        );
+        assert!(crate::crash::unseen_reports().iter().any(|p| p == &path), "the report is not among the ones the next run shows - written and then invisible is the same as not written");
 
         crate::crash::use_dir_for_test(None);
         let _ = std::fs::remove_dir_all(&dir);

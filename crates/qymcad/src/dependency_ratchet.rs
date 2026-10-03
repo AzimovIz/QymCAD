@@ -67,12 +67,7 @@ mod tests {
     fn declared() -> Vec<(String, String)> {
         let mut out = Vec::new();
         let mut manifests = vec![root().join("Cargo.toml")];
-        let mut crates: Vec<_> = std::fs::read_dir(root().join("crates"))
-            .expect("the crates directory reads")
-            .flatten()
-            .map(|e| e.path().join("Cargo.toml"))
-            .filter(|p| p.is_file())
-            .collect();
+        let mut crates: Vec<_> = std::fs::read_dir(root().join("crates")).expect("the crates directory reads").flatten().map(|e| e.path().join("Cargo.toml")).filter(|p| p.is_file()).collect();
         crates.sort();
         manifests.append(&mut crates);
 
@@ -94,11 +89,7 @@ mod tests {
                 if rhs.contains("path =") || rhs.contains("workspace = true") {
                     continue;
                 }
-                let version = rhs
-                    .split_once("version = \"")
-                    .map(|(_, v)| v)
-                    .or_else(|| rhs.trim().strip_prefix('"'))
-                    .and_then(|v| v.split('"').next());
+                let version = rhs.split_once("version = \"").map(|(_, v)| v).or_else(|| rhs.trim().strip_prefix('"')).and_then(|v| v.split('"').next());
                 if let Some(v) = version {
                     if !out.iter().any(|(n, _): &(String, String)| n == name) {
                         out.push((name.to_string(), v.to_string()));
@@ -158,11 +149,7 @@ mod tests {
         declared()
             .into_iter()
             .map(|(name, declared)| {
-                let (latest, what) = snap
-                    .iter()
-                    .find(|(n, _, _)| *n == name)
-                    .map(|(_, l, w)| (l.clone(), w.clone()))
-                    .unwrap_or_default();
+                let (latest, what) = snap.iter().find(|(n, _, _)| *n == name).map(|(_, l, w)| (l.clone(), w.clone())).unwrap_or_default();
                 Dep { name, declared, latest, what }
             })
             .collect()

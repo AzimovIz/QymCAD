@@ -52,24 +52,14 @@ mod tests {
 
     /// Arm the linear dimension tool - the same door the toolbar button uses.
     fn take_the_dimension_tool(app: &mut App) {
-        qymcad_ui_state::set_dim_tool(
-            &mut qymcad_ui_state::tools_of!(app),
-            &mut app.viewing.mode_3d,
-            &app.project,
-            app.chosen.sel,
-            app.sketch_ses,
-            &mut app.status,
-            1,
-        );
+        qymcad_ui_state::set_dim_tool(&mut qymcad_ui_state::tools_of!(app), &mut app.viewing.mode_3d, &app.project, app.chosen.sel, app.sketch_ses, &mut app.status, 1);
         assert_eq!(app.tools.armed.dim_kind(), 1, "setup: the dimension tool is not in hand");
     }
 
     /// Does any dimension added after `before` reference one of the sketch's axis points.
     fn goes_to_an_axis(app: &App, si: usize, before: usize) -> bool {
         let axis = &app.project.sketches[si].axis_pts;
-        app.project.sketches[si].constraints[before..].iter().any(|c| {
-            c.points().iter().any(|p| axis.contains(p))
-        })
+        app.project.sketches[si].constraints[before..].iter().any(|c| c.points().iter().any(|p| axis.contains(p)))
     }
 
     /// THE CLICK ON THE AXIS TAKES THE AXIS.
@@ -85,11 +75,7 @@ mod tests {
 
         let added = app.project.sketches[si].constraints.len() - before;
         assert!(added > 0, "two clicks and no dimension at all");
-        assert!(
-            goes_to_an_axis(&app, si, before),
-            "the click on the X axis did not take the axis; what was made instead: {:?}",
-            &app.project.sketches[si].constraints[before..]
-        );
+        assert!(goes_to_an_axis(&app, si, before), "the click on the X axis did not take the axis; what was made instead: {:?}", &app.project.sketches[si].constraints[before..]);
     }
 
     /// AND THE SAME FOR THE Y AXIS.
@@ -104,11 +90,7 @@ mod tests {
 
         let added = app.project.sketches[si].constraints.len() - before;
         assert!(added > 0, "two clicks and no dimension at all");
-        assert!(
-            goes_to_an_axis(&app, si, before),
-            "the click on the Y axis did not take the axis; what was made instead: {:?}",
-            &app.project.sketches[si].constraints[before..]
-        );
+        assert!(goes_to_an_axis(&app, si, before), "the click on the Y axis did not take the axis; what was made instead: {:?}", &app.project.sketches[si].constraints[before..]);
     }
 
     /// THE FRAME OF REFERENCE DOES NOT MOVE, however hard the drawing on top of it is pulled.
@@ -123,12 +105,7 @@ mod tests {
         app.project.regen_sketch(si);
 
         let p = app.project.sketches[si].points.iter().find(|p| p.id == a).expect("the anchor is still there");
-        assert!(
-            p.x.abs() < 1e-9 && p.y.abs() < 1e-9,
-            "the anchor was dragged to ({}, {}): the axes are now diagonals and every dimension to them measures the wrong line",
-            p.x,
-            p.y
-        );
+        assert!(p.x.abs() < 1e-9 && p.y.abs() < 1e-9, "the anchor was dragged to ({}, {}): the axes are now diagonals and every dimension to them measures the wrong line", p.x, p.y);
     }
 
     /// A CIRCLE DRAWN AT ZERO IS ITS OWN SHAPE, not the reference frame wearing a circle.
@@ -268,8 +245,7 @@ mod tests {
         Hand::new(&mut app).sk_tool(3).click2d(0.0, 0.0).click2d(10.0, 0.0);
 
         let s = &app.project.sketches[si];
-        let diameters: Vec<&qymcad_core::model::Constraint> =
-            s.constraints.iter().filter(|c| matches!(c, qymcad_core::model::Constraint::Diameter { .. })).collect();
+        let diameters: Vec<&qymcad_core::model::Constraint> = s.constraints.iter().filter(|c| matches!(c, qymcad_core::model::Constraint::Diameter { .. })).collect();
         assert_eq!(
             diameters.len(),
             1,

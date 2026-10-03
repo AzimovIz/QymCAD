@@ -44,12 +44,7 @@ fn every_dimension_kind_is_recognised() {
 /// coincidence and parallelism, where there is nothing to name.
 #[test]
 fn a_plain_constraint_is_not_a_dimension() {
-    for c in [
-        Constraint::Coincident { a: 1, b: 2 },
-        Constraint::Horizontal { a: 1, b: 2 },
-        Constraint::Parallel { a: 1, b: 2, c: 3, d: 4 },
-        Constraint::Fixed { p: 1 },
-    ] {
+    for c in [Constraint::Coincident { a: 1, b: 2 }, Constraint::Horizontal { a: 1, b: 2 }, Constraint::Parallel { a: 1, b: 2, c: 3, d: 4 }, Constraint::Fixed { p: 1 }] {
         assert!(Project::dim_refs(&c).is_none(), "a non-dimension was recognised as a dimension: {c:?}");
         assert!(Project::dim_value_of(&c).is_none(), "a value was read from a non-dimension: {c:?}");
     }
@@ -98,14 +93,7 @@ fn the_reference_order_does_not_matter() {
     p.new_document();
     let (si, ids) = sketch_with_points(&mut p, 3);
     let sid = p.sketches[si].id;
-    p.sketches[si].constraints.push(Constraint::Distance {
-        a: ids[0],
-        b: ids[1],
-        d: 25.0,
-        off: 0.0,
-        expr: String::new(),
-        driven: false,
-        axis: 0, at: None });
+    p.sketches[si].constraints.push(Constraint::Distance { a: ids[0], b: ids[1], d: 25.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
 
     assert!(p.add_named_dim("len".into(), sid, vec![ids[1], ids[0]]), "the name is set with the order reversed");
     assert_eq!(p.param_map().get("len"), Some(&25.0), "the dimension was not found with the points in reverse order");
@@ -118,14 +106,7 @@ fn renaming_the_same_dimension_replaces_the_old_name() {
     p.new_document();
     let (si, ids) = sketch_with_points(&mut p, 3);
     let sid = p.sketches[si].id;
-    p.sketches[si].constraints.push(Constraint::Distance {
-        a: ids[0],
-        b: ids[1],
-        d: 25.0,
-        off: 0.0,
-        expr: String::new(),
-        driven: false,
-        axis: 0, at: None });
+    p.sketches[si].constraints.push(Constraint::Distance { a: ids[0], b: ids[1], d: 25.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
 
     assert!(p.add_named_dim("staroe".into(), sid, vec![ids[0], ids[1]]));
     assert!(p.add_named_dim("novoe".into(), sid, vec![ids[1], ids[0]]));

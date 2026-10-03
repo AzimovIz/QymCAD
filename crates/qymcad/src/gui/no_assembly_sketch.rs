@@ -23,10 +23,7 @@ mod tests {
         app.workbench = Workbench::Assembly;
         app.cancel_all_tools();
         app.assembly_hotkey(egui::Key::K);
-        assert!(
-            !app.tools.picking.is_sketch_plane(),
-            "there is nothing to start a sketch with in an assembly: it could not be referenced anyway"
-        );
+        assert!(!app.tools.picking.is_sketch_plane(), "there is nothing to start a sketch with in an assembly: it could not be referenced anyway");
         // a datum, however, can be started: it works there (mirror, section)
         app.cancel_all_tools();
         app.assembly_hotkey(egui::Key::D);
@@ -48,10 +45,7 @@ mod tests {
         let src = crate::gui::panels_source::PANELS;
         let a = src.find("Workbench::Assembly =>").expect("the assembly workbench is there");
         let b = src[a..].find("Workbench::Cam").map(|i| a + i).unwrap_or(src.len());
-        assert!(
-            !src[a..b].contains("create_panel_sketch_button"),
-            "the Assembly toolbar must have no sketch button: a sketch is inert there"
-        );
+        assert!(!src[a..b].contains("create_panel_sketch_button"), "the Assembly toolbar must have no sketch button: a sketch is inert there");
         let p = src.find("Workbench::Part =>").expect("the part workbench is there");
         let q = src[p..].find("Workbench::Assembly =>").map(|i| p + i).unwrap_or(src.len());
         assert!(src[p..q].contains("create_panel_sketch_button"), "the Part toolbar must have the sketch button");

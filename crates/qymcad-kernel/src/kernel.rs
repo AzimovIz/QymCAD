@@ -287,8 +287,7 @@ impl qymcad_core::feature::Kernel for OcctKernel {
         let found = qymcad_meshfit::regions_until(&prepared, &tolerance, &stopped).ok_or_else(|| refused(qymcad_core::errors::Op::MeshRecognise))?;
         let bounds = qymcad_meshfit::boundaries(&prepared, &found);
         let curves = qymcad_meshfit::curves(&bounds, &found, &tolerance);
-        let made = crate::recognise::recognise_until(&prepared, &found, &bounds, &curves, &tolerance, &stopped)
-            .ok_or_else(|| refused(qymcad_core::errors::Op::MeshRecognise))?;
+        let made = crate::recognise::recognise_until(&prepared, &found, &bounds, &curves, &tolerance, &stopped).ok_or_else(|| refused(qymcad_core::errors::Op::MeshRecognise))?;
         self.finish(body, made.shape)
     }
     fn trim(&self, body: Id, src: Id, tool: Id, keep: [f64; 3]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
@@ -455,7 +454,15 @@ impl qymcad_core::feature::Kernel for OcctKernel {
         }
         self.finish(body, s)
     }
-    fn revolve_region_axis(&self, body: Id, profile: &[f64], line: qymcad_core::feature::AxisLine, angle_deg: f64, place: [f64; 12], caps: [u32; 2]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn revolve_region_axis(
+        &self,
+        body: Id,
+        profile: &[f64],
+        line: qymcad_core::feature::AxisLine,
+        angle_deg: f64,
+        place: [f64; 12],
+        caps: [u32; 2],
+    ) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
         // revolving about an arbitrary local axis, then placing the sketch
         let mut s = crate::Shape::revolve_profile_axis_named(profile, line.origin, line.dir, angle_deg, caps).ok_or_else(|| refused(qymcad_core::errors::Op::RevolveAxis))?;
         if place != qymcad_core::feature::PLACE_IDENTITY {
@@ -465,8 +472,7 @@ impl qymcad_core::feature::Kernel for OcctKernel {
     }
     fn sweep(&self, body: Id, profile: &[f64], profile_place: [f64; 12], path: &[f64], path_place: [f64; 12], caps: [u32; 2]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
         // a profile placed on its own plane is swept along a path on its own plane, giving a body
-        let s = crate::Shape::sweep_profile_named(profile, &profile_place, path, &path_place, caps)
-            .ok_or_else(|| refused(qymcad_core::errors::Op::Sweep))?;
+        let s = crate::Shape::sweep_profile_named(profile, &profile_place, path, &path_place, caps).ok_or_else(|| refused(qymcad_core::errors::Op::Sweep))?;
         self.finish(body, s)
     }
     fn revolve_region_multi(
@@ -528,8 +534,7 @@ impl qymcad_core::feature::Kernel for OcctKernel {
         let mut tool: Option<crate::Shape> = None;
         for (i, prof) in profiles.iter().enumerate() {
             let cap = [caps.get(i * 3 + 1).copied().unwrap_or(0), caps.get(i * 3 + 2).copied().unwrap_or(0)];
-            let s = crate::Shape::sweep_profile_named(prof, &profile_place, path, &path_place, cap)
-                .ok_or_else(|| refused(qymcad_core::errors::Op::Sweep))?;
+            let s = crate::Shape::sweep_profile_named(prof, &profile_place, path, &path_place, cap).ok_or_else(|| refused(qymcad_core::errors::Op::Sweep))?;
             tool = Some(match tool {
                 None => s,
                 Some(t) => t.boolean(&s, 1).ok_or_else(|| refused(qymcad_core::errors::Op::FuseProfiles))?,
@@ -546,18 +551,31 @@ impl qymcad_core::feature::Kernel for OcctKernel {
         };
         self.finish(body, res)
     }
-    fn loft(&self, body: Id, sections: qymcad_core::feature::LoftSections, walls: qymcad_core::feature::LoftWalls, kind: qymcad_core::feature::LoftBody, caps: [u32; 2]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn loft(
+        &self,
+        body: Id,
+        sections: qymcad_core::feature::LoftSections,
+        walls: qymcad_core::feature::LoftWalls,
+        kind: qymcad_core::feature::LoftBody,
+        caps: [u32; 2],
+    ) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
         let qymcad_core::feature::LoftSections { data: sections, offsets, places } = sections;
         // a body through a set of sections, each on its own plane
-        let s = crate::Shape::loft_sections_named(sections, offsets, places, walls, kind, caps)
-            .ok_or_else(|| refused(qymcad_core::errors::Op::Loft))?;
+        let s = crate::Shape::loft_sections_named(sections, offsets, places, walls, kind, caps).ok_or_else(|| refused(qymcad_core::errors::Op::Loft))?;
         self.finish(body, s)
     }
-    fn loft_combine(&self, bo: qymcad_core::model::BodyOp, sections: &[f64], offsets: &[usize], places: &[f64], walls: qymcad_core::feature::LoftWalls, caps: [u32; 2]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn loft_combine(
+        &self,
+        bo: qymcad_core::model::BodyOp,
+        sections: &[f64],
+        offsets: &[usize],
+        places: &[f64],
+        walls: qymcad_core::feature::LoftWalls,
+        caps: [u32; 2],
+    ) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
         let qymcad_core::model::BodyOp { src, op, body } = bo;
         // a lofted solid used as a tool, a closed body, taken in a boolean against the source
-        let tool = crate::Shape::loft_sections_named(sections, offsets, places, walls, qymcad_core::feature::LoftBody::Solid, caps)
-            .ok_or_else(|| refused(qymcad_core::errors::Op::Loft))?;
+        let tool = crate::Shape::loft_sections_named(sections, offsets, places, walls, qymcad_core::feature::LoftBody::Solid, caps).ok_or_else(|| refused(qymcad_core::errors::Op::Loft))?;
         let res = {
             let shapes = self.shapes.borrow();
             let src_shape = shapes.get(&src).ok_or(qymcad_core::errors::CoreError::SourceBodyNotBuilt)?;
@@ -598,7 +616,14 @@ impl qymcad_core::feature::Kernel for OcctKernel {
         };
         self.finish(body, res)
     }
-    fn combine_region_multi(&self, bo: qymcad_core::model::BodyOp, profiles: &[Vec<f64>], height: f64, place: [f64; 12], caps: &[u32]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn combine_region_multi(
+        &self,
+        bo: qymcad_core::model::BodyOp,
+        profiles: &[Vec<f64>],
+        height: f64,
+        place: [f64; 12],
+        caps: &[u32],
+    ) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
         let qymcad_core::model::BodyOp { src, op, body } = bo;
         // extrude every profile and fuse them into one tool, then one boolean against the source, giving one
         // body
@@ -614,7 +639,8 @@ impl qymcad_core::feature::Kernel for OcctKernel {
             None => {
                 let mut acc: Option<crate::Shape> = None;
                 for prof in profiles {
-                    let e = crate::Shape::extrude_profile_named(prof, height, [caps.get(1).copied().unwrap_or(0), caps.get(2).copied().unwrap_or(0)]).ok_or_else(|| refused(qymcad_core::errors::Op::ExtrudeContour))?;
+                    let e = crate::Shape::extrude_profile_named(prof, height, [caps.get(1).copied().unwrap_or(0), caps.get(2).copied().unwrap_or(0)])
+                        .ok_or_else(|| refused(qymcad_core::errors::Op::ExtrudeContour))?;
                     acc = Some(match acc {
                         None => e,
                         Some(t) => t.boolean(&e, 1).ok_or_else(|| refused(qymcad_core::errors::Op::FuseProfiles))?,
@@ -657,7 +683,12 @@ impl qymcad_core::feature::Kernel for OcctKernel {
             let sm = s.smooth_edge_ids();
             // EVERY EDGE, with smooth ones among them, is every sharp edge by name: the smooth ones have nothing to round
             let every: Vec<u32>;
-            let edges: &[u32] = if edges.is_empty() && !sm.is_empty() { every = s.sharp_edge_ids(); &every } else { edges };
+            let edges: &[u32] = if edges.is_empty() && !sm.is_empty() {
+                every = s.sharp_edge_ids();
+                &every
+            } else {
+                edges
+            };
             // THE NAMES GO WITH THEIR EDGES: the kernel takes the surface names in parallel with the edges, so an edge
             // left out takes its name out with it. Filtering the edges alone shifted every name after it onto the
             // next edge - the blend of one edge carried the name of its neighbour.
@@ -672,7 +703,13 @@ impl qymcad_core::feature::Kernel for OcctKernel {
                 return Err(qymcad_core::errors::CoreError::AllEdgesSmooth);
             }
             let name_of = |e: u32| kept.iter().position(|k| *k == e).and_then(|i| kept_names.get(i).copied()).unwrap_or(0);
-            let names_for = |list: &[u32]| -> Vec<u32> { if names.surfaces.is_empty() { Vec::new() } else { list.iter().map(|e| name_of(*e)).collect() } };
+            let names_for = |list: &[u32]| -> Vec<u32> {
+                if names.surfaces.is_empty() {
+                    Vec::new()
+                } else {
+                    list.iter().map(|e| name_of(*e)).collect()
+                }
+            };
             let edges = &kept[..];
             let surf = names_for(edges);
             let mut r = if edges.is_empty() { s.fillet_all(radius) } else { s.fillet_edges_named(radius, edges, &surf, names.corners, names.all) };
@@ -772,7 +809,21 @@ impl qymcad_core::feature::Kernel for OcctKernel {
         let shapes = self.shapes.borrow();
         let s = shapes.get(&h.src).ok_or(qymcad_core::errors::CoreError::SourceBodyNotBuilt)?;
         let out = s
-            .helical_profile(crate::HelicalCut { axis: qymcad_core::feature::AxisLine { origin: h.origin, dir: h.dir }, radius: h.radius, profile: h.profile, length: h.length, lead: h.lead, starts: h.starts, hand: if h.left { crate::Hand::Left } else { crate::Hand::Right }, kind: if h.fuse { crate::Helix::Rib } else { crate::Helix::Groove }, lead_in: h.lead_in, lead_out: h.lead_out, gnames: h.gnames, rnames: h.rnames, crest_relief: h.crest_relief })
+            .helical_profile(crate::HelicalCut {
+                axis: qymcad_core::feature::AxisLine { origin: h.origin, dir: h.dir },
+                radius: h.radius,
+                profile: h.profile,
+                length: h.length,
+                lead: h.lead,
+                starts: h.starts,
+                hand: if h.left { crate::Hand::Left } else { crate::Hand::Right },
+                kind: if h.fuse { crate::Helix::Rib } else { crate::Helix::Groove },
+                lead_in: h.lead_in,
+                lead_out: h.lead_out,
+                gnames: h.gnames,
+                rnames: h.rnames,
+                crest_relief: h.crest_relief,
+            })
             .ok_or(if h.fuse { qymcad_core::errors::CoreError::AugerFlightFailed } else { qymcad_core::errors::CoreError::ThreadFailed })?;
         // A GROOVE THAT CUT NOTHING, told by the exact volumes: the check on the meshes let 11546.04 -> 11546.04 through
         // as a thread, the tessellation noise passing for material taken.
@@ -792,7 +843,12 @@ impl qymcad_core::feature::Kernel for OcctKernel {
             let sm = s.smooth_edge_ids();
             // every edge, with smooth ones among them, is every sharp edge by name (see the rounding)
             let every: Vec<u32>;
-            let edges: &[u32] = if edges.is_empty() && !sm.is_empty() { every = s.sharp_edge_ids(); &every } else { edges };
+            let edges: &[u32] = if edges.is_empty() && !sm.is_empty() {
+                every = s.sharp_edge_ids();
+                &every
+            } else {
+                edges
+            };
             // the names go with their edges, as for a rounding: an edge left out takes its name out with it
             let kept: Vec<(u32, u32)> = edges.iter().enumerate().filter(|(_, e)| !sm.contains(*e)).map(|(i, e)| (*e, names.surfaces.get(i).copied().unwrap_or(0))).collect();
             let surf: Vec<u32> = if names.surfaces.is_empty() { Vec::new() } else { kept.iter().map(|k| k.1).collect() };
@@ -841,9 +897,9 @@ impl qymcad_core::feature::Kernel for OcctKernel {
             let shapes = self.shapes.borrow();
             let s = shapes.get(&src).ok_or(qymcad_core::errors::CoreError::SourceBodyNotBuilt)?;
             let offset = if outward { thickness.abs() } else { -thickness.abs() }; // the sign is the direction
-            // There is nothing to remove: the face reference matched none, so the kernel is never reached,
-            // yet an unnamed "the operation failed" was reported. That is not a broken shell but a lost
-            // reference, and it has to be named as one.
+                                                                                   // There is nothing to remove: the face reference matched none, so the kernel is never reached,
+                                                                                   // yet an unnamed "the operation failed" was reported. That is not a broken shell but a lost
+                                                                                   // reference, and it has to be named as one.
             if faces.is_empty() {
                 return Err(qymcad_core::errors::CoreError::FacesNotFound);
             }
@@ -900,8 +956,7 @@ impl qymcad_core::feature::Kernel for OcctKernel {
         let res = {
             let shapes = self.shapes.borrow();
             let s = shapes.get(&src).ok_or(qymcad_core::errors::CoreError::SourceBodyNotBuilt)?;
-            s.push_face(face, dist)
-                .ok_or_else(|| refused(qymcad_core::errors::Op::PushFace))?
+            s.push_face(face, dist).ok_or_else(|| refused(qymcad_core::errors::Op::PushFace))?
         };
         self.finish(body, res)
     }
@@ -973,15 +1028,22 @@ impl qymcad_core::feature::Kernel for OcctKernel {
         }
         with_key.into_iter().zip(bodies).map(|((_, sh), &b)| self.finish(b, sh)).collect()
     }
-    fn draft(&self, body: Id, src: Id, face_ids: &[u32], pull: qymcad_core::feature::DraftPull, neutral: qymcad_core::feature::PlaneAt, sides: &[u32]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn draft(
+        &self,
+        body: Id,
+        src: Id,
+        face_ids: &[u32],
+        pull: qymcad_core::feature::DraftPull,
+        neutral: qymcad_core::feature::PlaneAt,
+        sides: &[u32],
+    ) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
         let qymcad_core::feature::DraftPull { angle, dir: pull } = pull;
         let qymcad_core::feature::PlaneAt { origin: np_origin, normal: np_normal } = neutral;
         // draft: tilting faces relative to a neutral plane, in real B-rep, with the faces keeping their ids
         let res = {
             let shapes = self.shapes.borrow();
             let s = shapes.get(&src).ok_or(qymcad_core::errors::CoreError::SourceBodyNotBuilt)?;
-            s.draft_faces(face_ids, angle, pull, np_origin, np_normal, sides)
-                .ok_or(qymcad_core::errors::CoreError::DraftFailed { angle })?
+            s.draft_faces(face_ids, angle, pull, np_origin, np_normal, sides).ok_or(qymcad_core::errors::CoreError::DraftFailed { angle })?
         };
         self.finish(body, res)
     }
@@ -1092,13 +1154,7 @@ impl qymcad_core::feature::Kernel for OcctKernel {
         // A refusal names its cause. Mirroring a hollow part about one of its own faces is beyond the
         // kernel: fusing the halves leaves extra shells and no repair resolves them, tried five ways. While
         // that holds, the cause and the way out have to be visible instead of an unexplained red node.
-        self.finish(body, res).map_err(|e| {
-            if keep && matches!(e, qymcad_core::errors::CoreError::BrokenSolid) {
-                qymcad_core::errors::CoreError::MirrorOfHollowBody
-            } else {
-                e
-            }
-        })
+        self.finish(body, res).map_err(|e| if keep && matches!(e, qymcad_core::errors::CoreError::BrokenSolid) { qymcad_core::errors::CoreError::MirrorOfHollowBody } else { e })
     }
     fn transform_body(&self, body: Id, src: Id, mat: [f64; 12]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
         let res = {
@@ -1110,7 +1166,8 @@ impl qymcad_core::feature::Kernel for OcctKernel {
     }
     fn tessellate(&self, body: Id) -> Option<(Mesh, Vec<MeshFace>)> {
         // re-tessellation of an already imported STEP shape, through the same `tessellate_merged`
-        self.shapes.borrow().get(&body).and_then(|s| s.tessellate_merged_auto(self.k())) // deflection from the size
+        self.shapes.borrow().get(&body).and_then(|s| s.tessellate_merged_auto(self.k()))
+        // deflection from the size
     }
     fn body_boolean(&self, body: Id, a: Id, b: Id, op: u8) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
         let res = {

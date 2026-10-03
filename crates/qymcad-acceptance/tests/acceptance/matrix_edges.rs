@@ -9,7 +9,9 @@ use std::f64::consts::PI;
 use qymcad::Session;
 use qymcad_acceptance::chains::Tier;
 use qymcad_acceptance::bodies::{notched, BLOCK, BOSSED, CHAMFERED, CYLINDER, HOLED, NOTCHED, ROUNDED, WEDGE};
-use qymcad_acceptance::matrix::{chamfer_area, chamfer_corner, chamfer_mitre, fillet_area, fillet_centre, fillet_corner, fillet_mitre, run_all, short, spot, Added, Body, Case, Expect, PartTool, Pick, Spot, Then};
+use qymcad_acceptance::matrix::{
+    chamfer_area, chamfer_corner, chamfer_mitre, fillet_area, fillet_centre, fillet_corner, fillet_mitre, run_all, short, spot, Added, Body, Case, Expect, PartTool, Pick, Spot, Then,
+};
 use qymcad_acceptance::probe;
 
 const FILLET: PartTool = PartTool { hint: "tb-fillet-body-hint", caption: "f-radius", node: "Fillet", counts: true };
@@ -265,66 +267,45 @@ edge_matrix!(
     CHAMFER,
     |_: &PartTool| BLOCK_VALUES.into_iter().flat_map(|v| block_cases(false, v)).collect()
 );
-edge_matrix!(
-    fillets_on_round_edges,
-    "ROUNDING ROUND EDGES: the top of a cylinder and the rim of a hole, at an ordinary, a small and a near-limit radius.",
-    FILLET,
-    |_: &PartTool| ROUND_VALUES.into_iter().flat_map(|v| round_edge_cases(true, v)).collect()
-);
-edge_matrix!(
-    chamfers_on_round_edges,
-    "CHAMFERING ROUND EDGES: the top of a cylinder and the rim of a hole, at an ordinary, a small and a near-limit leg.",
-    CHAMFER,
-    |_: &PartTool| ROUND_VALUES.into_iter().flat_map(|v| round_edge_cases(false, v)).collect()
-);
-edge_matrix!(
-    fillets_along_an_earlier_chamfer_or_rounding,
-    "ROUNDING EDGES THAT RUN ALONG AN EARLIER CHAMFER OR ROUNDING.",
-    FILLET,
-    |_: &PartTool| after_chamfer_cases(true).into_iter().chain(after_rounding_cases(true)).collect()
-);
-edge_matrix!(
-    chamfers_along_an_earlier_chamfer_or_rounding,
-    "CHAMFERING EDGES THAT RUN ALONG AN EARLIER CHAMFER OR ROUNDING - a chamfer on a chamfer among them.",
-    CHAMFER,
-    |_: &PartTool| after_chamfer_cases(false).into_iter().chain(after_rounding_cases(false)).collect()
-);
-edge_matrix!(
-    fillets_refuse_what_the_geometry_cannot_hold,
-    "ROUNDING REFUSES IN WORDS what the geometry cannot hold, and zero and below - the body as it was.",
-    FILLET,
-    |_: &PartTool| refusals(true)
-);
-edge_matrix!(
-    chamfers_refuse_what_the_geometry_cannot_hold,
-    "CHAMFERING REFUSES IN WORDS what the geometry cannot hold, and zero and below - the body as it was.",
-    CHAMFER,
-    |_: &PartTool| refusals(false)
-);
-edge_matrix!(
-    fillets_in_a_notch,
-    "ROUNDING THE EDGES OF A NOTCH: a straight edge cut in two, the upright edges, a corner of two, the hollow edges of the floor.",
-    FILLET,
-    |_: &PartTool| [1.0, 0.1, 4.5].into_iter().flat_map(|v| notch_cases(true, v)).collect()
-);
-edge_matrix!(
-    chamfers_in_a_notch,
-    "CHAMFERING THE EDGES OF A NOTCH: a straight edge cut in two, the upright edges, a corner of two, the hollow edges of the floor.",
-    CHAMFER,
-    |_: &PartTool| [1.0, 0.1, 4.5].into_iter().flat_map(|v| notch_cases(false, v)).collect()
-);
-edge_matrix!(
-    fillets_round_a_boss,
-    "ROUNDING ROUND A BOSS: the hollow round edge where it stands on the block, and the round edge of its top.",
-    FILLET,
-    |_: &PartTool| [1.0, 0.1, 4.5].into_iter().flat_map(|v| boss_cases(true, v)).collect()
-);
-edge_matrix!(
-    chamfers_round_a_boss,
-    "CHAMFERING ROUND A BOSS: the hollow round edge where it stands on the block, and the round edge of its top.",
-    CHAMFER,
-    |_: &PartTool| [1.0, 0.1, 4.5].into_iter().flat_map(|v| boss_cases(false, v)).collect()
-);
+edge_matrix!(fillets_on_round_edges, "ROUNDING ROUND EDGES: the top of a cylinder and the rim of a hole, at an ordinary, a small and a near-limit radius.", FILLET, |_: &PartTool| ROUND_VALUES
+    .into_iter()
+    .flat_map(|v| round_edge_cases(true, v))
+    .collect());
+edge_matrix!(chamfers_on_round_edges, "CHAMFERING ROUND EDGES: the top of a cylinder and the rim of a hole, at an ordinary, a small and a near-limit leg.", CHAMFER, |_: &PartTool| ROUND_VALUES
+    .into_iter()
+    .flat_map(|v| round_edge_cases(false, v))
+    .collect());
+edge_matrix!(fillets_along_an_earlier_chamfer_or_rounding, "ROUNDING EDGES THAT RUN ALONG AN EARLIER CHAMFER OR ROUNDING.", FILLET, |_: &PartTool| after_chamfer_cases(true)
+    .into_iter()
+    .chain(after_rounding_cases(true))
+    .collect());
+edge_matrix!(chamfers_along_an_earlier_chamfer_or_rounding, "CHAMFERING EDGES THAT RUN ALONG AN EARLIER CHAMFER OR ROUNDING - a chamfer on a chamfer among them.", CHAMFER, |_: &PartTool| {
+    after_chamfer_cases(false).into_iter().chain(after_rounding_cases(false)).collect()
+});
+edge_matrix!(fillets_refuse_what_the_geometry_cannot_hold, "ROUNDING REFUSES IN WORDS what the geometry cannot hold, and zero and below - the body as it was.", FILLET, |_: &PartTool| refusals(true));
+edge_matrix!(chamfers_refuse_what_the_geometry_cannot_hold, "CHAMFERING REFUSES IN WORDS what the geometry cannot hold, and zero and below - the body as it was.", CHAMFER, |_: &PartTool| refusals(
+    false
+));
+edge_matrix!(fillets_in_a_notch, "ROUNDING THE EDGES OF A NOTCH: a straight edge cut in two, the upright edges, a corner of two, the hollow edges of the floor.", FILLET, |_: &PartTool| [
+    1.0, 0.1, 4.5
+]
+.into_iter()
+.flat_map(|v| notch_cases(true, v))
+.collect());
+edge_matrix!(chamfers_in_a_notch, "CHAMFERING THE EDGES OF A NOTCH: a straight edge cut in two, the upright edges, a corner of two, the hollow edges of the floor.", CHAMFER, |_: &PartTool| [
+    1.0, 0.1, 4.5
+]
+.into_iter()
+.flat_map(|v| notch_cases(false, v))
+.collect());
+edge_matrix!(fillets_round_a_boss, "ROUNDING ROUND A BOSS: the hollow round edge where it stands on the block, and the round edge of its top.", FILLET, |_: &PartTool| [1.0, 0.1, 4.5]
+    .into_iter()
+    .flat_map(|v| boss_cases(true, v))
+    .collect());
+edge_matrix!(chamfers_round_a_boss, "CHAMFERING ROUND A BOSS: the hollow round edge where it stands on the block, and the round edge of its top.", CHAMFER, |_: &PartTool| [1.0, 0.1, 4.5]
+    .into_iter()
+    .flat_map(|v| boss_cases(false, v))
+    .collect());
 edge_matrix!(
     a_fillet_runs_on_into_a_smaller_one_whole,
     "A ROUNDING THAT RUNS ON, TANGENT, INTO A SMALLER ONE: built where it can roll round it; where it cannot, overflowing onto the faces next to it or refused in words - never a broken body.",
@@ -384,12 +365,9 @@ edge_matrix!(
     FILLET,
     |_: &PartTool| wedge_cases(true)
 );
-edge_matrix!(
-    chamfers_on_a_wedge,
-    "CHAMFERING THE EDGES OF A WEDGE: its sharp edge of 14 degrees and the edge of 76 at the top of its back; one past the table refused.",
-    CHAMFER,
-    |_: &PartTool| wedge_cases(false)
-);
+edge_matrix!(chamfers_on_a_wedge, "CHAMFERING THE EDGES OF A WEDGE: its sharp edge of 14 degrees and the edge of 76 at the top of its back; one past the table refused.", CHAMFER, |_: &PartTool| {
+    wedge_cases(false)
+});
 
 /// The first row of the tree that begins with the word `key` gives, before its first value.
 fn tree_row(s: &mut qymcad::Session, key: &str) -> qymcad::Rect {

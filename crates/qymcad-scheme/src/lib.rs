@@ -486,138 +486,18 @@ macro_rules! readers {
 }
 
 readers!(
-    viewport_bg,
-    toolbar_bg,
-    panel_bg,
-    panel_border,
-    splash_bg,
-    thumbnail_bg,
-    scrim,
-    text_strong,
-    text_dim,
-    text_faint,
-    emphasis,
-    glyph_text,
-    glyph_backing,
-    grid,
-    grid_minor,
-    axis_x,
-    axis_y,
-    axis_z,
-    grid_axis_x,
-    grid_axis_y,
-    grid_axis_z,
-    sketch_axis_x,
-    sketch_axis_y,
-    sketch_axis_idle,
-    sketch_line,
-    sketch_construction,
-    sketch_driven,
-    sketch_face_edge,
-    sketch_edge_3d,
-    dimension,
-    dimension_driven,
-    dim_helper,
-    dim_helper_ring,
-    selected,
-    highlight,
-    active,
-    handle,
-    handle_face,
-    snap_point,
-    axis_pick_idle,
-    clip,
-    plate_text,
-    pattern_center,
-    sketch_point,
-    annotation,
-    note,
-    hint,
-    hint_action,
-    tree_selected,
-    connector,
-    rollback,
-    select_window,
-    select_cross,
-    rubber_band,
-    snap_marker,
-    snap_intersection,
-    snap_edge,
-    snap_axis,
-    snap_grid,
-    edge_idle,
-    body_face,
-    body_ghost,
-    body_clash,
-    add,
-    remove,
-    modify,
-    reference,
-    offset_in,
-    plane_face,
-    plane_fill,
-    plane_idle,
-    plane_normal,
-    datum_point,
-    datum_axis,
-    preview,
-    preview_prim,
-    preview_array,
-    preview_axis,
-    preview_datum,
-    measure,
-    cut_line,
-    gizmo_label,
-    constraint_ok,
-    constraint_selected,
-    constraint_hover,
-    joint_idle,
-    joint_hover,
-    joint_pick_a,
-    joint_pick_b,
-    grounded,
-    contour_idle,
-    contour_hover,
-    contour_profile,
-    ok,
-    ok_soft,
-    underdefined,
-    warning,
-    error,
-    error_mild,
-    confirm,
-    refuse,
-    cam_plunge,
-    cam_rapid,
-    cam_table,
-    cam_table_grid,
-    cam_stock,
-    ghost_target,
-    viewcube_face,
-    viewcube_edge,
-    cam_stock_idle,
-    cam_op1,
-    cam_op2,
-    cam_op3,
-    cam_op4,
-    cam_op5,
-    cam_op6,
-    ui_window,
-    ui_field,
-    ui_stripe,
-    ui_outline,
-    ui_control,
-    ui_control_hover,
-    ui_control_active,
-    ui_accent,
-    ui_text,
-    ui_text_dim,
-    ui_text_strong,
-    ui_link,
+    viewport_bg, toolbar_bg, panel_bg, panel_border, splash_bg, thumbnail_bg, scrim, text_strong, text_dim, text_faint, emphasis, glyph_text, glyph_backing, grid, grid_minor, axis_x, axis_y, axis_z,
+    grid_axis_x, grid_axis_y, grid_axis_z, sketch_axis_x, sketch_axis_y, sketch_axis_idle, sketch_line, sketch_construction, sketch_driven, sketch_face_edge, sketch_edge_3d, dimension,
+    dimension_driven, dim_helper, dim_helper_ring, selected, highlight, active, handle, handle_face, snap_point, axis_pick_idle, clip, plate_text, pattern_center, sketch_point, annotation, note,
+    hint, hint_action, tree_selected, connector, rollback, select_window, select_cross, rubber_band, snap_marker, snap_intersection, snap_edge, snap_axis, snap_grid, edge_idle, body_face, body_ghost,
+    body_clash, add, remove, modify, reference, offset_in, plane_face, plane_fill, plane_idle, plane_normal, datum_point, datum_axis, preview, preview_prim, preview_array, preview_axis,
+    preview_datum, measure, cut_line, gizmo_label, constraint_ok, constraint_selected, constraint_hover, joint_idle, joint_hover, joint_pick_a, joint_pick_b, grounded, contour_idle, contour_hover,
+    contour_profile, ok, ok_soft, underdefined, warning, error, error_mild, confirm, refuse, cam_plunge, cam_rapid, cam_table, cam_table_grid, cam_stock, ghost_target, viewcube_face, viewcube_edge,
+    cam_stock_idle, cam_op1, cam_op2, cam_op3, cam_op4, cam_op5, cam_op6, ui_window, ui_field, ui_stripe, ui_outline, ui_control, ui_control_hover, ui_control_active, ui_accent, ui_text, ui_text_dim,
+    ui_text_strong, ui_link,
 );
 
 impl Palette {
-
     /// AN IMPRINT OF THE SCHEME - for the keys of the image caches.
     ///
     /// The raster of the viewport and the GPU vertex buffer are computed once and reused while their key
@@ -642,7 +522,11 @@ impl Palette {
 
     /// The caption of a scheme in the person's language.
     pub fn title(&self) -> String {
-        if self.name.is_empty() { qymcad_i18n::tr(&format!("scheme-{}", self.id)) } else { self.name.clone() }
+        if self.name.is_empty() {
+            qymcad_i18n::tr(&format!("scheme-{}", self.id))
+        } else {
+            self.name.clone()
+        }
     }
 
     /// A gizmo axis by index (0/1/2) - the gizmo walks the axes in a loop rather than by name.
@@ -668,30 +552,30 @@ pub fn dark() -> Palette {
         light: false,
         ui_on: false, // the interface stays stock: a transcription, not a rework
 
-        viewport_bg: [26, 26, 26],     // gui.rs: from_gray(26)
-        toolbar_bg: [34, 40, 46],      // gui.rs: tool_bar_frame
-        panel_bg: [28, 28, 28],        // draw_dim_overlay: from_gray(28)
-        panel_border: [60, 60, 60],    // draw_dim_overlay: from_gray(60)
-        splash_bg: [22, 22, 22],       // draw_splash
-        thumbnail_bg: [38, 42, 48],    // render_component_thumbnail
-        scrim: [0, 0, 0],              // from_black_alpha(120)
-        text_strong: [230, 230, 230],  // draw_splash / draw_dim_overlay (225 merged in here)
-        text_dim: [170, 170, 170],     // draw_splash
-        text_faint: [135, 135, 135],   // a reference dimension
-        emphasis: [255, 255, 255],     // a dimension under the cursor
-        glyph_text: [255, 255, 255],   // the mark inside a constraint plate
-        glyph_backing: [20, 26, 34],   // the disc behind a joint glyph
-        grid: [70, 74, 80],            // the canvas grid (66,72,82 of the major 3D grid merged in here)
-        grid_minor: [46, 50, 58],      // a minor line of the 3D grid
+        viewport_bg: [26, 26, 26],    // gui.rs: from_gray(26)
+        toolbar_bg: [34, 40, 46],     // gui.rs: tool_bar_frame
+        panel_bg: [28, 28, 28],       // draw_dim_overlay: from_gray(28)
+        panel_border: [60, 60, 60],   // draw_dim_overlay: from_gray(60)
+        splash_bg: [22, 22, 22],      // draw_splash
+        thumbnail_bg: [38, 42, 48],   // render_component_thumbnail
+        scrim: [0, 0, 0],             // from_black_alpha(120)
+        text_strong: [230, 230, 230], // draw_splash / draw_dim_overlay (225 merged in here)
+        text_dim: [170, 170, 170],    // draw_splash
+        text_faint: [135, 135, 135],  // a reference dimension
+        emphasis: [255, 255, 255],    // a dimension under the cursor
+        glyph_text: [255, 255, 255],  // the mark inside a constraint plate
+        glyph_backing: [20, 26, 34],  // the disc behind a joint glyph
+        grid: [70, 74, 80],           // the canvas grid (66,72,82 of the major 3D grid merged in here)
+        grid_minor: [46, 50, 58],     // a minor line of the 3D grid
 
-        axis_x: [230, 90, 90],       // draw_gizmo_at
-        axis_y: [90, 200, 110],      //
-        axis_z: [90, 150, 240],      //
-        grid_axis_x: [205, 85, 85],  // draw_3d, the world grid
-        grid_axis_y: [90, 205, 90],  //
-        grid_axis_z: [95, 135, 235], //
-        sketch_axis_x: [180, 80, 80], // draw_axes
-        sketch_axis_y: [90, 165, 95], //
+        axis_x: [230, 90, 90],          // draw_gizmo_at
+        axis_y: [90, 200, 110],         //
+        axis_z: [90, 150, 240],         //
+        grid_axis_x: [205, 85, 85],     // draw_3d, the world grid
+        grid_axis_y: [90, 205, 90],     //
+        grid_axis_z: [95, 135, 235],    //
+        sketch_axis_x: [180, 80, 80],   // draw_axes
+        sketch_axis_y: [90, 165, 95],   //
         sketch_axis_idle: [60, 60, 60], // draw_axes: from_gray(60)
 
         sketch_line: [250, 230, 120],         // draw_sketch_preview
@@ -705,10 +589,10 @@ pub fn dark() -> Palette {
         dim_helper: [150, 210, 120],
         dim_helper_ring: [40, 70, 30],
 
-        selected: [255, 170, 60],  // an edge, dimension or face is selected (250,170,60 merged in here)
-        highlight: [250, 210, 110], // under the cursor, a selected datum, the copies of an array
-        active: [250, 200, 90],    // "being dragged now" (255,200,90 / 255,200,80 / 240,200,90 merged)
-        handle: [150, 225, 255],   // the arrow handle of a command
+        selected: [255, 170, 60],     // an edge, dimension or face is selected (250,170,60 merged in here)
+        highlight: [250, 210, 110],   // under the cursor, a selected datum, the copies of an array
+        active: [250, 200, 90],       // "being dragged now" (255,200,90 / 255,200,80 / 240,200,90 merged)
+        handle: [150, 225, 255],      // the arrow handle of a command
         handle_face: [200, 210, 230], // an arrow on a face
         snap_point: [80, 220, 120],
         axis_pick_idle: [150, 190, 150],
@@ -717,7 +601,7 @@ pub fn dark() -> Palette {
         pattern_center: [255, 140, 60],
         sketch_point: [120, 220, 250],
         annotation: [190, 205, 230],
-        note: [200, 180, 120],       // (200,190,130 merged in here)
+        note: [200, 180, 120], // (200,190,130 merged in here)
         hint: [120, 200, 255],
         hint_action: [230, 170, 90], // (230,160,90 and 230,180,90 merged in here)
         tree_selected: [120, 200, 255],
@@ -733,9 +617,9 @@ pub fn dark() -> Palette {
         snap_grid: [150, 160, 180],
         edge_idle: [150, 155, 170], // an edge of a body on its own
 
-        body_face: [97, 195, 214],  // draw_mesh: (g/2, g, g*1.1) on the lightest face
-        body_ghost: [58, 78, 89],   // (g*0.30, g*0.40, g*0.46)
-        body_clash: [214, 68, 68],  // (g*1.1, g*0.35, g*0.35)
+        body_face: [97, 195, 214], // draw_mesh: (g/2, g, g*1.1) on the lightest face
+        body_ghost: [58, 78, 89],  // (g*0.30, g*0.40, g*0.46)
+        body_clash: [214, 68, 68], // (g*1.1, g*0.35, g*0.35)
 
         add: [120, 220, 160],       // a pad
         remove: [240, 110, 100],    // a shell
@@ -750,7 +634,7 @@ pub fn dark() -> Palette {
         datum_point: [180, 200, 230],
         datum_axis: [200, 180, 120],
 
-        preview: [120, 200, 255],       // (130,205,255 / 120,210,255 merged in here)
+        preview: [120, 200, 255], // (130,205,255 / 120,210,255 merged in here)
         preview_prim: [90, 210, 230],
         preview_array: [120, 210, 235],
         preview_axis: [180, 160, 250],
@@ -773,26 +657,26 @@ pub fn dark() -> Palette {
         contour_hover: [220, 230, 255],
         contour_profile: [255, 190, 70],
 
-        ok: [120, 220, 140],  // (120,230,140 merged in here)
+        ok: [120, 220, 140], // (120,230,140 merged in here)
         ok_soft: [150, 190, 150],
         underdefined: [250, 210, 100], // (230,200,90 merged in here)
-        warning: [210, 160, 40], // a redundant constraint
-        error: [255, 80, 70],    // a conflict (240,90,80 and 255,90,80 merged in here)
-        error_mild: [230, 120, 120], // (240,130,120 and 230,130,110 merged in here)
-        confirm: [110, 200, 130], // quieter than `ok`: a button is a large patch, and the sketch mark is a thin line
-        refuse: [215, 125, 120],  // a way out rather than a mistake, so short of the alarm red of `error`
+        warning: [210, 160, 40],       // a redundant constraint
+        error: [255, 80, 70],          // a conflict (240,90,80 and 255,90,80 merged in here)
+        error_mild: [230, 120, 120],   // (240,130,120 and 230,130,110 merged in here)
+        confirm: [110, 200, 130],      // quieter than `ok`: a button is a large patch, and the sketch mark is a thin line
+        refuse: [215, 125, 120],       // a way out rather than a mistake, so short of the alarm red of `error`
 
         cam_plunge: [225, 95, 95],
         cam_rapid: [115, 115, 115], // from_gray(110) and from_gray(120) merged
         cam_table: [70, 90, 70],
         cam_table_grid: [60, 75, 60],
-        cam_stock: [224, 168, 92],   // (230,180,90 of the selected stock merged in here)
-        shade_floor_body: 0.40,      // gui.rs shade_tri: lit = 0.4 + 0.6*|n.light|
-        shade_floor_mesh: 45.0 / 195.0, // render.rs draw_mesh: g = 45 + shade*150
+        cam_stock: [224, 168, 92],          // (230,180,90 of the selected stock merged in here)
+        shade_floor_body: 0.40,             // gui.rs shade_tri: lit = 0.4 + 0.6*|n.light|
+        shade_floor_mesh: 45.0 / 195.0,     // render.rs draw_mesh: g = 45 + shade*150
         shade_floor_viewcube: 66.0 / 235.0, // viewcube.rs: the darkest corner
-        body_lighten: 0.0,           // the dark scheme does not touch a part - this is a transcription
+        body_lighten: 0.0,                  // the dark scheme does not touch a part - this is a transcription
         body_saturate: 0.0,
-        ghost_target: [29, 32, 40],  // the former addend (22,24,30) is 0.75 of it
+        ghost_target: [29, 32, 40],     // the former addend (22,24,30) is 0.75 of it
         viewcube_face: [235, 235, 249], // at full lighting; the cube is drawn by shading down from it
         viewcube_edge: [60, 66, 74],
         cam_stock_idle: [90, 95, 110],
@@ -809,18 +693,18 @@ pub fn dark() -> Palette {
         // stays stock. But a copy of this scheme with the box ticked must start from EXACTLY what was on
         // screen - otherwise "paint the interface" would mean "repaint it at random". A guard checks these
         // twelve against `Visuals::dark()` and goes red if egui changes them.
-        ui_window: [27, 27, 27],          // panel_fill / window_fill
-        ui_field: [10, 10, 10],           // extreme_bg_color
-        ui_stripe: [5, 5, 5],             // faint_bg_color
-        ui_outline: [60, 60, 60],         // window_stroke
-        ui_control: [60, 60, 60],         // widgets.inactive.bg_fill
-        ui_control_hover: [70, 70, 70],   // widgets.hovered.bg_fill
-        ui_control_active: [55, 55, 55],  // widgets.active.bg_fill
-        ui_accent: [0, 92, 128],          // selection.bg_fill
-        ui_text: [180, 180, 180],         // widgets.inactive.fg_stroke
-        ui_text_dim: [140, 140, 140],     // widgets.noninteractive.fg_stroke
-        ui_text_strong: [240, 240, 240],  // widgets.hovered.fg_stroke
-        ui_link: [90, 170, 255],          // hyperlink_color
+        ui_window: [27, 27, 27],         // panel_fill / window_fill
+        ui_field: [10, 10, 10],          // extreme_bg_color
+        ui_stripe: [5, 5, 5],            // faint_bg_color
+        ui_outline: [60, 60, 60],        // window_stroke
+        ui_control: [60, 60, 60],        // widgets.inactive.bg_fill
+        ui_control_hover: [70, 70, 70],  // widgets.hovered.bg_fill
+        ui_control_active: [55, 55, 55], // widgets.active.bg_fill
+        ui_accent: [0, 92, 128],         // selection.bg_fill
+        ui_text: [180, 180, 180],        // widgets.inactive.fg_stroke
+        ui_text_dim: [140, 140, 140],    // widgets.noninteractive.fg_stroke
+        ui_text_strong: [240, 240, 240], // widgets.hovered.fg_stroke
+        ui_link: [90, 170, 255],         // hyperlink_color
     }
 }
 

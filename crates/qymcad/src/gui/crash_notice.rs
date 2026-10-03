@@ -16,10 +16,7 @@ mod tests {
     const SCREEN: egui::Vec2 = egui::vec2(1400.0, 900.0);
 
     fn raw() -> egui::RawInput {
-        egui::RawInput {
-            screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), SCREEN)),
-            ..Default::default()
-        }
+        egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), SCREEN)), ..Default::default() }
     }
 
     fn texts(shapes: &[egui::epaint::ClippedShape]) -> Vec<(String, egui::Rect)> {
@@ -64,28 +61,13 @@ mod tests {
         // CLOSING IT MARKS IT SEEN. Clicked through a real frame: the button has to be reachable, not
         // merely present in the code.
         let close = crate::i18n::tr("close");
-        let spot = painted
-            .iter()
-            .find(|(t, _)| t.trim() == close.trim())
-            .map(|(_, r)| r.center())
-            .expect("the window has no close button");
+        let spot = painted.iter().find(|(t, _)| t.trim() == close.trim()).map(|(_, r)| r.center()).expect("the window has no close button");
         let press = egui::RawInput {
-            events: vec![
-                egui::Event::PointerMoved(spot),
-                egui::Event::PointerButton { pos: spot, button: egui::PointerButton::Primary, pressed: true, modifiers: Default::default() },
-            ],
+            events: vec![egui::Event::PointerMoved(spot), egui::Event::PointerButton { pos: spot, button: egui::PointerButton::Primary, pressed: true, modifiers: Default::default() }],
             ..raw()
         };
         let _ = ctx.run_ui(press, |c| crate::gui::panels_windows::crash_notice(&mut app.disk.crash_report, c.ctx()));
-        let release = egui::RawInput {
-            events: vec![egui::Event::PointerButton {
-                pos: spot,
-                button: egui::PointerButton::Primary,
-                pressed: false,
-                modifiers: Default::default(),
-            }],
-            ..raw()
-        };
+        let release = egui::RawInput { events: vec![egui::Event::PointerButton { pos: spot, button: egui::PointerButton::Primary, pressed: false, modifiers: Default::default() }], ..raw() };
         let _ = ctx.run_ui(release, |c| crate::gui::panels_windows::crash_notice(&mut app.disk.crash_report, c.ctx()));
 
         assert!(app.disk.crash_report.is_empty(), "the window stayed open after it was closed");
@@ -129,25 +111,14 @@ mod tests {
 
         let painted = texts(&out.shapes);
         let close = crate::i18n::tr("close");
-        let spot = painted
-            .iter()
-            .find(|(t, _)| t.trim() == close.trim())
-            .map(|(_, r)| r.center())
-            .expect("the window has no close button");
+        let spot = painted.iter().find(|(t, _)| t.trim() == close.trim()).map(|(_, r)| r.center()).expect("the window has no close button");
         for pressed in [true, false] {
-            let ev = egui::RawInput {
-                events: vec![egui::Event::PointerButton { pos: spot, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() }],
-                ..raw()
-            };
+            let ev = egui::RawInput { events: vec![egui::Event::PointerButton { pos: spot, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() }], ..raw() };
             let _ = ctx.run_ui(ev, |c| crate::gui::panels_windows::crash_notice(&mut app.disk.crash_report, c.ctx()));
         }
 
         let still_waiting: Vec<&std::path::PathBuf> = reports.iter().filter(|p| p.exists()).collect();
-        assert!(
-            still_waiting.is_empty(),
-            "the window was closed once and {} report(s) are still unseen, so the next start shows it again: {still_waiting:?}",
-            still_waiting.len()
-        );
+        assert!(still_waiting.is_empty(), "the window was closed once and {} report(s) are still unseen, so the next start shows it again: {still_waiting:?}", still_waiting.len());
         for p in &reports {
             assert!(p.with_extension("seen.txt").exists(), "marking it seen deleted the report instead of renaming it: {}", p.display());
         }

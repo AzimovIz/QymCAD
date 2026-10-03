@@ -190,8 +190,8 @@ fn rigid_face_mate_offset_part_comes_to_face() {
     p.add_joint(ca, cb, JointKind::Rigid);
     p.solve_joints();
     let fb = apply12(&p.world_transform(b), [0.0, 0.0, 0.0]); // World centre of face B.
-    // A rigid mate leaves zero degrees of freedom, so face B travels to face A, centre onto centre at
-    // [0,0,5], rather than staying displaced sideways at [20,15,5].
+                                                              // A rigid mate leaves zero degrees of freedom, so face B travels to face A, centre onto centre at
+                                                              // [0,0,5], rather than staying displaced sideways at [20,15,5].
     assert!((0..3).all(|i| (fb[i] - [0.0, 0.0, 5.0][i]).abs() < 1e-6), "face B must travel to face A at [0,0,5]: {fb:?}");
 }
 
@@ -210,8 +210,8 @@ fn assembly_coincident_positions_via_constraint_solver() {
     p.set_active_component(Some(b));
     let body_b = p.add_extrude(2, 5.0);
     set_transform(&mut p, b, tr(20.0, 15.0, 30.0)); // B is displaced sideways and upwards (an exploded assembly).
-    // Face A points at +Z at z = 5; face B points at -Z, facing it, at its local zero, so the two are not
-    // aligned and the default flip applies.
+                                                    // Face A points at +Z at z = 5; face B points at -Z, facing it, at its local zero, so the two are not
+                                                    // aligned and the default flip applies.
     let key_a = FaceKey { index: 0, centroid: [0.0, 0.0, 5.0], normal: [0.0, 0.0, 1.0], id: 0 };
     let key_b = FaceKey { index: 0, centroid: [0.0, 0.0, 0.0], normal: [0.0, 0.0, -1.0], id: 0 };
     let ca = p.add_connector(a, AnchorRef::FaceCenter(body_a, key_a));
@@ -429,10 +429,7 @@ fn straight_edge_connector_uses_midpoint() {
     let a = c[0];
     p.set_active_component(Some(a));
     let body_a = p.add_extrude(1, 5.0);
-    p.regen_edges.insert(
-        body_a,
-        vec![MeshEdge { id: 12, mid: [1.0, 2.0, 3.0], dir: [0.0, 0.0, 1.0], a: [1.0, 2.0, 0.0], b: [1.0, 2.0, 6.0], ..Default::default() }],
-    );
+    p.regen_edges.insert(body_a, vec![MeshEdge { id: 12, mid: [1.0, 2.0, 3.0], dir: [0.0, 0.0, 1.0], a: [1.0, 2.0, 0.0], b: [1.0, 2.0, 6.0], ..Default::default() }]);
     assert_eq!(p.resolve_edge_axis(body_a, 12), Some(([1.0, 2.0, 3.0], [0.0, 0.0, 1.0])), "a straight edge gives midpoint plus tangent");
 }
 
@@ -506,10 +503,16 @@ fn a_free_slot_stays_where_you_put_it_and_a_driven_one_holds() {
     p.set_grounded(a, true);
     p.set_active_component(Some(a));
     let body_a = p.add_extrude(1, 5.0);
-    p.regen_edges.insert(body_a, vec![MeshEdge { id: 5, mid: [0.0, 0.0, 5.0], dir: [0.0, 0.0, 1.0], a: [0.0, 0.0, 0.0], b: [0.0, 0.0, 10.0], radius: 0.0, center: [0.0; 3], axis: [0.0, 0.0, 1.0], ref_dir: [0.0; 3] }]);
+    p.regen_edges.insert(
+        body_a,
+        vec![MeshEdge { id: 5, mid: [0.0, 0.0, 5.0], dir: [0.0, 0.0, 1.0], a: [0.0, 0.0, 0.0], b: [0.0, 0.0, 10.0], radius: 0.0, center: [0.0; 3], axis: [0.0, 0.0, 1.0], ref_dir: [0.0; 3] }],
+    );
     p.set_active_component(Some(b));
     let body_b = p.add_extrude(2, 5.0);
-    p.regen_edges.insert(body_b, vec![MeshEdge { id: 7, mid: [0.0, 0.0, 0.0], dir: [0.0, 0.0, 1.0], a: [0.0, 0.0, -5.0], b: [0.0, 0.0, 5.0], radius: 0.0, center: [0.0; 3], axis: [0.0, 0.0, 1.0], ref_dir: [0.0; 3] }]);
+    p.regen_edges.insert(
+        body_b,
+        vec![MeshEdge { id: 7, mid: [0.0, 0.0, 0.0], dir: [0.0, 0.0, 1.0], a: [0.0, 0.0, -5.0], b: [0.0, 0.0, 5.0], radius: 0.0, center: [0.0; 3], axis: [0.0, 0.0, 1.0], ref_dir: [0.0; 3] }],
+    );
     let ca = p.add_connector(a, AnchorRef::EdgeMid(body_a, 5));
     let cb = p.add_connector(b, AnchorRef::EdgeMid(body_b, 7));
     let jid = p.add_joint(ca, cb, JointKind::Cylindrical);
@@ -530,10 +533,7 @@ fn a_free_slot_stays_where_you_put_it_and_a_driven_one_holds() {
     assert!((moved - before - 30.0).abs() < 1e-6, "setup: the body must move 30 mm along the axis (was {before:.2}, now {moved:.2})");
     p.solve_joints();
     let after = slide(&p);
-    assert!(
-        (after - moved).abs() < 1e-3,
-        "a cylindrical mate does not constrain along its axis, so the body must stay at {moved:.2} mm, but it sprang back to {after:.2}"
-    );
+    assert!((after - moved).abs() < 1e-3, "a cylindrical mate does not constrain along its axis, so the body must stay at {moved:.2} mm, but it sprang back to {after:.2}");
 
     // Specified: the offset is pinned and the mate has to hold it.
     p.joints.iter_mut().find(|j| j.id == jid).unwrap().drive[1] = Some(12.0);
@@ -560,14 +560,7 @@ fn a_free_slot_stays_where_you_put_it_and_a_driven_one_holds() {
 /// second. If they diverge, a mate behaves differently from what the interface shows, silently.
 #[test]
 fn every_mechanical_kind_keeps_free_slots_and_holds_driven_ones() {
-    let kinds = [
-        JointKind::Revolute,
-        JointKind::Slider,
-        JointKind::Cylindrical,
-        JointKind::Planar,
-        JointKind::Ball,
-        JointKind::PinSlot,
-    ];
+    let kinds = [JointKind::Revolute, JointKind::Slider, JointKind::Cylindrical, JointKind::Planar, JointKind::Ball, JointKind::PinSlot];
     for kind in kinds {
         let free = kind.free_slots();
         for slot in 0..3 {
@@ -605,11 +598,7 @@ fn every_mechanical_kind_keeps_free_slots_and_holds_driven_ones() {
             };
             let got = p.world_transform(b);
             let err = (0..12).map(|i| (got[i] - want[i]).abs()).fold(0.0, f64::max);
-            assert!(
-                err < 1e-6,
-                "{:?}, slot {slot}: a free degree must not be moved — the body stood at {v0} and was carried away (off by {err:.4})",
-                kind
-            );
+            assert!(err < 1e-6, "{:?}, slot {slot}: a free degree must not be moved — the body stood at {v0} and was carried away (off by {err:.4})", kind);
 
             // Specification: v1 is required, and the solve has to bring the body exactly there.
             p.joints.iter_mut().find(|x| x.id == jid).unwrap().drive[slot] = Some(v1);
@@ -701,10 +690,7 @@ fn a_rigid_joint_keeps_the_gap_it_was_given() {
     p.joints.iter_mut().find(|x| x.id == jid).unwrap().drive[1] = Some(4.0);
     p.solve_joints();
     let fb = apply12(&p.world_transform(b), [0.0, 0.0, 0.0]);
-    assert!(
-        (fb[2] - 9.0).abs() < 1e-6 && fb[0].abs() < 1e-6 && fb[1].abs() < 1e-6,
-        "a gap of 4 mm must separate the faces: expected the centre of B at [0,0,9], got {fb:?}"
-    );
+    assert!((fb[2] - 9.0).abs() < 1e-6 && fb[0].abs() < 1e-6 && fb[1].abs() < 1e-6, "a gap of 4 mm must separate the faces: expected the centre of B at [0,0,9], got {fb:?}");
 }
 
 /// The "flip side" control really does turn the body over.
@@ -744,10 +730,7 @@ fn the_flip_toggle_actually_turns_the_part_over() {
     let axis = |m: [f64; 12]| [m[2], m[6], m[10]];
     let (straight, flipped) = (axis(build(false)), axis(build(true)));
     let dot = straight[0] * flipped[0] + straight[1] * flipped[1] + straight[2] * flipped[2];
-    assert!(
-        dot < -0.99,
-        "the toggle must turn the body to the opposite side, yet the axes point almost the same way (dot product {dot:.3})"
-    );
+    assert!(dot < -0.99, "the toggle must turn the body to the opposite side, yet the axes point almost the same way (dot product {dot:.3})");
 }
 
 /// Nested assembly: placements have to be written parents before children.
@@ -843,17 +826,7 @@ fn the_complaint_goes_away_once_the_edges_are_there() {
     let j = p.add_joint(ca, cb, JointKind::Slider);
     assert_eq!(p.unresolved_joints(), vec![j], "setup: the anchor does not resolve");
 
-    p.regen_edges.insert(
-        777,
-        vec![qymcad_core::geom::MeshEdge {
-            id: 5,
-            mid: [1.0, 0.0, 0.0],
-            dir: [0.0, 1.0, 0.0],
-            a: [1.0, -1.0, 0.0],
-            b: [1.0, 1.0, 0.0],
-            ..Default::default()
-        }],
-    );
+    p.regen_edges.insert(777, vec![qymcad_core::geom::MeshEdge { id: 5, mid: [1.0, 0.0, 0.0], dir: [0.0, 1.0, 0.0], a: [1.0, -1.0, 0.0], b: [1.0, 1.0, 0.0], ..Default::default() }]);
     assert!(p.unresolved_joints().is_empty(), "the edges appeared yet the mate is still counted as unresolved");
 }
 
@@ -871,10 +844,7 @@ fn a_slider_moves_along_the_chosen_edge() {
     let body_a = p.add_extrude(1, 5.0);
     // A diagonal edge with direction (1,1,0)/sqrt(2). No world axis looks like that.
     let s = 1.0 / 2.0_f64.sqrt();
-    p.regen_edges.insert(
-        body_a,
-        vec![MeshEdge { id: 5, mid: [0.0, 0.0, 0.0], dir: [s, s, 0.0], a: [-s, -s, 0.0], b: [s, s, 0.0], ..Default::default() }],
-    );
+    p.regen_edges.insert(body_a, vec![MeshEdge { id: 5, mid: [0.0, 0.0, 0.0], dir: [s, s, 0.0], a: [-s, -s, 0.0], b: [s, s, 0.0], ..Default::default() }]);
     let ca = p.add_connector(a, AnchorRef::EdgeMid(body_a, 5));
     let cb = p.add_connector(b, AnchorRef::Origin);
     let j = p.add_joint(ca, cb, JointKind::Slider);
@@ -890,10 +860,7 @@ fn a_slider_moves_along_the_chosen_edge() {
     assert!(len > 1e-6, "the body did not move along the slider at all: {at0:?} to {at1:?}");
     // Along the edge means the cosine with its direction equals one.
     let cos = (d[0] * s + d[1] * s + d[2] * 0.0) / len;
-    assert!(
-        (cos.abs() - 1.0).abs() < 1e-6,
-        "the body did not move along the selected edge: displacement {d:?}, edge [{s:.3},{s:.3},0], cosine {cos:.6}"
-    );
+    assert!((cos.abs() - 1.0).abs() < 1e-6, "the body did not move along the selected edge: displacement {d:?}, edge [{s:.3},{s:.3},0], cosine {cos:.6}");
     assert!((len - 10.0).abs() < 1e-6, "it travelled {len:.3} instead of the specified 10 mm");
 }
 
@@ -912,10 +879,7 @@ fn re_creating_a_slider_gives_the_same_motion() {
         p.set_grounded(a, true);
         p.set_active_component(Some(a));
         let body_a = p.add_extrude(1, 5.0);
-        p.regen_edges.insert(
-            body_a,
-            vec![MeshEdge { id: 5, mid: [0.0, 0.0, 0.0], dir: [s, s, 0.0], a: [-s, -s, 0.0], b: [s, s, 0.0], ..Default::default() }],
-        );
+        p.regen_edges.insert(body_a, vec![MeshEdge { id: 5, mid: [0.0, 0.0, 0.0], dir: [s, s, 0.0], a: [-s, -s, 0.0], b: [s, s, 0.0], ..Default::default() }]);
         let mk = |p: &mut Project| {
             let ca = p.add_connector(a, AnchorRef::EdgeMid(body_a, 5));
             let cb = p.add_connector(b, AnchorRef::Origin);
@@ -999,10 +963,7 @@ fn a_slider_on_flat_faces_moves_along_the_face_not_away_from_it() {
     let d = [at1[0] - at0[0], at1[1] - at0[1], at1[2] - at0[2]];
     let len = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
     assert!(len > 1e-6, "a slider on faces did not move at all: {at0:?} to {at1:?}");
-    assert!(
-        d[2].abs() < 1e-6,
-        "the body moved along the face normal (up or down) when it must slide along the face: displacement {d:?}"
-    );
+    assert!(d[2].abs() < 1e-6, "the body moved along the face normal (up or down) when it must slide along the face: displacement {d:?}");
 }
 
 /// Acceptance matrix: every joint kind on every anchor kind behaves as expected.
@@ -1073,10 +1034,7 @@ fn every_kind_on_every_anchor_moves_the_way_a_human_expects() {
 
             // The mate has to resolve: dropping it from the problem silently is the defect this file exists
             // for.
-            assert!(
-                p.unresolved_joints().is_empty(),
-                "{kind:?} on anchor \"{anchor_name}\": the anchor did not resolve, so the mate drops out of the computation silently"
-            );
+            assert!(p.unresolved_joints().is_empty(), "{kind:?} on anchor \"{anchor_name}\": the anchor did not resolve, so the mate drops out of the computation silently");
             // Degrees of freedom are checked only where the roll is defined.
             //
             // A face anchor without raised geometry has nowhere to take a secondary axis from, and the solver
@@ -1201,15 +1159,7 @@ fn a_rigid_joint_on_edges_lines_up_the_faces_not_the_world_axes() {
     let (a, b) = (c[0], c[1]);
     p.set_grounded(a, true);
 
-    let edge = |ref_dir: [f64; 3]| MeshEdge {
-        id: 5,
-        mid: [0.0, 0.0, 0.0],
-        dir: [0.0, 0.0, 1.0],
-        a: [0.0, 0.0, -5.0],
-        b: [0.0, 0.0, 5.0],
-        ref_dir,
-        ..Default::default()
-    };
+    let edge = |ref_dir: [f64; 3]| MeshEdge { id: 5, mid: [0.0, 0.0, 0.0], dir: [0.0, 0.0, 1.0], a: [0.0, 0.0, -5.0], b: [0.0, 0.0, 5.0], ref_dir, ..Default::default() };
     p.set_active_component(Some(a));
     let body_a = p.add_extrude(1, 10.0);
     p.regen_edges.insert(body_a, vec![edge([0.0, 1.0, 0.0])]);
@@ -1228,10 +1178,7 @@ fn a_rigid_joint_on_edges_lines_up_the_faces_not_the_world_axes() {
     let f = apply12(&m, [1.0, 0.0, 0.0]);
     let got = [f[0] - o[0], f[1] - o[1], f[2] - o[2]];
     let dot = got[1]; // Projection onto +Y, the direction of face A.
-    assert!(
-        dot > 0.999,
-        "a rigid mate on edges placed the body by world axes rather than by its face: face B points at {got:?}, expected +Y"
-    );
+    assert!(dot > 0.999, "a rigid mate on edges placed the body by world axes rather than by its face: face B points at {got:?}, expected +Y");
 }
 
 /// A mate the solver did not take is named in the report.
@@ -1257,10 +1204,7 @@ fn a_joint_the_solver_could_not_use_is_named_in_the_report() {
     // The state of the measured document: the connector is lost and the mate remains.
     p.connectors.retain(|x| x.id != cb);
     let rep = p.solve_joints();
-    assert!(
-        rep.errors.iter().any(|(id, _)| *id == j),
-        "a mate without a connector dropped out of the computation silently: report {rep:?}, while on screen the assembly looks assembled"
-    );
+    assert!(rep.errors.iter().any(|(id, _)| *id == j), "a mate without a connector dropped out of the computation silently: report {rep:?}, while on screen the assembly looks assembled");
 }
 
 /// Deleting one mate does not touch the others.
@@ -1323,10 +1267,7 @@ fn when_there_is_no_solution_the_part_stays_where_the_human_put_it() {
     let rep = p.solve_joints();
     let at = apply12(&p.world_transform(b), [0.0, 0.0, 0.0]);
     let moved = ((at[0] - 7.0).powi(2) + (at[1] - 8.0).powi(2) + (at[2] - 9.0).powi(2)).sqrt();
-    assert!(
-        moved < 1e-9,
-        "there is no solution yet the body moved {moved:.3} mm to {at:?}: the solver placed it at a compromise nobody asked for"
-    );
+    assert!(moved < 1e-9, "there is no solution yet the body moved {moved:.3} mm to {at:?}: the solver placed it at a compromise nobody asked for");
     assert!(p.mates_conflict, "an unsolvable assembly was not flagged as conflicting");
     assert!(!rep.errors.is_empty(), "there is no solution yet the report is silent: {rep:?}");
 }
@@ -1361,10 +1302,7 @@ fn a_pin_slot_slides_along_the_slot_not_along_the_pin() {
     p.solve_joints();
 
     let at = apply12(&p.world_transform(b), [0.0, 0.0, 0.0]);
-    assert!(
-        (at[1] - 10.0).abs() < 1e-6 && at[0].abs() < 1e-6 && at[2].abs() < 1e-6,
-        "the body travelled along the pin rather than along the slot: it is at {at:?}, expected (0, 10, 0)"
-    );
+    assert!((at[1] - 10.0).abs() < 1e-6 && at[0].abs() < 1e-6 && at[2].abs() < 1e-6, "the body travelled along the pin rather than along the slot: it is at {at:?}, expected (0, 10, 0)");
 }
 
 /// Pin-slot: the travel reading is measured along the slot.
@@ -1436,10 +1374,7 @@ fn a_connector_turns_its_secondary_axis_by_any_angle() {
     let m = p.connector_matrix(cid).expect("the connector frame");
     let (x, y) = ([m[0], m[4], m[8]], [m[1], m[5], m[9]]);
     let (c30, s30) = 30.0_f64.to_radians().sin_cos();
-    assert!(
-        (x[0] - s30).abs() < 1e-9 && (x[1] - c30).abs() < 1e-9 && x[2].abs() < 1e-9,
-        "the secondary axis was not turned by 30 degrees: frame X is {x:?}"
-    );
+    assert!((x[0] - s30).abs() < 1e-9 && (x[1] - c30).abs() < 1e-9 && x[2].abs() < 1e-9, "the secondary axis was not turned by 30 degrees: frame X is {x:?}");
     // Orthonormality is preserved.
     let dot = x[0] * y[0] + x[1] * y[1] + x[2] * y[2];
     assert!(dot.abs() < 1e-9, "the frame axes stopped being perpendicular: dot product {dot:.3e}");
@@ -1465,10 +1400,7 @@ fn a_connector_takes_its_axis_from_the_geometry_you_point_at() {
     let body = p.add_extrude(1, 10.0);
     // An edge along the XY diagonal: a direction the automatic derivation would never choose.
     let s = 1.0 / 2.0_f64.sqrt();
-    p.regen_edges.insert(
-        body,
-        vec![MeshEdge { id: 5, mid: [0.0; 3], dir: [s, s, 0.0], a: [-s, -s, 0.0], b: [s, s, 0.0], ref_dir: [0.0, 0.0, 1.0], ..Default::default() }],
-    );
+    p.regen_edges.insert(body, vec![MeshEdge { id: 5, mid: [0.0; 3], dir: [s, s, 0.0], a: [-s, -s, 0.0], b: [s, s, 0.0], ref_dir: [0.0, 0.0, 1.0], ..Default::default() }]);
 
     let cid = p.add_connector(a, AnchorRef::Origin);
     let before = p.connector_matrix(cid).expect("the connector frame");
@@ -1478,10 +1410,7 @@ fn a_connector_takes_its_axis_from_the_geometry_you_point_at() {
     p.connectors.iter_mut().find(|x| x.id == cid).expect("the connector").axis_ref = Some(AnchorRef::EdgeMid(body, 5));
     let m = p.connector_matrix(cid).expect("the connector frame");
     let x = [m[0], m[4], m[8]];
-    assert!(
-        (x[0] - s).abs() < 1e-9 && (x[1] - s).abs() < 1e-9 && x[2].abs() < 1e-9,
-        "the connector axis was not taken from the picked edge: frame X is {x:?}, expected ({s:.4}, {s:.4}, 0)"
-    );
+    assert!((x[0] - s).abs() < 1e-9 && (x[1] - s).abs() < 1e-9 && x[2].abs() < 1e-9, "the connector axis was not taken from the picked edge: frame X is {x:?}, expected ({s:.4}, {s:.4}, 0)");
     // The main axis is untouched: the pick sets the secondary one.
     let z = [m[2], m[6], m[10]];
     assert!(z[2].abs() > 0.999, "picking the secondary axis turned the main one: frame Z is {z:?}");
@@ -1501,10 +1430,7 @@ fn a_slider_runs_along_the_edge_you_pointed_at() {
     let mk = |p: &mut Project, comp: Id, sketch: Id| {
         p.set_active_component(Some(comp));
         let body = p.add_extrude(sketch, 10.0);
-        p.regen_edges.insert(
-            body,
-            vec![MeshEdge { id: 5, mid: [0.0; 3], dir: [s, s, 0.0], a: [-s, -s, 0.0], b: [s, s, 0.0], ref_dir: [0.0, 0.0, 1.0], ..Default::default() }],
-        );
+        p.regen_edges.insert(body, vec![MeshEdge { id: 5, mid: [0.0; 3], dir: [s, s, 0.0], a: [-s, -s, 0.0], b: [s, s, 0.0], ref_dir: [0.0, 0.0, 1.0], ..Default::default() }]);
         let key = FaceKey { index: 0, centroid: [0.0; 3], normal: [0.0, 0.0, 1.0], id: 0 };
         let cid = p.add_connector(comp, AnchorRef::FaceCenter(body, key));
         p.connectors.iter_mut().find(|x| x.id == cid).expect("the connector").axis_ref = Some(AnchorRef::EdgeMid(body, 5));
@@ -1523,11 +1449,7 @@ fn a_slider_runs_along_the_edge_you_pointed_at() {
     let d = [at1[0] - at0[0], at1[1] - at0[1], at1[2] - at0[2]];
     let len = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
     assert!((len - 10.0).abs() < 1e-6, "10 was specified but it travelled {len:.3}");
-    assert!(
-        (d[0] / len - s).abs() < 1e-6 && (d[1] / len - s).abs() < 1e-6,
-        "the body did not travel along the picked edge: {:?}",
-        [d[0] / len, d[1] / len, d[2] / len]
-    );
+    assert!((d[0] / len - s).abs() < 1e-6 && (d[1] / len - s).abs() < 1e-6, "the body did not travel along the picked edge: {:?}", [d[0] / len, d[1] / len, d[2] / len]);
 }
 
 /// A group carries bodies together and needs no connectors.
@@ -1748,10 +1670,7 @@ fn deleting_a_body_leaves_the_joint_broken_instead_of_vanishing() {
     p.set_grounded(a, true);
     p.set_active_component(Some(a));
     let body_a = p.add_extrude(1, 10.0);
-    p.regen_edges.insert(
-        body_a,
-        vec![MeshEdge { id: 5, mid: [0.0; 3], dir: [0.0, 0.0, 1.0], a: [0.0, 0.0, -5.0], b: [0.0, 0.0, 5.0], ref_dir: [0.0, 1.0, 0.0], ..Default::default() }],
-    );
+    p.regen_edges.insert(body_a, vec![MeshEdge { id: 5, mid: [0.0; 3], dir: [0.0, 0.0, 1.0], a: [0.0, 0.0, -5.0], b: [0.0, 0.0, 5.0], ref_dir: [0.0, 1.0, 0.0], ..Default::default() }]);
     let ca = p.add_connector(a, AnchorRef::EdgeMid(body_a, 5));
     let cb = p.add_connector(b, AnchorRef::Origin);
     let j = p.add_joint(ca, cb, JointKind::Rigid);
@@ -1817,10 +1736,7 @@ fn an_as_built_joint_holds_the_parts_exactly_where_they_stand() {
     // Guard: an ordinary rigid mate does pull the body in, or there would be nothing to test.
     p.solve_joints();
     let pulled = apply12(&p.world_transform(b), [0.0, 0.0, 0.0]);
-    assert!(
-        (pulled[0] - 10.0).abs() < 1e-3,
-        "setup: an ordinary rigid mate must bring the origins together (x = 10), but the body is at {pulled:?}"
-    );
+    assert!((pulled[0] - 10.0).abs() < 1e-3, "setup: an ordinary rigid mate must bring the origins together (x = 10), but the body is at {pulled:?}");
 
     // Now the current placement is declared as the one the mate holds.
     set_transform(&mut p, b, tr(50.0, 7.0, -3.0));
@@ -1828,10 +1744,7 @@ fn an_as_built_joint_holds_the_parts_exactly_where_they_stand() {
     p.solve_joints();
     let held = apply12(&p.world_transform(b), [0.0, 0.0, 0.0]);
     for (i, want) in [50.0, 7.0, -3.0].into_iter().enumerate() {
-        assert!(
-            (held[i] - want).abs() < 1e-3,
-            "the body must stay where it stood ({want} along axis {i}), but it is at {held:?}"
-        );
+        assert!((held[i] - want).abs() < 1e-3, "the body must stay where it stood ({want} along axis {i}), but it is at {held:?}");
     }
     // And it holds: displaced by hand, the body returns.
     set_transform(&mut p, b, tr(80.0, 7.0, -3.0));
@@ -1846,10 +1759,7 @@ fn an_as_built_joint_holds_the_parts_exactly_where_they_stand() {
     assert!(p.set_joint_as_built(jid), "declaring it again must succeed");
     p.solve_joints();
     let twice = apply12(&p.world_transform(b), [0.0, 0.0, 0.0]);
-    assert!(
-        (twice[0] - 50.0).abs() < 1e-3 && (twice[1] - 7.0).abs() < 1e-3 && (twice[2] + 3.0).abs() < 1e-3,
-        "the second hold-as-built moved the body: was [50, 7, -3], now {twice:?}"
-    );
+    assert!((twice[0] - 50.0).abs() < 1e-3 && (twice[1] - 7.0).abs() < 1e-3 && (twice[2] + 3.0).abs() < 1e-3, "the second hold-as-built moved the body: was [50, 7, -3], now {twice:?}");
 }
 
 /// Sweeping a degree for animation: the bounds come from the limits rather than from thin air.
@@ -2024,11 +1934,7 @@ fn the_gizmo_arrow_agrees_with_the_travel_even_when_the_anchor_is_turned_around(
 
     let ax = p.joint_slot_axis(jid, 1, p.root).expect("a slider has a travel axis");
     let along = (d[0] * ax[0] + d[1] * ax[1] + d[2] * ax[2]) / len;
-    assert!(
-        along > 0.999,
-        "the body does not travel where the arrow points: agreement {along:.4} (travel {:?}, arrow {ax:?})",
-        [d[0] / len, d[1] / len, d[2] / len]
-    );
+    assert!(along > 0.999, "the body does not travel where the arrow points: agreement {along:.4} (travel {:?}, arrow {ax:?})", [d[0] / len, d[1] / len, d[2] / len]);
 }
 
 /// A limit holds where its mark is drawn, including when the anchor was turned.
@@ -2074,10 +1980,7 @@ fn a_limit_stops_the_part_where_its_mark_is_drawn_even_on_a_turned_anchor() {
     let along = d[0] * dir[0] + d[1] * dir[1] + d[2] * dir[2];
     let across = ((d[0] * d[0] + d[1] * d[1] + d[2] * d[2]) - along * along).max(0.0).sqrt();
     assert!(across < 1e-3, "the body moved {across:.4} mm across the travel axis");
-    assert!(
-        (along - 10.0).abs() < 1e-3,
-        "a limit of 10 mm: the body must stop at the mark (10 along the arrow) but travelled {along:.4}"
-    );
+    assert!((along - 10.0).abs() < 1e-3, "a limit of 10 mm: the body must stop at the mark (10 along the arrow) but travelled {along:.4}");
 }
 
 /// Hold as built works on a turned anchor too.
@@ -2154,10 +2057,7 @@ fn a_positive_angle_turns_the_part_the_way_the_gizmo_ring_points() {
     go(&mut p, 45.0);
     let at1 = spin(&p);
     let d = (at1 - at0 + 540.0) % 360.0 - 180.0;
-    assert!(
-        (d - 45.0).abs() < 1e-2,
-        "+45 degrees were specified but the body turned {d:.4} degrees about the gizmo axis (from {at0:.3} to {at1:.3}): the angle runs the wrong way"
-    );
+    assert!((d - 45.0).abs() < 1e-2, "+45 degrees were specified but the body turned {d:.4} degrees about the gizmo axis (from {at0:.3} to {at1:.3}): the angle runs the wrong way");
 }
 
 /// The mate frame shows the same axes the mate holds by.
@@ -2182,10 +2082,7 @@ fn the_joint_frame_shows_the_axes_the_joint_actually_holds_by() {
     let main = [m[2], m[6], m[10]]; // The main axis (Z) of the frame.
     let axis = p.joint_slot_axis(jid, 1, p.root).expect("the travel axis");
     let dot = main[0] * axis[0] + main[1] * axis[1] + main[2] * axis[2];
-    assert!(
-        dot > 0.999,
-        "the main axis of the mate frame {main:?} disagrees with the travel axis {axis:?}: agreement {dot:.4}"
-    );
+    assert!(dot > 0.999, "the main axis of the mate frame {main:?} disagrees with the travel axis {axis:?}: agreement {dot:.4}");
 }
 
 /// Every degree travels along its own arrow, the second one included, and on a turned anchor too.
@@ -2246,12 +2143,7 @@ fn every_slot_travels_along_its_own_arrow_on_a_turned_anchor() {
 /// deliberately turned anchor.
 #[test]
 fn the_field_of_a_joint_shows_exactly_what_was_asked_on_a_turned_anchor() {
-    let cases: [(JointKind, usize, f64); 4] = [
-        (JointKind::Revolute, 0, 30.0),
-        (JointKind::Slider, 1, 12.0),
-        (JointKind::Cylindrical, 0, -25.0),
-        (JointKind::Planar, 2, 7.0),
-    ];
+    let cases: [(JointKind, usize, f64); 4] = [(JointKind::Revolute, 0, 30.0), (JointKind::Slider, 1, 12.0), (JointKind::Cylindrical, 0, -25.0), (JointKind::Planar, 2, 7.0)];
     let mut bad = Vec::new();
     let mut checked = 0usize;
     for (kind, slot, want) in cases {

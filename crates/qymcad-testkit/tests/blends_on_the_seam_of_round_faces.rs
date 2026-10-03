@@ -36,7 +36,11 @@ fn cut_at_the_seam(solid: &str, at_seam: bool) -> (Project, u64, u32) {
     assert!(report.errors.is_empty(), "{solid}: setup, the cut did not build: {:?}", report.errors);
     // the edge where the face of the cut in the plane y = 0 meets the round surface: the one farthest out
     let sign = if at_seam { 1.0 } else { -1.0 };
-    let edge = p.regen_edges.get(&cut).and_then(|es| es.iter().filter(|e| e.mid[1].abs() < 1e-3 && sign * e.mid[0] > 0.1).max_by(|a, b| (sign * a.mid[0]).total_cmp(&(sign * b.mid[0]))).map(|e| e.id)).unwrap_or_else(|| panic!("{solid}: no edge of the cut on the line y = 0"));
+    let edge = p
+        .regen_edges
+        .get(&cut)
+        .and_then(|es| es.iter().filter(|e| e.mid[1].abs() < 1e-3 && sign * e.mid[0] > 0.1).max_by(|a, b| (sign * a.mid[0]).total_cmp(&(sign * b.mid[0]))).map(|e| e.id))
+        .unwrap_or_else(|| panic!("{solid}: no edge of the cut on the line y = 0"));
     (p, cut, edge)
 }
 

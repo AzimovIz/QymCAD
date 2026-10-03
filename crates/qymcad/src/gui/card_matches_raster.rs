@@ -22,8 +22,7 @@ mod tests {
     /// A part with the word "Text" extruded out of a sketch, in a font from a file.
     fn extruded_text(app: &mut App) {
         let font = std::fs::read(FONT).expect("the font shipped with the repository");
-        let glyphs: Vec<Vec<qymcad_core::geom::Point2>> =
-            qymcad_core::text::text_outline_contours(&font, 0, "Text", 30.0, 0.0, 0.0).into_iter().map(|c| c.points).collect();
+        let glyphs: Vec<Vec<qymcad_core::geom::Point2>> = qymcad_core::text::text_outline_contours(&font, 0, "Text", 30.0, 0.0, 0.0).into_iter().map(|c| c.points).collect();
         // A PART TO PUT IT IN: a body belongs to a component, and without one the node has no owner and is
         // never built.
         let root = app.project.root;

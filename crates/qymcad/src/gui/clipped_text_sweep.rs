@@ -52,12 +52,34 @@ mod tests {
         let surfaces: &[Surface] = &[
             ("tree", |a, c| a.tree_panel(c)),
             ("properties", |a, c| a.properties_panel(c)),
-            ("menu", |a, c| { let mut asks = Vec::new(); crate::gui::panels_bars::menu_bar(&mut a.bar_ctx(&mut asks), c); let c = c.ctx().clone(); a.do_bar_asks(asks, &c); }),
-            ("tool bar", |a, c| { let mut asks = Vec::new(); crate::gui::panels_bars::tool_options_bar(&mut a.bar_ctx(&mut asks), c); let c = c.ctx().clone(); a.do_bar_asks(asks, &c); }),
+            ("menu", |a, c| {
+                let mut asks = Vec::new();
+                crate::gui::panels_bars::menu_bar(&mut a.bar_ctx(&mut asks), c);
+                let c = c.ctx().clone();
+                a.do_bar_asks(asks, &c);
+            }),
+            ("tool bar", |a, c| {
+                let mut asks = Vec::new();
+                crate::gui::panels_bars::tool_options_bar(&mut a.bar_ctx(&mut asks), c);
+                let c = c.ctx().clone();
+                a.do_bar_asks(asks, &c);
+            }),
             ("command bar", |a, c| a.feat_command_bar(c)),
-            ("settings", |a, c| { let mut asks = Vec::new(); crate::gui::panels_windows::settings_window(&mut a.win_ctx(&mut asks), c); a.do_win_asks(asks, c); }),
-            ("parameters", |a, c| { let mut asks = Vec::new(); crate::gui::panels_windows::params_window(&mut a.win_ctx(&mut asks), c); a.do_win_asks(asks, c); }),
-            ("parts library", |a, c| { let mut asks = Vec::new(); crate::gui::panels_windows::parts_library_window(&mut a.win_ctx(&mut asks), c); a.do_win_asks(asks, c); }),
+            ("settings", |a, c| {
+                let mut asks = Vec::new();
+                crate::gui::panels_windows::settings_window(&mut a.win_ctx(&mut asks), c);
+                a.do_win_asks(asks, c);
+            }),
+            ("parameters", |a, c| {
+                let mut asks = Vec::new();
+                crate::gui::panels_windows::params_window(&mut a.win_ctx(&mut asks), c);
+                a.do_win_asks(asks, c);
+            }),
+            ("parts library", |a, c| {
+                let mut asks = Vec::new();
+                crate::gui::panels_windows::parts_library_window(&mut a.win_ctx(&mut asks), c);
+                a.do_win_asks(asks, c);
+            }),
             ("hotkeys", |a, c| a.hotkeys_window(c)),
             ("about", |a, c| crate::gui::panels_windows::about_dialog(&mut a.win, &a.scheme, c)),
         ];

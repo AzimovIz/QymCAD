@@ -76,7 +76,14 @@ impl Kernel for MockKernel {
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(path.len() as f64, path_place))
     }
-    fn loft(&self, body: Id, sections: qymcad_core::feature::LoftSections, walls: qymcad_core::feature::LoftWalls, _kind: qymcad_core::feature::LoftBody, _caps: [u32; 2]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn loft(
+        &self,
+        body: Id,
+        sections: qymcad_core::feature::LoftSections,
+        walls: qymcad_core::feature::LoftWalls,
+        _kind: qymcad_core::feature::LoftBody,
+        _caps: [u32; 2],
+    ) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
         let qymcad_core::feature::LoftSections { data: sections, offsets, places } = sections;
         // The number of sections (`offsets.len() - 1`) and the lengths of the data and placements are logged.
         // The log keeps the old word: what is checked is the value that reached the kernel, not its spelling.
@@ -88,7 +95,15 @@ impl Kernel for MockKernel {
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(offsets.len() as f64, places.get(0..12).map(|s| s.try_into().unwrap()).unwrap_or(PLACE_IDENTITY)))
     }
-    fn loft_combine(&self, bo: qymcad_core::model::BodyOp, _sections: &[f64], offsets: &[usize], _places: &[f64], walls: qymcad_core::feature::LoftWalls, _caps: [u32; 2]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn loft_combine(
+        &self,
+        bo: qymcad_core::model::BodyOp,
+        _sections: &[f64],
+        offsets: &[usize],
+        _places: &[f64],
+        walls: qymcad_core::feature::LoftWalls,
+        _caps: [u32; 2],
+    ) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
         let qymcad_core::model::BodyOp { src, op, body } = bo;
         // Lofted boolean: the number of sections and the operation are logged, and the target body `src` is
         // required to exist.
@@ -99,7 +114,15 @@ impl Kernel for MockKernel {
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(op as f64, PLACE_IDENTITY))
     }
-    fn draft(&self, body: Id, src: Id, face_ids: &[u32], pull: qymcad_core::feature::DraftPull, neutral: qymcad_core::feature::PlaneAt, _sides: &[u32]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn draft(
+        &self,
+        body: Id,
+        src: Id,
+        face_ids: &[u32],
+        pull: qymcad_core::feature::DraftPull,
+        neutral: qymcad_core::feature::PlaneAt,
+        _sides: &[u32],
+    ) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
         let qymcad_core::feature::DraftPull { angle, dir: pull } = pull;
         let qymcad_core::feature::PlaneAt { origin: np_origin, normal: _np_normal } = neutral;
         // The face count, the angle, the pull direction and the neutral origin are logged.
@@ -108,7 +131,14 @@ impl Kernel for MockKernel {
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(angle, PLACE_IDENTITY))
     }
-    fn boolean(&self, body: Id, _base: qymcad_core::feature::Extruded, _tool: qymcad_core::feature::Extruded, op: u8, place: [f64; 12]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn boolean(
+        &self,
+        body: Id,
+        _base: qymcad_core::feature::Extruded,
+        _tool: qymcad_core::feature::Extruded,
+        op: u8,
+        place: [f64; 12],
+    ) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
         self.calls.borrow_mut().push(format!("boolean op={op}"));
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(op as f64, place))
@@ -132,7 +162,15 @@ impl Kernel for MockKernel {
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(angle, place))
     }
-    fn revolve_region_axis(&self, body: Id, _profile: &[f64], line: qymcad_core::feature::AxisLine, angle: f64, place: [f64; 12], _caps: [u32; 2]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn revolve_region_axis(
+        &self,
+        body: Id,
+        _profile: &[f64],
+        line: qymcad_core::feature::AxisLine,
+        angle: f64,
+        place: [f64; 12],
+        _caps: [u32; 2],
+    ) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
         self.calls.borrow_mut().push(format!("revolve_axis o={:?} d={:?} a={angle}", line.origin, line.dir));
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(angle, place))
@@ -177,7 +215,14 @@ impl Kernel for MockKernel {
         self.shapes.borrow_mut().insert(body);
         Ok(Self::placed(height, place))
     }
-    fn combine_region_multi(&self, bo: qymcad_core::model::BodyOp, profiles: &[Vec<f64>], height: f64, place: [f64; 12], _caps: &[u32]) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
+    fn combine_region_multi(
+        &self,
+        bo: qymcad_core::model::BodyOp,
+        profiles: &[Vec<f64>],
+        height: f64,
+        place: [f64; 12],
+        _caps: &[u32],
+    ) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
         let qymcad_core::model::BodyOp { src, op, body } = bo;
         self.calls.borrow_mut().push(format!("combine_multi n={} op={op} src={src} h={height}", profiles.len()));
         if self.fail {
@@ -198,10 +243,7 @@ impl Kernel for MockKernel {
     fn helical(&self, h: qymcad_core::feature::Helical<'_>) -> Result<(Mesh, Vec<MeshFace>), qymcad_core::errors::CoreError> {
         // The axis and radius resolved from the edge are logged, which is what makes the associativity
         // checkable; the mock builds no geometry.
-        self.calls.borrow_mut().push(format!(
-            "helical r={} oz={} lead={} L={} starts={} fuse={} prof={}",
-            h.radius, h.origin[2], h.lead, h.length, h.starts, h.fuse, h.profile.len()
-        ));
+        self.calls.borrow_mut().push(format!("helical r={} oz={} lead={} L={} starts={} fuse={} prof={}", h.radius, h.origin[2], h.lead, h.length, h.starts, h.fuse, h.profile.len()));
         self.need_src(h.src)?;
         self.shapes.borrow_mut().insert(h.body);
         Ok(Self::placed(h.radius, PLACE_IDENTITY))
@@ -278,7 +320,6 @@ fn square(p: &mut Project, name: &str) -> u64 {
     p.add_line_sketch(name, vec![Point2::new(0.0, 0.0), Point2::new(10.0, 0.0), Point2::new(10.0, 10.0), Point2::new(0.0, 10.0)], true)
 }
 
-
 // Topological naming: when a stored edge id of a feature comes loose (the topology above it changed), the
 // reference is repaired from the geometric snapshot — the nearest current edge by midpoint and direction, and
 // only on an unambiguous match.
@@ -287,10 +328,13 @@ fn fillet_edge_ref_heals_stale_id_by_snapshot() {
     use qymcad_core::geom::MeshEdge;
     let mut p = Project::default();
     let (src, fid) = (100u64, 200u64);
-    p.regen_edges.insert(src, vec![
-        MeshEdge { id: 7, mid: [0.0, 0.0, 5.0], dir: [0.0, 0.0, 1.0], ..Default::default() },
-        MeshEdge { id: 8, mid: [10.0, 0.0, 5.0], dir: [0.0, 0.0, 1.0], ..Default::default() },
-    ]);
+    p.regen_edges.insert(
+        src,
+        vec![
+            MeshEdge { id: 7, mid: [0.0, 0.0, 5.0], dir: [0.0, 0.0, 1.0], ..Default::default() },
+            MeshEdge { id: 8, mid: [10.0, 0.0, 5.0], dir: [0.0, 0.0, 1.0], ..Default::default() },
+        ],
+    );
     // The feature selected the edge that used to have id 3; its snapshot is the position (0,0,5) along Z.
     p.edge_refs.insert(fid, vec![ElemSnapshot { id: 3, at: [0.0, 0.0, 5.0], dir: [0.0, 0.0, 1.0] }]);
     // Id 3 is gone, so the snapshot repairs it to the current edge 7, the nearest and unambiguous one.
@@ -298,10 +342,13 @@ fn fillet_edge_ref_heals_stale_id_by_snapshot() {
     // A valid id passes through unchanged.
     assert_eq!(p.resolve_edge_ids(fid, src, &[8]), vec![8], "a valid id must be left alone");
     // An ambiguous match (two equally close edges) is not repaired and the edge drops out.
-    p.regen_edges.insert(src, vec![
-        MeshEdge { id: 7, mid: [0.0, 0.0, 5.0], dir: [0.0, 0.0, 1.0], ..Default::default() },
-        MeshEdge { id: 9, mid: [0.0, 0.0, 5.0], dir: [0.0, 0.0, 1.0], ..Default::default() },
-    ]);
+    p.regen_edges.insert(
+        src,
+        vec![
+            MeshEdge { id: 7, mid: [0.0, 0.0, 5.0], dir: [0.0, 0.0, 1.0], ..Default::default() },
+            MeshEdge { id: 9, mid: [0.0, 0.0, 5.0], dir: [0.0, 0.0, 1.0], ..Default::default() },
+        ],
+    );
     assert!(p.resolve_edge_ids(fid, src, &[3]).is_empty(), "an ambiguous match must not be repaired");
 }
 
@@ -319,11 +366,7 @@ fn thread_feature_associative_via_circular_edge() {
     p.regenerate(&k);
     assert!(p.mesh_index(thr).is_some(), "the thread body must be built (the modifier produced a body)");
     // The kernel received the axis (centre at z = 5) and the radius (4) from the edge: associativity.
-    assert!(
-        k.calls.borrow().iter().any(|c| c.contains("helical r=4 oz=5")),
-        "the thread must be called with the axis and radius taken from the edge: {:?}",
-        k.calls.borrow()
-    );
+    assert!(k.calls.borrow().iter().any(|c| c.contains("helical r=4 oz=5")), "the thread must be called with the axis and radius taken from the edge: {:?}", k.calls.borrow());
 }
 
 // Thread parameters are validated before the kernel, so bad values give a readable error on a red node rather
@@ -481,7 +524,6 @@ fn sketch_plane_and_timeline_survive_serde() {
     }
     assert_eq!(back.timeline.len(), p.timeline.len(), "the timeline must survive serialisation");
 }
-
 
 #[test]
 fn regenerate_builds_extrude_then_clean_noop() {
@@ -742,7 +784,12 @@ fn delete_datum_axis_degrades_circular_array() {
     let body = p.add_extrude(sid, 5.0);
     let ax = p.add_axis_manual([0.0, 0.0, 0.0], [1.0, 0.0, 0.0]);
     let arr = p.add_circular_array_axis(body, 4, 360.0, ax);
-    let axis_of = |p: &Project, id: Id| p.timeline.iter().find(|n| n.id == id).and_then(|n| match n.kind { FeatureKind::CircularArray { axis, .. } => Some(axis), _ => None });
+    let axis_of = |p: &Project, id: Id| {
+        p.timeline.iter().find(|n| n.id == id).and_then(|n| match n.kind {
+            FeatureKind::CircularArray { axis, .. } => Some(axis),
+            _ => None,
+        })
+    };
     assert_eq!(axis_of(&p, arr), Some(ax), "the pattern must reference the axis");
     assert!(p.delete_datum_axis(ax));
     assert_eq!(axis_of(&p, arr), Some(0), "the pattern must degrade to world Z (axis 0)");
@@ -897,8 +944,8 @@ fn chamfer_modes_route_and_are_parametric() {
     let two = p.add_chamfer_ex(sym, 2.0, qymcad_core::model::ChamferShape { mode: ChamferMode::TwoDist, d2: 1.0, flip: true, ref_face: 0 }, vec![7]);
     p.set_feat_dim(two, "dist", "k".into()); // d1 = k = 3
     p.set_feat_dim(two, "d2", "k/2".into()); // d2 = 1.5
-    // Setback plus angle calls `chamfer_ex` in `DistAngle` mode with a manually chosen reference face, so
-    // `ref_face` reaches the kernel.
+                                             // Setback plus angle calls `chamfer_ex` in `DistAngle` mode with a manually chosen reference face, so
+                                             // `ref_face` reaches the kernel.
     let da = p.add_chamfer_ex(two, 2.5, qymcad_core::model::ChamferShape { mode: ChamferMode::DistAngle, d2: 30.0, flip: false, ref_face: 42 }, vec![9]);
 
     let k = MockKernel::default();
@@ -1071,11 +1118,7 @@ fn delete_sketch_cascades_dependent_bodies() {
     // timeline node produces counted as alive: measured on a loft, a two-node timeline still reported the body
     // as live with its previous three faces. Everything that enumerates live bodies counts such a ghost, from
     // the document tree to the machine output.
-    assert!(
-        !p.regen_faces.contains_key(&body) && !p.regen_faces.contains_key(&fil),
-        "the faces of deleted bodies must leave the rebuild cache: {:?}",
-        p.regen_faces.keys().collect::<Vec<_>>()
-    );
+    assert!(!p.regen_faces.contains_key(&body) && !p.regen_faces.contains_key(&fil), "the faces of deleted bodies must leave the rebuild cache: {:?}", p.regen_faces.keys().collect::<Vec<_>>());
     assert!(!p.regen_edges.contains_key(&body) && !p.regen_edges.contains_key(&fil), "the edges of deleted bodies must leave the cache");
 }
 
@@ -1388,7 +1431,13 @@ fn suppress_feature_cascades_to_dependents() {
     let sid = square(&mut p, "square");
     p.add_sketch_node(sid, "square");
     let base = p.add_extrude_on(sid, 0, 5.0, qymcad_core::feature::Reach::Forward, 0.0);
-    let cut = p.add_combine_on(base, sid, 0, qymcad_core::model::CombineSpan { height: 4.0, down: 0.0, extent: qymcad_core::feature::Extent { reach: qymcad_core::feature::Reach::Backward, ..Default::default() }, fill: &[] }, 0); // Depends on the base.
+    let cut = p.add_combine_on(
+        base,
+        sid,
+        0,
+        qymcad_core::model::CombineSpan { height: 4.0, down: 0.0, extent: qymcad_core::feature::Extent { reach: qymcad_core::feature::Reach::Backward, ..Default::default() }, fill: &[] },
+        0,
+    ); // Depends on the base.
     let k = MockKernel::default();
     p.regenerate(&k);
     assert!(p.mesh_index(base).is_some() && p.mesh_index(cut).is_some(), "both bodies must be built");
@@ -1736,11 +1785,23 @@ fn regen_combine_direction_matches_extrude() {
     p.add_sketch_node(sid, "square");
     let base = p.add_extrude_on(sid, 0, 5.0, qymcad_core::feature::Reach::Forward, 0.0);
     // One-sided plus flip starts the tool against the normal, at -h.
-    let cut_flip = p.add_combine_on(base, sid, 0, qymcad_core::model::CombineSpan { height: 4.0, down: 0.0, extent: qymcad_core::feature::Extent { reach: qymcad_core::feature::Reach::Backward, ..Default::default() }, fill: &[] }, 0);
+    let cut_flip = p.add_combine_on(
+        base,
+        sid,
+        0,
+        qymcad_core::model::CombineSpan { height: 4.0, down: 0.0, extent: qymcad_core::feature::Extent { reach: qymcad_core::feature::Reach::Backward, ..Default::default() }, fill: &[] },
+        0,
+    );
     // Two-sided with down = 2 starts at -down.
     let cut_two = p.add_combine_on(base, sid, 0, qymcad_core::model::CombineSpan { height: 4.0, down: 2.0, extent: qymcad_core::feature::Extent::default(), fill: &[] }, 0);
     // Symmetric starts at -h/2.
-    let cut_sym = p.add_combine_on(base, sid, 0, qymcad_core::model::CombineSpan { height: 4.0, down: 0.0, extent: qymcad_core::feature::Extent { reach: qymcad_core::feature::Reach::BothWays, ..Default::default() }, fill: &[] }, 0);
+    let cut_sym = p.add_combine_on(
+        base,
+        sid,
+        0,
+        qymcad_core::model::CombineSpan { height: 4.0, down: 0.0, extent: qymcad_core::feature::Extent { reach: qymcad_core::feature::Reach::BothWays, ..Default::default() }, fill: &[] },
+        0,
+    );
     let k = MockKernel::default();
     p.regenerate(&k);
     let z = |b| p.bodies[p.mesh_index(b).unwrap()].mesh.verts[0].z;
@@ -1756,14 +1817,16 @@ fn combine_direction_survives_serde() {
     let mut p = part_project();
     let sid = square(&mut p, "square");
     let base = p.add_extrude_on(sid, 0, 5.0, qymcad_core::feature::Reach::Forward, 0.0);
-    let cut = p.add_combine_on(base, sid, 0, qymcad_core::model::CombineSpan { height: 4.0, down: 2.5, extent: qymcad_core::feature::Extent { reach: qymcad_core::feature::Reach::BothWays, ..Default::default() }, fill: &[] }, 0);
+    let cut = p.add_combine_on(
+        base,
+        sid,
+        0,
+        qymcad_core::model::CombineSpan { height: 4.0, down: 2.5, extent: qymcad_core::feature::Extent { reach: qymcad_core::feature::Reach::BothWays, ..Default::default() }, fill: &[] },
+        0,
+    );
     let ron = qymcad_core::model::to_ron(&p).unwrap();
     let back = qymcad_core::model::from_ron(&ron).unwrap();
-    let (reach, down) = back
-        .timeline
-        .iter()
-        .find_map(|n| if let FeatureKind::Combine { extent, down, .. } = n.kind { Some((extent.reach, down)) } else { None })
-        .unwrap();
+    let (reach, down) = back.timeline.iter().find_map(|n| if let FeatureKind::Combine { extent, down, .. } = n.kind { Some((extent.reach, down)) } else { None }).unwrap();
     assert_eq!(reach, qymcad_core::feature::Reach::BothWays, "the direction of the tool must be saved");
     assert_eq!(down, 2.5, "the second side must be saved");
     let _ = cut;
@@ -2314,12 +2377,12 @@ fn draft_resolves_neutral_face_and_routes_pull_direction() {
     let src = p.add_extrude_on(sid, 0, 10.0, qymcad_core::feature::Reach::Forward, 0.0);
     let k = MockKernel::default();
     p.regenerate(&k); // Builds src; the mock produces no faces.
-    // The faces of the source: the neutral one (persistent id 42, normal +Z, the bottom of the mould) and two
-    // drafted ones.
-    //
-    // The drafted faces 7 and 8 are put in the scene for more than completeness: with query references the
-    // feature verifies that the faces exist and refuses when they do not. Their ids used to reach the kernel
-    // unchecked, so a draft could be aimed at faces the body no longer had.
+                      // The faces of the source: the neutral one (persistent id 42, normal +Z, the bottom of the mould) and two
+                      // drafted ones.
+                      //
+                      // The drafted faces 7 and 8 are put in the scene for more than completeness: with query references the
+                      // feature verifies that the faces exist and refuses when they do not. Their ids used to reach the kernel
+                      // unchecked, so a draft could be aimed at faces the body no longer had.
     p.regen_faces.insert(
         src,
         vec![
@@ -2348,11 +2411,7 @@ fn draft_resolves_neutral_face_and_routes_pull_direction() {
     let k3 = MockKernel::default();
     k3.shapes.borrow_mut().insert(src);
     p.regenerate(&k3);
-    assert!(
-        k3.calls.borrow().iter().any(|c| c.contains("angle=3") && c.contains("pull=[-0.0, -0.0, -1.0]")),
-        "flip must pull along -Z: {:?}",
-        k3.calls.borrow()
-    );
+    assert!(k3.calls.borrow().iter().any(|c| c.contains("angle=3") && c.contains("pull=[-0.0, -0.0, -1.0]")), "flip must pull along -Z: {:?}", k3.calls.borrow());
     assert!(p.mesh_index(body2).is_some(), "the flipped draft body must be built");
 }
 
@@ -2606,10 +2665,7 @@ fn a_mirror_follows_the_source_when_its_active_body_is_replaced() {
         "the mirror failed after the active body of the source was replaced: {:?} (its dirty flag was {mirror_dirty:?})",
         p.regen_errors.get(&mirror_body)
     );
-    assert!(
-        p.mesh_index(mirror_body).is_some(),
-        "the mirror was left without a body after the active body of the source was replaced (its dirty flag was {mirror_dirty:?})"
-    );
+    assert!(p.mesh_index(mirror_body).is_some(), "the mirror was left without a body after the active body of the source was replaced (its dirty flag was {mirror_dirty:?})");
 }
 
 /// The same document gives the same result, however it was reached.
@@ -2646,7 +2702,8 @@ fn rebuilding_the_same_timeline_twice_gives_the_same_bodies() {
     p.regenerate(&k);
     let second: HashSet<Id> = p.bodies.iter().map(|b| b.id).collect();
     assert_eq!(
-        first, second,
+        first,
+        second,
         "a full rebuild of the same timeline gave a different set of bodies: {:?} vanished, {:?} appeared, so the model is not reproducible",
         first.difference(&second).collect::<Vec<_>>(),
         second.difference(&first).collect::<Vec<_>>()
@@ -2677,12 +2734,7 @@ fn a_mirror_node_stands_below_the_body_it_copies() {
             _ => None,
         })
         .expect("the mirror node");
-    assert!(
-        pos(&p, mirror_body) > pos(&p, b1),
-        "the mirror node stands above the body it copies: mirror at {:?}, source body at {:?}",
-        pos(&p, mirror_body),
-        pos(&p, b1)
-    );
+    assert!(pos(&p, mirror_body) > pos(&p, b1), "the mirror node stands above the body it copies: mirror at {:?}, source body at {:?}", pos(&p, mirror_body), pos(&p, b1));
 
     // ...and it still holds once the source has gained a new active body.
     p.set_active_component(Some(d1));
@@ -2692,10 +2744,7 @@ fn a_mirror_node_stands_below_the_body_it_copies() {
     let merged = p.add_body_boolean(b1, b2, 1);
     assert_eq!(p.active_body(d1), Some(merged), "setup: the merged body must become the active one");
     let seen = p.active_body_before(d1, pos(&p, mirror_body).expect("the position of the mirror"));
-    assert!(
-        seen.is_some(),
-        "the mirror sees no body of the source above itself, so it copies what does not exist at its point in the timeline"
-    );
+    assert!(seen.is_some(), "the mirror sees no body of the source above itself, so it copies what does not exist at its point in the timeline");
 }
 
 /// A moved sketch does not cost a fillet its edges.
@@ -2728,11 +2777,7 @@ fn a_moved_sketch_does_not_cost_the_fillet_its_edges() {
     // After the sketch edit the names changed and the edges themselves moved by one and a half millimetres.
     let now = vec![edge(70, [1.5, 0.0, 0.0]), edge(80, [41.5, 0.0, 0.0])];
     let healed = p.resolve_edge_ids_in(&now, fid, &[7, 8]);
-    assert_eq!(
-        healed.len(),
-        2,
-        "healing lost the edges that moved with the edit: it returned {healed:?}, leaving unfilleted cutouts and no error to explain them"
-    );
+    assert_eq!(healed.len(), 2, "healing lost the edges that moved with the edit: it returned {healed:?}, leaving unfilleted cutouts and no error to explain them");
 
     // ...and it does not grab an unrelated edge. An edge at the other end of the part is no replacement for one that vanished.
     let far = vec![edge(90, [200.0, 0.0, 0.0])];

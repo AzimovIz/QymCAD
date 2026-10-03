@@ -50,12 +50,7 @@ mod tests {
         app.viewing.cam.scale = 8.0;
         app.viewing.cam.target = [10.0, 10.0, 5.0];
         let rect = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(900.0, 700.0));
-        let top = app.project.bodies[mi]
-            .faces
-            .iter()
-            .filter(|f| f.normal[2] > 0.9)
-            .max_by(|a, b| a.centroid.z.partial_cmp(&b.centroid.z).unwrap())
-            .expect("the top face");
+        let top = app.project.bodies[mi].faces.iter().filter(|f| f.normal[2] > 0.9).max_by(|a, b| a.centroid.z.partial_cmp(&b.centroid.z).unwrap()).expect("the top face");
         let (fid, c) = (top.id, [top.centroid.x, top.centroid.y, top.centroid.z]);
         let basis = app.viewing.cam.basis();
         app.pick_face_3d(rect, qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: rect, basis: &basis }.at(c).0);
@@ -68,12 +63,7 @@ mod tests {
         app.apply_feat_cmd();
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
 
-        let node = app
-            .project
-            .timeline
-            .iter()
-            .find(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::Thicken { .. }))
-            .expect("a thicken feature must appear in the timeline");
+        let node = app.project.timeline.iter().find(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::Thicken { .. })).expect("a thicken feature must appear in the timeline");
         let out = node.kind.body().expect("the body of the result");
         let v = app.project.mesh_index(out).map(|i| app.project.bodies[i].mesh.volume()).unwrap_or(0.0);
         assert!(v > before_v + 1.0, "the part must grow by the plate: it was {before_v:.1}, it became {v:.1}; the status line: {}", app.status);
@@ -204,7 +194,8 @@ mod tests {
         app.pick_face_3d(rect, qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: rect, basis: &basis }.at(c).0);
         assert!(app.tools.gsel.faces.contains(&fid), "the face must get selected by a click");
 
-        let anchor = crate::gui::commands::cmd_anchor_screen(&mut app.part_ctx(), rect).expect("the command must have an anchor for the popup — otherwise there is nowhere to show the thickness field");
+        let anchor =
+            crate::gui::commands::cmd_anchor_screen(&mut app.part_ctx(), rect).expect("the command must have an anchor for the popup — otherwise there is nowhere to show the thickness field");
         assert!(rect.contains(anchor), "the anchor must be inside the viewport, and it is {anchor:?}");
         // and it is at THE FACE ITSELF rather than in some random corner
         let face = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: rect, basis: &basis }.at(c).0;

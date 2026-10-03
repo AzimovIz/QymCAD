@@ -124,5 +124,4 @@ mod tests {
         let got = (app.viewing.mode_3d, app.viewing.cam.yaw, app.viewing.cam.scale, app.viewing.view.initialized);
         assert_eq!(got, want, "Enter must leave the view as it is: it was {want:?}, it became {got:?}");
     }
-
 }

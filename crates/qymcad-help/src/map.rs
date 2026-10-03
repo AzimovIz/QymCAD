@@ -243,13 +243,7 @@ pub fn sketch_tool_article(draw: u8, dim: u8, click: u8, modify: Option<u8>) -> 
 
 /// Every article promised by the table (without repeats).
 pub fn promised() -> Vec<&'static str> {
-    let mut v: Vec<&'static str> = PART
-        .iter()
-        .map(|(_, a)| *a)
-        .chain(SKETCH.iter().map(|(_, _, a)| *a))
-        .chain(ASSEMBLY.iter().map(|(_, a)| *a))
-        .chain(TOOLBAR.iter().map(|(_, a)| *a))
-        .collect();
+    let mut v: Vec<&'static str> = PART.iter().map(|(_, a)| *a).chain(SKETCH.iter().map(|(_, _, a)| *a)).chain(ASSEMBLY.iter().map(|(_, a)| *a)).chain(TOOLBAR.iter().map(|(_, a)| *a)).collect();
     v.sort();
     v.dedup();
     v

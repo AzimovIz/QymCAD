@@ -97,10 +97,7 @@ mod tests {
         // under a fillet, the original under an array. Fitting by those would stretch the frame around what
         // is invisible, and the part would come out half the size it should be.
         let pn = app.painting();
-        let items: Vec<([f64; 3], [f64; 12])> = qymcad_ui_state::visible_mesh_items(&pn)
-            .iter()
-            .flat_map(|m| m.mesh.verts.iter().map(|v| ([v.x, v.y, v.z], m.world)).collect::<Vec<_>>())
-            .collect();
+        let items: Vec<([f64; 3], [f64; 12])> = qymcad_ui_state::visible_mesh_items(&pn).iter().flat_map(|m| m.mesh.verts.iter().map(|v| ([v.x, v.y, v.z], m.world)).collect::<Vec<_>>()).collect();
         assert!(!items.is_empty(), "there is not a single visible vertex in the scene - nothing to shoot");
         let world: Vec<[f64; 3]> = items.iter().map(|(p, wt)| if qymcad_core::feature::is_identity12(wt) { *p } else { qymcad_core::feature::apply12(wt, *p) }).collect();
         let (mut lo, mut hi) = ([f64::MAX; 3], [f64::MIN; 3]);
@@ -523,9 +520,6 @@ mod tests {
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
         still(&mut app, "part-mirror");
 
-
-
-
         // PUSH A FACE - three frames: offsets of 0, 6 and 12. A single picture is pointless here: the whole
         // command is that the face MOVES while its neighbours stretch after it.
         anim(
@@ -668,7 +662,14 @@ mod tests {
         sketch_still(&mut app, si, "sketch-circle");
 
         let (mut app, si) = empty_sketch();
-        app.project.add_arc_entity(si, qymcad_core::geom::Point2::new(0.0, -8.0), qymcad_core::geom::Point2::new(-22.0, -8.0), qymcad_core::geom::Point2::new(22.0, -8.0), qymcad_core::feature::Winding::Ccw, qymcad_core::feature::Purpose::Real);
+        app.project.add_arc_entity(
+            si,
+            qymcad_core::geom::Point2::new(0.0, -8.0),
+            qymcad_core::geom::Point2::new(-22.0, -8.0),
+            qymcad_core::geom::Point2::new(22.0, -8.0),
+            qymcad_core::feature::Winding::Ccw,
+            qymcad_core::feature::Purpose::Real,
+        );
         sketch_still(&mut app, si, "sketch-arc");
 
         let (mut app, si) = empty_sketch();
@@ -763,7 +764,6 @@ mod tests {
             app.viewing.mode_3d = true;
             still(&mut app, "part-thread");
         }
-
 
         // A PATCH STEP BY STEP: an open box -> the selected edges -> the surface stretched over them.
         //
@@ -947,7 +947,6 @@ mod tests {
             save("part-remove-face/01.png", &shot_as_is(&mut app, 640, 400));
         }
 
-
         // --- THE WHOLE PROGRAM WINDOW ---
         //
         // The picture a beginner needs most, and the one the frame rasteriser was written for: "tools on the
@@ -971,11 +970,26 @@ mod tests {
             let img = {
                 let a = &mut app;
                 super::super::help_raster::shot_ui([1100, 690], bg, |ui| {
-            let ctx = &ui.ctx().clone();
+                    let ctx = &ui.ctx().clone();
                     crate::gui::apply_theme(&mut a.scheme, &a.set, ctx);
-                    { let mut asks = Vec::new(); crate::gui::panels_bars::menu_bar(&mut a.bar_ctx(&mut asks), ui); let c = ui.ctx().clone(); a.do_bar_asks(asks, &c); };
-                    { let mut asks = Vec::new(); crate::gui::panels_bars::toolbar(&mut a.bar_ctx(&mut asks), ui); let c = ui.ctx().clone(); a.do_bar_asks(asks, &c); };
-                    { let mut asks = Vec::new(); crate::gui::panels_bars::wb_toolbar(&mut a.bar_ctx(&mut asks), ui); let c = ui.ctx().clone(); a.do_bar_asks(asks, &c); };
+                    {
+                        let mut asks = Vec::new();
+                        crate::gui::panels_bars::menu_bar(&mut a.bar_ctx(&mut asks), ui);
+                        let c = ui.ctx().clone();
+                        a.do_bar_asks(asks, &c);
+                    };
+                    {
+                        let mut asks = Vec::new();
+                        crate::gui::panels_bars::toolbar(&mut a.bar_ctx(&mut asks), ui);
+                        let c = ui.ctx().clone();
+                        a.do_bar_asks(asks, &c);
+                    };
+                    {
+                        let mut asks = Vec::new();
+                        crate::gui::panels_bars::wb_toolbar(&mut a.bar_ctx(&mut asks), ui);
+                        let c = ui.ctx().clone();
+                        a.do_bar_asks(asks, &c);
+                    };
                     a.tree_panel(ui);
                     a.properties_panel(ui);
                     a.viewport(ui);
@@ -1037,7 +1051,6 @@ mod tests {
         // plate - the whole point is that the eye does not catch it. What has to be shown here is the report
         // of the check, that is, a shot of the WINDOW with the panel open; that is a separate piece of work.
 
-
         // A POLYGON, A SLOT AND AN ELLIPSE - FLAT.
         //
         // At first they were shot EXTRUDED: there was no 2D shot back then, and the reasoning was that a
@@ -1072,7 +1085,6 @@ mod tests {
         // coincidences is not enough), and the shot came out as a tent made of one polyline: the picture
         // would show a bend rather than a break. To come back here, first work out what exactly ties the
         // ends together after the cut.
-
 
         // --- THE GENERAL SECTION: shots of the real panels and windows ---
         //
@@ -1110,7 +1122,11 @@ mod tests {
                 qymcad_core::model::Param { name: "d".into(), expr: "w/6 + wall".into(), value: 13.0 },
             ];
             app.win.open(WinKind::Params);
-            let img = shot_panel(&mut app, 560, 320, |a, ui| { let mut asks = Vec::new(); crate::gui::panels_windows::params_window(&mut a.win_ctx(&mut asks), ui.ctx()); a.do_win_asks(asks, ui.ctx()); });
+            let img = shot_panel(&mut app, 560, 320, |a, ui| {
+                let mut asks = Vec::new();
+                crate::gui::panels_windows::params_window(&mut a.win_ctx(&mut asks), ui.ctx());
+                a.do_win_asks(asks, ui.ctx());
+            });
             save("params.png", &img);
         }
 
@@ -1118,7 +1134,11 @@ mod tests {
         {
             let mut app = App::default();
             app.win.open(WinKind::Settings);
-            let img = shot_panel(&mut app, 900, 560, |a, ui| { let mut asks = Vec::new(); crate::gui::panels_windows::settings_window(&mut a.win_ctx(&mut asks), ui.ctx()); a.do_win_asks(asks, ui.ctx()); });
+            let img = shot_panel(&mut app, 900, 560, |a, ui| {
+                let mut asks = Vec::new();
+                crate::gui::panels_windows::settings_window(&mut a.win_ctx(&mut asks), ui.ctx());
+                a.do_win_asks(asks, ui.ctx());
+            });
             save("settings.png", &img);
         }
 
@@ -1152,11 +1172,26 @@ mod tests {
             let img = {
                 let a = &mut app;
                 super::super::help_raster::shot_ui([1200, 700], bg, |ui| {
-            let ctx = &ui.ctx().clone();
+                    let ctx = &ui.ctx().clone();
                     crate::gui::apply_theme(&mut a.scheme, &a.set, ctx);
-                    { let mut asks = Vec::new(); crate::gui::panels_bars::menu_bar(&mut a.bar_ctx(&mut asks), ui); let c = ui.ctx().clone(); a.do_bar_asks(asks, &c); };
-                    { let mut asks = Vec::new(); crate::gui::panels_bars::toolbar(&mut a.bar_ctx(&mut asks), ui); let c = ui.ctx().clone(); a.do_bar_asks(asks, &c); };
-                    { let mut asks = Vec::new(); crate::gui::panels_bars::wb_toolbar(&mut a.bar_ctx(&mut asks), ui); let c = ui.ctx().clone(); a.do_bar_asks(asks, &c); };
+                    {
+                        let mut asks = Vec::new();
+                        crate::gui::panels_bars::menu_bar(&mut a.bar_ctx(&mut asks), ui);
+                        let c = ui.ctx().clone();
+                        a.do_bar_asks(asks, &c);
+                    };
+                    {
+                        let mut asks = Vec::new();
+                        crate::gui::panels_bars::toolbar(&mut a.bar_ctx(&mut asks), ui);
+                        let c = ui.ctx().clone();
+                        a.do_bar_asks(asks, &c);
+                    };
+                    {
+                        let mut asks = Vec::new();
+                        crate::gui::panels_bars::wb_toolbar(&mut a.bar_ctx(&mut asks), ui);
+                        let c = ui.ctx().clone();
+                        a.do_bar_asks(asks, &c);
+                    };
                     a.tree_panel(ui);
                     a.properties_panel(ui);
                     a.viewport(ui);
@@ -1177,7 +1212,11 @@ mod tests {
         {
             let mut app = plate(10.0);
             app.win.open(WinKind::DocProps);
-            let img = shot_panel(&mut app, 640, 460, |a, ui| { let mut asks = Vec::new(); crate::gui::panels_windows::doc_props_window(&mut a.win_ctx(&mut asks), ui.ctx()); a.do_win_asks(asks, ui.ctx()); });
+            let img = shot_panel(&mut app, 640, 460, |a, ui| {
+                let mut asks = Vec::new();
+                crate::gui::panels_windows::doc_props_window(&mut a.win_ctx(&mut asks), ui.ctx());
+                a.do_win_asks(asks, ui.ctx());
+            });
             save("doc-props.png", &img);
         }
 
@@ -1198,7 +1237,7 @@ mod tests {
             let img = {
                 let a = &mut app;
                 super::super::help_raster::shot_ui([640, 420], bg, |ui| {
-            let ctx = &ui.ctx().clone();
+                    let ctx = &ui.ctx().clone();
                     crate::gui::apply_theme(&mut a.scheme, &a.set, ctx);
                     a.viewport(ui);
                 })
@@ -1234,7 +1273,7 @@ mod tests {
             let img = {
                 let a = &mut app;
                 super::super::help_raster::shot_ui([640, 420], bg, |ui| {
-            let ctx = &ui.ctx().clone();
+                    let ctx = &ui.ctx().clone();
                     crate::gui::apply_theme(&mut a.scheme, &a.set, ctx);
                     a.viewport(ui);
                 })
@@ -1261,14 +1300,10 @@ mod tests {
             /// be clicked by mouse. The key is assembled from the live face, so resolving finds exactly it.
             fn face_towards(p: &qymcad_core::model::Project, comp: qymcad_core::model::Id, dir: [f64; 3]) -> Option<(qymcad_core::model::Id, FaceKey)> {
                 let body = p.bodies.iter().find(|b| p.body_owner(b.id) == Some(comp))?;
-                let (i, f) = body
-                    .faces
-                    .iter()
-                    .enumerate()
-                    .max_by(|(_, a), (_, b)| {
-                        let dot = |f: &qymcad_core::geom::MeshFace| f.normal[0] * dir[0] + f.normal[1] * dir[1] + f.normal[2] * dir[2];
-                        dot(a).partial_cmp(&dot(b)).unwrap_or(std::cmp::Ordering::Equal)
-                    })?;
+                let (i, f) = body.faces.iter().enumerate().max_by(|(_, a), (_, b)| {
+                    let dot = |f: &qymcad_core::geom::MeshFace| f.normal[0] * dir[0] + f.normal[1] * dir[1] + f.normal[2] * dir[2];
+                    dot(a).partial_cmp(&dot(b)).unwrap_or(std::cmp::Ordering::Equal)
+                })?;
                 Some((body.id, FaceKey { index: i as u32, centroid: [f.centroid.x, f.centroid.y, f.centroid.z], normal: f.normal, id: f.id }))
             }
             /// The bounds of a body IN THE WORLD - the only way to check IN NUMBERS whether the parts sit
@@ -1336,7 +1371,7 @@ mod tests {
                 let img = {
                     let a = &mut app;
                     super::super::help_raster::shot_ui([640, 420], bg, |ui| {
-            let ctx = &ui.ctx().clone();
+                        let ctx = &ui.ctx().clone();
                         crate::gui::apply_theme(&mut a.scheme, &a.set, ctx);
                         a.viewport(ui);
                     })
@@ -1399,12 +1434,7 @@ mod tests {
             app.project.regen_sketch(si);
             std::fs::create_dir_all(img_dir().join("sketch-delete")).expect("the frame directory");
             save("sketch-delete/00.png", &shot_sketch_fixed(&mut app, si, 4.2));
-            let circle = app.project.sketches[si]
-                .entities
-                .iter()
-                .find(|e| matches!(e.kind, qymcad_core::model::EntityKind::Circle { .. }))
-                .map(|e| e.id)
-                .expect("the circle in the sketch");
+            let circle = app.project.sketches[si].entities.iter().find(|e| matches!(e.kind, qymcad_core::model::EntityKind::Circle { .. })).map(|e| e.id).expect("the circle in the sketch");
             app.project.delete_entities(si, &[circle]);
             app.project.regen_sketch(si);
             save("sketch-delete/01.png", &shot_sketch_fixed(&mut app, si, 4.2));
@@ -1417,7 +1447,11 @@ mod tests {
             let font = app.font_cache.for_tool(&mut app.tool_prefs.font).map(|(f, _)| f).unwrap_or_default();
             let glyphs = qymcad_ui_state::bake_text_glyphs(&mut app.font_cache, &font, -34.0, -8.0, 22.0, "QYM CAD");
             assert!(!glyphs.is_empty(), "the glyphs did not bake - the shot would be empty");
-            app.project.add_sketch_text(si, qymcad_core::model::TextSpec { at: qymcad_core::geom::Point2::new(-34.0, -8.0), height: 22.0, angle: 0.0, text: "QYM CAD".to_string(), glyphs, font }, qymcad_core::feature::Purpose::Real);
+            app.project.add_sketch_text(
+                si,
+                qymcad_core::model::TextSpec { at: qymcad_core::geom::Point2::new(-34.0, -8.0), height: 22.0, angle: 0.0, text: "QYM CAD".to_string(), glyphs, font },
+                qymcad_core::feature::Purpose::Real,
+            );
             app.project.regen_sketch(si);
             sketch_still(&mut app, si, "sketch-text");
         }
@@ -1590,14 +1624,10 @@ mod tests {
             fn face_towards2(p: &qymcad_core::model::Project, comp: qymcad_core::model::Id, dir: [f64; 3]) -> Option<(qymcad_core::model::Id, qymcad_core::feature::FaceKey)> {
                 use qymcad_core::feature::FaceKey;
                 let body = p.bodies.iter().find(|b| p.body_owner(b.id) == Some(comp))?;
-                let (i, f) = body
-                    .faces
-                    .iter()
-                    .enumerate()
-                    .max_by(|(_, a), (_, b)| {
-                        let dot = |f: &qymcad_core::geom::MeshFace| f.normal[0] * dir[0] + f.normal[1] * dir[1] + f.normal[2] * dir[2];
-                        dot(a).partial_cmp(&dot(b)).unwrap_or(std::cmp::Ordering::Equal)
-                    })?;
+                let (i, f) = body.faces.iter().enumerate().max_by(|(_, a), (_, b)| {
+                    let dot = |f: &qymcad_core::geom::MeshFace| f.normal[0] * dir[0] + f.normal[1] * dir[1] + f.normal[2] * dir[2];
+                    dot(a).partial_cmp(&dot(b)).unwrap_or(std::cmp::Ordering::Equal)
+                })?;
                 Some((body.id, FaceKey { index: i as u32, centroid: [f.centroid.x, f.centroid.y, f.centroid.z], normal: f.normal, id: f.id }))
             }
             fn aabb(p: &qymcad_core::model::Project, comp: qymcad_core::model::Id) -> Option<([f64; 3], [f64; 3])> {
@@ -1665,7 +1695,7 @@ mod tests {
                 let img = {
                     let a = &mut app;
                     super::super::help_raster::shot_ui([640, 420], bg, |ui| {
-            let ctx = &ui.ctx().clone();
+                        let ctx = &ui.ctx().clone();
                         crate::gui::apply_theme(&mut a.scheme, &a.set, ctx);
                         a.viewport(ui);
                     })
@@ -1697,7 +1727,11 @@ mod tests {
         {
             let mut app = App::default();
             app.win.open(WinKind::PartsLibrary);
-            let img = shot_panel(&mut app, 760, 520, |a, ui| { let mut asks = Vec::new(); crate::gui::panels_windows::parts_library_window(&mut a.win_ctx(&mut asks), ui.ctx()); a.do_win_asks(asks, ui.ctx()); });
+            let img = shot_panel(&mut app, 760, 520, |a, ui| {
+                let mut asks = Vec::new();
+                crate::gui::panels_windows::parts_library_window(&mut a.win_ctx(&mut asks), ui.ctx());
+                a.do_win_asks(asks, ui.ctx());
+            });
             save("library.png", &img);
         }
 
@@ -1722,7 +1756,7 @@ mod tests {
             let img = {
                 let a = &mut app;
                 super::super::help_raster::shot_ui([640, 440], bg, |ui| {
-            let ctx = &ui.ctx().clone();
+                    let ctx = &ui.ctx().clone();
                     crate::gui::apply_theme(&mut a.scheme, &a.set, ctx);
                     a.viewport(ui);
                 })
@@ -1808,7 +1842,6 @@ mod tests {
         out.dedup();
     }
 
-
     /// AND THERE IS SOMETHING IN THE PICTURE: it is not one colour and not one flat blot.
     ///
     /// Exactly the fault that was caught by eye and only by chance: the rasteriser stopped assembling the
@@ -1871,7 +1904,4 @@ mod tests {
         crate::help::set_lang("");
         assert!(found, "there is no caption under the picture (looked for \"{word}\"): {texts:?}");
     }
-
-
-
 }

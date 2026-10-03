@@ -21,11 +21,7 @@ use qymcad_core::thread::{ThreadSpec, ThreadStandard};
 fn rim(p: &mut Project, body: Id, r: f64) -> u32 {
     let _ = qymcad_testkit::regenerate(p);
     let e = p.regen_edges.get(&body).cloned().unwrap_or_default();
-    e.iter()
-        .filter(|e| e.radius > 1e-9 && (e.radius - r).abs() < 0.05)
-        .map(|e| e.id)
-        .next()
-        .unwrap_or_else(|| panic!("body {body} has no round edge of radius {r}"))
+    e.iter().filter(|e| e.radius > 1e-9 && (e.radius - r).abs() < 0.05).map(|e| e.id).next().unwrap_or_else(|| panic!("body {body} has no round edge of radius {r}"))
 }
 
 fn metric(d: f64, pitch: f64) -> ThreadSpec {
@@ -76,10 +72,7 @@ fn a_copied_part_with_a_thread_still_builds() {
     // the body of the part is the one not eaten by a later operation (the shaft is eaten by the thread)
     let live = live_body(&p, copy);
     let vol_copy = v1.iter().find(|(id, _)| *id == live).map(|(_, v)| *v).expect("volume of the copy");
-    assert!(
-        (vol_copy - vol_src).abs() < vol_src * 1e-6,
-        "the copy must be the same shape: original {vol_src:.3}, copy {vol_copy:.3} — the thread did not land on the copy"
-    );
+    assert!((vol_copy - vol_src).abs() < vol_src * 1e-6, "the copy must be the same shape: original {vol_src:.3}, copy {vol_copy:.3} — the thread did not land on the copy");
 }
 
 /// THE COPY'S REFERENCE LEADS TO ITS OWN GEOMETRY, NOT TO THE ORIGINAL.
@@ -97,13 +90,8 @@ fn the_copy_points_at_its_own_edge_not_at_the_source() {
     let copy = p.clone_component(comp, root).expect("the copied part");
     let _ = qymcad_testkit::regenerate(&mut p);
 
-    let edge_of = |p: &Project, c: Id| -> u32 {
-        p.timeline
-            .iter()
-            .filter(|n| n.parent == Some(c))
-            .find_map(|n| if let FK::Thread { edge, .. } = n.kind { Some(edge) } else { None })
-            .expect("the thread node")
-    };
+    let edge_of =
+        |p: &Project, c: Id| -> u32 { p.timeline.iter().filter(|n| n.parent == Some(c)).find_map(|n| if let FK::Thread { edge, .. } = n.kind { Some(edge) } else { None }).expect("the thread node") };
     let (src_edge, copy_edge) = (edge_of(&p, comp), edge_of(&p, copy));
     assert_ne!(src_edge, copy_edge, "the copy carried away the NAME of the original's edge — exactly the defect that broke the thread");
 

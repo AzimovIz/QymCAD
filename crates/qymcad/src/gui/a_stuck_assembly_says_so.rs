@@ -22,12 +22,7 @@ mod tests {
     /// A point ON THE BODY that can be clicked: the centre of the topmost face.
     fn aim(app: &App, body: Id) -> [f64; 3] {
         let wt = app.project.body_display_transform(body, qymcad_ui_state::current_ctx_id(&app.active_path, &app.project));
-        let f = app
-            .project
-            .regen_faces
-            .get(&body)
-            .and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z)))
-            .expect("the body has faces");
+        let f = app.project.regen_faces.get(&body).and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z))).expect("the body has faces");
         qymcad_core::feature::apply12(&wt, [f.centroid.x, f.centroid.y, f.centroid.z])
     }
 
@@ -145,10 +140,7 @@ mod tests {
         app.project.solve_joints();
         let now = app.project.world_transform(moving);
         let went = was.iter().zip(now.iter()).map(|(x, y)| (x - y).abs()).fold(0.0f64, f64::max);
-        assert!(
-            (went - 15.0).abs() < 1e-3,
-            "a healthy mechanism must move despite an argument in another corner of the document: it travelled {went:.4} instead of 15"
-        );
+        assert!((went - 15.0).abs() < 1e-3, "a healthy mechanism must move despite an argument in another corner of the document: it travelled {went:.4} instead of 15");
         assert!(app.project.mates_conflict, "and the argument must stay named rather than dissolve");
     }
 
@@ -168,10 +160,7 @@ mod tests {
         let words = panel_words(&mut app);
         let defined = crate::i18n::tr("jp-defined");
         let bad: Vec<&String> = words.iter().filter(|t| t.contains(&defined)).collect();
-        assert!(
-            bad.is_empty(),
-            "joints {rigid} and {hinge} ARGUE and the panel calls the part defined: {bad:?}\neverything drawn: {words:?}"
-        );
+        assert!(bad.is_empty(), "joints {rigid} and {hinge} ARGUE and the panel calls the part defined: {bad:?}\neverything drawn: {words:?}");
     }
 
     #[test]
@@ -181,18 +170,12 @@ mod tests {
         assert_ne!(rigid, hinge, "setup: there should be two joints");
 
         // TRAP GUARD: the solve really did fail to converge — otherwise there is nothing to check.
-        assert!(
-            app.project.mates_conflict,
-            "GUARD: there is no trap — the solve CONVERGED, so no argument came out and there is nothing to say words about"
-        );
+        assert!(app.project.mates_conflict, "GUARD: there is no trap — the solve CONVERGED, so no argument came out and there is nothing to say words about");
 
         let words = panel_words(&mut app);
         assert!(words.len() > 5, "GUARD: the panel drew suspiciously few lines ({})", words.len());
         let want = crate::i18n::tr("jp-conflict");
         let head = want.split(' ').take(2).collect::<Vec<_>>().join(" ");
-        assert!(
-            words.iter().any(|t| t.contains(&head)),
-            "the assembly is stuck and not a word was said to the person: drawn {words:?}"
-        );
+        assert!(words.iter().any(|t| t.contains(&head)), "the assembly is stuck and not a word was said to the person: drawn {words:?}");
     }
 }

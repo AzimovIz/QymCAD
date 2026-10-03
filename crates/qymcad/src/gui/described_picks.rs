@@ -98,10 +98,7 @@ mod tests {
     #[test]
     fn touching_one_edge_after_a_face_drops_the_description() {
         let source = crate::gui::sketch_source::PICK;
-        assert!(
-            source.contains("self.tools.gsel.described = None;"),
-            "a single click on an edge must clear the description, otherwise the reference lies"
-        );
+        assert!(source.contains("self.tools.gsel.described = None;"), "a single click on an edge must clear the description, otherwise the reference lies");
         // and the other way round: a click on a face must RECORD the description
         assert!(source.contains("self.tools.gsel.describe_edges_of_face(fid);"), "a click on a face must record a description");
     }

@@ -90,7 +90,10 @@ mod tests {
     fn inside_a_field_a_bare_letter_is_typed_not_executed() {
         let mut app = extruding();
         press(&mut app, Key::U, Modifiers::NONE, true);
-        assert!(!(matches!(app.tools.armed.cmd_kind(), 1 | 3) && app.tools.cmd.sketch.is_some() && !app.viewing.mode_3d), "a letter from a field ran a command — `len` can no longer be written into a formula");
+        assert!(
+            !(matches!(app.tools.armed.cmd_kind(), 1 | 3) && app.tools.cmd.sketch.is_some() && !app.viewing.mode_3d),
+            "a letter from a field ran a command — `len` can no longer be written into a formula"
+        );
     }
 
     /// ALT PLUS A LETTER WORKS FROM A FIELD TOO. Exactly the reported case.
@@ -98,7 +101,10 @@ mod tests {
     fn alt_letter_works_even_while_typing() {
         let mut app = extruding();
         press(&mut app, Key::U, Modifiers::ALT, true);
-        assert!((matches!(app.tools.armed.cmd_kind(), 1 | 3) && app.tools.cmd.sketch.is_some() && !app.viewing.mode_3d), "Alt+U from a field did not open the contour re-pick — the hand still reaches for the mouse");
+        assert!(
+            (matches!(app.tools.armed.cmd_kind(), 1 | 3) && app.tools.cmd.sketch.is_some() && !app.viewing.mode_3d),
+            "Alt+U from a field did not open the contour re-pick — the hand still reaches for the mouse"
+        );
     }
 
     /// ESC FROM A FIELD DOES NOT CANCEL THE COMMAND, AND A SECOND ONE DOES.
@@ -148,6 +154,9 @@ mod tests {
     fn the_rule_lives_in_one_place() {
         let src = include_str!("input.rs");
         assert!(crate::gui::render_source::has(src, "if typing { i.modifiers.alt"), "the \"with focus, use Alt\" rule is gone from the common place");
-        assert!(!crate::gui::render_source::has(src, "if ctx.egui_wants_keyboard_input() {\n            return;\n        }\n        use egui::Key;"), "the unconditional muting of every key on focus has come back");
+        assert!(
+            !crate::gui::render_source::has(src, "if ctx.egui_wants_keyboard_input() {\n            return;\n        }\n        use egui::Key;"),
+            "the unconditional muting of every key on focus has come back"
+        );
     }
 }

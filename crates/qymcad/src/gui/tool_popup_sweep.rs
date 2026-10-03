@@ -252,10 +252,6 @@ mod tests {
                 without.push(format!("{kind}"));
             }
         }
-        assert!(
-            without.is_empty(),
-            "the driver list did not appear in the popups of these part tools: {}",
-            without.join(", ")
-        );
+        assert!(without.is_empty(), "the driver list did not appear in the popups of these part tools: {}", without.join(", "));
     }
 }

@@ -39,10 +39,7 @@ fn a_slider_on_origins_travels_along_the_axis_you_point_at() {
         c.axis_ref = Some(AnchorRef::BasePlane(qymcad_core::feature::BasePlane::YZ));
     }
     let after = p.joint_slot_axis(jid, 1, p.root).expect("the travel axis after the pick");
-    assert!(
-        after[0].abs() > 0.9,
-        "an axis along X was picked and the slider still travels {after:?}, so the pick did not reach the travel"
-    );
+    assert!(after[0].abs() > 0.9, "an axis along X was picked and the slider still travels {after:?}, so the pick did not reach the travel");
 }
 
 #[test]
@@ -70,8 +67,5 @@ fn pointing_at_an_axis_changes_where_the_part_actually_goes() {
     let went = [m[3] - was[0], m[7] - was[1], m[11] - was[2]];
     let len = (went[0] * went[0] + went[1] * went[1] + went[2] * went[2]).sqrt();
     assert!((len - 12.0).abs() < 1e-3, "the part has to travel 12 mm and travelled {len:.4}");
-    assert!(
-        went[0].abs() > 11.9,
-        "an axis along X was picked, so the part has to travel along X, and it went {went:?}"
-    );
+    assert!(went[0].abs() > 11.9, "an axis along X was picked, so the part has to travel along X, and it went {went:?}");
 }

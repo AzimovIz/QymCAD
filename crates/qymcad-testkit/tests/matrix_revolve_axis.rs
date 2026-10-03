@@ -19,7 +19,8 @@ fn half_disc(p: &mut Project, si: usize, cx: f64, r: f64) {
     for w in pts.windows(2) {
         p.add_line_entity(si, w[0].x, w[0].y, w[1].x, w[1].y, qymcad_core::feature::Purpose::Real);
     }
-    p.add_line_entity(si, cx + r, 0.0, cx - r, 0.0, qymcad_core::feature::Purpose::Real); // diameter along the axis
+    p.add_line_entity(si, cx + r, 0.0, cx - r, 0.0, qymcad_core::feature::Purpose::Real);
+    // diameter along the axis
 }
 
 fn build(p: &mut Project, body: u64) -> (f64, Vec<String>) {

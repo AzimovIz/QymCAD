@@ -45,7 +45,10 @@ mod tests {
     #[test]
     fn the_pass_of_a_selected_ghost_is_still_the_blended_one() {
         let src = crate::gui::render_source::RENDER;
-        assert!(crate::gui::render_source::has(src, "if ghost { ghost_tris.push(tri) } else { tris.push(tri) }"), "on the CPU path the bucket is chosen by `ghost` alone, with no regard to the selection");
+        assert!(
+            crate::gui::render_source::has(src, "if ghost { ghost_tris.push(tri) } else { tris.push(tri) }"),
+            "on the CPU path the bucket is chosen by `ghost` alone, with no regard to the selection"
+        );
 
         // THE CARD, checked by the look table rather than by the text of the source: a body of a neighbouring
         // part, selected, must carry BOTH bits.
@@ -56,18 +59,12 @@ mod tests {
         app.win.context = true; // "in context": the neighbouring parts stay on screen as ghosts
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
         app.enter_component(first);
-        let ghostly = crate::gui::render_scene::scene_looks(&app.painting())
-            .iter()
-            .position(|l| l.state & qymcad_ui_state::LOOK_GHOST != 0)
-            .expect("setup: the neighbouring part must be a ghost");
+        let ghostly = crate::gui::render_scene::scene_looks(&app.painting()).iter().position(|l| l.state & qymcad_ui_state::LOOK_GHOST != 0).expect("setup: the neighbouring part must be a ghost");
         app.chosen.sel = qymcad_ui_state::Sel::Mesh(ghostly);
 
         let look = crate::gui::render_scene::scene_looks(&app.painting())[ghostly];
         assert!(look.state & qymcad_ui_state::LOOK_HOT != 0, "the selection did not reach the look of the body");
         assert!(look.state & qymcad_ui_state::LOOK_GHOST != 0, "selecting a ghost took its ghostliness away, and with it the blended pass");
-        assert!(
-            crate::gui::render_source::has(crate::viewport_gpu::SHADER, "if ((look.state & 2u) != 0u) {"),
-            "the shader must read the ghost as a bit of its own, not as a number of three"
-        );
+        assert!(crate::gui::render_source::has(crate::viewport_gpu::SHADER, "if ((look.state & 2u) != 0u) {"), "the shader must read the ghost as a bit of its own, not as a number of three");
     }
 }

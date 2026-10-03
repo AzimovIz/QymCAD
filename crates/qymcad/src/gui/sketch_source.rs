@@ -15,26 +15,12 @@
 
 /// The sketch, whole: the workbench crate plus what stayed with the application.
 #[cfg(test)]
-pub(crate) const SKETCH: &str = concat!(
-    include_str!("../../../qymcad-sketch/src/lib.rs"),
-    "\n",
-    include_str!("sketching.rs"),
-);
+pub(crate) const SKETCH: &str = concat!(include_str!("../../../qymcad-sketch/src/lib.rs"), "\n", include_str!("sketching.rs"),);
 
 /// The picking, whole: the module crate plus the remnant in the application.
 #[cfg(test)]
-pub(crate) const PICK: &str = concat!(
-    include_str!("../../../qymcad-pick/src/lib.rs"),
-    "\n",
-    include_str!("pick.rs"),
-);
+pub(crate) const PICK: &str = concat!(include_str!("../../../qymcad-pick/src/lib.rs"), "\n", include_str!("pick.rs"),);
 
 /// The Part, whole: the workbench crate plus what stayed with the application.
 #[cfg(test)]
-pub(crate) const PART: &str = concat!(
-    include_str!("../../../qymcad-part/src/lib.rs"),
-    "\n",
-    include_str!("commands.rs"),
-    "\n",
-    include_str!("panels_bars.rs"),
-);
+pub(crate) const PART: &str = concat!(include_str!("../../../qymcad-part/src/lib.rs"), "\n", include_str!("commands.rs"), "\n", include_str!("panels_bars.rs"),);

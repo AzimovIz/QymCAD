@@ -95,7 +95,14 @@ fn an_offset_rounded_rectangle_follows_its_source() {
         set_width(&mut p, si, width, 40.0);
         let s = &p.sketches[si];
         let at = |id: u64| s.points.iter().find(|q| q.id == id).map(|q| (q.x, q.y)).expect("a point");
-        let arcs: Vec<((f64, f64), f64)> = s.entities.iter().filter_map(|e| match e.kind { EntityKind::Arc { center, a, .. } => Some((at(center), (at(center).0 - at(a).0).hypot(at(center).1 - at(a).1))), _ => None }).collect();
+        let arcs: Vec<((f64, f64), f64)> = s
+            .entities
+            .iter()
+            .filter_map(|e| match e.kind {
+                EntityKind::Arc { center, a, .. } => Some((at(center), (at(center).0 - at(a).0).hypot(at(center).1 - at(a).1))),
+                _ => None,
+            })
+            .collect();
         let source = arcs.iter().find(|(_, r)| (r - 4.0).abs() < 1e-6).expect("the source arc is still R4");
         let copy = arcs.iter().find(|(c, r)| (c.0 - source.0 .0).hypot(c.1 - source.0 .1) < 1e-6 && (r - 4.0).abs() > 1e-6).expect("a copy arc concentric with the source");
         assert!((copy.1 - 1.0).abs() < 1e-6 || (copy.1 - 7.0).abs() < 1e-6, "the rounded corner R4 offset by 3 is R1 or R7 by the side, not {}: {arcs:?}", copy.1);

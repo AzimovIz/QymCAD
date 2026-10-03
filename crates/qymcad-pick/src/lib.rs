@@ -335,10 +335,14 @@ pub fn body_bbox_hit(pn: &Painting, body: qymcad_core::model::Id, rect: Rect, po
                 let wt = pn.project.body_display_transform(body, current_ctx_id(pn.active_path, pn.project));
                 let mut out = [[0.0f64; 3]; 8];
                 for (k, p) in [
-                    [bb.min.x, bb.min.y, bb.min.z], [bb.max.x, bb.min.y, bb.min.z],
-                    [bb.min.x, bb.max.y, bb.min.z], [bb.max.x, bb.max.y, bb.min.z],
-                    [bb.min.x, bb.min.y, bb.max.z], [bb.max.x, bb.min.y, bb.max.z],
-                    [bb.min.x, bb.max.y, bb.max.z], [bb.max.x, bb.max.y, bb.max.z],
+                    [bb.min.x, bb.min.y, bb.min.z],
+                    [bb.max.x, bb.min.y, bb.min.z],
+                    [bb.min.x, bb.max.y, bb.min.z],
+                    [bb.max.x, bb.max.y, bb.min.z],
+                    [bb.min.x, bb.min.y, bb.max.z],
+                    [bb.max.x, bb.min.y, bb.max.z],
+                    [bb.min.x, bb.max.y, bb.max.z],
+                    [bb.max.x, bb.max.y, bb.max.z],
                 ]
                 .into_iter()
                 .enumerate()
@@ -425,9 +429,7 @@ pub fn fillet_vertex_at(scr: &Screen, armed: &qymcad_ui_state::Armed, edges: &Ed
     let grab = grab(scr.set, Grab::Point);
     let mut best: Option<(f32, u32, [f64; 3])> = None;
     for c in project.vertex_pool(body) {
-        let on_picked = picked.iter().flatten().any(|p| {
-            (p[0] - c.centroid[0]).abs() < 1e-6 && (p[1] - c.centroid[1]).abs() < 1e-6 && (p[2] - c.centroid[2]).abs() < 1e-6
-        });
+        let on_picked = picked.iter().flatten().any(|p| (p[0] - c.centroid[0]).abs() < 1e-6 && (p[1] - c.centroid[1]).abs() < 1e-6 && (p[2] - c.centroid[2]).abs() < 1e-6);
         if !on_picked {
             continue;
         }
@@ -441,7 +443,8 @@ pub fn fillet_vertex_at(scr: &Screen, armed: &qymcad_ui_state::Armed, edges: &Ed
     // set a radius at that corner (point grab 10 px beat edge grab 8 px) and the edge was never added.
     if let Some((d, _, _)) = best {
         if d > grab / 2.0 {
-            let on_edge = project.regen_edges.get(&body).is_some_and(|es| es.iter().any(|e| screen_dist_seg(screen, scr.at(e.a).0, scr.at(e.b).0) <= qymcad_ui_state::grab::grab(scr.set, Grab::Curve)));
+            let on_edge =
+                project.regen_edges.get(&body).is_some_and(|es| es.iter().any(|e| screen_dist_seg(screen, scr.at(e.a).0, scr.at(e.b).0) <= qymcad_ui_state::grab::grab(scr.set, Grab::Curve)));
             if on_edge {
                 return None;
             }
@@ -465,7 +468,11 @@ pub fn edge_at(active_path: &[Id], cam: Cam3, edges: &EdgeCache, project: &Proje
     let wt = edges.body.map(|b| project.body_display_transform(b, current_ctx_id(active_path, project))).unwrap_or(qymcad_core::feature::PLACE_IDENTITY);
     let tp = |p: &[f32; 3]| -> [f64; 3] {
         let v = [p[0] as f64, p[1] as f64, p[2] as f64];
-        if qymcad_core::feature::is_identity12(&wt) { v } else { qymcad_core::feature::apply12(&wt, v) }
+        if qymcad_core::feature::is_identity12(&wt) {
+            v
+        } else {
+            qymcad_core::feature::apply12(&wt, v)
+        }
     };
     // ON A COLLINEAR OVERLAP (a long seam edge containing a short one) both project into the same
     // screen line. The first one met used to win (usually the long one), so the short one could not be
@@ -671,7 +678,11 @@ pub fn pick_vertex_pos(pn: &Painting, rect: Rect, pos: Pos2) -> Option<[f64; 3]>
         let wt = pn.project.body_display_transform(body, ctx);
         let tp = |p: &[f32; 3]| -> [f64; 3] {
             let v = [p[0] as f64, p[1] as f64, p[2] as f64];
-            if is_identity12(&wt) { v } else { apply12(&wt, v) }
+            if is_identity12(&wt) {
+                v
+            } else {
+                apply12(&wt, v)
+            }
         };
         for (k, (poly, id)) in polys.iter().zip(ids.iter().copied()).enumerate() {
             if id == 0 || poly.len() < 2 {
@@ -716,7 +727,11 @@ pub fn pick_edge_point(pn: &Painting, rect: Rect, pos: Pos2) -> Option<[f64; 3]>
         let wt = pn.project.body_display_transform(body, ctx);
         let tp = |p: &[f32; 3]| -> [f64; 3] {
             let v = [p[0] as f64, p[1] as f64, p[2] as f64];
-            if is_identity12(&wt) { v } else { apply12(&wt, v) }
+            if is_identity12(&wt) {
+                v
+            } else {
+                apply12(&wt, v)
+            }
         };
         for (poly, id) in polys.iter().zip(ids.iter().copied()) {
             if id == 0 || poly.len() < 2 {
@@ -889,7 +904,11 @@ pub fn edge_or_corner_under(pn: &Painting, rect: Rect, pos: Pos2) -> Option<Sel>
         let wt = pn.project.body_display_transform(body, ctx);
         let tp = |p: &[f32; 3]| -> [f64; 3] {
             let v = [p[0] as f64, p[1] as f64, p[2] as f64];
-            if qymcad_core::feature::is_identity12(&wt) { v } else { qymcad_core::feature::apply12(&wt, v) }
+            if qymcad_core::feature::is_identity12(&wt) {
+                v
+            } else {
+                qymcad_core::feature::apply12(&wt, v)
+            }
         };
         for (k, (poly, id)) in edges.polys.iter().zip(edges.ids.iter().copied()).enumerate() {
             if id == 0 || poly.len() < 2 {
@@ -940,7 +959,11 @@ pub fn pick_edge_any(pn: &Painting, rect: Rect, pos: Pos2) -> Option<(Id, u32)> 
         let wt = pn.project.body_display_transform(body, ctx);
         let tp = |p: &[f32; 3]| -> [f64; 3] {
             let v = [p[0] as f64, p[1] as f64, p[2] as f64];
-            if qymcad_core::feature::is_identity12(&wt) { v } else { qymcad_core::feature::apply12(&wt, v) }
+            if qymcad_core::feature::is_identity12(&wt) {
+                v
+            } else {
+                qymcad_core::feature::apply12(&wt, v)
+            }
         };
         for (poly, id) in polys.iter().zip(ids.iter().copied()) {
             if id == 0 {
@@ -1168,7 +1191,11 @@ pub fn pick_vertex_any(pn: &Painting, rect: Rect, pos: Pos2) -> Option<(Id, u32,
         let wt = pn.project.body_display_transform(body, ctx);
         let tp = |p: &[f32; 3]| -> [f64; 3] {
             let v = [p[0] as f64, p[1] as f64, p[2] as f64];
-            if qymcad_core::feature::is_identity12(&wt) { v } else { qymcad_core::feature::apply12(&wt, v) }
+            if qymcad_core::feature::is_identity12(&wt) {
+                v
+            } else {
+                qymcad_core::feature::apply12(&wt, v)
+            }
         };
         for (poly, id) in polys.iter().zip(ids.iter().copied()) {
             if id == 0 || poly.len() < 2 {
@@ -1370,17 +1397,15 @@ pub fn foreign_contour_ids(pn: &Painting) -> std::collections::HashSet<Id> {
     // while the document is being walked borrows the same record twice.
     // ONE COPY OF THE RULE. Inlining "does this sketch belong to the context" here left the same rule
     // written twice; the free function takes exactly what it reads instead, so drawing needs no `&mut`.
-    pn.project
-        .sketches
-        .iter()
-        .filter(|s| !sketch_in_ctx(pn.active_path, pn.project, pn.sketch_ses, s.id))
-        .flat_map(|s| s.contour_ids.iter().copied())
-        .collect()
+    pn.project.sketches.iter().filter(|s| !sketch_in_ctx(pn.active_path, pn.project, pn.sketch_ses, s.id)).flat_map(|s| s.contour_ids.iter().copied()).collect()
 }
 
 pub fn sketch_ref_edges_2d(cache: &Caches, cmd: &FeatCommand, live: &LiveGeom, project: &qymcad_core::model::Project, regen: &Rebuilding, si: usize) -> Vec<Vec<Point2>> {
     use qymcad_core::feature::SketchPlane;
-    let s = match project.sketches.get(si) { Some(s) => s, None => return Vec::new() };
+    let s = match project.sketches.get(si) {
+        Some(s) => s,
+        None => return Vec::new(),
+    };
     // THE BODY IS TAKEN LIVE, not the one recorded when the sketch was created.
     //
     // `SketchPlane::Face(b, _)` holds the id of the body AT THE MOMENT of creation, while every subsequent
@@ -1609,7 +1634,11 @@ pub fn infer_mate_anchor(pn: &qymcad_ui_state::Painting, rect: Rect, pos: Pos2) 
         let wt = pn.project.body_display_transform(body, ctx);
         let to_world = |p: &[f32; 3]| -> [f64; 3] {
             let v = [p[0] as f64, p[1] as f64, p[2] as f64];
-            if qymcad_core::feature::is_identity12(&wt) { v } else { qymcad_core::feature::apply12(&wt, v) }
+            if qymcad_core::feature::is_identity12(&wt) {
+                v
+            } else {
+                qymcad_core::feature::apply12(&wt, v)
+            }
         };
         let model = pn.project.regen_edges.get(&body);
         for (poly, id) in edges.polys.iter().zip(edges.ids.iter().copied()) {
@@ -1622,7 +1651,11 @@ pub fn infer_mate_anchor(pn: &qymcad_ui_state::Painting, rect: Rect, pos: Pos2) 
             let mid = match model.and_then(|es| es.iter().find(|e| e.id == id)) {
                 Some(e) => {
                     let (p, _) = e.axis_ref();
-                    if qymcad_core::feature::is_identity12(&wt) { p } else { qymcad_core::feature::apply12(&wt, p) }
+                    if qymcad_core::feature::is_identity12(&wt) {
+                        p
+                    } else {
+                        qymcad_core::feature::apply12(&wt, p)
+                    }
                 }
                 None => to_world(&poly[poly.len() / 2]),
             };

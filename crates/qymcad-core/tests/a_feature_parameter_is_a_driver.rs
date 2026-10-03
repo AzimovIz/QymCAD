@@ -16,11 +16,7 @@ use qymcad_core::model::{Constraint, DimTarget, Id, Param, Project};
 fn part_with_extrude(p: &mut Project, part: &str, h: f64) -> (Id, Id) {
     let comp = p.add_component(part);
     p.set_active_component(Some(comp));
-    let sid = p.add_line_sketch(
-        "Profile",
-        vec![Point2::new(0.0, 0.0), Point2::new(40.0, 0.0), Point2::new(40.0, 20.0), Point2::new(0.0, 20.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("Profile", vec![Point2::new(0.0, 0.0), Point2::new(40.0, 0.0), Point2::new(40.0, 20.0), Point2::new(0.0, 20.0)], true);
     p.add_sketch_node(sid, "Profile");
     let node = p.add_extrude_on(sid, 0, h, qymcad_core::feature::Reach::Forward, 0.0);
     if let Some(n) = p.timeline.iter_mut().find(|n| n.id == node) {
@@ -38,11 +34,7 @@ fn part_with_extrude(p: &mut Project, part: &str, h: f64) -> (Id, Id) {
 fn every_tool_exposes_its_numbers() {
     let edges = qymcad_core::refs::Ref::one(1, Default::default());
     let cases: Vec<(&str, FeatureKind, Vec<&str>)> = vec![
-        (
-            "extrude",
-            FeatureKind::Extrude { sketch: 1, profiles: vec![], height: 25.0, reach: Reach::Forward, down: 0.0, fill: vec![], body: 0 },
-            vec!["height", "down"],
-        ),
+        ("extrude", FeatureKind::Extrude { sketch: 1, profiles: vec![], height: 25.0, reach: Reach::Forward, down: 0.0, fill: vec![], body: 0 }, vec!["height", "down"]),
         ("fillet", FeatureKind::Fillet { src: 1, radius: 3.0, edges: edges.clone(), at_vertices: vec![], body: 0 }, vec!["radius"]),
         ("shell", FeatureKind::Shell { src: 1, thickness: 1.2, faces: edges.clone(), side: ShellSide::Inward, body: 0 }, vec!["thickness"]),
         ("draft", FeatureKind::Draft { src: 1, faces: edges.clone(), neutral: edges.clone(), angle: 4.0, flip: false, body: 0 }, vec!["angle"]),

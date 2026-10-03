@@ -94,11 +94,7 @@ fn every_boolean_object_is_configured() {
             }
         }
     }
-    assert!(
-        caught.is_empty(),
-        "a boolean is built without going through `qym_configure` or `qym_boolean`, so it runs on one core:\n{}",
-        caught.join("\n")
-    );
+    assert!(caught.is_empty(), "a boolean is built without going through `qym_configure` or `qym_boolean`, so it runs on one core:\n{}", caught.join("\n"));
 }
 
 /// AND THE FLAG IS SET IN ONE PLACE ONLY: scattered `SetRunParallel` calls are how the eight booleans came to

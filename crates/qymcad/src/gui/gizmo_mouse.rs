@@ -15,11 +15,7 @@ mod tests {
     const SCREEN: egui::Vec2 = egui::vec2(900.0, 700.0);
 
     fn frame(events: Vec<egui::Event>) -> egui::RawInput {
-        egui::RawInput {
-            screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), SCREEN)),
-            events,
-            ..Default::default()
-        }
+        egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), SCREEN)), events, ..Default::default() }
     }
 
     fn press(at: egui::Pos2, down: bool) -> egui::Event {
@@ -31,9 +27,9 @@ mod tests {
         let mut app = App::default();
         let comp = super::super::comp_array_flow::tests::assembly_with_part(&mut app);
         app.viewing.mode_3d = true; // the gizmo and the orbit live in the THREE-DIMENSIONAL canvas; by default the window opens in 2D
-        // THE WORKBENCH IS DERIVED FROM THE CONTEXT, but it is the application frame that does it,
-        // not the canvas. The component gizmo is only given in the Assembly — without this line it
-        // will not be there however carefully one aims.
+                                    // THE WORKBENCH IS DERIVED FROM THE CONTEXT, but it is the application frame that does it,
+                                    // not the canvas. The component gizmo is only given in the Assembly — without this line it
+                                    // will not be there however carefully one aims.
         app.sync_workbench();
         let ci = app.project.components.iter().position(|c| c.id == comp).expect("the component in the list");
         app.chosen.sel = super::super::Sel::Component(ci);
@@ -80,20 +76,13 @@ mod tests {
             let _ = ctx.run_ui(frame(vec![egui::Event::PointerMoved(p)]), |c| app.viewport(c));
             grabbed = grabbed.or(app.dragged.comp_giz.axis);
         }
-        assert_eq!(
-            grabbed,
-            Some(0),
-            "the mouse was led along the X arrow and the gizmo did not grab it; without that a drag turns into a camera rotation"
-        );
+        assert_eq!(grabbed, Some(0), "the mouse was led along the X arrow and the gizmo did not grab it; without that a drag turns into a camera rotation");
         let _ = ctx.run_ui(frame(vec![press(to, false)]), |c| app.viewport(c));
 
         let after = app.project.component_transform(comp);
         let moved = [after[3] - before[3], after[7] - before[7], after[11] - before[11]];
         assert!(moved[0].abs() > 1e-6, "the part did not follow the mouse: shift {moved:?}");
-        assert!(
-            moved[1].abs() < 1e-6 && moved[2].abs() < 1e-6,
-            "the drag went along the X axis and the part went sideways: shift {moved:?} — a drag must keep to the grabbed axis"
-        );
+        assert!(moved[1].abs() < 1e-6 && moved[2].abs() < 1e-6, "the drag went along the X axis and the part went sideways: shift {moved:?} — a drag must keep to the grabbed axis");
         assert!(app.dragged.comp_giz.axis.is_none() && app.dragged.comp_giz.drag.is_none(), "after the release the grab must be let go, otherwise the next click will drag the part");
     }
 

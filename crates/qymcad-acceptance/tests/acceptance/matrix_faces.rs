@@ -213,8 +213,22 @@ fn draft_cases() -> Vec<Case> {
     let wedge = |h: f64, along: f64, deg: f64| h * h * deg.to_radians().tan() / 2.0 * along;
     let mut out = Vec::new();
     for deg in [10.0, 3.0, 30.0] {
-        out.push(about_top(case(&BLOCK, &[FRONT, TOP], deg, &[], Expect::Magnitude { change: wedge(10.0, 40.0, deg), tol: tol(wedge(10.0, 40.0, deg)), added: Some(Added::default()) }, "the front of the block, about its top edge")));
-        out.push(about_top(case(&BLOCK, &[RIGHT, TOP], deg, &[], Expect::Magnitude { change: wedge(10.0, 30.0, deg), tol: tol(wedge(10.0, 30.0, deg)), added: Some(Added::default()) }, "the right of the block, about its top edge")));
+        out.push(about_top(case(
+            &BLOCK,
+            &[FRONT, TOP],
+            deg,
+            &[],
+            Expect::Magnitude { change: wedge(10.0, 40.0, deg), tol: tol(wedge(10.0, 40.0, deg)), added: Some(Added::default()) },
+            "the front of the block, about its top edge",
+        )));
+        out.push(about_top(case(
+            &BLOCK,
+            &[RIGHT, TOP],
+            deg,
+            &[],
+            Expect::Magnitude { change: wedge(10.0, 30.0, deg), tol: tol(wedge(10.0, 30.0, deg)), added: Some(Added::default()) },
+            "the right of the block, about its top edge",
+        )));
     }
     out.push(about_top(case(&BLOCK, &[FRONT, TOP], 0.0, &[], Expect::Refused, "the front of the block, by nothing")));
     out.push(about_top(case(&BLOCK, &[FRONT, TOP], 90.0, &[], Expect::Refused, "the front of the block, by a right angle")));
@@ -268,4 +282,9 @@ face_matrix!(thickened_faces_across_bodies, "THICKEN the top and the front of a 
 face_matrix!(split_faces_across_bodies, "SPLIT FACES across a block and a cylinder; a plane that misses, or lies in the face, refused.", SPLIT, split_cases);
 face_matrix!(removed_faces_across_features, "REMOVE FACES of a rounding, a chamfer, a hole, a boss and a notch; a face nothing can heal refused.", REMOVE, remove_cases);
 face_matrix!(drafts_across_faces, "DRAFT the front and the right of a block about their top edges at 3, 10 and 30 degrees; nothing and a right angle refused.", DRAFT, draft_cases);
-face_matrix!(threads_outside_and_inside, "THREAD: M20 on a cylinder, M10 in a hole drilled for it, whole and part of the length; another size, no length, below zero and a flat face refused.", THREAD, thread_cases);
+face_matrix!(
+    threads_outside_and_inside,
+    "THREAD: M20 on a cylinder, M10 in a hole drilled for it, whole and part of the length; another size, no length, below zero and a flat face refused.",
+    THREAD,
+    thread_cases
+);

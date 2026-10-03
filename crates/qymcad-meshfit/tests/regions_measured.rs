@@ -88,24 +88,30 @@ fn regions_of_a_filleted_bar_against_its_faces() {
             if by_face.len() > 1 || region.tris.len() < 2 {
                 // how far the corners of the triangles of the other faces lie from this region's surface
                 let main = by_face.iter().max_by_key(|(_, n)| **n).map(|(f, _)| *f).unwrap_or(u32::MAX);
-                let off = region.tris.iter().filter(|&&t| face_of[p.origin[t as usize] as usize] != main).flat_map(|&t| p.mesh.tris[t as usize]).map(|i| {
-                    let v = p.mesh.verts[i as usize];
-                    let v = [v.x, v.y, v.z];
-                    let d = |a: [f64; 3], b: [f64; 3]| [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-                    let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-                    match &region.surface {
-                        Some(qymcad_meshfit::Surface::Plane { point, normal }) => dot(d(v, *point), *normal).abs(),
-                        Some(qymcad_meshfit::Surface::Cylinder { point, axis, radius }) => {
-                            let w = d(v, *point);
-                            let along = dot(w, *axis);
-                            let r = d(w, [axis[0] * along, axis[1] * along, axis[2] * along]);
-                            (dot(r, r).sqrt() - radius).abs()
+                let off = region
+                    .tris
+                    .iter()
+                    .filter(|&&t| face_of[p.origin[t as usize] as usize] != main)
+                    .flat_map(|&t| p.mesh.tris[t as usize])
+                    .map(|i| {
+                        let v = p.mesh.verts[i as usize];
+                        let v = [v.x, v.y, v.z];
+                        let d = |a: [f64; 3], b: [f64; 3]| [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+                        let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+                        match &region.surface {
+                            Some(qymcad_meshfit::Surface::Plane { point, normal }) => dot(d(v, *point), *normal).abs(),
+                            Some(qymcad_meshfit::Surface::Cylinder { point, axis, radius }) => {
+                                let w = d(v, *point);
+                                let along = dot(w, *axis);
+                                let r = d(w, [axis[0] * along, axis[1] * along, axis[2] * along]);
+                                (dot(r, r).sqrt() - radius).abs()
+                            }
+                            Some(qymcad_meshfit::Surface::Sphere { center, radius }) => (dot(d(v, *center), d(v, *center)).sqrt() - radius).abs(),
+                            Some(other) => other.distance(v),
+                            None => 0.0,
                         }
-                        Some(qymcad_meshfit::Surface::Sphere { center, radius }) => (dot(d(v, *center), d(v, *center)).sqrt() - radius).abs(),
-                        Some(other) => other.distance(v),
-                        None => 0.0,
-                    }
-                }).fold(0.0f64, f64::max);
+                    })
+                    .fold(0.0f64, f64::max);
                 println!("  region {r:2}: {kind}, {} tris, faces {by_face:?}, other faces' corners off it up to {off:.6}", region.tris.len());
             }
         }

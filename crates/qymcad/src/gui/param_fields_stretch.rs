@@ -16,14 +16,8 @@ mod tests {
     fn wider_window_gives_wider_fields() {
         let (narrow_name, narrow_expr) = param_field_widths(360.0);
         let (wide_name, wide_expr) = param_field_widths(900.0);
-        assert!(
-            wide_name > narrow_name + 100.0,
-            "the name did not stretch with the window: {narrow_name} -> {wide_name}"
-        );
-        assert!(
-            wide_expr > narrow_expr + 100.0,
-            "the formula did not stretch with the window: {narrow_expr} -> {wide_expr}"
-        );
+        assert!(wide_name > narrow_name + 100.0, "the name did not stretch with the window: {narrow_name} -> {wide_name}");
+        assert!(wide_expr > narrow_expr + 100.0, "the formula did not stretch with the window: {narrow_expr} -> {wide_expr}");
     }
 
     /// A NARROW WINDOW DOES NOT COLLAPSE THE FIELDS TO NOTHING. The old fixed numbers became the lower
@@ -53,11 +47,7 @@ mod tests {
     fn the_value_column_and_the_button_still_fit() {
         for avail in [600.0, 900.0, 1400.0] {
             let (name, expr) = param_field_widths(avail);
-            assert!(
-                name + expr <= avail * 0.75,
-                "the fields ate {} of {avail} — nothing is left for the value and the button",
-                name + expr
-            );
+            assert!(name + expr <= avail * 0.75, "the fields ate {} of {avail} — nothing is left for the value and the button", name + expr);
         }
     }
 
@@ -81,28 +71,13 @@ mod tests {
         let mut app = App::default();
         app.project.new_document();
         for i in 0..count {
-            app.project.parameters.push(qymcad_core::model::Param {
-                name: format!("H_Okno_Verh_{i}"),
-                expr: "22".into(),
-                value: 22.0,
-            });
+            app.project.parameters.push(qymcad_core::model::Param { name: format!("H_Okno_Verh_{i}"), expr: "22".into(), value: 22.0 });
         }
         for i in 0..drivers {
-            let sid = app.project.add_line_sketch(
-                format!("Profile {i}"),
-                vec![Point2::new(0.0, 0.0), Point2::new(40.0, 0.0), Point2::new(40.0, 20.0), Point2::new(0.0, 20.0)],
-                true,
-            );
+            let sid = app.project.add_line_sketch(format!("Profile {i}"), vec![Point2::new(0.0, 0.0), Point2::new(40.0, 0.0), Point2::new(40.0, 20.0), Point2::new(0.0, 20.0)], true);
             let si = app.project.sketch_index(sid).unwrap();
             let pts: Vec<Id> = app.project.sketches[si].points.iter().take(2).map(|q| q.id).collect();
-            app.project.sketches[si].constraints.push(Constraint::Distance {
-                a: pts[0],
-                b: pts[1],
-                d: 40.0,
-                off: 0.0,
-                expr: String::new(),
-                driven: false,
-                axis: 0, at: None });
+            app.project.sketches[si].constraints.push(Constraint::Distance { a: pts[0], b: pts[1], d: 40.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
             assert!(app.project.add_named_dim(format!("dlina_proema_{i}"), sid, pts));
         }
         let ctx = egui::Context::default();
@@ -137,10 +112,7 @@ mod tests {
         let narrow = rows_out(360.0, 3).name_w;
         let wide = rows_out(1100.0, 3).name_w;
         assert!(narrow > 0.0 && wide > 0.0, "the field was not drawn: {narrow} / {wide}");
-        assert!(
-            wide > narrow + 150.0,
-            "the name field did not stretch with the window: {narrow:.0} -> {wide:.0} points IN THE FRAME"
-        );
+        assert!(wide > narrow + 150.0, "the name field did not stretch with the window: {narrow:.0} -> {wide:.0} points IN THE FRAME");
     }
 
     /// A HUNDRED AND FIFTY ROWS OF VARIABLES **AND DRIVERS** SCROLL TOO.
@@ -156,11 +128,7 @@ mod tests {
         let few = rows_out_with(600.0, 3, 2);
         let many = rows_out_with(600.0, 75, 75);
         assert!(many.content_h > few.content_h * 5.0, "the contents did not grow with the list: {:.0} -> {:.0}", few.content_h, many.content_h);
-        assert!(
-            many.height <= super::super::PARAM_ROWS_MAX_H + 8.0,
-            "150 rows (variables and drivers) stretched the window to {:.0} points — there is no scrolling",
-            many.height
-        );
+        assert!(many.height <= super::super::PARAM_ROWS_MAX_H + 8.0, "150 rows (variables and drivers) stretched the window to {:.0} points — there is no scrolling", many.height);
         assert!(many.content_h > many.height + 100.0, "the contents ({:.0}) did not exceed the box ({:.0}) — there is nothing to scroll", many.content_h, many.height);
         // AND THE FIELDS DID NOT COLLAPSE: a long name can still be typed.
         assert!(many.name_w > 120.0, "the name field collapsed to {:.0} points — a long name cannot be typed", many.name_w);
@@ -171,24 +139,14 @@ mod tests {
         let few = rows_out(600.0, 3);
         let many = rows_out(600.0, 150);
         // THE CONTENTS grow, so the list really is long and the measurement tells the cases apart.
-        assert!(
-            many.content_h > few.content_h * 10.0,
-            "the contents did not grow with the list: {:.0} -> {:.0}",
-            few.content_h,
-            many.content_h
-        );
+        assert!(many.content_h > few.content_h * 10.0, "the contents did not grow with the list: {:.0} -> {:.0}", few.content_h, many.content_h);
         // AND THE BOX does not grow, so it is scrolled rather than shown whole.
         assert!(
             many.height <= super::super::PARAM_ROWS_MAX_H + 8.0,
             "150 parameters stretched the window to {:.0} points — there is no scrolling and the add button will slide off the screen",
             many.height
         );
-        assert!(
-            many.content_h > many.height + 100.0,
-            "the contents ({:.0}) did not exceed the box ({:.0}) — there is nothing to scroll and the check is empty",
-            many.content_h,
-            many.height
-        );
+        assert!(many.content_h > many.height + 100.0, "the contents ({:.0}) did not exceed the box ({:.0}) — there is nothing to scroll and the check is empty", many.content_h, many.height);
     }
 
     /// AND THE WINDOW REALLY DRAWS THESE ROWS rather than a copy of its own beside them.
@@ -202,5 +160,4 @@ mod tests {
         assert!(!body.contains("desired_width(90.0)"), "a fixed width for the name is left in the parameters window");
         assert!(!body.contains("desired_width(120.0)"), "a fixed width for the formula is left in the parameters window");
     }
-
 }

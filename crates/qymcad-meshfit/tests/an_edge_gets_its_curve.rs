@@ -71,7 +71,12 @@ fn a_rounded_bar_edge_is_a_tangent_line_or_a_circle() {
         // a rounding touches a corner's sphere along its great circle: the circle's centre is the sphere's
         let centres: Vec<[f64; 3]> = found.iter().filter_map(|c| if let Curve::Circle { center, .. } = *c { Some(center) } else { None }).collect();
         for c in &centres {
-            let off = [2.0, 38.0].iter().flat_map(|&x| [2.0, 18.0].map(|y| (x, y))).flat_map(|(x, y)| [2.0, 8.0].map(|z| [x, y, z])).map(|s| ((c[0] - s[0]).powi(2) + (c[1] - s[1]).powi(2) + (c[2] - s[2]).powi(2)).sqrt()).fold(f64::MAX, f64::min);
+            let off = [2.0, 38.0]
+                .iter()
+                .flat_map(|&x| [2.0, 18.0].map(|y| (x, y)))
+                .flat_map(|(x, y)| [2.0, 8.0].map(|z| [x, y, z]))
+                .map(|s| ((c[0] - s[0]).powi(2) + (c[1] - s[1]).powi(2) + (c[2] - s[2]).powi(2)).sqrt())
+                .fold(f64::MAX, f64::min);
             assert!(off < 0.01, "a circle about {c:?} stands {off} mm off every corner sphere's centre at {deflection}");
         }
         for e in lines {

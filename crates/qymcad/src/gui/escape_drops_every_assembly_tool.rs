@@ -74,10 +74,6 @@ mod tests {
                 stuck.push(format!("\"{name}\": left over after Esc — {}", left.join(", ")));
             }
         }
-        assert!(
-            stuck.is_empty(),
-            "a tool is not released by Esc, and the next click will go somewhere else:\n{}",
-            stuck.join("\n")
-        );
+        assert!(stuck.is_empty(), "a tool is not released by Esc, and the next click will go somewhere else:\n{}", stuck.join("\n"));
     }
 }

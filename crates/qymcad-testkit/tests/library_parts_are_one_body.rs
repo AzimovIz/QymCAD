@@ -76,7 +76,14 @@ fn translate_the_library_parts() {
         }
         let (rep, _) = qymcad_testkit::regenerate(&mut p);
         // the fillet named its edges in the old naming: they are taken again by where they lie
-        let fillets: Vec<(Id, Id)> = p.timeline.iter().filter_map(|n| match n.kind { FeatureKind::Fillet { src, body, .. } => Some((src, body)), _ => None }).collect();
+        let fillets: Vec<(Id, Id)> = p
+            .timeline
+            .iter()
+            .filter_map(|n| match n.kind {
+                FeatureKind::Fillet { src, body, .. } => Some((src, body)),
+                _ => None,
+            })
+            .collect();
         for (src, body) in fillets {
             let edges = &p.regen_edges[&src];
             let top = edges.iter().map(|e| e.a[2].max(e.b[2])).fold(f64::MIN, f64::max);

@@ -132,10 +132,7 @@ mod tests {
         // backwards by LINES rather than by bytes: a slice in the middle of a multibyte letter fails
         // the test with a panic
         let before: String = panels[..at].lines().rev().take(8).collect::<Vec<_>>().join("\n");
-        assert!(
-            before.contains("Workbench::Assembly"),
-            "the contours switch must stand under the \"this is an assembly\" condition — it must not be in a Part"
-        );
+        assert!(before.contains("Workbench::Assembly"), "the contours switch must stand under the \"this is an assembly\" condition — it must not be in a Part");
     }
 
     /// THE GEOMETRY IS VISIBLE IN BOTH SCHEMES: the colour of a line does not match the canvas

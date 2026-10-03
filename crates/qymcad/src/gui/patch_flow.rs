@@ -47,11 +47,7 @@ mod tests {
             }
         }
         let on_border = |q: [f64; 3]| (q[0] - x0).abs() < 1e-6 || (q[0] - x1).abs() < 1e-6 || (q[1] - y0).abs() < 1e-6 || (q[1] - y1).abs() < 1e-6;
-        app.project.regen_edges[&body]
-            .iter()
-            .filter(|e| (e.a[2] - zmax).abs() < 1e-6 && (e.b[2] - zmax).abs() < 1e-6 && on_border(e.a) && on_border(e.b))
-            .map(|e| e.id)
-            .collect()
+        app.project.regen_edges[&body].iter().filter(|e| (e.a[2] - zmax).abs() < 1e-6 && (e.b[2] - zmax).abs() < 1e-6 && on_border(e.a) && on_border(e.b)).map(|e| e.id).collect()
     }
 
     /// The button exists.

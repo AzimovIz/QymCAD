@@ -139,7 +139,9 @@ pub(crate) mod tests {
     ///
     /// Whole words only: `я` matches the pronoun, not the middle of `имя`.
     fn speaks_to_a_person(s: &str) -> bool {
-        const WORDS: &[&str] = &["юзер", "юзера", "юзеру", "я", "мне", "меня", "мной", "мой", "моя", "моё", "мои", "моего", "мы", "нам", "нас", "наш", "наша", "наше", "наши", "тебе", "тебя", "твой", "вчера", "сегодня"];
+        const WORDS: &[&str] = &[
+            "юзер", "юзера", "юзеру", "я", "мне", "меня", "мной", "мой", "моя", "моё", "мои", "моего", "мы", "нам", "нас", "наш", "наша", "наше", "наши", "тебе", "тебя", "твой", "вчера", "сегодня",
+        ];
         let low = s.to_lowercase();
         let words: Vec<&str> = low.split(|c: char| !c.is_alphabetic()).collect();
         if WORDS.iter().any(|w| words.contains(w)) {
@@ -212,14 +214,8 @@ pub(crate) mod tests {
             "comments name third-party products: {prod} lines, ceiling {PRODUCT_CEILING}.\n\
              Naming a competitor buys nothing and risks a claim — state the engineering rule instead.\n{report}"
         );
-        assert!(
-            voice == VOICE_CEILING,
-            "comments talk to a person instead of describing the code: {voice} lines, ceiling {VOICE_CEILING}.\n{report}"
-        );
-        assert!(
-            cyr == CYRILLIC_CEILING,
-            "comments still in Russian: {cyr} lines, ceiling {CYRILLIC_CEILING}.\n{report}"
-        );
+        assert!(voice == VOICE_CEILING, "comments talk to a person instead of describing the code: {voice} lines, ceiling {VOICE_CEILING}.\n{report}");
+        assert!(cyr == CYRILLIC_CEILING, "comments still in Russian: {cyr} lines, ceiling {CYRILLIC_CEILING}.\n{report}");
         assert!(lit <= LITERAL_CEILING, "assertion and panic texts still in Russian: {lit} literals, ceiling {LITERAL_CEILING}");
 
         // Slack is as bad as growth: under it a whole rewritten file hides, and the next regression
@@ -290,7 +286,12 @@ pub(crate) mod tests {
     /// THE SIGNAL CATCHES THE SHAPES IT IS FOR, and lets the help and the readme pass.
     #[test]
     fn the_signal_catches_a_document_of_work() {
-        for line in ["// see docs/PARALLEL_REBUILD_PLAN.md, step three", concat!("/// written down in docs/", "archive/UI_SWEEP.md"), "//! (C4 of `IMPORT_STRUCTURE_PLAN.md`)", "# See docs/MSVC_MIGRATION.md."] {
+        for line in [
+            "// see docs/PARALLEL_REBUILD_PLAN.md, step three",
+            concat!("/// written down in docs/", "archive/UI_SWEEP.md"),
+            "//! (C4 of `IMPORT_STRUCTURE_PLAN.md`)",
+            "# See docs/MSVC_MIGRATION.md.",
+        ] {
             assert!(names_a_plan(line), "not caught: {line}");
         }
         for line in ["let page = \"docs/help/en/sketch/01-line.md\";", "// the build is described in README.md", "// a rebuild plan of 0 nodes"] {

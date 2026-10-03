@@ -54,10 +54,7 @@ mod tests {
         }
 
         crate::gui::io_jobs::ensure_brep(&mut app.rebuild_ctx()); // the second must not start
-        assert!(
-            !app.regen.wanted,
-            "the B-rep preparation went round a second time having changed nothing on the first — in a live window that is the endless flashing of the rebuild window"
-        );
+        assert!(!app.regen.wanted, "the B-rep preparation went round a second time having changed nothing on the first — in a live window that is the endless flashing of the rebuild window");
     }
 
     /// A REBUILD RESULT DOES NOT WIPE THE LIVE GEOMETRY THAT APPEARED WHILE IT RAN.
@@ -96,10 +93,7 @@ mod tests {
         // AND HERE IT COMES BACK — with a cache of its own (an empty one).
         app.finish_regen_checked(stamp, rebuilt, Vec::new(), Vec::new(), Vec::new(), false);
 
-        assert!(
-            app.live.shapes.contains_key(&body),
-            "the rebuild wiped the live geometry raised while it ran — hence the endless circle of zero shapes, rebuild, zero shapes"
-        );
+        assert!(app.live.shapes.contains_key(&body), "the rebuild wiped the live geometry raised while it ran — hence the endless circle of zero shapes, rebuild, zero shapes");
     }
 
     /// WHILE THE CACHE IS AWAY IN THE WORKER, THE PREPARATION PASSES NO JUDGEMENT ON IT.
@@ -158,9 +152,6 @@ mod tests {
             app.regen.bg.len() > bg_before || app.regen.busy.is_some(),
             "rebuild-everything threw away the live B-rep and did not ask for the imports back: their geometry will not come alive until a restart"
         );
-        assert!(
-            app.regen.import_asked,
-            "rebuild-everything did not call the restoration of the imports — the timeline cannot raise them, their geometry is in the embedded STEP"
-        );
+        assert!(app.regen.import_asked, "rebuild-everything did not call the restoration of the imports — the timeline cannot raise them, their geometry is in the embedded STEP");
     }
 }

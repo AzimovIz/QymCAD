@@ -41,10 +41,7 @@ mod tests {
             let md = article_in(&l, "general/07-settings");
             for sec in SettingsSection::all() {
                 let label = crate::i18n::tr_in(&l, sec.key()).unwrap_or_else(|| panic!("there is no caption {} in language {l}", sec.key()));
-                assert!(
-                    md.contains(&label),
-                    "the settings section \"{label}\" is in the window, and the help article ({l}) says not a word about it — the list will be read as complete"
-                );
+                assert!(md.contains(&label), "the settings section \"{label}\" is in the window, and the help article ({l}) says not a word about it — the list will be read as complete");
             }
         }
     }
@@ -89,10 +86,7 @@ mod tests {
         for l in langs() {
             let note = crate::i18n::tr_in(&l, "hotkeys-alt-note").unwrap_or_else(|| panic!("there is no remark about Alt in language {l}"));
             assert!(note.contains("Alt"), "the remark ({l}) must name the key itself: {note}");
-            assert!(
-                include_str!("hotkeys.rs").contains("hotkeys-alt-note"),
-                "the remark is in the language catalogue, and the reference window does not print it — the rule stayed a secret"
-            );
+            assert!(include_str!("hotkeys.rs").contains("hotkeys-alt-note"), "the remark is in the language catalogue, and the reference window does not print it — the rule stayed a secret");
             let md = article_in(&l, "general/10-hotkeys");
             assert!(md.contains("Alt+U"), "the article ({l}) must show the rule BY EXAMPLE: Alt+U instead of U");
         }
@@ -115,8 +109,6 @@ mod tests {
             }
         }
     }
-
-
 
     /// THE "GENERAL" SECTION COVERS EVERYTHING CROSS-CUTTING that was promised. The list is short and
     /// deliberately nailed down: this is not "some number of articles" but by name the topics without

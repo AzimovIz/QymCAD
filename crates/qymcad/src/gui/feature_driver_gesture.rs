@@ -16,11 +16,7 @@ mod tests {
     fn part_with_extrude(app: &mut App) -> (usize, Id) {
         let comp = app.project.add_part("Housing");
         app.enter_component(comp);
-        let sid = app.project.add_line_sketch(
-            "Profile",
-            vec![Point2::new(0.0, 0.0), Point2::new(40.0, 0.0), Point2::new(40.0, 20.0), Point2::new(0.0, 20.0)],
-            true,
-        );
+        let sid = app.project.add_line_sketch("Profile", vec![Point2::new(0.0, 0.0), Point2::new(40.0, 0.0), Point2::new(40.0, 20.0), Point2::new(0.0, 20.0)], true);
         app.project.add_sketch_node(sid, "Profile");
         let node = app.project.add_extrude_on(sid, 0, 25.0, qymcad_core::feature::Reach::Forward, 0.0);
         let ti = app.project.timeline.iter().position(|n| n.id == node).expect("the node in the timeline");
@@ -180,12 +176,8 @@ mod tests {
 
         let mut p = Props::new();
         p.settle(&mut app, ti);
-        let at = p
-            .ctx
-            .read_response(egui::Id::new(("featdim", node, "height")))
-            .unwrap_or_else(|| panic!("the feature properties have no expression field for the height: {:?}", p.drawn))
-            .rect
-            .center();
+        let at =
+            p.ctx.read_response(egui::Id::new(("featdim", node, "height"))).unwrap_or_else(|| panic!("the feature properties have no expression field for the height: {:?}", p.drawn)).rect.center();
         p.events.push(egui::Event::PointerMoved(at));
         p.frame(&mut app, ti);
         p.events.push(egui::Event::PointerMoved(at));

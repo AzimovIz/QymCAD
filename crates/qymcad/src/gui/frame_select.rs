@@ -56,7 +56,9 @@ pub(crate) fn frame(pn: &Painting, ctx: &egui::Context, resp: &Response, painter
     // THE LAYOUT'S OWN GESTURE OF THE FRAME, its modifiers exactly: a chord or another modified drag belongs to the
     // layout's movements
     let Some((gesture, on_the_model)) = pn.set.mouse_nav.frames() else { return None };
-    let held = ctx.input(|i| i.modifiers.shift == gesture.shift && (i.modifiers.ctrl || i.modifiers.command) == gesture.ctrl && i.modifiers.alt == gesture.alt && !i.pointer.middle_down() && !i.pointer.secondary_down());
+    let held = ctx.input(|i| {
+        i.modifiers.shift == gesture.shift && (i.modifiers.ctrl || i.modifiers.command) == gesture.ctrl && i.modifiers.alt == gesture.alt && !i.pointer.middle_down() && !i.pointer.secondary_down()
+    });
     if resp.drag_started_by(egui::PointerButton::Primary) && held {
         if let Some(pos) = ctx.input(|i| i.pointer.press_origin()).filter(|p| may_start(pn, rect, *p, on_the_model)) {
             ctx.data_mut(|d| d.insert_temp(memory(), pos));

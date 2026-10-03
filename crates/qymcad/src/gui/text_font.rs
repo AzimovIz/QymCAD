@@ -135,7 +135,6 @@ mod tests {
         assert!(!app.status.trim().is_empty(), "the edit was refused and nothing was said about it");
     }
 
-
     /// THE LIST OF FONTS IS A LIST: it opens, it narrows to what is typed, and a click on a row takes that
     /// face - no file paths, no knowing where fonts live.
     #[test]
@@ -153,7 +152,6 @@ mod tests {
         assert_eq!(app.tool_prefs.font.family, family, "the face taken is not the one the row showed");
         assert!(!app.font_cache.picker.open, "the window stayed open after a face was chosen");
     }
-
 
     /// THE INTERFACE SAYS WHICH FONT IT WILL WRITE WITH, in both places that ask the question.
     ///
@@ -178,7 +176,6 @@ mod tests {
         assert!(state.contains("font_label(&of_label"), "the editor of a label names its font some other way");
     }
 
-
     /// A FONT WITHOUT THE LETTERS SAYS SO WHEN THE LABEL IS PLACED, and not "the text is empty".
     ///
     /// The list marks a face that cannot write its own name, and that is not the same question: a font with
@@ -194,13 +191,8 @@ mod tests {
 
         assert!(app.project.sketches[si].texts.is_empty(), "a label with nothing in it was placed all the same");
         let said = app.status.clone();
-        assert_eq!(
-            said,
-            qymcad_i18n::tr1("sk-text-no-letters", "name", "Liberation Sans"),
-            "the program blamed the string instead of naming the font that cannot write it: {said:?}"
-        );
+        assert_eq!(said, qymcad_i18n::tr1("sk-text-no-letters", "name", "Liberation Sans"), "the program blamed the string instead of naming the font that cannot write it: {said:?}");
     }
-
 
     /// A NOTE ASKS ITS LETTERS OF THE FONT IT IS DRAWN IN: the interface's. A letter no font of the window has (a
     /// Tangut sign) is not taken into the note, and the status line says why. Reported behaviour: the letters of a
@@ -250,7 +242,6 @@ mod tests {
         assert_ne!(now.glyphs, was_glyphs, "the outlines are the same as before: the label was not re-baked in the new face");
     }
 
-
     /// EDITING A LABEL MEANS THE TEXT TOOL IS IN HAND, and the bar shows what is being edited.
     ///
     /// Reported behaviour, with a screenshot: "while editing, the tool stays Select". The bar is where the
@@ -277,7 +268,6 @@ mod tests {
         assert!((app.tool_prefs.text_h - 20.0).abs() < 1e-9, "the bar shows some other height: {}", app.tool_prefs.text_h);
         assert_eq!(app.tool_prefs.font.family, "Liberation Sans", "the bar shows some other font: {:?}", app.tool_prefs.font);
     }
-
 
     /// A DOUBLE CLICK ON A LABEL OPENS IT WITH THE TEXT TOOL STILL IN HAND, and puts no other label on it.
     ///
@@ -324,5 +314,4 @@ mod tests {
         Hand::canvas(&mut app).click2d(60.0, -40.0);
         assert_eq!(app.project.sketches[si].texts.len(), 1, "a click after the edit placed another label");
     }
-
 }

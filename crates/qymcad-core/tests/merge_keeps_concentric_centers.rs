@@ -36,21 +36,13 @@ fn merge_close_points_keeps_concentric_circle_centers_distinct() {
 
     let centers_before = circle_centers(&p, si);
     assert_eq!(centers_before.len(), 3, "three circles give three entities");
-    assert_eq!(
-        centers_before.iter().collect::<std::collections::HashSet<_>>().len(),
-        3,
-        "each circle owns its centre; `add_circle_entity` splits concentric ones"
-    );
+    assert_eq!(centers_before.iter().collect::<std::collections::HashSet<_>>().len(), 3, "each circle owns its centre; `add_circle_entity` splits concentric ones");
 
     // merging coincident points: what runs after a trim or a cut and used to break the sketch
     p.merge_close_points(si, 1e-3);
 
     let centers_after = circle_centers(&p, si);
-    assert_eq!(
-        centers_after.iter().collect::<std::collections::HashSet<_>>().len(),
-        3,
-        "after the merge the centres stayed distinct and the radii did not collapse"
-    );
+    assert_eq!(centers_after.iter().collect::<std::collections::HashSet<_>>().len(), 3, "after the merge the centres stayed distinct and the radii did not collapse");
 
     // the radii survived, all three distinct
     let mut radii: Vec<f64> = p.sketches[si]

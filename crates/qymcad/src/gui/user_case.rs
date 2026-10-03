@@ -21,13 +21,8 @@ mod tests {
         // chamfer is larger than the wall", "the fillet has nothing to round". Such a node is legitimate
         // during work - it is seen and reworked. A nameless `OpFailed` is another matter: that is the program
         // staying silent, and it remains a finding at every step.
-        let unexplained: std::collections::HashMap<u64, String> = app
-            .project
-            .regen_errors
-            .iter()
-            .filter(|(_, e)| matches!(e, qymcad_core::errors::CoreError::OpFailed(_)))
-            .map(|(id, e)| (*id, format!("{e:?}")))
-            .collect();
+        let unexplained: std::collections::HashMap<u64, String> =
+            app.project.regen_errors.iter().filter(|(_, e)| matches!(e, qymcad_core::errors::CoreError::OpFailed(_))).map(|(id, e)| (*id, format!("{e:?}"))).collect();
         if !unexplained.is_empty() {
             problems.push(format!("[{step}] red nodes WITH NO EXPLANATION: {unexplained:?}"));
         }
@@ -39,13 +34,7 @@ mod tests {
                 continue;
             }
             let nm = crate::i18n::name(&c.name);
-            let inside: Vec<String> = app
-                .project
-                .components
-                .iter()
-                .filter(|x| x.parent == Some(c.id))
-                .map(|x| crate::i18n::name(&x.name))
-                .collect();
+            let inside: Vec<String> = app.project.components.iter().filter(|x| x.parent == Some(c.id)).map(|x| crate::i18n::name(&x.name)).collect();
             if !inside.is_empty() {
                 problems.push(format!("[{step}] part \"{nm}\" contains other components: {}", inside.join(", ")));
             }
@@ -80,10 +69,7 @@ mod tests {
                     let built = app.project.mesh_index(b).is_some();
                     let explained = app.project.regen_errors.contains_key(&n.id);
                     if !built && !explained {
-                        problems.push(format!(
-                            "[{step}] node {} \"{}\" did not build body {b} and NAMED NO REASON - the row is in the tree, the screen is empty",
-                            n.id, n.name
-                        ));
+                        problems.push(format!("[{step}] node {} \"{}\" did not build body {b} and NAMED NO REASON - the row is in the tree, the screen is empty", n.id, n.name));
                     }
                 }
             }
@@ -93,10 +79,7 @@ mod tests {
             // keep counting it.
             let parent_alive = n.parent.is_some_and(|p| app.project.components.iter().any(|c| c.id == p));
             if !parent_alive {
-                problems.push(format!(
-                    "[{step}] node {} \"{}\" sits in the timeline with no live part (parent = {:?}) - there is nowhere to show it in the tree",
-                    n.id, n.name, n.parent
-                ));
+                problems.push(format!("[{step}] node {} \"{}\" sits in the timeline with no live part (parent = {:?}) - there is nowhere to show it in the tree", n.id, n.name, n.parent));
             }
         }
         // 1d. THERE MUST BE NO BODIES IN THE ROOT. A body lives in A PART; in the root assembly it has
@@ -105,12 +88,7 @@ mod tests {
             let root = app.project.root;
             // by the body's owner, not the node's parent: a pattern of components stands in the assembly and builds
             // bodies that belong to its copies
-            let orphan: Vec<u64> = app
-                .project
-                .timeline
-                .iter()
-                .flat_map(|n| n.kind.bodies().into_iter().filter(move |b| n.owner_of(*b) == Some(root)))
-                .collect();
+            let orphan: Vec<u64> = app.project.timeline.iter().flat_map(|n| n.kind.bodies().into_iter().filter(move |b| n.owner_of(*b) == Some(root))).collect();
             // BY THE SAME SIGN THE TREE USES. In the root it shows THE MESHES that no timeline node produces
             // - the previous check looked for "bodies with no owner" and did not see those.
             let produced: std::collections::HashSet<u64> = app.project.timeline.iter().flat_map(|n| n.kind.bodies()).collect();
@@ -129,9 +107,7 @@ mod tests {
                 .map(|b| b.id)
                 .collect();
             if !orphan.is_empty() || !ownerless.is_empty() {
-                problems.push(format!(
-                    "[{step}] bodies with no part: in the root {orphan:?}, with no owner {ownerless:?} - a body must live in A PART, otherwise it hangs by itself in the tree"
-                ));
+                problems.push(format!("[{step}] bodies with no part: in the root {orphan:?}, with no owner {ownerless:?} - a body must live in A PART, otherwise it hangs by itself in the tree"));
             }
         }
         // 1e. THE NAMES OF PARTS DO NOT REPEAT. Two parts with one name are indistinguishable in the tree:
@@ -168,13 +144,7 @@ mod tests {
             }
 
             // An abandoned sketch: it belongs to no part, and there is nowhere to show it in the tree.
-            let orphan_sk: Vec<u64> = app
-                .project
-                .sketches
-                .iter()
-                .filter(|sk| app.project.sketch_owner(sk.id).is_none_or(|o| !live.contains(&o)))
-                .map(|sk| sk.id)
-                .collect();
+            let orphan_sk: Vec<u64> = app.project.sketches.iter().filter(|sk| app.project.sketch_owner(sk.id).is_none_or(|o| !live.contains(&o))).map(|sk| sk.id).collect();
             if !orphan_sk.is_empty() {
                 problems.push(format!("[{step}] sketches {orphan_sk:?} belong to no part"));
             }
@@ -210,11 +180,7 @@ mod tests {
             };
             let words = row.split_whitespace().skip(1).collect::<Vec<_>>().join(" ");
             if words.trim().is_empty() {
-                problems.push(format!(
-                    "[{step}] node {} ({}) has no row in the tree",
-                    app.project.timeline[ti].id,
-                    crate::gui::feat_default_name(&app.project.timeline[ti].kind)
-                ));
+                problems.push(format!("[{step}] node {} ({}) has no row in the tree", app.project.timeline[ti].id, crate::gui::feat_default_name(&app.project.timeline[ti].kind)));
             } else if !words.contains(' ') && words.contains('-') && words.chars().all(|c| c.is_ascii_lowercase() || c == '-' || c.is_ascii_digit()) {
                 problems.push(format!("[{step}] node {} shows A KEY \"{words}\"", app.project.timeline[ti].id));
             }
@@ -249,11 +215,8 @@ mod tests {
                 // becomes several, and a cut through the body leaves its pieces bodies of the part the same way;
                 // after them, several bodies in a part are not a fault but work that was done deliberately. Without
                 // this proviso the check would forbid the tools themselves.
-                let was_split = app
-                    .project
-                    .timeline
-                    .iter()
-                    .any(|nd| nd.parent == Some(owner) && (matches!(nd.kind, qymcad_core::feature::FeatureKind::SplitBody { .. }) || nd.kind.cut_pieces().len() > 1));
+                let was_split =
+                    app.project.timeline.iter().any(|nd| nd.parent == Some(owner) && (matches!(nd.kind, qymcad_core::feature::FeatureKind::SplitBody { .. }) || nd.kind.cut_pieces().len() > 1));
                 if !was_split {
                     problems.push(format!("[{step}] part \"{name}\" has {n} visible bodies instead of one: {}", who.join(", ")));
                 }
@@ -313,15 +276,7 @@ mod tests {
         // component: the tool took the body of a neighbouring part and the program honestly refused. Work
         // happens inside the part that was entered, and the recipe must behave the same way.
         let here = app.project.active_ctx();
-        let Some(body) = app
-            .project
-            .timeline
-            .iter()
-            .rev()
-            .filter(|n| n.parent == Some(here))
-            .filter_map(|n| n.kind.body())
-            .find(|b| app.project.bodies.iter().any(|x| x.id == *b && !x.sheet))
-        else {
+        let Some(body) = app.project.timeline.iter().rev().filter(|n| n.parent == Some(here)).filter_map(|n| n.kind.body()).find(|b| app.project.bodies.iter().any(|x| x.id == *b && !x.sheet)) else {
             return false;
         };
         qymcad_ui_state::select_body(&mut app.project, &mut app.chosen.sel, &mut app.viewing.view, body);
@@ -356,16 +311,15 @@ mod tests {
                     fs.iter()
                         .filter(|f| f.normal[0] * dir[0] + f.normal[1] * dir[1] + f.normal[2] * dir[2] > 0.9)
                         .max_by(|a, b| {
-                            let d = |f: &qymcad_core::geom::MeshFace| {
-                                (f.centroid.x - c[0]) * dir[0] + (f.centroid.y - c[1]) * dir[1] + (f.centroid.z - c[2]) * dir[2]
-                            };
+                            let d = |f: &qymcad_core::geom::MeshFace| (f.centroid.x - c[0]) * dir[0] + (f.centroid.y - c[1]) * dir[1] + (f.centroid.z - c[2]) * dir[2];
                             d(a).total_cmp(&d(b)).then(a.area.total_cmp(&b.area))
                         })
                         .cloned()
                 })
                 .map(|f| ([f.centroid.x, f.centroid.y, f.centroid.z], f.id))
         };
-        let edge_vertical = |app: &App| app.project.regen_edges.get(&body).and_then(|es| es.iter().filter(|e| (e.a[2] - e.b[2]).abs() > 1.0).max_by(|x, y| x.mid[0].total_cmp(&y.mid[0])).map(|e| e.mid));
+        let edge_vertical =
+            |app: &App| app.project.regen_edges.get(&body).and_then(|es| es.iter().filter(|e| (e.a[2] - e.b[2]).abs() > 1.0).max_by(|x, y| x.mid[0].total_cmp(&y.mid[0])).map(|e| e.mid));
         // THE OUTER RIM, NOT JUST ANY EDGE AT THE SAME HEIGHT. After a shell the top of the part carries two
         // rims, inner and outer, and "the highest edge" took the inner one just as readily - and a chamfer on
         // it runs into a 2 mm wall. A person clicks the outer one: it is further from the axis of the part.
@@ -386,11 +340,7 @@ mod tests {
                 // THE SIZE FOLLOWS THE STATE OF THE PART, as it does by hand: on a solid body the fillet is
                 // large (and it must be LARGER than the wall to come, or the shell will eat it whole), while on
                 // an already shelled part the wall is thin and the chamfer has to fit into it.
-                let shelled = app
-                    .project
-                    .timeline
-                    .iter()
-                    .any(|n| n.parent == Some(here) && matches!(n.kind, qymcad_core::feature::FeatureKind::Shell { .. }));
+                let shelled = app.project.timeline.iter().any(|n| n.parent == Some(here) && matches!(n.kind, qymcad_core::feature::FeatureKind::Shell { .. }));
                 let size = if shelled { 0.3 } else { 3.0 };
                 let mut hand = Hand::new(app);
                 hand.look_at(c, scale).tool(kind);
@@ -466,8 +416,7 @@ mod tests {
                 // REFUSED, SO ANOTHER FACE IS TRIED. Not every face can be removed: around a wall the
                 // neighbours cannot be stretched, and the core honestly refuses. At that moment a person does
                 // not drop the tool but clicks the next face - and the recipe must behave the same way.
-                let mut cands: Vec<qymcad_core::geom::MeshFace> =
-                    app.project.regen_faces.get(&body).map(|fs| fs.iter().filter(|f| f.area > 1e-6).cloned().collect()).unwrap_or_default();
+                let mut cands: Vec<qymcad_core::geom::MeshFace> = app.project.regen_faces.get(&body).map(|fs| fs.iter().filter(|f| f.area > 1e-6).cloned().collect()).unwrap_or_default();
                 cands.sort_by(|a, b| {
                     let slant = |f: &qymcad_core::geom::MeshFace| if f.normal.iter().all(|c| c.abs() < 0.99) { 0 } else { 1 };
                     slant(a).cmp(&slant(b)).then(a.area.total_cmp(&b.area))
@@ -502,12 +451,7 @@ mod tests {
                 // A THREAD LIES ON A CYLINDER, which a hole provides. The cylindrical face is found through the
                 // circular edges around it; with no cylinder a thread has nothing to stand on, and nobody
                 // reaches for it. That is not a fault of the program but a consequence of there being no hole.
-                let round: Vec<[f64; 3]> = app
-                    .project
-                    .regen_edges
-                    .get(&body)
-                    .map(|es| es.iter().filter(|e| e.radius > 1e-6).map(|e| e.mid).collect())
-                    .unwrap_or_default();
+                let round: Vec<[f64; 3]> = app.project.regen_edges.get(&body).map(|es| es.iter().filter(|e| e.radius > 1e-6).map(|e| e.mid).collect()).unwrap_or_default();
                 // THE AIM IS THE WALL, NOT THE RIM. The midpoint of a circular edge lies on the boundary, and a
                 // click there lands on the flat face around the hole; a person aims slightly BELOW the rim,
                 // where the wall of the cylinder is.
@@ -545,12 +489,7 @@ mod tests {
                 // down from the top face cut only the part the recipe was written on: let the shape change, and
                 // the plane passes by while the tool honestly says the plane does not cut the body. At that
                 // moment a person takes another plane rather than repeating the previous one.
-                let half = app
-                    .project
-                    .mesh_index(body)
-                    .and_then(|mi| app.project.bodies[mi].mesh.bounds())
-                    .map(|bb| ((bb.max.z - bb.min.z) * 0.5).max(1.0))
-                    .unwrap_or(5.0);
+                let half = app.project.mesh_index(body).and_then(|mi| app.project.bodies[mi].mesh.bounds()).map(|bb| ((bb.max.z - bb.min.z) * 0.5).max(1.0)).unwrap_or(5.0);
                 let mut hand = Hand::new(app);
                 hand.look_at(c, scale).tool(27);
                 let Some((t, _)) = face(hand.app, [0.0, 0.0, 1.0]) else { return false };
@@ -606,14 +545,7 @@ mod tests {
                 hand.look_at(c, scale).tool(30);
                 let Some((t, _)) = face(hand.app, [0.0, 0.0, 1.0]) else { return false };
                 hand.click(t).enter();
-                let sheet = app
-                    .project
-                    .timeline
-                    .iter()
-                    .rev()
-                    .filter(|n| n.parent == Some(here))
-                    .filter_map(|n| n.kind.body())
-                    .find(|b| app.project.bodies.iter().any(|x| x.id == *b && x.sheet));
+                let sheet = app.project.timeline.iter().rev().filter(|n| n.parent == Some(here)).filter_map(|n| n.kind.body()).find(|b| app.project.bodies.iter().any(|x| x.id == *b && x.sheet));
                 let Some(sheet) = sheet else { return false };
                 let Some(f) = app.project.regen_faces.get(&sheet).and_then(|fs| fs.first().cloned()) else { return false };
                 app.start_feat_cmd(34);
@@ -691,14 +623,7 @@ mod tests {
                 hand.look_at(c, scale).tool(30);
                 let Some((t, _)) = face(hand.app, [0.0, 0.0, 1.0]) else { return false };
                 hand.click(t).enter();
-                let sheet = app
-                    .project
-                    .timeline
-                    .iter()
-                    .rev()
-                    .filter(|n| n.parent == Some(here))
-                    .filter_map(|n| n.kind.body())
-                    .find(|b| app.project.bodies.iter().any(|x| x.id == *b && x.sheet));
+                let sheet = app.project.timeline.iter().rev().filter(|n| n.parent == Some(here)).filter_map(|n| n.kind.body()).find(|b| app.project.bodies.iter().any(|x| x.id == *b && x.sheet));
                 let Some(sheet) = sheet else { return false };
                 let edges: Vec<u32> = app.project.regen_edges.get(&sheet).map(|es| es.iter().map(|e| e.id).collect()).unwrap_or_default();
                 if edges.len() < 2 {
@@ -723,14 +648,7 @@ mod tests {
             28 => {
                 // THICKENING A SHEET: the part already carries a surface from a face copy - it is given a
                 // thickness and returns INTO the part. One tool, two cases: a face of a part and a sheet.
-                let sheet = app
-                    .project
-                    .timeline
-                    .iter()
-                    .rev()
-                    .filter(|n| n.parent == Some(here))
-                    .filter_map(|n| n.kind.body())
-                    .find(|b| app.project.bodies.iter().any(|x| x.id == *b && x.sheet));
+                let sheet = app.project.timeline.iter().rev().filter(|n| n.parent == Some(here)).filter_map(|n| n.kind.body()).find(|b| app.project.bodies.iter().any(|x| x.id == *b && x.sheet));
                 let Some(sheet) = sheet else { return false };
                 let Some(f) = app.project.regen_faces.get(&sheet).and_then(|fs| fs.first().cloned()) else { return false };
                 qymcad_ui_state::select_body(&mut app.project, &mut app.chosen.sel, &mut app.viewing.view, sheet);
@@ -761,31 +679,16 @@ mod tests {
         if !made {
             // NOTHING WAS CREATED, SO WHAT THE PROGRAM ACTUALLY SAID IS RECORDED, along with the body being
             // worked on: "the tool did not fire" without that is as empty a complaint as any.
-            let fs: Vec<String> = app
-                .project
-                .regen_faces
-                .get(&body)
-                .map(|v| v.iter().map(|f| format!("[{:.2},{:.2},{:.2}]S{:.0}", f.normal[0], f.normal[1], f.normal[2], f.area)).collect())
-                .unwrap_or_default();
-            problems.push(format!(
-                "[{part}] tool {kind} created no node: body {body}, {} faces picked, the faces of the body: {}; status: {}",
-                app.tools.gsel.faces.len(),
-                fs.join(" "),
-                app.status
-            ));
+            let fs: Vec<String> =
+                app.project.regen_faces.get(&body).map(|v| v.iter().map(|f| format!("[{:.2},{:.2},{:.2}]S{:.0}", f.normal[0], f.normal[1], f.normal[2], f.area)).collect()).unwrap_or_default();
+            problems.push(format!("[{part}] tool {kind} created no node: body {body}, {} faces picked, the faces of the body: {}; status: {}", app.tools.gsel.faces.len(), fs.join(" "), app.status));
         }
         // A NAMED LIMIT OF THE CORE IS NOT A FAULT. The program said in words what it cannot do ("the body is
         // assembled from copies", "the offset fails inside the core"); a person then cancels the step and does
         // it differently rather than leaving a red node in the part. What stays red is only THE NAMELESS - and
         // that is the finding this whole thing exists for.
-        let named: Vec<u64> = app
-            .project
-            .timeline
-            .iter()
-            .skip(before)
-            .filter(|n| app.project.regen_errors.get(&n.id).is_some_and(|e| !matches!(e, qymcad_core::errors::CoreError::OpFailed(_))))
-            .map(|n| n.id)
-            .collect();
+        let named: Vec<u64> =
+            app.project.timeline.iter().skip(before).filter(|n| app.project.regen_errors.get(&n.id).is_some_and(|e| !matches!(e, qymcad_core::errors::CoreError::OpFailed(_)))).map(|n| n.id).collect();
         for id in named {
             app.project.delete_feature_op(id);
         }
@@ -958,18 +861,13 @@ mod tests {
                 let anchor = |app: &App, part: u64, dir: [f64; 3]| -> AnchorRef {
                     let body = app.project.active_body(part);
                     let face = body.and_then(|b| {
-                        app.project.regen_faces.get(&b).and_then(|fs| {
-                            fs.iter()
-                                .filter(|f| f.normal[0] * dir[0] + f.normal[1] * dir[1] + f.normal[2] * dir[2] > 0.9)
-                                .max_by(|x, y| x.area.total_cmp(&y.area))
-                                .cloned()
-                        })
+                        app.project
+                            .regen_faces
+                            .get(&b)
+                            .and_then(|fs| fs.iter().filter(|f| f.normal[0] * dir[0] + f.normal[1] * dir[1] + f.normal[2] * dir[2] > 0.9).max_by(|x, y| x.area.total_cmp(&y.area)).cloned())
                     });
                     match (body, face) {
-                        (Some(b), Some(f)) => AnchorRef::FaceCenter(
-                            b,
-                            qymcad_core::feature::FaceKey { index: 0, centroid: [f.centroid.x, f.centroid.y, f.centroid.z], normal: f.normal, id: f.id },
-                        ),
+                        (Some(b), Some(f)) => AnchorRef::FaceCenter(b, qymcad_core::feature::FaceKey { index: 0, centroid: [f.centroid.x, f.centroid.y, f.centroid.z], normal: f.normal, id: f.id }),
                         _ => AnchorRef::Origin,
                     }
                 };
@@ -1001,14 +899,7 @@ mod tests {
                 };
                 if let (Some(ba), Some(bb2)) = (bb(a), bb(b)) {
                     let near = |p: [f64; 3], r: [f64; 6]| (0..3).all(|k| p[k] >= r[k] - 30.0 && p[k] <= r[k + 3] + 30.0);
-                    let cpos = |id: u64| {
-                        app.project
-                            .connectors
-                            .iter()
-                            .find(|k| k.id == id)
-                            .and_then(|k| app.project.connector_frame(k))
-                            .map(|f| f.origin)
-                    };
+                    let cpos = |id: u64| app.project.connectors.iter().find(|k| k.id == id).and_then(|k| app.project.connector_frame(k)).map(|f| f.origin);
                     if let Some(pos) = cpos(ca) {
                         if !near(pos, ba) {
                             problems.push(format!("joint \"{name}\" sits at {pos:?} while its part is at {ba:?} - the joint is tied to nothing"));
@@ -1059,8 +950,7 @@ mod tests {
         // at the end.
         {
             let mid = app.project.timeline.len() / 2;
-            let victim = (mid..app.project.timeline.len())
-                .find(|&i| !matches!(app.project.timeline[i].kind, qymcad_core::feature::FeatureKind::Sketch { .. }));
+            let victim = (mid..app.project.timeline.len()).find(|&i| !matches!(app.project.timeline[i].kind, qymcad_core::feature::FeatureKind::Sketch { .. }));
             if let Some(ti) = victim {
                 let name = crate::i18n::name(&app.project.timeline[ti].name);
                 app.project.set_feature_suppressed(ti, true);
@@ -1138,7 +1028,11 @@ mod tests {
                     }
                     check_all(&mut app, "the linear array of parts grown to four", &mut problems);
                     // THE SOURCE EDITED IN THE MIDDLE: a feature of the part made taller, and every copy follows
-                    let taller = app.project.timeline.iter_mut().find(|n| n.parent == Some(src) && matches!(n.kind, qymcad_core::feature::FeatureKind::Extrude { .. } | qymcad_core::feature::FeatureKind::Box3 { .. }));
+                    let taller = app
+                        .project
+                        .timeline
+                        .iter_mut()
+                        .find(|n| n.parent == Some(src) && matches!(n.kind, qymcad_core::feature::FeatureKind::Extrude { .. } | qymcad_core::feature::FeatureKind::Box3 { .. }));
                     if let Some(n) = taller {
                         match &mut n.kind {
                             qymcad_core::feature::FeatureKind::Extrude { height, .. } => *height += 5.0,
@@ -1300,7 +1194,8 @@ mod tests {
         hand.look_at([20.0, 15.0, 5.0], 8.0).tool(31).click([20.0, 2.0, 10.0]).click([20.0, 15.0, 15.0]).enter();
         check_all(&mut app, "the top of the riser replaced by its offset", &mut problems);
         let consumed = app.project.consumed_bodies();
-        let solid = app.project.component_bodies(riser).into_iter().filter(|b| !consumed.contains(b)).filter_map(|b| app.project.bodies.iter().find(|x| x.id == b && !x.sheet)).map(|b| b.mesh.volume()).next();
+        let solid =
+            app.project.component_bodies(riser).into_iter().filter(|b| !consumed.contains(b)).filter_map(|b| app.project.bodies.iter().find(|x| x.id == b && !x.sheet)).map(|b| b.mesh.volume()).next();
         if solid.is_none_or(|v| (v - 18000.0).abs() > 1.0) {
             problems.push(format!("[riser] the top replaced by the sheet 5 above: the solid is {solid:?} mm^3, 40 x 30 x 15 = 18000; status {}", app.status));
         }
@@ -1352,7 +1247,10 @@ mod tests {
         // Without this list a missed click reads as a success: there is no red because there is no operation
         // either. The list grows along with the scenario, and it also shows what is not covered yet.
         use qymcad_core::feature::FeatureKind as FK;
-        let mut want: Vec<&str> = vec!["extrude", "fillet", "chamfer", "shell", "cut", "draft", "array", "face copy", "thicken", "hole", "mirror", "split face", "remove face", "thread", "circular array", "split body", "stitch", "trim", "patch"];
+        let mut want: Vec<&str> = vec![
+            "extrude", "fillet", "chamfer", "shell", "cut", "draft", "array", "face copy", "thicken", "hole", "mirror", "split face", "remove face", "thread", "circular array", "split body",
+            "stitch", "trim", "patch",
+        ];
         for n in &app.project.timeline {
             let got = match n.kind {
                 FK::Extrude { .. } => "extrude",
@@ -1439,17 +1337,8 @@ mod tests {
 
             // CONSTRAINTS: each is placed on a suitable selection. One that did not take must say so through
             // the status line rather than silently doing nothing.
-            let codes: [(u8, &str); 9] = [
-                (0, "coincident"),
-                (1, "horizontal"),
-                (2, "vertical"),
-                (3, "parallel"),
-                (4, "perpendicular"),
-                (5, "equal"),
-                (6, "fixed"),
-                (7, "collinear"),
-                (8, "concentric"),
-            ];
+            let codes: [(u8, &str); 9] =
+                [(0, "coincident"), (1, "horizontal"), (2, "vertical"), (3, "parallel"), (4, "perpendicular"), (5, "equal"), (6, "fixed"), (7, "collinear"), (8, "concentric")];
             for (code, name) in codes {
                 let before = app.project.sketches[si].constraints.len();
                 let mut hand = Hand::new(&mut app);
@@ -1486,8 +1375,7 @@ mod tests {
                 }
                 check_all(&mut app, "sketch: rounding every corner", &mut problems);
 
-                let ops: [(u8, &str, (f64, f64)); 4] =
-                    [(5, "chamfer", (30.0, 0.0)), (1, "trim", (40.0, 0.0)), (2, "extend", (30.0, 7.0)), (3, "break", (50.0, 7.0))];
+                let ops: [(u8, &str, (f64, f64)); 4] = [(5, "chamfer", (30.0, 0.0)), (1, "trim", (40.0, 0.0)), (2, "extend", (30.0, 7.0)), (3, "break", (50.0, 7.0))];
                 for (op, name, (x, y)) in ops {
                     let before = count(&app);
                     qymcad_ui_state::set_click_op(&mut qymcad_ui_state::tools_of!(app), &mut app.viewing.mode_3d, op);
@@ -1559,7 +1447,11 @@ mod tests {
                     match mode {
                         1 => match ends_of(&app, eid) {
                             Some(now) if !held && (mid(now).0 - m0.0).hypot(mid(now).1 - m0.1) < asked / 2.0 => {
-                                problems.push(format!("sketch: \"move\" was asked for {asked:.2} mm and the line went {:.2} mm, saying {:?}", (mid(now).0 - m0.0).hypot(mid(now).1 - m0.1), app.status));
+                                problems.push(format!(
+                                    "sketch: \"move\" was asked for {asked:.2} mm and the line went {:.2} mm, saying {:?}",
+                                    (mid(now).0 - m0.0).hypot(mid(now).1 - m0.1),
+                                    app.status
+                                ));
                             }
                             None => problems.push("sketch: \"move\" lost the line it moved".into()),
                             _ => {}
@@ -1568,7 +1460,12 @@ mod tests {
                             let copies: Vec<u64> = sk.entities.iter().map(|e| e.id).filter(|id| !ids_before.contains(id)).collect();
                             let away = copies.iter().filter_map(|c| ends_of(&app, *c)).any(|c| (mid(c).0 - m0.0).hypot(mid(c).1 - m0.1) >= asked / 2.0);
                             if !away {
-                                problems.push(format!("sketch: \"copy\" made {} new entities and none stands {:.2} mm off its source - the copy lies on top of it; status {:?}", copies.len(), asked, app.status));
+                                problems.push(format!(
+                                    "sketch: \"copy\" made {} new entities and none stands {:.2} mm off its source - the copy lies on top of it; status {:?}",
+                                    copies.len(),
+                                    asked,
+                                    app.status
+                                ));
                             }
                         }
                         _ => {
@@ -1600,20 +1497,14 @@ mod tests {
             // DIMENSIONS: linear, angular, radial. A dimension is not a caption but A CONSTRAINT: it must take
             // away a degree of freedom, otherwise the sketch stays rubbery while it looks set.
             {
-                let dims: [(u8, &str, &[(f64, f64)]); 3] =
-                    [(1, "linear", &[(30.0, 0.0), (50.0, 15.0)]), (3, "radial", &[(70.0, 10.0)]), (2, "angular", &[(0.0, 0.0), (20.0, 0.0), (30.0, 0.0)])];
+                let dims: [(u8, &str, &[(f64, f64)]); 3] = [(1, "linear", &[(30.0, 0.0), (50.0, 15.0)]), (3, "radial", &[(70.0, 10.0)]), (2, "angular", &[(0.0, 0.0), (20.0, 0.0), (30.0, 0.0)])];
                 for (kind, name, picks) in dims {
                     // ONLY DIMENSION CONSTRAINTS ARE COUNTED. Any constraint used to count, and the fixed ones
                     // from the neighbouring block got into the tally - the check blamed a dimension for
                     // someone else's work.
                     use qymcad_core::model::Constraint;
-                    let dims_now = |a: &App| {
-                        a.project.sketches[si]
-                            .constraints
-                            .iter()
-                            .filter(|c| matches!(c, Constraint::Distance { .. } | Constraint::Diameter { .. } | Constraint::Angle { .. }))
-                            .count()
-                    };
+                    let dims_now =
+                        |a: &App| a.project.sketches[si].constraints.iter().filter(|c| matches!(c, Constraint::Distance { .. } | Constraint::Diameter { .. } | Constraint::Angle { .. })).count();
                     let before = dims_now(&app);
                     let dof_before = app.project.sketch_dof(si);
                     qymcad_ui_state::set_dim_tool(&mut qymcad_ui_state::tools_of!(app), &mut app.viewing.mode_3d, &app.project, app.chosen.sel, app.sketch_ses, &mut app.status, kind);
@@ -1793,12 +1684,7 @@ mod tests {
                     .timeline
                     .iter()
                     .skip(before)
-                    .filter(|n| {
-                        app.project
-                            .regen_errors
-                            .get(&n.id)
-                            .is_some_and(|e| !matches!(e, qymcad_core::errors::CoreError::OpFailed(_)))
-                    })
+                    .filter(|n| app.project.regen_errors.get(&n.id).is_some_and(|e| !matches!(e, qymcad_core::errors::CoreError::OpFailed(_))))
                     .map(|n| n.id)
                     .collect();
                 for id in named {
@@ -1845,9 +1731,7 @@ mod tests {
                 let a2 = area(&app);
 
                 if (a2 - a1).abs() < 1e-6 {
-                    problems.push(format!(
-                        "the variable was changed from 18 to 34 and the body did not move: the area went {a1:.0} -> {a2:.0} (it was {a0:.0} before the binding)"
-                    ));
+                    problems.push(format!("the variable was changed from 18 to 34 and the body did not move: the area went {a1:.0} -> {a2:.0} (it was {a0:.0} before the binding)"));
                 }
                 check_all(&mut app, "the height of an extrude driven by a global variable", &mut problems);
             }
@@ -1860,12 +1744,7 @@ mod tests {
         // own.
         {
             let part = app.project.components.iter().find(|c| c.id != app.project.root).map(|c| c.id);
-            let node = app
-                .project
-                .timeline
-                .iter()
-                .find(|n| !matches!(n.kind, qymcad_core::feature::FeatureKind::Sketch { .. }))
-                .map(|n| n.id);
+            let node = app.project.timeline.iter().find(|n| !matches!(n.kind, qymcad_core::feature::FeatureKind::Sketch { .. })).map(|n| n.id);
             if let (Some(part), Some(node)) = (part, node) {
                 // THE BOUNDARY OF AN EDIT, as in the program: renaming is a deliberate act and makes one undo
                 // step. Without it the undo snapshot knows nothing of the new names and wipes them.
@@ -1948,26 +1827,16 @@ mod tests {
                 // person removes it; the undo returns the state from BEFORE that removal, red node included.
                 // That is correct behaviour for an undo, but afterwards the document has to be tidied the same
                 // way a person would tidy it: take away what the program explained.
-                let named: Vec<u64> = app
-                    .project
-                    .timeline
-                    .iter()
-                    .filter(|n| app.project.regen_errors.get(&n.id).is_some_and(|e| !matches!(e, qymcad_core::errors::CoreError::OpFailed(_))))
-                    .map(|n| n.id)
-                    .collect();
+                let named: Vec<u64> =
+                    app.project.timeline.iter().filter(|n| app.project.regen_errors.get(&n.id).is_some_and(|e| !matches!(e, qymcad_core::errors::CoreError::OpFailed(_)))).map(|n| n.id).collect();
                 for id in named {
                     app.project.delete_feature_op(id);
                 }
                 qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
                 // SECOND PASS: the rebuild after removing nodes can name a refusal again (the step
                 // came back with a redo), and a red node would survive the first cleanup.
-                let named2: Vec<u64> = app
-                    .project
-                    .timeline
-                    .iter()
-                    .filter(|n| app.project.regen_errors.get(&n.id).is_some_and(|e| !matches!(e, qymcad_core::errors::CoreError::OpFailed(_))))
-                    .map(|n| n.id)
-                    .collect();
+                let named2: Vec<u64> =
+                    app.project.timeline.iter().filter(|n| app.project.regen_errors.get(&n.id).is_some_and(|e| !matches!(e, qymcad_core::errors::CoreError::OpFailed(_)))).map(|n| n.id).collect();
                 for id in named2 {
                     app.project.delete_feature_op(id);
                 }
@@ -2019,13 +1888,8 @@ mod tests {
             // away). A person who opens the file and sees red removes the step; so does the scenario.
             for _ in 0..3 {
                 qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
-                let named: Vec<u64> = app
-                    .project
-                    .timeline
-                    .iter()
-                    .filter(|n| app.project.regen_errors.get(&n.id).is_some_and(|e| !matches!(e, qymcad_core::errors::CoreError::OpFailed(_))))
-                    .map(|n| n.id)
-                    .collect();
+                let named: Vec<u64> =
+                    app.project.timeline.iter().filter(|n| app.project.regen_errors.get(&n.id).is_some_and(|e| !matches!(e, qymcad_core::errors::CoreError::OpFailed(_)))).map(|n| n.id).collect();
                 if named.is_empty() {
                     break;
                 }
@@ -2096,7 +1960,11 @@ mod tests {
                     lo = lo.min(v.x);
                     hi = hi.max(v.x);
                 }
-                if lo > hi { (0.0, 30.0) } else { (lo, hi) }
+                if lo > hi {
+                    (0.0, 30.0)
+                } else {
+                    (lo, hi)
+                }
             };
             let parts: Vec<u64> = app.project.components.iter().filter(|c| c.id != app.project.root).map(|c| c.id).collect();
             let mut x = 0.0;
@@ -2144,9 +2012,7 @@ mod tests {
             let red_after: std::collections::HashSet<u64> = app.project.regen_errors.keys().copied().collect();
             let hidden: Vec<u64> = red_after.difference(&red_before).copied().collect();
             if !hidden.is_empty() {
-                problems.push(format!(
-                    "the full rebuild uncovered nodes {hidden:?} that the partial one did not see - the document looked intact and was already broken"
-                ));
+                problems.push(format!("the full rebuild uncovered nodes {hidden:?} that the partial one did not see - the document looked intact and was already broken"));
             }
             check_all(&mut app, "the parts are laid out", &mut problems);
         }
@@ -2194,20 +2060,9 @@ mod tests {
             // A PART TIED TO NOTHING. In an assembly a part without a single joint floats free:
             // sometimes that is intended, but in a finished document it is worth seeing rather than
             // finding out later.
-            let jointed: std::collections::HashSet<u64> = app
-                .project
-                .joints
-                .iter()
-                .flat_map(|j| [j.a, j.b])
-                .filter_map(|c| app.project.connectors.iter().find(|k| k.id == c).map(|k| k.owner))
-                .collect();
-            let loose = app
-                .project
-                .components
-                .iter()
-                .filter(|c| c.id != app.project.root && matches!(c.kind, qymcad_core::feature::ComponentKind::Part))
-                .filter(|c| !jointed.contains(&c.id))
-                .count();
+            let jointed: std::collections::HashSet<u64> =
+                app.project.joints.iter().flat_map(|j| [j.a, j.b]).filter_map(|c| app.project.connectors.iter().find(|k| k.id == c).map(|k| k.owner)).collect();
+            let loose = app.project.components.iter().filter(|c| c.id != app.project.root && matches!(c.kind, qymcad_core::feature::ComponentKind::Part)).filter(|c| !jointed.contains(&c.id)).count();
             if loose == app.project.components.len().saturating_sub(1) && !app.project.joints.is_empty() {
                 problems.push("not one part is tied by a joint although the document has joints - the joints are dangling".into());
             }
@@ -2294,11 +2149,7 @@ mod tests {
             // person sees.
             app.start_feat_cmd(5); // chamfer - the next command
             if !app.tools.gsel.edges.is_empty() || !app.tools.gsel.faces.is_empty() {
-                problems.push(format!(
-                    "the new command opened with a FOREIGN reference set: {} edges, {} faces",
-                    app.tools.gsel.edges.len(),
-                    app.tools.gsel.faces.len()
-                ));
+                problems.push(format!("the new command opened with a FOREIGN reference set: {} edges, {} faces", app.tools.gsel.edges.len(), app.tools.gsel.faces.len()));
             }
             app.on_escape();
             check_all(&mut app, "cancelling mid-command", &mut problems);
@@ -2350,18 +2201,10 @@ mod tests {
                 // single word that the node no longer builds.
                 for n in &app.project.timeline {
                     if let qymcad_core::feature::FeatureKind::MirrorPart { src_comp, body: mb, .. } = n.kind {
-                        let src_has_body = app
-                            .project
-                            .timeline
-                            .iter()
-                            .flat_map(|x| x.kind.bodies())
-                            .any(|b| app.project.body_owner(b) == Some(src_comp) && app.project.mesh_index(b).is_some());
+                        let src_has_body = app.project.timeline.iter().flat_map(|x| x.kind.bodies()).any(|b| app.project.body_owner(b) == Some(src_comp) && app.project.mesh_index(b).is_some());
                         let _ = mb;
                         if !src_has_body && !app.project.regen_errors.contains_key(&n.id) {
-                            problems.push(format!(
-                                "part {src_comp} is left with no body while its mirror (node {}) says nothing: old geometry on the screen and not a word about the breakage",
-                                n.id
-                            ));
+                            problems.push(format!("part {src_comp} is left with no body while its mirror (node {}) says nothing: old geometry on the screen and not a word about the breakage", n.id));
                         }
                     }
                 }
@@ -2389,12 +2232,7 @@ mod tests {
             // by design: a pattern copy is not deleted on its own, the pattern drives it and the whole
             // pattern goes (see `execute_delete`). This step is about something else - deleting a part
             // WITH JOINTS - so a pattern is not taken.
-            let victim = app
-                .project
-                .joints
-                .iter()
-                .filter_map(|j| owner_of(&app, j.a).or_else(|| owner_of(&app, j.b)))
-                .find(|c| app.project.comp_pattern_of(*c).is_none());
+            let victim = app.project.joints.iter().filter_map(|j| owner_of(&app, j.a).or_else(|| owner_of(&app, j.b))).find(|c| app.project.comp_pattern_of(*c).is_none());
             // THE STEP MUST HAPPEN. Without this it is silently skipped and the green means nothing.
             if victim.is_none() {
                 problems.push("deleting a part with joints is unchecked: no part with a joint outside a pattern was found in the document".into());
@@ -2403,12 +2241,7 @@ mod tests {
                 let joints_before = app.project.joints.len();
                 let comps_before = app.project.components.len();
                 let neighbours: Vec<qymcad_core::model::Id> = app.project.components.iter().filter(|c| c.id != victim).map(|c| c.id).collect();
-                let its_joints = app
-                    .project
-                    .joints
-                    .iter()
-                    .filter(|j| owner_of(&app, j.a) == Some(victim) || owner_of(&app, j.b) == Some(victim))
-                    .count();
+                let its_joints = app.project.joints.iter().filter(|j| owner_of(&app, j.a) == Some(victim) || owner_of(&app, j.b) == Some(victim)).count();
 
                 let ci = app.project.components.iter().position(|c| c.id == victim).expect("the part is on the list");
                 qymcad_ui_state::begin_edit(&mut app.disk.edits, &app.project, "delete a part with joints");
@@ -2455,13 +2288,7 @@ mod tests {
         // enters it, builds a part there and leaves - and everything built must stay INSIDE.
         {
             let root = app.project.root;
-            let bodies_in_root = |app: &App| -> usize {
-                app.project
-                    .timeline
-                    .iter()
-                    .filter(|n| n.kind.bodies().iter().any(|b| n.owner_of(*b) == Some(app.project.root)))
-                    .count()
-            };
+            let bodies_in_root = |app: &App| -> usize { app.project.timeline.iter().filter(|n| n.kind.bodies().iter().any(|b| n.owner_of(*b) == Some(app.project.root))).count() };
             let root_bodies_before = bodies_in_root(&app);
 
             app.set_context_to(root);
@@ -2505,10 +2332,7 @@ mod tests {
                 problems.push(format!("the body built in the subassembly ended up outside it: owner {owner:?}"));
             }
             if bodies_in_root(&app) != root_bodies_before {
-                problems.push(format!(
-                    "after working in the subassembly the ROOT gained builds: there were {root_bodies_before}, now {}",
-                    bodies_in_root(&app)
-                ));
+                problems.push(format!("after working in the subassembly the ROOT gained builds: there were {root_bodies_before}, now {}", bodies_in_root(&app)));
             }
 
             // go back up - the context must return and the subassembly must stay in the tree
@@ -2554,10 +2378,7 @@ mod tests {
                             let producer = app.project.timeline.iter().find(|x| x.kind.bodies().contains(&inp)).map(|x| x.id);
                             if let (Some(p), Some(c)) = (producer.and_then(pos), pos(n.id)) {
                                 if p > c {
-                                    problems.push(format!(
-                                        "in the timeline consumer \"{}\" ended up ABOVE its own input - the part is built on what does not exist yet",
-                                        n.name
-                                    ));
+                                    problems.push(format!("in the timeline consumer \"{}\" ended up ABOVE its own input - the part is built on what does not exist yet", n.name));
                                 }
                             }
                         }
@@ -2703,10 +2524,7 @@ mod tests {
             }
 
             // The STL is really written, into a temporary directory: the file must exist and be non-empty.
-            let meshes: Vec<qymcad_core::geom::Mesh> = out
-                .iter()
-                .filter_map(|b| app.project.mesh_index(*b).map(|mi| app.project.bodies[mi].mesh.clone()))
-                .collect();
+            let meshes: Vec<qymcad_core::geom::Mesh> = out.iter().filter_map(|b| app.project.mesh_index(*b).map(|mi| app.project.bodies[mi].mesh.clone())).collect();
             let path = std::env::temp_dir().join("qym-user-case.stl").to_string_lossy().into_owned();
             match qymcad_io::export_stl(&meshes, &path) {
                 Ok(()) => match std::fs::metadata(&path).map(|m| m.len()) {
@@ -2733,12 +2551,7 @@ mod tests {
             // A point ON THE BODY that can be clicked: the centre of the topmost face.
             let aim = |app: &App, body: Id| -> [f64; 3] {
                 let wt = app.project.body_display_transform(body, qymcad_ui_state::current_ctx_id(&app.active_path, &app.project));
-                let f = app
-                    .project
-                    .regen_faces
-                    .get(&body)
-                    .and_then(|fs| fs.iter().max_by(|x, y| x.centroid.z.total_cmp(&y.centroid.z)))
-                    .expect("the body has faces");
+                let f = app.project.regen_faces.get(&body).and_then(|fs| fs.iter().max_by(|x, y| x.centroid.z.total_cmp(&y.centroid.z))).expect("the body has faces");
                 qymcad_core::feature::apply12(&wt, [f.centroid.x, f.centroid.y, f.centroid.z])
             };
 
@@ -2758,8 +2571,7 @@ mod tests {
                 for (k, b) in mine.iter().enumerate() {
                     if let Some(o) = app.project.body_owner(*b) {
                         if let Some(i) = app.project.component_index(o) {
-                            app.project.components[i].transform =
-                                [1.0, 0.0, 0.0, x + k as f64 * 60.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0];
+                            app.project.components[i].transform = [1.0, 0.0, 0.0, x + k as f64 * 60.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0];
                         }
                         if k == 0 {
                             app.project.set_grounded(o, true);
@@ -2802,7 +2614,9 @@ mod tests {
 
             // A GEAR RELATION between two revolutes - by the same tool a person uses.
             app.start_relation_pick();
-            if let Some(p) = app.side.joint.relation_pick.as_mut() { p.set(RelationKind::Gear, 2.0); }
+            if let Some(p) = app.side.joint.relation_pick.as_mut() {
+                p.set(RelationKind::Gear, 2.0);
+            }
             qymcad_assembly::relation_pick_click(&mut app.joint_ctx(), hinge_a);
             qymcad_assembly::relation_pick_click(&mut app.joint_ctx(), hinge_b);
             qymcad_assembly::relation_pick_confirm(&mut app.joint_ctx());
@@ -2864,13 +2678,8 @@ mod tests {
             // removed, others that stood on them can turn red.
             for _ in 0..3 {
                 qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
-                let named: Vec<u64> = app
-                    .project
-                    .timeline
-                    .iter()
-                    .filter(|n| app.project.regen_errors.get(&n.id).is_some_and(|e| !matches!(e, qymcad_core::errors::CoreError::OpFailed(_))))
-                    .map(|n| n.id)
-                    .collect();
+                let named: Vec<u64> =
+                    app.project.timeline.iter().filter(|n| app.project.regen_errors.get(&n.id).is_some_and(|e| !matches!(e, qymcad_core::errors::CoreError::OpFailed(_)))).map(|n| n.id).collect();
                 if named.is_empty() {
                     break;
                 }
@@ -2889,16 +2698,12 @@ mod tests {
             .iter()
             .map(|(id, e)| {
                 let node = app.project.timeline.iter().find(|n| n.id == *id);
-                let part = node
-                    .and_then(|n| n.parent)
-                    .and_then(|c| app.project.components.iter().find(|x| x.id == c))
-                    .map(|c| crate::i18n::name(&c.name))
-                    .unwrap_or_else(|| {
-                        // THE NODE REFERENCES A PART THAT DOES NOT EXIST. This is not "outside a part"
-                        // but a dangling reference: the component is deleted and the build stayed. Such
-                        // a node cannot be shown in the tree - there is nowhere to draw it.
-                        format!("a dangling reference to part {:?}", node.and_then(|n| n.parent))
-                    });
+                let part = node.and_then(|n| n.parent).and_then(|c| app.project.components.iter().find(|x| x.id == c)).map(|c| crate::i18n::name(&c.name)).unwrap_or_else(|| {
+                    // THE NODE REFERENCES A PART THAT DOES NOT EXIST. This is not "outside a part"
+                    // but a dangling reference: the component is deleted and the build stayed. Such
+                    // a node cannot be shown in the tree - there is nowhere to draw it.
+                    format!("a dangling reference to part {:?}", node.and_then(|n| n.parent))
+                });
                 let what = node.map(|n| crate::i18n::name(&crate::gui::feat_default_name(&n.kind))).unwrap_or_default();
                 format!("[{part}] {what} (node {id}): {e:?}")
             })

@@ -3,14 +3,8 @@
 use qymcad_core::geom::{circle_contour, Contour, Point2};
 use qymcad_core::model::{from_ron, to_ron, Project};
 
-
 fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> Contour {
-    Contour::closed(vec![
-        Point2::new(x0, y0),
-        Point2::new(x1, y0),
-        Point2::new(x1, y1),
-        Point2::new(x0, y1),
-    ])
+    Contour::closed(vec![Point2::new(x0, y0), Point2::new(x1, y0), Point2::new(x1, y1), Point2::new(x0, y1)])
 }
 
 /// A sketch groups contours; removing the sketch removes its contours and clears the operation references to
@@ -34,7 +28,6 @@ fn sketch_groups_and_removes_contours() {
     assert_eq!(p.contours.len(), 1, "only the loose contour is left");
     assert_eq!(p.contour_index(loose), Some(0));
 }
-
 
 /// A typed sketch: editing a point re-tessellates the contour while the contour id stays the same.
 #[test]
@@ -112,7 +105,14 @@ fn entity_circle_regen_keeps_contour_id() {
     let mut p = Project::default();
     let si = p.drawing_sketch();
     p.add_circle_entity(si, 0.0, 0.0, 5.0, qymcad_core::feature::Purpose::Real);
-    let center = p.sketches[si].entities.iter().find_map(|e| match e.kind { EntityKind::Circle { center, .. } => Some(center), _ => None }).unwrap();
+    let center = p.sketches[si]
+        .entities
+        .iter()
+        .find_map(|e| match e.kind {
+            EntityKind::Circle { center, .. } => Some(center),
+            _ => None,
+        })
+        .unwrap();
     let cid = p.sketches[si].contour_ids[0];
     let r0 = p.contours[p.contour_index(cid).unwrap()].as_circle().unwrap().1;
     assert!((r0 - 5.0).abs() < 0.2, "the starting radius is ~5, got {r0}");
@@ -124,12 +124,6 @@ fn entity_circle_regen_keeps_contour_id() {
     let r1 = p.contours[p.contour_index(cid).unwrap()].as_circle().unwrap().1;
     assert!((r1 - 12.0).abs() < 0.3, "the radius is updated to ~12, got {r1}");
 }
-
-
-
-
-
-
 
 #[test]
 fn project_roundtrips_through_ron() {
@@ -155,8 +149,6 @@ fn a_node_keeps_its_reason_through_save_and_open() {
     assert_eq!(back.regen_errors.get(&7), Some(&CoreError::CutRemovedNothing), "the red node lost its reason");
     assert_eq!(back.regen_warnings.get(&9), Some(&CoreError::EmptyResult), "the yellow node lost its warning");
 }
-
-
 
 #[test]
 fn p1_root_assembly_and_component_kinds() {
@@ -251,11 +243,7 @@ fn copy_paste_sketch_geometry_between_sketches() {
     assert_eq!(p.sketches[src].entities.len(), 5, "the source is intact");
 
     // the circle in the target moved to (105,105) with r = 2
-    let csel: Vec<_> = p.sketches[dst]
-        .entities
-        .iter()
-        .filter_map(|e| if let EntityKind::Circle { center, r } = e.kind { Some((center, r)) } else { None })
-        .collect();
+    let csel: Vec<_> = p.sketches[dst].entities.iter().filter_map(|e| if let EntityKind::Circle { center, r } = e.kind { Some((center, r)) } else { None }).collect();
     assert_eq!(csel.len(), 1);
     let (cc, cr) = csel[0];
     let cp = p.sketches[dst].points.iter().find(|q| q.id == cc).unwrap();
@@ -429,7 +417,7 @@ fn reparent_component_rejects_cycles() {
     let a = p.add_assembly("A");
     p.set_active_component(Some(a));
     let b = p.add_assembly("B"); // b lives inside a
-    // a cannot be nested into its own descendant b
+                                 // a cannot be nested into its own descendant b
     assert!(!p.reparent_component(a, b), "a cycle is rejected");
     // the root cannot be moved
     assert!(!p.reparent_component(root, a));

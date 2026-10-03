@@ -12,11 +12,7 @@ use qymcad_core::model::Project;
 fn plate_with_a_rounded_corner() -> (Project, u64) {
     let mut p = Project::default();
     p.new_document();
-    let sid = p.add_line_sketch(
-        "Sketch 1",
-        vec![Point2::new(0.0, 0.0), Point2::new(60.0, 0.0), Point2::new(60.0, 40.0), Point2::new(0.0, 40.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("Sketch 1", vec![Point2::new(0.0, 0.0), Point2::new(60.0, 0.0), Point2::new(60.0, 40.0), Point2::new(0.0, 40.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {
@@ -55,10 +51,7 @@ fn a_chain_runs_through_the_rounded_corner_and_stops_at_the_sharp_ones() {
 
     // the seed is the arc: from it the chain must run into both adjoining straight pieces
     let arc = edges.iter().find(|e| e.radius > 1e-9).expect("the fillet arc");
-    let q = qymcad_core::refs::Ref::many(qymcad_core::refs::Query::TangentChain {
-        seed: Box::new(qymcad_core::refs::Query::Id(arc.id)),
-        tol_deg: 5.0,
-    });
+    let q = qymcad_core::refs::Ref::many(qymcad_core::refs::Query::TangentChain { seed: Box::new(qymcad_core::refs::Query::Id(arc.id)), tol_deg: 5.0 });
     let got = p.resolve_edge_refs(body, &q, "ref-what-fillet-edge").expect("the chain resolved");
     assert_eq!(got.len(), 3, "the arc plus the two straight pieces it blends: it came out {} — {got:?}", got.len());
 
@@ -74,10 +67,7 @@ fn a_fillet_built_on_a_chain_takes_the_whole_chain() {
     let arc = top_edges(&p, body).into_iter().find(|e| e.radius > 1e-9).expect("the arc").id;
     let before = p.regen_edges[&body].len();
 
-    let q = qymcad_core::refs::Ref::many(qymcad_core::refs::Query::TangentChain {
-        seed: Box::new(qymcad_core::refs::Query::Id(arc)),
-        tol_deg: 5.0,
-    });
+    let q = qymcad_core::refs::Ref::many(qymcad_core::refs::Query::TangentChain { seed: Box::new(qymcad_core::refs::Query::Id(arc)), tol_deg: 5.0 });
     let node = p.add_fillet_ref(body, 1.0, q);
     let (rep, shapes) = qymcad_testkit::regenerate(&mut p);
     assert!(rep.errors.is_empty(), "a fillet on a chain must build: {:?}", rep.errors);

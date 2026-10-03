@@ -102,7 +102,13 @@ pub(crate) mod tests {
         assert!(misnumbered(&app).is_empty(), "at the top: {:?}", misnumbered(&app)); // the blocks are built here
         let head = head(&app);
         double_click(&mut app, &ctx, &head);
-        let unit = app.project.components.iter().find(|c| c.kind == qymcad_core::feature::ComponentKind::Assembly && app.project.components.iter().any(|p| Some(p.id) == c.parent && p.name == head)).map(|c| c.name.clone()).expect("the subassembly of the reference");
+        let unit = app
+            .project
+            .components
+            .iter()
+            .find(|c| c.kind == qymcad_core::feature::ComponentKind::Assembly && app.project.components.iter().any(|p| Some(p.id) == c.parent && p.name == head))
+            .map(|c| c.name.clone())
+            .expect("the subassembly of the reference");
         double_click(&mut app, &ctx, &unit);
         assert_eq!(inside(&app), unit, "the double click did not step into {unit:?}");
         assert!(misnumbered(&app).is_empty(), "stepped in, and the card is told to draw these pieces (their body, the row their vertices name) by another body's look: {:?}", misnumbered(&app));
@@ -137,7 +143,13 @@ pub(crate) mod tests {
         let (mut app, ctx) = landed(&reference());
         let head = head(&app);
         double_click(&mut app, &ctx, &head);
-        let plate = app.project.components.iter().find(|c| c.kind == qymcad_core::feature::ComponentKind::Part && app.project.components.iter().any(|p| Some(p.id) == c.parent && p.name == head)).map(|c| c.name.clone()).expect("a part of the head");
+        let plate = app
+            .project
+            .components
+            .iter()
+            .find(|c| c.kind == qymcad_core::feature::ComponentKind::Part && app.project.components.iter().any(|p| Some(p.id) == c.parent && p.name == head))
+            .map(|c| c.name.clone())
+            .expect("a part of the head");
         double_click(&mut app, &ctx, &plate);
         assert_eq!(inside(&app), plate, "the double click did not step into the part");
         assert!(lit(&app).is_empty(), "inside the part, the view still draws {:?} highlighted", lit(&app));
@@ -164,7 +176,16 @@ pub(crate) mod tests {
         let names = include_str!("../../../qymcad-kernel/tests/data/condor-first-level.names");
         let extruder = names.lines().nth(1).expect("the extruder's name").to_string();
         // the extruder's mount: its subassembly that names the extruder
-        let mount = app.project.components.iter().find(|c| app.project.components.iter().any(|p| Some(p.id) == c.parent && p.name == extruder) && c.kind == qymcad_core::feature::ComponentKind::Assembly && c.name.to_lowercase().contains(&extruder.to_lowercase())).map(|c| c.name.clone());
+        let mount = app
+            .project
+            .components
+            .iter()
+            .find(|c| {
+                app.project.components.iter().any(|p| Some(p.id) == c.parent && p.name == extruder)
+                    && c.kind == qymcad_core::feature::ComponentKind::Assembly
+                    && c.name.to_lowercase().contains(&extruder.to_lowercase())
+            })
+            .map(|c| c.name.clone());
         for (k, name) in ["Condor v108".to_string(), extruder.clone()].into_iter().chain(mount).enumerate() {
             double_click(&mut app, &ctx, &name);
             eprintln!("into {name}: inside {:?}, lit {:?}, misnumbered {:?}", inside(&app), lit(&app), misnumbered(&app));

@@ -88,7 +88,6 @@ fn unweighed(mut step: DVector<f64>, problem: &Problem, layout: &Layout, lever: 
     step
 }
 
-
 /// Initial guess: place every free body so that its anchor coincides with the anchor of an already
 /// placed partner.
 ///
@@ -204,8 +203,7 @@ fn place_minimally(c: &Constraint, dst_body: usize, poses: &mut [Isometry3<f64>]
     // 1.990. Roll is therefore turned about the main axis of the constraint, which is perpendicular to
     // roll by construction and unaffected by the turn.
     let turn = |poses: &mut [Isometry3<f64>], from: Vector3<f64>, to: Vector3<f64>, pivot: Vector3<f64>, spare: Vector3<f64>| {
-        let q = UnitQuaternion::rotation_between(&from, &to)
-            .unwrap_or_else(|| UnitQuaternion::from_axis_angle(&nalgebra::Unit::new_normalize(spare), std::f64::consts::PI));
+        let q = UnitQuaternion::rotation_between(&from, &to).unwrap_or_else(|| UnitQuaternion::from_axis_angle(&nalgebra::Unit::new_normalize(spare), std::f64::consts::PI));
         poses[dst_body] = Translation3::from(pivot) * q * Translation3::from(-pivot) * poses[dst_body];
     };
     match *c {
@@ -251,15 +249,9 @@ fn pose_is_finite(p: &Isometry3<f64>) -> bool {
 ///
 /// There are two attempts (see `solve`). As a single inlined loop the choice of start is fixed, which
 /// decides the outcome for the user.
-fn run_lm(
-    problem: &Problem,
-    layout: &Layout,
-    start: &[Isometry3<f64>],
-) -> (Vec<Isometry3<f64>>, DVector<f64>, usize) {
-    let mut based = Problem {
-        bodies: problem.bodies.iter().zip(start.iter()).map(|(b, pose)| super::problem::Body { pose: *pose, grounded: b.grounded }).collect(),
-        constraints: problem.constraints.clone(),
-    };
+fn run_lm(problem: &Problem, layout: &Layout, start: &[Isometry3<f64>]) -> (Vec<Isometry3<f64>>, DVector<f64>, usize) {
+    let mut based =
+        Problem { bodies: problem.bodies.iter().zip(start.iter()).map(|(b, pose)| super::problem::Body { pose: *pose, grounded: b.grounded }).collect(), constraints: problem.constraints.clone() };
     let problem = &mut based;
     let mut iterations = 0usize;
     let mut lambda = 1e-3; // Damping: grows after a rejected step, shrinks after an accepted one.
@@ -474,16 +466,11 @@ pub fn solve(problem: &Problem) -> (Vec<Isometry3<f64>>, Report) {
         _ => pull_back_free_directions(problem, &layout, poses, &origin_poses),
     };
     let r = residuals(
-        &Problem {
-            bodies: problem.bodies.iter().zip(poses.iter()).map(|(b, pose)| super::problem::Body { pose: *pose, grounded: b.grounded }).collect(),
-            constraints: problem.constraints.clone(),
-        },
+        &Problem { bodies: problem.bodies.iter().zip(poses.iter()).map(|(b, pose)| super::problem::Body { pose: *pose, grounded: b.grounded }).collect(), constraints: problem.constraints.clone() },
         &poses,
     );
-    let problem = &Problem {
-        bodies: problem.bodies.iter().zip(poses.iter()).map(|(b, pose)| super::problem::Body { pose: *pose, grounded: b.grounded }).collect(),
-        constraints: problem.constraints.clone(),
-    };
+    let problem =
+        &Problem { bodies: problem.bodies.iter().zip(poses.iter()).map(|(b, pose)| super::problem::Body { pose: *pose, grounded: b.grounded }).collect(), constraints: problem.constraints.clone() };
 
     // The verdict comes from the constraints, not from the drag target, and that holds because the
     // target contributes no equations (`rows()` is 0) rather than by striking its rows out afterwards.
@@ -510,7 +497,6 @@ pub fn solve(problem: &Problem) -> (Vec<Isometry3<f64>>, Report) {
 
     (poses, report)
 }
-
 
 /// Move a body towards the cursor, but only where the constraints are indifferent.
 ///
@@ -599,12 +585,7 @@ fn pull_towards_cursor(problem: &Problem, layout: &Layout, poses: Vec<Isometry3<
 /// to first order, so there is physically nothing to argue with. The problem is non-linear, however, so
 /// the result is verified by fact: if the correction raises the residual, it is halved, and eventually
 /// abandoned.
-fn pull_back_free_directions(
-    problem: &Problem,
-    layout: &Layout,
-    poses: Vec<Isometry3<f64>>,
-    origin: &[Isometry3<f64>],
-) -> Vec<Isometry3<f64>> {
+fn pull_back_free_directions(problem: &Problem, layout: &Layout, poses: Vec<Isometry3<f64>>, origin: &[Isometry3<f64>]) -> Vec<Isometry3<f64>> {
     let n = layout.unknowns;
     if n == 0 {
         return poses;
@@ -722,10 +703,7 @@ fn deviation_norm(problem: &Problem, layout: &Layout, poses: &[Isometry3<f64>], 
 
 /// The same problem with bodies at `poses`: a working copy for the Jacobian and the residuals.
 fn staged_problem(problem: &Problem, poses: &[Isometry3<f64>]) -> Problem {
-    Problem {
-        bodies: problem.bodies.iter().zip(poses.iter()).map(|(b, pose)| super::problem::Body { pose: *pose, grounded: b.grounded }).collect(),
-        constraints: problem.constraints.clone(),
-    }
+    Problem { bodies: problem.bodies.iter().zip(poses.iter()).map(|(b, pose)| super::problem::Body { pose: *pose, grounded: b.grounded }).collect(), constraints: problem.constraints.clone() }
 }
 
 /// Least-squares solution through SVD, stable under degeneracy.
@@ -834,10 +812,7 @@ mod tests {
     /// it was.
     #[test]
     fn lying_on_an_axis_never_turns_the_part() {
-        let turned = Isometry3::from_parts(
-            Translation3::new(400.0, 90.0, 0.0),
-            UnitQuaternion::from_axis_angle(&Vector3::y_axis(), std::f64::consts::PI),
-        );
+        let turned = Isometry3::from_parts(Translation3::new(400.0, 90.0, 0.0), UnitQuaternion::from_axis_angle(&Vector3::y_axis(), std::f64::consts::PI));
         let mut p = Problem::new(vec![Body::grounded(at(0.0, 0.0, 0.0)), Body::new(turned)]);
         let a = Anchor::new(0, at(0.0, 0.0, 0.0));
         let b = Anchor::new(1, at(0.0, 0.0, 0.0));
@@ -873,10 +848,7 @@ mod tests {
     fn it_converges_from_a_deliberately_terrible_start() {
         // The body starts far away and turned. Without damping this case requires a heuristic
         // pre-alignment, which displaces bodies by itself.
-        let far = Isometry3::from_parts(
-            Translation3::new(5000.0, -3000.0, 900.0),
-            UnitQuaternion::from_axis_angle(&Vector3::x_axis(), 2.9),
-        );
+        let far = Isometry3::from_parts(Translation3::new(5000.0, -3000.0, 900.0), UnitQuaternion::from_axis_angle(&Vector3::x_axis(), 2.9));
         let mut p = Problem::new(vec![Body::grounded(at(0.0, 0.0, 0.0)), Body::new(far)]);
         let a = Anchor::from_axes(0, Vector3::zeros(), Vector3::z(), Vector3::x()).unwrap();
         let b = Anchor::from_axes(1, Vector3::zeros(), Vector3::z(), Vector3::x()).unwrap();
@@ -993,11 +965,7 @@ mod free_dof_tests {
         // pose is soft, so the body settles at an equilibrium rather than exactly back. What matters is
         // that the drift is measured in microns instead of the forty millimetres produced by frame
         // composition.
-        assert!(
-            poses[1].translation.vector.z.abs() < 1e-3,
-            "the body was moved {:.6} mm along the free axis, which the constraint never required",
-            poses[1].translation.vector.z
-        );
+        assert!(poses[1].translation.vector.z.abs() < 1e-3, "the body was moved {:.6} mm along the free axis, which the constraint never required", poses[1].translation.vector.z);
         // Coaxiality removes 4 of the 6 degrees: two transverse translations and two rotations. Exactly
         // two remain, travel along the axis and rotation about it, which is a cylindrical mate; for a
         // revolute pair that rotation is the whole point.

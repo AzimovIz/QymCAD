@@ -27,11 +27,7 @@ use qymcad_core::model::{Id, Project};
 const FOREIGN_ID: u32 = 999_999;
 
 fn box_body(p: &mut Project, w: f64, h: f64, up: f64) -> Id {
-    let sid = p.add_line_sketch(
-        "Sketch",
-        vec![Point2::new(0.0, 0.0), Point2::new(w, 0.0), Point2::new(w, h), Point2::new(0.0, h)],
-        true,
-    );
+    let sid = p.add_line_sketch("Sketch", vec![Point2::new(0.0, 0.0), Point2::new(w, 0.0), Point2::new(w, h), Point2::new(0.0, h)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {
@@ -54,10 +50,7 @@ fn a_fillet_with_a_lost_edge_says_so_instead_of_rounding_everything() {
     let f = p.add_fillet(body, 1.5, vec![FOREIGN_ID]);
     qymcad_testkit::regenerate(&mut p);
     let now = p.regen_faces.get(&f).map(|x| x.len()).unwrap_or(0);
-    assert!(
-        !p.regen_errors.is_empty(),
-        "a fillet on a lost reference must fail rather than stay silent: the face count became {now}"
-    );
+    assert!(!p.regen_errors.is_empty(), "a fillet on a lost reference must fail rather than stay silent: the face count became {now}");
     assert_eq!(now, 6, "the body must stay untouched instead of being rounded all over: {now} faces");
 }
 
@@ -84,10 +77,7 @@ fn a_shell_that_found_fewer_faces_than_asked_says_so() {
     let sh = p.add_shell_mode(body, 2.0, open, qymcad_core::feature::ShellSide::Inward);
     qymcad_testkit::regenerate(&mut p);
     let now = p.regen_faces.get(&sh).map(|x| x.len()).unwrap_or(0);
-    assert!(
-        !p.regen_errors.is_empty(),
-        "the shell found fewer faces than were asked for and must say so: the face count became {now}"
-    );
+    assert!(!p.regen_errors.is_empty(), "the shell found fewer faces than were asked for and must say so: the face count became {now}");
 }
 
 /// THE CURE DID NOT KILL THE PATIENT. A "round EVERYTHING" request names no descriptors at all and
@@ -172,10 +162,7 @@ fn a_shell_that_hollowed_nothing_says_so() {
     let sh = p.add_shell_mode(body, 12.0, open, qymcad_core::feature::ShellSide::Inward); // a wall the full height — there will be no cavity
     qymcad_testkit::regenerate(&mut p);
     let now: f64 = p.regen_faces.get(&sh).map(|f| f.iter().map(|x| x.area).sum()).unwrap_or(0.0);
-    assert!(
-        !p.regen_errors.is_empty(),
-        "the shell hollowed nothing and must say so: stock area {solid:.2}, now {now:.2}"
-    );
+    assert!(!p.regen_errors.is_empty(), "the shell hollowed nothing and must say so: stock area {solid:.2}, now {now:.2}");
 }
 
 /// AND A SANE THICKNESS BUILDS AS BEFORE. Measured: 2232.00 for the stock, 3032.00 for the shell.

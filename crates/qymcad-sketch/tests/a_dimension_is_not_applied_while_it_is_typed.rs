@@ -68,11 +68,7 @@ fn a_length_that_cannot_exist_is_not_handed_to_the_solver() {
             bad.push(format!("{v} was taken={took}, the edge became {edge:.3} instead of 100"));
         }
     }
-    assert!(
-        bad.is_empty(),
-        "a length of zero or less reached the solver, and it collapses the edge to nothing:\n{}",
-        bad.join("\n")
-    );
+    assert!(bad.is_empty(), "a length of zero or less reached the solver, and it collapses the edge to nothing:\n{}", bad.join("\n"));
 }
 
 /// AND AN ORDINARY VALUE STILL GOES IN.

@@ -27,14 +27,7 @@ fn scene(gap: f64) -> (Project, usize) {
 }
 
 fn closed_areas(p: &Project, si: usize) -> Vec<f64> {
-    let mut v: Vec<f64> = p.sketches[si]
-        .contour_ids
-        .iter()
-        .filter_map(|c| p.contour_index(*c))
-        .map(|i| &p.contours[i])
-        .filter(|c| c.closed)
-        .map(|c| c.area().abs())
-        .collect();
+    let mut v: Vec<f64> = p.sketches[si].contour_ids.iter().filter_map(|c| p.contour_index(*c)).map(|i| &p.contours[i]).filter(|c| c.closed).map(|c| c.area().abs()).collect();
     v.sort_by(f64::total_cmp);
     v
 }

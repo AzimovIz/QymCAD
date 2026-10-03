@@ -59,11 +59,7 @@ fn unescape(s: &str) -> Option<String> {
             "quot" => out.push('"'),
             "apos" => out.push('\''),
             _ => {
-                let code = if let Some(h) = ent.strip_prefix("#x").or_else(|| ent.strip_prefix("#X")) {
-                    u32::from_str_radix(h, 16).ok()?
-                } else {
-                    ent.strip_prefix('#')?.parse().ok()?
-                };
+                let code = if let Some(h) = ent.strip_prefix("#x").or_else(|| ent.strip_prefix("#X")) { u32::from_str_radix(h, 16).ok()? } else { ent.strip_prefix('#')?.parse().ok()? };
                 out.push(char::from_u32(code)?);
             }
         }

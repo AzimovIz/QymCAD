@@ -112,9 +112,15 @@ fn local(node: &Value) -> M4 {
     let (x, y, z, w) = (f("rotation", 0, 0.0), f("rotation", 1, 0.0), f("rotation", 2, 0.0), f("rotation", 3, 1.0));
     let (sx, sy, sz) = (f("scale", 0, 1.0), f("scale", 1, 1.0), f("scale", 2, 1.0));
     let r = [
-        1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y + z * w), 2.0 * (x * z - y * w),
-        2.0 * (x * y - z * w), 1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z + x * w),
-        2.0 * (x * z + y * w), 2.0 * (y * z - x * w), 1.0 - 2.0 * (x * x + y * y),
+        1.0 - 2.0 * (y * y + z * z),
+        2.0 * (x * y + z * w),
+        2.0 * (x * z - y * w),
+        2.0 * (x * y - z * w),
+        1.0 - 2.0 * (x * x + z * z),
+        2.0 * (y * z + x * w),
+        2.0 * (x * z + y * w),
+        2.0 * (y * z - x * w),
+        1.0 - 2.0 * (x * x + y * y),
     ];
     [r[0] * sx, r[1] * sx, r[2] * sx, 0.0, r[3] * sy, r[4] * sy, r[5] * sy, 0.0, r[6] * sz, r[7] * sz, r[8] * sz, 0.0, tx, ty, tz, 1.0]
 }
@@ -441,7 +447,11 @@ impl Out {
     fn material(&mut self, rgb: [u8; 3]) -> usize {
         let linear = rgb.map(|b| {
             let c = b as f64 / 255.0;
-            if c <= 0.040_45 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
+            if c <= 0.040_45 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            }
         });
         let m = serde_json::json!({"pbrMetallicRoughness": {"baseColorFactor": [linear[0], linear[1], linear[2], 1.0], "metallicFactor": 0.0}});
         match self.materials.iter().position(|x| *x == m) {

@@ -109,10 +109,14 @@ fn parse(xml: &str) -> Result<Vec<NamedMesh>, String> {
     }
     let constellations: Vec<&Node> = root.all("constellation").collect();
     let place_mesh = |m: &Mesh, p: &Place| Mesh {
-        verts: m.verts.iter().map(|v| {
-            let q = p.apply([v.x, v.y, v.z]);
-            Point3::new(q[0] * to_mm, q[1] * to_mm, q[2] * to_mm)
-        }).collect(),
+        verts: m
+            .verts
+            .iter()
+            .map(|v| {
+                let q = p.apply([v.x, v.y, v.z]);
+                Point3::new(q[0] * to_mm, q[1] * to_mm, q[2] * to_mm)
+            })
+            .collect(),
         tris: m.tris.clone(),
     };
     // constellations nobody else instances are the top; each instance under them is a body

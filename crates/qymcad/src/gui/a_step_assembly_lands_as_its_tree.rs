@@ -92,7 +92,12 @@ mod tests {
         let root = named(&app, name(0))[0];
         let (bodies, back) = exported(&mut app, &ctx, root, "door-out.step");
         let roots: Vec<usize> = (0..back.len()).filter(|&i| back[i].parent.is_none()).collect();
-        assert_eq!(roots.iter().map(|&i| back[i].name.as_str()).collect::<Vec<_>>(), [name(0)], "the subassembly does not go out under its name; the file holds {:?}", back.iter().map(|n| &n.name).collect::<Vec<_>>());
+        assert_eq!(
+            roots.iter().map(|&i| back[i].name.as_str()).collect::<Vec<_>>(),
+            [name(0)],
+            "the subassembly does not go out under its name; the file holds {:?}",
+            back.iter().map(|n| &n.name).collect::<Vec<_>>()
+        );
         let under = |p: usize| back.iter().filter(|n| n.parent == Some(p)).map(|n| n.name.as_str()).collect::<Vec<_>>();
         assert_eq!(under(roots[0]), [name(1), name(1), name(2)], "the tree does not go out as it stands");
         let unit = (0..back.len()).find(|&i| back[i].name == name(2)).expect("the subassembly inside");
@@ -179,7 +184,12 @@ mod tests {
         assert_eq!(back.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), [name(1), name(1), name(3)], "the parts do not go out under their names");
         assert_eq!(back.iter().map(|p| p.color).collect::<Vec<_>>(), [Some([204, 26, 26]), Some([204, 26, 26]), Some([26, 51, 230])], "the parts do not go out in their colours");
         let bounds = |k: usize| world_box(&back[k]);
-        assert!((0..2).any(|k| near(&bounds(k), &[0.0, 0.0, 0.0, 10.0, 20.0, 5.0], 1e-3)) && (0..2).any(|k| near(&bounds(k), &[30.0, 0.0, 0.0, 40.0, 20.0, 5.0], 1e-3)), "the plates go out at {:?} and {:?}", bounds(0), bounds(1));
+        assert!(
+            (0..2).any(|k| near(&bounds(k), &[0.0, 0.0, 0.0, 10.0, 20.0, 5.0], 1e-3)) && (0..2).any(|k| near(&bounds(k), &[30.0, 0.0, 0.0, 40.0, 20.0, 5.0], 1e-3)),
+            "the plates go out at {:?} and {:?}",
+            bounds(0),
+            bounds(1)
+        );
         assert!(near(&bounds(2), &[1.0, 6.0, 5.0, 9.0, 14.0, 17.0], 0.15), "the pin goes out at {:?}", bounds(2));
         // BACK IN BY THE DOOR as the tree the file holds: the subassembly with its two plates and the unit holding the
         // pin, every part where it stands. The subassembly is found as the last one in, not by its name, which the
@@ -191,7 +201,12 @@ mod tests {
         // brought back beside the same parts, they come in numbered "(2)"; the tree is checked by the names without it
         let bare = |n: &str| n.rsplit_once(" (").filter(|(_, k)| k.ends_with(')') && k[..k.len() - 1].chars().all(|c| c.is_ascii_digit())).map_or(n.to_string(), |(b, _)| b.to_string());
         let tree: Vec<(String, ComponentKind)> = under(&app, top).into_iter().map(|(n, k)| (bare(&n), k)).collect();
-        assert_eq!(tree, [(name(1).to_string(), ComponentKind::Part), (name(1).to_string(), ComponentKind::Part), (name(2).to_string(), ComponentKind::Assembly)], "the file comes in as {tree:?} under {:?}", app.project.components.iter().find(|c| c.id == top).map(|c| &c.name));
+        assert_eq!(
+            tree,
+            [(name(1).to_string(), ComponentKind::Part), (name(1).to_string(), ComponentKind::Part), (name(2).to_string(), ComponentKind::Assembly)],
+            "the file comes in as {tree:?} under {:?}",
+            app.project.components.iter().find(|c| c.id == top).map(|c| &c.name)
+        );
         let unit = app.project.components.iter().filter(|c| c.parent == Some(top)).map(|c| c.id).last().expect("the unit");
         let pin: Vec<(String, ComponentKind)> = under(&app, unit).into_iter().map(|(n, k)| (bare(&n), k)).collect();
         assert_eq!(pin, [(name(3).to_string(), ComponentKind::Part)]);
@@ -219,13 +234,19 @@ mod tests {
         assert_eq!(back.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), [name(1), name(1), name(3)], "the parts do not go out under their names");
         assert_eq!(back.iter().map(|p| p.color).collect::<Vec<_>>(), [Some([204, 26, 26]), Some([204, 26, 26]), Some([26, 51, 230])], "the parts do not go out in their colours");
         let bounds = |k: usize| world_box(&back[k]);
-        assert!((0..2).any(|k| near(&bounds(k), &[0.0, 0.0, 0.0, 10.0, 20.0, 5.0], 1e-6)) && (0..2).any(|k| near(&bounds(k), &[30.0, 0.0, 0.0, 40.0, 20.0, 5.0], 1e-6)), "the plates go out at {:?} and {:?}", bounds(0), bounds(1));
+        assert!(
+            (0..2).any(|k| near(&bounds(k), &[0.0, 0.0, 0.0, 10.0, 20.0, 5.0], 1e-6)) && (0..2).any(|k| near(&bounds(k), &[30.0, 0.0, 0.0, 40.0, 20.0, 5.0], 1e-6)),
+            "the plates go out at {:?} and {:?}",
+            bounds(0),
+            bounds(1)
+        );
         assert!(near(&bounds(2), &[1.0, 6.0, 5.0, 9.0, 14.0, 17.0], 0.15), "the pin goes out at {:?}", bounds(2));
         // BACK IN BY THE DOOR: a subassembly under the file's name, its parts where the components place them
         answer(&mut app, &ctx, Want::Anything, concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/step-export/door-out.3mf"));
         settle(&mut app, &ctx);
         calm(&mut app, &ctx);
-        let sub = *named(&app, "door-out").first().unwrap_or_else(|| panic!("no subassembly under the file's name; the tree: {:?}", app.project.components.iter().map(|c| &c.name).collect::<Vec<_>>()));
+        let sub =
+            *named(&app, "door-out").first().unwrap_or_else(|| panic!("no subassembly under the file's name; the tree: {:?}", app.project.components.iter().map(|c| &c.name).collect::<Vec<_>>()));
         // brought back into the document that holds the same parts, they come in numbered - "Plate (2)" - to be told
         // apart from those already here; the tree is what is checked, under the names without the number
         let bare = |n: &str| n.rsplit_once(" (").filter(|(_, k)| k.ends_with(')') && k[..k.len() - 1].chars().all(|c| c.is_ascii_digit())).map_or(n.to_string(), |(b, _)| b.to_string());
@@ -323,7 +344,14 @@ mod tests {
         // INTO THE PRINT HEAD by a double click on its row, as a person goes into a subassembly: the tree then shows
         // its first level
         // the head as a subassembly, or as one part where the file holds no tree (a mesh: PLY, STL)
-        let head = app.project.components.iter().filter(|c| c.parent == Some(app.project.root)).find(|c| c.kind == ComponentKind::Assembly || !app.project.component_bodies(c.id).is_empty()).map(|c| c.name.clone()).expect("the head came in");
+        let head = app
+            .project
+            .components
+            .iter()
+            .filter(|c| c.parent == Some(app.project.root))
+            .find(|c| c.kind == ComponentKind::Assembly || !app.project.component_bodies(c.id).is_empty())
+            .map(|c| c.name.clone())
+            .expect("the head came in");
         let texts = frame(&mut app, &ctx, Vec::new());
         let row = spot(&texts, &head).unwrap_or_else(|| panic!("no row {head:?} in the tree"));
         let _ = frame(&mut app, &ctx, click(row));
@@ -358,13 +386,26 @@ mod tests {
         let mut our_colours: Vec<[u8; 3]> = ours.iter().flat_map(|&p| app.project.component_bodies(p)).filter_map(|b| app.project.mesh_index(b)).map(|i| app.project.mesh_color(i)).collect();
         our_colours.sort();
         our_colours.dedup();
-        eprintln!("ours: {} parts, {} of them no clone, colours {our_colours:?}; the file: {} nodes, {} parts, {} bodies, colours {colours:?}; the first level: {:?}", ours.len(), originals, back.len(), leaves, bodies.len(), first);
+        eprintln!(
+            "ours: {} parts, {} of them no clone, colours {our_colours:?}; the file: {} nodes, {} parts, {} bodies, colours {colours:?}; the first level: {:?}",
+            ours.len(),
+            originals,
+            back.len(),
+            leaves,
+            bodies.len(),
+            first
+        );
         assert_eq!(first, want, "the first level does not go out as it stands");
         assert_eq!(leaves, ours.len(), "not every part goes out");
         assert_eq!(bodies.len(), originals, "a clone goes out as a product of its own, or a part is missing");
         assert_eq!(colours, our_colours, "the colours do not go out as they stand");
         // THE FACES OF A COLOUR OF THEIR OWN go out as many as the parts hold: a clone repeats its original's product
-        let our_faces: usize = ours.iter().filter(|&&p| app.project.instance_origin(p) == p).filter_map(|&p| app.project.component_bodies(p).first().copied()).map(|b| app.project.face_colors.get(&app.project.lineage_root(b)).map_or(0, Vec::len)).sum();
+        let our_faces: usize = ours
+            .iter()
+            .filter(|&&p| app.project.instance_origin(p) == p)
+            .filter_map(|&p| app.project.component_bodies(p).first().copied())
+            .map(|b| app.project.face_colors.get(&app.project.lineage_root(b)).map_or(0, Vec::len))
+            .sum();
         let their_faces: usize = back.iter().map(|n| n.faces.len()).sum();
         eprintln!("faces of a colour of their own: {our_faces} in the document, {their_faces} back from the file");
         assert_eq!(their_faces, our_faces, "the faces of a colour of their own do not go out as they stand");
@@ -383,7 +424,8 @@ mod tests {
         let mut worst = 0.0f64;
         for &p in &ours {
             let m = app.project.world_transform(p);
-            let (k, d) = placed.iter().enumerate().map(|(k, t)| (k, t.iter().zip(&m).map(|(a, b)| (a - b).abs()).fold(0.0, f64::max))).min_by(|a, b| a.1.total_cmp(&b.1)).expect("a part left in the file");
+            let (k, d) =
+                placed.iter().enumerate().map(|(k, t)| (k, t.iter().zip(&m).map(|(a, b)| (a - b).abs()).fold(0.0, f64::max))).min_by(|a, b| a.1.total_cmp(&b.1)).expect("a part left in the file");
             worst = worst.max(d);
             placed.swap_remove(k);
         }
@@ -456,7 +498,8 @@ mod tests {
         let shows = |p: Id| {
             let b = app.project.component_bodies(p)[0];
             let own = app.project.face_colors.get(&app.project.lineage_root(b)).cloned().unwrap_or_default();
-            let mut cs: Vec<[u8; 3]> = app.project.bodies[app.project.mesh_index(b).expect("a body")].faces.iter().map(|f| own.iter().find(|(id, _)| *id == f.id).map_or(colour_of(p), |(_, c)| *c)).collect();
+            let mut cs: Vec<[u8; 3]> =
+                app.project.bodies[app.project.mesh_index(b).expect("a body")].faces.iter().map(|f| own.iter().find(|(id, _)| *id == f.id).map_or(colour_of(p), |(_, c)| *c)).collect();
             cs.sort_unstable();
             cs.dedup();
             cs
@@ -473,9 +516,13 @@ mod tests {
         let (mut worst, mut wrong_colour, mut wrong_faces, mut own_tris) = (0.0f64, 0usize, 0usize, 0usize);
         for &p in &ours {
             let want = part_box(p);
-            let (k, d) = left.iter().enumerate().filter(|(_, &i)| back[i].name == name_of(p)).map(|(k, &i)| {
-                (k, world_box(&back[i]).iter().zip(&want).map(|(a, b)| (a - b).abs()).fold(0.0, f64::max))
-            }).min_by(|a, b| a.1.total_cmp(&b.1)).expect("a piece of the part's name left");
+            let (k, d) = left
+                .iter()
+                .enumerate()
+                .filter(|(_, &i)| back[i].name == name_of(p))
+                .map(|(k, &i)| (k, world_box(&back[i]).iter().zip(&want).map(|(a, b)| (a - b).abs()).fold(0.0, f64::max)))
+                .min_by(|a, b| a.1.total_cmp(&b.1))
+                .expect("a piece of the part's name left");
             worst = worst.max(d);
             let (piece, seen) = (&back[left[k]], shows(p));
             // glTF gives a mesh no colour but its primitives': a part no face of which shows its body's colour comes
@@ -529,7 +576,8 @@ mod tests {
         answer(&mut app, &ctx, Want::Anything, concat!(env!("CARGO_MANIFEST_DIR"), "/../qymcad-kernel/tests/data/surfaces.igs"));
         settle(&mut app, &ctx);
         calm(&mut app, &ctx);
-        let root = *named(&app, "surfaces").first().unwrap_or_else(|| panic!("no subassembly under the file's name; the tree: {:?}", app.project.components.iter().map(|c| &c.name).collect::<Vec<_>>()));
+        let root =
+            *named(&app, "surfaces").first().unwrap_or_else(|| panic!("no subassembly under the file's name; the tree: {:?}", app.project.components.iter().map(|c| &c.name).collect::<Vec<_>>()));
         assert_eq!(under(&app, root), [(name(1).to_string(), ComponentKind::Part), (name(2).to_string(), ComponentKind::Assembly)], "the tree under the file");
         assert_eq!(under(&app, named(&app, name(2))[0]), [(name(3).to_string(), ComponentKind::Part)], "the unit does not hold the pin");
         let (plate, _) = body_at(&app, named(&app, name(1))[0]);

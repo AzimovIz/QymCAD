@@ -75,10 +75,7 @@ pub(in crate::gui) mod tests {
 
         // THE GROUNDED ONE DOES NOT MOVE, the free one comes onto the axis of the grounded one.
         let ground_after = app.project.world_transform(owner_a);
-        assert!(
-            ground_before.iter().zip(ground_after.iter()).all(|(x, y)| (x - y).abs() < 1e-9),
-            "a joint has no right to move a grounded part"
-        );
+        assert!(ground_before.iter().zip(ground_after.iter()).all(|(x, y)| (x - y).abs() < 1e-9), "a joint has no right to move a grounded part");
         let (fa, fb) = (app.project.connector_matrix(ja).expect("the frame of A"), app.project.connector_matrix(jb).expect("the frame of B"));
         let wa = qymcad_core::feature::mat_mul12(&app.project.world_transform(owner_a), &fa);
         let wb = qymcad_core::feature::mat_mul12(&app.project.world_transform(owner_b), &fb);
@@ -111,24 +108,13 @@ pub(in crate::gui) mod tests {
         let owner_a = app.project.body_owner(ba).expect("the owner of A");
         let owner_b = app.project.body_owner(bb).expect("the owner of B");
         app.project.set_grounded(owner_a, true);
-        let (ca, cb) = (
-            app.project.add_connector(owner_a, qymcad_core::feature::AnchorRef::Origin),
-            app.project.add_connector(owner_b, qymcad_core::feature::AnchorRef::Origin),
-        );
+        let (ca, cb) = (app.project.add_connector(owner_a, qymcad_core::feature::AnchorRef::Origin), app.project.add_connector(owner_b, qymcad_core::feature::AnchorRef::Origin));
         let jid = app.project.add_joint(ca, cb, JointKind::Slider);
         app.project.solve_joints();
         let before = app.project.world_transform(owner_b);
 
         // the slide handle (slot 1) is dragged by 40 mm
-        app.side.joint.giz_drag = Some(super::super::JointGizDrag {
-            jid,
-            slot: 1,
-            ring: false,
-            start: 0.0,
-            amt: 40.0,
-            o: [0.0; 3],
-            dir: [0.0, 0.0, 1.0],
-        });
+        app.side.joint.giz_drag = Some(super::super::JointGizDrag { jid, slot: 1, ring: false, start: 0.0, amt: 40.0, o: [0.0; 3], dir: [0.0, 0.0, 1.0] });
         qymcad_assembly::apply_joint_giz(&mut app.joint_ctx());
 
         let j = app.project.joints.iter().find(|x| x.id == jid).expect("the joint is in place");
@@ -183,12 +169,7 @@ pub(in crate::gui) mod tests {
         let body = app.project.mesh_id(0).expect("the body");
         let mi = app.project.mesh_index(body).expect("the mesh");
         let face = app.project.bodies[mi].faces[0].clone();
-        let key = qymcad_core::feature::FaceKey {
-            index: 0,
-            centroid: [face.centroid.x, face.centroid.y, face.centroid.z],
-            normal: face.normal,
-            id: face.id,
-        };
+        let key = qymcad_core::feature::FaceKey { index: 0, centroid: [face.centroid.x, face.centroid.y, face.centroid.z], normal: face.normal, id: face.id };
         // first as it stands (the B-rep is live), then as after opening a bundle
         let si = app.create_sketch_on(qymcad_core::feature::SketchPlane::Face(body, key));
         let with_brep = crate::gui::sketching::sketch_ref_edges_2d(&app.cache, &app.tools.cmd, &app.live, &app.project, &app.regen, si).len();
@@ -216,10 +197,7 @@ pub(in crate::gui) mod tests {
         app.live.tried_rev = None;
         app.tools.armed = qymcad_ui_state::Armed::Command(24); // THE THREAD
         crate::gui::commands::refresh_edges(&mut app.part_ctx());
-        assert!(
-            app.live.ready || app.regen.wanted || !app.live.shapes.is_empty(),
-            "the thread tool must ask for the live B-rep: without it, it answers a correct click with a miss"
-        );
+        assert!(app.live.ready || app.regen.wanted || !app.live.shapes.is_empty(), "the thread tool must ask for the live B-rep: without it, it answers a correct click with a miss");
     }
 
     /// THE GIZMO OF A JOINT TURNS THE SAME WAY THE GIZMO OF A BODY DOES.
@@ -240,10 +218,7 @@ pub(in crate::gui) mod tests {
         app.enter_component(root);
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
         let bodies: Vec<_> = (0..app.project.bodies.len()).filter_map(|mi| app.project.mesh_id(mi)).collect();
-        let (owner_a, owner_b) = (
-            app.project.body_owner(bodies[0]).expect("the owner of A"),
-            app.project.body_owner(bodies[1]).expect("the owner of B"),
-        );
+        let (owner_a, owner_b) = (app.project.body_owner(bodies[0]).expect("the owner of A"), app.project.body_owner(bodies[1]).expect("the owner of B"));
         app.project.set_grounded(owner_a, true);
         let ca = app.project.add_connector(owner_a, qymcad_core::feature::AnchorRef::Origin);
         let cb = app.project.add_connector(owner_b, qymcad_core::feature::AnchorRef::Origin);
@@ -266,10 +241,7 @@ pub(in crate::gui) mod tests {
             let d = basis.2;
             [-d[0], -d[1], -d[2]]
         };
-        assert!(
-            axis[0] * basis.2[0] + axis[1] * basis.2[1] + axis[2] * basis.2[2] < 0.0,
-            "setup: the axis must look AT the viewer"
-        );
+        assert!(axis[0] * basis.2[0] + axis[1] * basis.2[1] + axis[2] * basis.2[2] < 0.0, "setup: the axis must look AT the viewer");
         app.side.joint.giz_drag = Some(super::super::JointGizDrag { jid, slot: 0, ring: true, start: 0.0, amt: 0.0, o: [0.0; 3], dir: axis });
 
         // A COUNTER-CLOCKWISE DRAG on screen: the cursor at twelve o'clock relative to the centre, moving
@@ -299,24 +271,13 @@ pub(in crate::gui) mod tests {
     #[test]
     fn every_joint_kind_is_creatable_through_the_bar() {
         use qymcad_core::feature::JointKind;
-        let kinds = [
-            JointKind::Rigid,
-            JointKind::Revolute,
-            JointKind::Slider,
-            JointKind::Cylindrical,
-            JointKind::Planar,
-            JointKind::Ball,
-            JointKind::PinSlot,
-        ];
+        let kinds = [JointKind::Rigid, JointKind::Revolute, JointKind::Slider, JointKind::Cylindrical, JointKind::Planar, JointKind::Ball, JointKind::PinSlot];
         // ALL seven are offered in the creation bar
         let src = include_str!("../../../qymcad-assembly/src/lib.rs");
         let a = src.find("joint_bar_kind").expect("the kind combo of the creation bar is in place");
         let b = src[a..].find("});").map(|i| a + i).unwrap_or(src.len());
         for k in kinds {
-            assert!(
-                src[a..b].contains(&format!("JointKind::{k:?}")),
-                "{k:?} is not offered in the creation bar — and there are no per-kind buttons any more, so the kind is unreachable"
-            );
+            assert!(src[a..b].contains(&format!("JointKind::{k:?}")), "{k:?} is not offered in the creation bar — and there are no per-kind buttons any more, so the kind is unreachable");
         }
 
         // and each one IS REALLY created with the kind chosen in the bar
@@ -389,10 +350,7 @@ pub(in crate::gui) mod tests {
         let unit = [went[0] / len, went[1] / len, went[2] / len];
 
         let dot = dir[0] * unit[0] + dir[1] * unit[1] + dir[2] * unit[2];
-        assert!(
-            dot > 0.999,
-            "the slide arrow points at {dir:?} and the part went to {unit:?} — the handle is dragged one way and the part goes another"
-        );
+        assert!(dot > 0.999, "the slide arrow points at {dir:?} and the part went to {unit:?} — the handle is dragged one way and the part goes another");
     }
 
     /// THE GEOMETRY IS UP BEFORE A FACE IS PICKED.
@@ -548,11 +506,7 @@ pub(in crate::gui) mod tests {
         // button and in no other way.
         app.start_joint_pick();
         qymcad_assembly::joint_pick_face_click_for_test(&mut app.joint_ctx(), body, key);
-        assert!(
-            qymcad_assembly::joint_pick_first_anchor_for_test(&mut app.joint_ctx()).is_some(),
-            "an anchor on a face was not taken although the faces are computed: {}",
-            app.status
-        );
+        assert!(qymcad_assembly::joint_pick_first_anchor_for_test(&mut app.joint_ctx()).is_some(), "an anchor on a face was not taken although the faces are computed: {}", app.status);
 
         // AN EDGE, THOUGH, REALLY HAS NOTHING TO WAIT FOR: the reference direction is read from the edges
         // of the model, there are none and there will be none — no live body is left. Here "one moment"
@@ -605,7 +559,8 @@ pub(in crate::gui) mod tests {
         let mut at = None;
         for _ in 0..2 {
             let out = ctx.run_ui(egui::RawInput { screen_rect: Some(rect), ..Default::default() }, |c| {
-                { app.side.joint.edit = app.side.joint.edit.or_else(|| app.project.joints.first().map(|j| j.id)); qymcad_assembly::joint_popup(&mut app.joint_ctx(), c, rect); }
+                app.side.joint.edit = app.side.joint.edit.or_else(|| app.project.joints.first().map(|j| j.id));
+                qymcad_assembly::joint_popup(&mut app.joint_ctx(), c, rect);
             });
             at = None;
             for cs in &out.shapes {
@@ -616,7 +571,8 @@ pub(in crate::gui) mod tests {
         let btn = |pressed| egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
         for events in [vec![egui::Event::PointerMoved(at)], vec![egui::Event::PointerMoved(at), btn(true)], vec![btn(false)]] {
             let _ = ctx.run_ui(egui::RawInput { screen_rect: Some(rect), events, ..Default::default() }, |c| {
-                { app.side.joint.edit = app.side.joint.edit.or_else(|| app.project.joints.first().map(|j| j.id)); qymcad_assembly::joint_popup(&mut app.joint_ctx(), c, rect); }
+                app.side.joint.edit = app.side.joint.edit.or_else(|| app.project.joints.first().map(|j| j.id));
+                qymcad_assembly::joint_popup(&mut app.joint_ctx(), c, rect);
             });
         }
         assert_eq!(app.side.joint.axis_pick, Some(ca), "the point-at-the-axis button did not take the tool: {:?}", app.side.joint.axis_pick);

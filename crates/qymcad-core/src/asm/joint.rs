@@ -205,7 +205,7 @@ impl Joint {
     /// Lets motion along the secondary axes be pinned with the same primitives as along the main one.
     fn turned_to(a: Anchor, axis: u8) -> Anchor {
         let q = match axis {
-            0 => UnitQuaternion::from_axis_angle(&Vector3::y_axis(), std::f64::consts::FRAC_PI_2), // Z → X
+            0 => UnitQuaternion::from_axis_angle(&Vector3::y_axis(), std::f64::consts::FRAC_PI_2),  // Z → X
             1 => UnitQuaternion::from_axis_angle(&Vector3::x_axis(), -std::f64::consts::FRAC_PI_2), // Z → Y
             _ => UnitQuaternion::identity(),
         };
@@ -268,19 +268,11 @@ impl Joint {
     fn base_primitives(&self, a: Anchor, b: Anchor) -> Vec<Constraint> {
         match self.kind {
             // Nothing is free: points, axes and roll all coincide.
-            JointKind::Rigid => vec![
-                Constraint::PointCoincident { a, b },
-                Constraint::AxisAligned { a, b },
-                Constraint::RollAligned { a, b },
-            ],
+            JointKind::Rigid => vec![Constraint::PointCoincident { a, b }, Constraint::AxisAligned { a, b }, Constraint::RollAligned { a, b }],
             // Rotation about the axis is free: points and axes coincide, roll is not pinned.
             JointKind::Revolute => vec![Constraint::PointCoincident { a, b }, Constraint::AxisAligned { a, b }],
             // Travel along the axis is free: point on axis, axes aligned, roll pinned.
-            JointKind::Slider => vec![
-                Constraint::OnAxis { a, b },
-                Constraint::AxisAligned { a, b },
-                Constraint::RollAligned { a, b },
-            ],
+            JointKind::Slider => vec![Constraint::OnAxis { a, b }, Constraint::AxisAligned { a, b }, Constraint::RollAligned { a, b }],
             // Travel along the axis and rotation about it are free.
             JointKind::Cylindrical => vec![Constraint::OnAxis { a, b }, Constraint::AxisAligned { a, b }],
             // Two translations in the plane and rotation about the normal are free.
@@ -314,10 +306,7 @@ impl Joint {
             // holds the distance along the normal, which is why it has three degrees rather than four;
             // treating the two as the same mate silently converts one into the other.
             JointKind::Parallel => vec![Constraint::AxisAligned { a, b }],
-            JointKind::PinSlot => vec![
-                Constraint::OnAxis { a: Self::turned_to(b, 0), b: a },
-                Constraint::AxisAligned { a: b, b: a },
-            ],
+            JointKind::PinSlot => vec![Constraint::OnAxis { a: Self::turned_to(b, 0), b: a }, Constraint::AxisAligned { a: b, b: a }],
         }
     }
 }
@@ -350,10 +339,7 @@ mod tests {
 
     /// Two bodies: one grounded, the other moved and turned, so the solver has work to do.
     fn pair(kind: JointKind) -> (super::super::problem::Problem, Joint) {
-        let far = Isometry3::from_parts(
-            Translation3::new(120.0, -45.0, 30.0),
-            UnitQuaternion::from_axis_angle(&nalgebra::Unit::new_normalize(Vector3::new(1.0, 2.0, 0.5)), 1.2),
-        );
+        let far = Isometry3::from_parts(Translation3::new(120.0, -45.0, 30.0), UnitQuaternion::from_axis_angle(&nalgebra::Unit::new_normalize(Vector3::new(1.0, 2.0, 0.5)), 1.2));
         let a = Anchor::from_axes(0, Vector3::new(0.0, 0.0, 0.0), Vector3::z(), Vector3::x()).unwrap();
         let b = Anchor::from_axes(1, Vector3::new(0.0, 0.0, 0.0), Vector3::z(), Vector3::x()).unwrap();
         let j = Joint::new(a, b, kind);
@@ -367,15 +353,7 @@ mod tests {
     /// constraints, and "a slider behaves like a rigid mate" shows up only on screen.
     #[test]
     fn every_joint_kind_leaves_exactly_the_freedom_it_promises() {
-        let kinds = [
-            JointKind::Rigid,
-            JointKind::Revolute,
-            JointKind::Slider,
-            JointKind::Cylindrical,
-            JointKind::Planar,
-            JointKind::Ball,
-            JointKind::PinSlot,
-        ];
+        let kinds = [JointKind::Rigid, JointKind::Revolute, JointKind::Slider, JointKind::Cylindrical, JointKind::Planar, JointKind::Ball, JointKind::PinSlot];
         let mut bad = Vec::new();
         for k in kinds {
             let (p, _) = pair(k);
@@ -430,10 +408,7 @@ mod tests {
     /// nothing to preserve, so losing 30 mm along the axis failed nowhere.
     #[test]
     fn every_kind_keeps_the_place_along_the_directions_it_does_not_constrain() {
-        let start = Isometry3::from_parts(
-            Translation3::new(120.0, -45.0, 30.0),
-            UnitQuaternion::from_axis_angle(&nalgebra::Unit::new_normalize(Vector3::new(1.0, 2.0, 0.5)), 1.2),
-        );
+        let start = Isometry3::from_parts(Translation3::new(120.0, -45.0, 30.0), UnitQuaternion::from_axis_angle(&nalgebra::Unit::new_normalize(Vector3::new(1.0, 2.0, 0.5)), 1.2));
         // What must stay untouched, along X, Y and Z.
         let cases = [
             (JointKind::Slider, [false, false, true]),
@@ -473,25 +448,14 @@ mod tests {
     /// planar and parallel mates used to burn all 200.
     #[test]
     fn no_kind_of_joint_burns_its_way_to_the_iteration_cap() {
-        let start = Isometry3::from_parts(
-            Translation3::new(120.0, -45.0, 30.0),
-            UnitQuaternion::from_axis_angle(&nalgebra::Unit::new_normalize(Vector3::new(1.0, 2.0, 0.5)), 1.2),
-        );
+        let start = Isometry3::from_parts(Translation3::new(120.0, -45.0, 30.0), UnitQuaternion::from_axis_angle(&nalgebra::Unit::new_normalize(Vector3::new(1.0, 2.0, 0.5)), 1.2));
         // Pin-slot is excluded here by measurement, not as a concession. From a distant, turned start
         // its first attempt does not stall near the answer, it does not solve the problem at all:
         // residual 1.963e-1. The slot axis belongs to the moving body, so the line the pin must lie on
         // travels with it, and the problem is genuinely non-linear. The second attempt, started from
         // the assembled guess, finds the answer in 4 steps; here that is not a fallback but the only
         // path, and the guess exists for exactly such cases.
-        let kinds = [
-            JointKind::Rigid,
-            JointKind::Revolute,
-            JointKind::Slider,
-            JointKind::Cylindrical,
-            JointKind::Planar,
-            JointKind::Ball,
-            JointKind::Parallel,
-        ];
+        let kinds = [JointKind::Rigid, JointKind::Revolute, JointKind::Slider, JointKind::Cylindrical, JointKind::Planar, JointKind::Ball, JointKind::Parallel];
         let mut bad = Vec::new();
         let mut checked = 0usize;
         for kind in kinds {
@@ -529,10 +493,6 @@ mod tests {
         assert!(rep.converged, "the coaxial condition must hold: {:.3e}", rep.residual);
         let o = b.world_origin(&poses[1]);
         assert!(o.x.abs() < 1e-6 && o.y.abs() < 1e-6, "the anchors must become coaxial: {o:?}");
-        assert!(
-            poses[1].translation.vector.z.abs() < 1e-3,
-            "the body was moved {:.3} mm along the axis: a difference in hole depth must not move it",
-            poses[1].translation.vector.z
-        );
+        assert!(poses[1].translation.vector.z.abs() < 1e-3, "the body was moved {:.3} mm along the axis: a difference in hole depth must not move it", poses[1].translation.vector.z);
     }
 }

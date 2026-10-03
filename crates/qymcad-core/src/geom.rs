@@ -445,9 +445,7 @@ impl Mesh {
         let mut v = 0.0;
         for i in 0..self.tris.len() {
             let t = self.triangle(i);
-            v += (t[0].x * (t[1].y * t[2].z - t[2].y * t[1].z) - t[0].y * (t[1].x * t[2].z - t[2].x * t[1].z)
-                + t[0].z * (t[1].x * t[2].y - t[2].x * t[1].y))
-                / 6.0;
+            v += (t[0].x * (t[1].y * t[2].z - t[2].y * t[1].z) - t[0].y * (t[1].x * t[2].z - t[2].x * t[1].z) + t[0].z * (t[1].x * t[2].y - t[2].x * t[1].y)) / 6.0;
         }
         v.abs()
     }
@@ -514,11 +512,7 @@ impl Mesh {
         let c = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
         let len = (c[0] * c[0] + c[1] * c[1] + c[2] * c[2]).sqrt();
         let n = if len > 1e-12 { [c[0] / len, c[1] / len, c[2] / len] } else { [0.0, 0.0, 1.0] };
-        let ctr = Point3::new(
-            (t[0].x + t[1].x + t[2].x) / 3.0,
-            (t[0].y + t[1].y + t[2].y) / 3.0,
-            (t[0].z + t[1].z + t[2].z) / 3.0,
-        );
+        let ctr = Point3::new((t[0].x + t[1].x + t[2].x) / 3.0, (t[0].y + t[1].y + t[2].y) / 3.0, (t[0].z + t[1].z + t[2].z) / 3.0);
         (n, len * 0.5, ctr)
     }
 
@@ -914,23 +908,12 @@ pub fn nesting_depth(all: &[Contour], i: usize) -> usize {
         return 0;
     }
     let probe = me.centroid();
-    all.iter()
-        .enumerate()
-        .filter(|(k, c)| *k != i && c.closed && c.points.len() >= 3 && c.contains(probe))
-        .count()
+    all.iter().enumerate().filter(|(k, c)| *k != i && c.closed && c.points.len() >= 3 && c.contains(probe)).count()
 }
 
 /// Tessellate an arc into points. The angles are in radians and `ccw` gives the direction. `max_sag` is the largest
 /// permitted deviation of a chord from the arc, that is the accuracy of the linearisation.
-pub fn tessellate_arc(
-    cx: f64,
-    cy: f64,
-    radius: f64,
-    start: f64,
-    end: f64,
-    ccw: bool,
-    max_sag: f64,
-) -> Vec<Point2> {
+pub fn tessellate_arc(cx: f64, cy: f64, radius: f64, start: f64, end: f64, ccw: bool, max_sag: f64) -> Vec<Point2> {
     // Normalise the swept angle to the requested direction.
     let mut sweep = end - start;
     if ccw {
@@ -1379,31 +1362,16 @@ pub fn mesh_section_cap(mesh: &Mesh, origin: [f64; 3], normal: [f64; 3]) -> Vec<
     };
     let probes: Vec<Point2> = loops.iter().map(&probe).collect();
     let inside = |ip: Point2, ia: f64, outer: &Contour| outer.contains(ip) && outer.area() > ia;
-    let depth: Vec<usize> = loops
-        .iter()
-        .enumerate()
-        .map(|(i, c)| loops.iter().enumerate().filter(|(j, o)| *j != i && inside(probes[i], c.area(), o)).count())
-        .collect();
+    let depth: Vec<usize> = loops.iter().enumerate().map(|(i, c)| loops.iter().enumerate().filter(|(j, o)| *j != i && inside(probes[i], c.area(), o)).count()).collect();
     let mut tris: Vec<[Point3; 3]> = Vec::new();
     for (i, c) in loops.iter().enumerate() {
         if !depth[i].is_multiple_of(2) {
             continue; // A hole; the material around it comes from its parent loop.
         }
         // The direct children of this loop are its holes.
-        let holes: Vec<Vec<Point2>> = loops
-            .iter()
-            .enumerate()
-            .filter(|(j, h)| depth[*j] == depth[i] + 1 && inside(probes[*j], h.area(), c))
-            .map(|(_, h)| h.points.clone())
-            .collect();
+        let holes: Vec<Vec<Point2>> = loops.iter().enumerate().filter(|(j, h)| depth[*j] == depth[i] + 1 && inside(probes[*j], h.area(), c)).map(|(_, h)| h.points.clone()).collect();
         for t in triangulate_with_holes(&c.points, &holes) {
-            let lift = |p: Point2| {
-                Point3::new(
-                    origin[0] + u[0] * p.x + v[0] * p.y,
-                    origin[1] + u[1] * p.x + v[1] * p.y,
-                    origin[2] + u[2] * p.x + v[2] * p.y,
-                )
-            };
+            let lift = |p: Point2| Point3::new(origin[0] + u[0] * p.x + v[0] * p.y, origin[1] + u[1] * p.x + v[1] * p.y, origin[2] + u[2] * p.x + v[2] * p.y);
             tris.push([lift(t[0]), lift(t[1]), lift(t[2])]);
         }
     }
@@ -1449,9 +1417,11 @@ pub fn triangulate_with_holes(outer: &[Point2], holes: &[Vec<Point2>]) -> Vec<[P
         let (hi, _) = h.iter().enumerate().fold((0usize, f64::MIN), |(bi, bx), (i, p)| if p.x > bx { (i, p.x) } else { (bi, bx) });
         // The nearest vertex of the outer contour to the right of the cut-in point, a simple and robust bridge.
         let m = h[hi];
-        let Some(oi) = (0..poly.len()).filter(|&i| poly[i].x >= m.x - 1e-9).min_by(|&i, &j| poly[i].dist(m).partial_cmp(&poly[j].dist(m)).unwrap_or(std::cmp::Ordering::Equal)).or_else(|| {
-            (0..poly.len()).min_by(|&i, &j| poly[i].dist(m).partial_cmp(&poly[j].dist(m)).unwrap_or(std::cmp::Ordering::Equal))
-        }) else {
+        let Some(oi) = (0..poly.len())
+            .filter(|&i| poly[i].x >= m.x - 1e-9)
+            .min_by(|&i, &j| poly[i].dist(m).partial_cmp(&poly[j].dist(m)).unwrap_or(std::cmp::Ordering::Equal))
+            .or_else(|| (0..poly.len()).min_by(|&i, &j| poly[i].dist(m).partial_cmp(&poly[j].dist(m)).unwrap_or(std::cmp::Ordering::Equal)))
+        else {
             continue;
         };
         let mut merged: Vec<Point2> = Vec::with_capacity(poly.len() + h.len() + 2);
@@ -1557,7 +1527,10 @@ mod normal_tests {
             tris: vec![[0, 1, 2], [1, 3, 4], [1, 4, 2]],
         };
         // the roof's second face turned straight up: its corners at the shared vertex 1 keep their faces' normals
-        let sharp = Mesh { verts: vec![Point3::new(0.0, 0.0, 0.0), Point3::new(1.0, 0.0, 0.0), Point3::new(1.0, 1.0, 0.0), Point3::new(1.0, 0.0, 1.0), Point3::new(1.0, 1.0, 1.0)], tris: vec![[0, 1, 2], [1, 2, 4], [1, 4, 3]] };
+        let sharp = Mesh {
+            verts: vec![Point3::new(0.0, 0.0, 0.0), Point3::new(1.0, 0.0, 0.0), Point3::new(1.0, 1.0, 0.0), Point3::new(1.0, 0.0, 1.0), Point3::new(1.0, 1.0, 1.0)],
+            tris: vec![[0, 1, 2], [1, 2, 4], [1, 4, 3]],
+        };
         let n = sharp.corner_normals(30.0);
         assert!((n[1][2] - 1.0).abs() < 1e-9, "the flat face's corner at the edge is {:?}, not +Z", n[1]);
         assert!((n[3][0] - 1.0).abs() < 1e-9, "the upright face's corner at the edge is {:?}, not +X", n[3]);
@@ -1570,10 +1543,7 @@ mod normal_tests {
     // A flat quad of two triangles with shared vertices: the vertex normal equals the face normal, +Z.
     #[test]
     fn vertex_normals_flat_quad_shares_face_normal() {
-        let m = Mesh {
-            verts: vec![Point3::new(0.0, 0.0, 0.0), Point3::new(1.0, 0.0, 0.0), Point3::new(1.0, 1.0, 0.0), Point3::new(0.0, 1.0, 0.0)],
-            tris: vec![[0, 1, 2], [0, 2, 3]],
-        };
+        let m = Mesh { verts: vec![Point3::new(0.0, 0.0, 0.0), Point3::new(1.0, 0.0, 0.0), Point3::new(1.0, 1.0, 0.0), Point3::new(0.0, 1.0, 0.0)], tris: vec![[0, 1, 2], [0, 2, 3]] };
         for n in m.vertex_normals() {
             assert!((n[0]).abs() < 1e-9 && (n[1]).abs() < 1e-9 && (n[2] - 1.0).abs() < 1e-9, "a flat quad must give +Z, got {n:?}");
         }
@@ -1614,17 +1584,20 @@ mod normal_tests {
         /// A box [x0..x1] x [y0..y1] x [z0..z1] as 12 triangles; the normals do not matter for a section.
         fn box_mesh(x0: f64, x1: f64, y0: f64, y1: f64, z0: f64, z1: f64) -> Mesh {
             let v = |x: f64, y: f64, z: f64| Point3::new(x, y, z);
-            let verts = vec![
-                v(x0, y0, z0), v(x1, y0, z0), v(x1, y1, z0), v(x0, y1, z0),
-                v(x0, y0, z1), v(x1, y0, z1), v(x1, y1, z1), v(x0, y1, z1),
-            ];
+            let verts = vec![v(x0, y0, z0), v(x1, y0, z0), v(x1, y1, z0), v(x0, y1, z0), v(x0, y0, z1), v(x1, y0, z1), v(x1, y1, z1), v(x0, y1, z1)];
             let tris = vec![
-                [0, 2, 1], [0, 3, 2], // Bottom.
-                [4, 5, 6], [4, 6, 7], // Top.
-                [0, 1, 5], [0, 5, 4], // y0
-                [1, 2, 6], [1, 6, 5], // x1
-                [2, 3, 7], [2, 7, 6], // y1
-                [3, 0, 4], [3, 4, 7], // x0
+                [0, 2, 1],
+                [0, 3, 2], // Bottom.
+                [4, 5, 6],
+                [4, 6, 7], // Top.
+                [0, 1, 5],
+                [0, 5, 4], // y0
+                [1, 2, 6],
+                [1, 6, 5], // x1
+                [2, 3, 7],
+                [2, 7, 6], // y1
+                [3, 0, 4],
+                [3, 4, 7], // x0
             ];
             Mesh { verts, tris }
         }
@@ -1742,10 +1715,7 @@ mod normal_tests {
             let outer = vec![Point2::new(0.0, 0.0), Point2::new(10.0, 0.0), Point2::new(10.0, 10.0), Point2::new(0.0, 10.0)];
             let hole = vec![Point2::new(4.0, 4.0), Point2::new(6.0, 4.0), Point2::new(6.0, 6.0), Point2::new(4.0, 6.0)];
             let tris = triangulate_with_holes(&outer, &[hole]);
-            let area: f64 = tris
-                .iter()
-                .map(|t| ((t[1].x - t[0].x) * (t[2].y - t[0].y) - (t[1].y - t[0].y) * (t[2].x - t[0].x)).abs() * 0.5)
-                .sum();
+            let area: f64 = tris.iter().map(|t| ((t[1].x - t[0].x) * (t[2].y - t[0].y) - (t[1].y - t[0].y) * (t[2].x - t[0].x)).abs() * 0.5).sum();
             assert!((area - 96.0).abs() < 1e-6, "the triangulated area is 100 - 4: {area}");
         }
 
@@ -1756,5 +1726,4 @@ mod normal_tests {
             assert!(mesh_section_cap(&box_mesh(0.0, 1.0, 0.0, 1.0, 0.0, 1.0), [0.0; 3], [0.0; 3]).is_empty(), "a zero normal");
         }
     }
-
 }

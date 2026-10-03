@@ -3,12 +3,7 @@
 use qymcad_core::geom::{Contour, Point2};
 
 fn square(side: f64) -> Contour {
-    Contour::closed(vec![
-        Point2::new(0.0, 0.0),
-        Point2::new(side, 0.0),
-        Point2::new(side, side),
-        Point2::new(0.0, side),
-    ])
+    Contour::closed(vec![Point2::new(0.0, 0.0), Point2::new(side, 0.0), Point2::new(side, side), Point2::new(0.0, side)])
 }
 
 #[test]

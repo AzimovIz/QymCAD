@@ -80,9 +80,9 @@ fn matrix_base_extrude() {
     for which in ["rect", "rect_hole", "rings", "two_rects"] {
         use qymcad_core::feature::Reach;
         for (ext, reach, down, h_eff) in [
-            ("length", Reach::Forward, 0.0, 10.0),   // one side, 10
-            ("sym", Reach::BothWays, 0.0, 10.0),     // both ways 10 (+-5) — the total volume is the same
-            ("two", Reach::Forward, 4.0, 14.0),      // 10 up + 4 down
+            ("length", Reach::Forward, 0.0, 10.0), // one side, 10
+            ("sym", Reach::BothWays, 0.0, 10.0),   // both ways 10 (+-5) — the total volume is the same
+            ("two", Reach::Forward, 4.0, 14.0),    // 10 up + 4 down
         ] {
             let (mut p, sid, closed) = scene(which);
             let e = p.add_extrude_multi(sid, closed.clone(), 10.0, reach, down, vec![]);
@@ -154,11 +154,17 @@ fn matrix_ops_on_plate() {
             let plate_v = 100.0 * 100.0 * 20.0;
             use qymcad_core::feature::Reach;
             let (h, reach, expect) = match op {
-                0 => (5.0, Reach::Forward, plate_v - area * 5.0),  // a pocket 5 deep into the plate
+                0 => (5.0, Reach::Forward, plate_v - area * 5.0),    // a pocket 5 deep into the plate
                 1 => (50.0, Reach::BothWays, plate_v + area * 30.0), // both ways +-25: 5 above + 25 below, outside
                 _ => (50.0, Reach::BothWays, area * 20.0),           // intersection: scene column ∩ plate = area*20
             };
-            let node = p.add_combine_multi_op(plate, sid, closed.clone(), qymcad_core::model::CombineSpan { height: h, down: 0.0, extent: qymcad_core::feature::Extent { reach, ..Default::default() }, fill: &[] }, op);
+            let node = p.add_combine_multi_op(
+                plate,
+                sid,
+                closed.clone(),
+                qymcad_core::model::CombineSpan { height: h, down: 0.0, extent: qymcad_core::feature::Extent { reach, ..Default::default() }, fill: &[] },
+                op,
+            );
             let (report, shapes) = qymcad_testkit::regenerate(&mut p);
             let label = format!("{opname} {which}");
             for (id, er) in &report.errors {

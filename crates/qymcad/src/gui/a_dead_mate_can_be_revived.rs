@@ -23,12 +23,7 @@ mod tests {
     /// A point ON THE BODY that can be clicked: the centre of its topmost face.
     fn aim(app: &App, body: Id) -> [f64; 3] {
         let wt = app.project.body_display_transform(body, qymcad_ui_state::current_ctx_id(&app.active_path, &app.project));
-        let f = app
-            .project
-            .regen_faces
-            .get(&body)
-            .and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z)))
-            .expect("the body has faces");
+        let f = app.project.regen_faces.get(&body).and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z))).expect("the body has faces");
         qymcad_core::feature::apply12(&wt, [f.centroid.x, f.centroid.y, f.centroid.z])
     }
 
@@ -85,11 +80,7 @@ mod tests {
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
 
         let faults = app.project.joint_faults();
-        assert!(
-            !faults.iter().any(|(id, _)| *id == jid),
-            "the joint must COME ALIVE after the anchor is re-picked, and it is still dead: {faults:?}; status: {}",
-            app.status
-        );
+        assert!(!faults.iter().any(|(id, _)| *id == jid), "the joint must COME ALIVE after the anchor is re-picked, and it is still dead: {faults:?}; status: {}", app.status);
 
         // AND ONCE ALIVE IT MUST MOVE, not merely count as healthy.
         let owner = app.project.body_owner(mine[1]).expect("the owner of the driven part");

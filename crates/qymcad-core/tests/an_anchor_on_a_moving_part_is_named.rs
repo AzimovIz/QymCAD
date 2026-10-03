@@ -32,7 +32,6 @@ fn a_subassembly_with_a_moving_part(p: &mut Project) -> (Id, Id, Id) {
     (sub, still, moving)
 }
 
-
 /// A body belonging to a part. A body lives in the document through a timeline node whose owner is a
 /// component, and `body_owner` asks the timeline.
 fn body_inside(p: &mut Project, comp: Id) -> Id {
@@ -95,8 +94,5 @@ fn an_anchor_on_stationary_geometry_of_its_own_assembly_is_fine() {
     let jid = p.add_joint(out, ok, JointKind::Slider);
 
     let faults = p.joint_faults();
-    assert!(
-        !faults.iter().any(|(id, why)| *id == jid && *why == "j-fault-anchor-on-moving-part"),
-        "the anchor rests on stationary geometry of its own assembly, yet was declared faulty: {faults:?}"
-    );
+    assert!(!faults.iter().any(|(id, why)| *id == jid && *why == "j-fault-anchor-on-moving-part"), "the anchor rests on stationary geometry of its own assembly, yet was declared faulty: {faults:?}");
 }

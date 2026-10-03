@@ -20,10 +20,7 @@ fn removing_a_hole_restores_the_material() {
     let healed = drilled.remove_faces(&[bore]).expect("the hole was removed and healed");
     let v2 = healed.volume();
     assert!(healed.is_valid(), "the healed body has to stay valid");
-    assert!(
-        (v2 - v0).abs() < 1.0,
-        "with the hole removed the volume has to return to {v0}, and came out as {v2}"
-    );
+    assert!((v2 - v0).abs() < 1.0, "with the hole removed the volume has to return to {v0}, and came out as {v2}");
 }
 
 /// When a face cannot be removed, the answer is a refusal rather than a quiet "nothing changed".
@@ -39,10 +36,7 @@ fn an_impossible_removal_is_refused_not_silently_ignored() {
     // The fillet strips are bounded by spherical corners: they cannot be removed while the spheres remain,
     // since there is nothing for the neighbours to extend through. The algorithm removes a whole element rather
     // than an arbitrary piece of surface.
-    assert!(
-        rounded.remove_faces(&all_round).is_none(),
-        "an impossible removal has to refuse rather than return the same body as a success"
-    );
+    assert!(rounded.remove_faces(&all_round).is_none(), "an impossible removal has to refuse rather than return the same body as a success");
 }
 
 /// A face that does not exist gives a refusal rather than a damaged body.

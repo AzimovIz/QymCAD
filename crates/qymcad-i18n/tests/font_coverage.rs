@@ -130,12 +130,7 @@ fn the_ui_code_holds_words_not_symbols() {
             }
         }
     }
-    assert!(
-        bad.is_empty(),
-        "an interface string holds a symbol instead of a word or a `ph::*` icon ({}):\n{}",
-        bad.len(),
-        bad.join("\n")
-    );
+    assert!(bad.is_empty(), "an interface string holds a symbol instead of a word or a `ph::*` icon ({}):\n{}", bad.len(), bad.join("\n"));
 }
 
 /// AND IN THE HELP TOO — it is drawn by the same window and the same font.

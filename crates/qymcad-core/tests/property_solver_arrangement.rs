@@ -98,12 +98,7 @@ fn arrangement_is_deterministic() {
         let (p1, s1) = mk();
         let (p2, s2) = mk();
         let sig = |p: &Project, si: usize| -> Vec<(usize, u64)> {
-            p.sketches[si]
-                .contour_ids
-                .iter()
-                .filter_map(|c| p.contour_index(*c))
-                .map(|i| (p.contours[i].points.len(), (p.contours[i].area() * 1e6) as u64))
-                .collect()
+            p.sketches[si].contour_ids.iter().filter_map(|c| p.contour_index(*c)).map(|i| (p.contours[i].points.len(), (p.contours[i].area() * 1e6) as u64)).collect()
         };
         if sig(&p1, s1) != sig(&p2, s2) {
             bad.push(format!("seed {seed}: two runs over one scene produced different regions"));
@@ -185,12 +180,7 @@ fn solving_twice_is_stable() {
         p.solve_sketch(si);
         let first = p.sketches[si].points.clone();
         p.solve_sketch(si);
-        let moved = p.sketches[si]
-            .points
-            .iter()
-            .zip(first.iter())
-            .map(|(a, b)| ((a.x - b.x).powi(2) + (a.y - b.y).powi(2)).sqrt())
-            .fold(0.0_f64, f64::max);
+        let moved = p.sketches[si].points.iter().zip(first.iter()).map(|(a, b)| ((a.x - b.x).powi(2) + (a.y - b.y).powi(2)).sqrt()).fold(0.0_f64, f64::max);
         if moved > span * 1e-3 {
             bad.push(format!("seed {seed}: a repeated solve moved a point by {moved:.4}, so the sketch drifts"));
         }

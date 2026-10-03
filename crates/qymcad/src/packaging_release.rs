@@ -77,20 +77,9 @@ mod tests {
     fn the_publishing_job_counts_the_packages_that_are_built() {
         let uploads = upload_steps().len();
         let wf = workflow();
-        let line = wf
-            .lines()
-            .find(|l| l.contains("-eq") && l.contains("packages were expected"))
-            .expect("the publishing job no longer counts what arrived");
-        let expected: usize = line
-            .split("-eq")
-            .nth(1)
-            .and_then(|t| t.split(']').next())
-            .and_then(|t| t.trim().parse().ok())
-            .expect("the count in the publishing job is not a number");
-        assert_eq!(
-            expected, uploads,
-            "the run hands over {uploads} packages and the publishing job waits for {expected}; the Release page would go up short, or the run would stop at the last step"
-        );
+        let line = wf.lines().find(|l| l.contains("-eq") && l.contains("packages were expected")).expect("the publishing job no longer counts what arrived");
+        let expected: usize = line.split("-eq").nth(1).and_then(|t| t.split(']').next()).and_then(|t| t.trim().parse().ok()).expect("the count in the publishing job is not a number");
+        assert_eq!(expected, uploads, "the run hands over {uploads} packages and the publishing job waits for {expected}; the Release page would go up short, or the run would stop at the last step");
     }
 
     /// THE STEP THAT COMPILES THE PROGRAM CARRIES THE TAG.
@@ -126,9 +115,6 @@ mod tests {
             }
             start = i;
         }
-        assert!(
-            naked.is_empty(),
-            "a step compiles the program without QYMCAD_VERSION, so the binary cannot say which release it is while the file around it is named by the tag: {naked:?}"
-        );
+        assert!(naked.is_empty(), "a step compiles the program without QYMCAD_VERSION, so the binary cannot say which release it is while the file around it is named by the tag: {naked:?}");
     }
 }

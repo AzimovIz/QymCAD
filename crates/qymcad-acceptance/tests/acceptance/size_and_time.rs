@@ -128,7 +128,6 @@ probe! {
     }
 }
 
-
 probe! {
     budget = 1800;
     /// THE VACUUM CLEANER SAMPLE - a cross-check: it opens whole and in time and rebuilds in time, as the checks on the

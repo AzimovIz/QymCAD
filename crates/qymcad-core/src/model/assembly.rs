@@ -235,7 +235,16 @@ impl Project {
             _ => {
                 let asm = self.add_assembly(node.name.clone());
                 // a node that carries a body AND children: the body is a part of its own inside the group
-                let own = node.body.map(|body| ImportNode { name: node.name.clone(), body: Some(body), solid: node.solid, color: node.color, face_colors: node.face_colors.clone(), tri_colors: node.tri_colors.clone(), mesh: node.mesh, ..Default::default() });
+                let own = node.body.map(|body| ImportNode {
+                    name: node.name.clone(),
+                    body: Some(body),
+                    solid: node.solid,
+                    color: node.color,
+                    face_colors: node.face_colors.clone(),
+                    tri_colors: node.tri_colors.clone(),
+                    mesh: node.mesh,
+                    ..Default::default()
+                });
                 for child in own.into_iter().chain(node.children.into_iter().filter(ImportNode::carries_something)) {
                     self.set_active_component(Some(asm));
                     self.import_node(child, source, parts);
@@ -301,10 +310,14 @@ impl Project {
         let others: Vec<([f64; 3], [f64; 3])> = self.bodies.iter().filter(live).filter_map(boxed).collect();
         let len = hi[0] - lo[0];
         let step = len + (len / 5.0).max(5.0);
-        let meets = |dx: f64| others.iter().any(|(a, b)| (0..3).all(|i| {
-            let (l, h) = if i == 0 { (lo[0] + dx, hi[0] + dx) } else { (lo[i], hi[i]) };
-            l < b[i] - 1e-6 && a[i] < h - 1e-6
-        }));
+        let meets = |dx: f64| {
+            others.iter().any(|(a, b)| {
+                (0..3).all(|i| {
+                    let (l, h) = if i == 0 { (lo[0] + dx, hi[0] + dx) } else { (lo[i], hi[i]) };
+                    l < b[i] - 1e-6 && a[i] < h - 1e-6
+                })
+            })
+        };
         let dx = (1..=64).map(|k| k as f64 * step).find(|dx| !meets(*dx)).unwrap_or(64.0 * step);
         place[3] += dx;
         place
@@ -1260,8 +1273,8 @@ impl Project {
         let mut report = JointReport::default();
         self.mates_conflict = false; // Cleared here; the solve sets it again on a conflict.
         self.mates_violated.clear(); // The by-id list of conflicting mates is filled by the same solve.
-        // Constraints without mates are work too. Returning early on "no mates" leaves a group or a width
-        // constraint in a document with no mates doing nothing at all, silently.
+                                     // Constraints without mates are work too. Returning early on "no mates" leaves a group or a width
+                                     // constraint in a document with no mates doing nothing at all, silently.
         if self.joints.is_empty() && self.mate_constraints.is_empty() {
             return report;
         }
@@ -1521,10 +1534,10 @@ impl Project {
     pub fn group_components_into_assembly(&mut self, dragged: &[Id], target: Id, name: impl Into<String>) -> Option<Id> {
         let ti = self.component_index(target)?;
         let par = self.components[ti].parent?; // The root is never nested inside anything.
-        // Members: the target plus the selection, without duplicates and without anything that contains the
-        // target. Placing an ancestor into a group holding its own descendant is a cycle;
-        // `reparent_component` would refuse it anyway, but that would leave a half-empty group and no
-        // explanation.
+                                               // Members: the target plus the selection, without duplicates and without anything that contains the
+                                               // target. Placing an ancestor into a group holding its own descendant is a cycle;
+                                               // `reparent_component` would refuse it anyway, but that would leave a half-empty group and no
+                                               // explanation.
         let mut members: Vec<Id> = vec![target];
         for &d in dragged {
             if d == target || d == self.root || members.contains(&d) {
@@ -1581,10 +1594,7 @@ impl Project {
     /// The first name of the "Part n" kind no component holds yet.
     pub fn free_part_name(&self) -> String {
         let taken: std::collections::HashSet<String> = self.components.iter().map(|c| c.name.clone()).collect();
-        (1..)
-            .map(|n| format!("name-part-n#{n}"))
-            .find(|nm| !taken.contains(nm))
-            .unwrap_or_else(|| "name-part-n#1".into())
+        (1..).map(|n| format!("name-part-n#{n}")).find(|nm| !taken.contains(nm)).unwrap_or_else(|| "name-part-n#1".into())
     }
 
     pub(super) fn body_parent(&mut self) -> Id {
@@ -1595,13 +1605,7 @@ impl Project {
         // An empty part is reused rather than duplicated. A new document already creates one part, and the
         // first feature would create a second, leaving an empty row in the tree with nothing behind it: two
         // parts listed where one was made.
-        let free = self
-            .components
-            .iter()
-            .find(|c| {
-                c.kind == crate::feature::ComponentKind::Part && c.parent == Some(ctx) && !self.timeline.iter().any(|n| n.parent == Some(c.id))
-            })
-            .map(|c| c.id);
+        let free = self.components.iter().find(|c| c.kind == crate::feature::ComponentKind::Part && c.parent == Some(ctx) && !self.timeline.iter().any(|n| n.parent == Some(c.id))).map(|c| c.id);
         if let Some(free) = free {
             self.set_active_component(Some(free));
             return free;
@@ -1626,9 +1630,9 @@ impl Project {
         let new_part = self.add_part(format!("name-mirror-of#{src_name}"));
         self.active_component = saved;
         let l_p = self.relative_transform(part, sa_src); // The original local transform of the part inside the subassembly.
-        // The part offset (a point in subassembly local space) is reflected through the plane (0, n_sa) — the
-        // same formula as for the world zero of the subassembly, with the local space of `sa_src` playing the
-        // role of the world. The rotation is left alone.
+                                                         // The part offset (a point in subassembly local space) is reflected through the plane (0, n_sa) — the
+                                                         // same formula as for the world zero of the subassembly, with the local space of `sa_src` playing the
+                                                         // role of the world. The rotation is left alone.
         let lt = [l_p[3], l_p[7], l_p[11]];
         let ld = lt[0] * n_sa[0] + lt[1] * n_sa[1] + lt[2] * n_sa[2];
         let mut l_new = l_p;
@@ -1641,7 +1645,14 @@ impl Project {
         let ln = crate::feature::apply12_dir(&crate::feature::mat_inv12(&self.world_transform(part)), wn);
         let body = self.alloc_id();
         use crate::feature::{FeatureKind, FeatureNode};
-        self.push_timeline(FeatureNode { id: body, name: "name-mirror-part".into(), kind: FeatureKind::MirrorPart { src_comp: part, ln, body }, parent: Some(new_part), dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode {
+            id: body,
+            name: "name-mirror-part".into(),
+            kind: FeatureKind::MirrorPart { src_comp: part, ln, body },
+            parent: Some(new_part),
+            dirty: true,
+            suppressed: false,
+        });
         body
     }
     /// Mirror of a single part: a new sibling of the source (under `src_parent`).
@@ -1655,19 +1666,14 @@ impl Project {
     /// direct world reflection; what changes is where the gizmo sits, so it travels with the mirrored body
     /// instead of staying at the source.
     pub fn add_mirror_part(&mut self, src_comp: Id, wo: [f64; 3], wn: [f64; 3]) -> Id {
-        let (src_name, src_parent) = self
-            .components
-            .iter()
-            .find(|c| c.id == src_comp)
-            .map(|c| (c.name.clone(), c.parent))
-            .unwrap_or(("name-part".into(), None));
+        let (src_name, src_parent) = self.components.iter().find(|c| c.id == src_comp).map(|c| (c.name.clone(), c.parent)).unwrap_or(("name-part".into(), None));
         let saved = self.active_component;
         self.active_component = src_parent.or(saved);
         let part = self.add_part(format!("name-mirror-of#{src_name}"));
         self.active_component = saved;
         let wt = self.world_transform(src_comp);
         let ln = crate::feature::apply12_dir(&crate::feature::mat_inv12(&wt), wn); // Rotation only; the plane passes through the local zero.
-        // The world point (the local zero of the source) reflected through (wo, wn): p' = p - 2*((p-wo).n)*n.
+                                                                                   // The world point (the local zero of the source) reflected through (wo, wn): p' = p - 2*((p-wo).n)*n.
         let t = [wt[3], wt[7], wt[11]];
         let d = (t[0] - wo[0]) * wn[0] + (t[1] - wo[1]) * wn[1] + (t[2] - wo[2]) * wn[2];
         let t_new = [t[0] - 2.0 * d * wn[0], t[1] - 2.0 * d * wn[1], t[2] - 2.0 * d * wn[2]];
@@ -1730,7 +1736,9 @@ impl Project {
         let mesh = self.mesh_index(body).map(|i| &self.bodies[i].mesh)?;
         let n = {
             let l = (f.normal[0].powi(2) + f.normal[1].powi(2) + f.normal[2].powi(2)).sqrt();
-            if l < 1e-12 { return None }
+            if l < 1e-12 {
+                return None;
+            }
             [f.normal[0] / l, f.normal[1] / l, f.normal[2] / l]
         };
         // Face vertices, each counted once, projected into the face plane.
@@ -1787,11 +1795,7 @@ impl Project {
             [w[0] / l, w[1] / l, w[2] / l]
         };
         for _ in 0..64 {
-            let w = [
-                c[0][0] * v[0] + c[0][1] * v[1] + c[0][2] * v[2],
-                c[1][0] * v[0] + c[1][1] * v[1] + c[1][2] * v[2],
-                c[2][0] * v[0] + c[2][1] * v[1] + c[2][2] * v[2],
-            ];
+            let w = [c[0][0] * v[0] + c[0][1] * v[1] + c[0][2] * v[2], c[1][0] * v[0] + c[1][1] * v[1] + c[1][2] * v[2], c[2][0] * v[0] + c[2][1] * v[1] + c[2][2] * v[2]];
             // Keep the direction within the face plane.
             let along = w[0] * n[0] + w[1] * n[1] + w[2] * n[2];
             let w = [w[0] - n[0] * along, w[1] - n[1] * along, w[2] - n[2] * along];
@@ -1869,9 +1873,7 @@ impl Project {
                 v = [w[0] / l, w[1] / l, w[2] / l];
             }
             // Spread of the normals along v: near zero along the axis of a cylinder.
-            let q = v[0] * (a[0][0] * v[0] + a[0][1] * v[1] + a[0][2] * v[2])
-                + v[1] * (a[1][0] * v[0] + a[1][1] * v[1] + a[1][2] * v[2])
-                + v[2] * (a[2][0] * v[0] + a[2][1] * v[1] + a[2][2] * v[2]);
+            let q = v[0] * (a[0][0] * v[0] + a[0][1] * v[1] + a[0][2] * v[2]) + v[1] * (a[1][0] * v[0] + a[1][1] * v[1] + a[1][2] * v[2]) + v[2] * (a[2][0] * v[0] + a[2][1] * v[1] + a[2][2] * v[2]);
             if best.as_ref().is_none_or(|(_, bq)| q < *bq) {
                 best = Some((v, q));
             }
@@ -2270,14 +2272,23 @@ impl Project {
             AnchorRef::FaceCenter(body, key) if self.face_cylinder(*body, key).is_none() => Some(self.resolve_face(*body, key)),
             _ => None,
         };
-        let Some(((co, (o, ax, _)), (po, (_, n)))) = cyl(a).map(|c| (owner_a, c)).zip(plane(b).map(|p| (owner_b, p))).or_else(|| cyl(b).map(|c| (owner_b, c)).zip(plane(a).map(|p| (owner_a, p)))) else { return };
+        let Some(((co, (o, ax, _)), (po, (_, n)))) = cyl(a).map(|c| (owner_a, c)).zip(plane(b).map(|p| (owner_b, p))).or_else(|| cyl(b).map(|c| (owner_b, c)).zip(plane(a).map(|p| (owner_a, p))))
+        else {
+            return;
+        };
         let turn_dir = |m: &[f64; 12], v: [f64; 3]| [m[0] * v[0] + m[1] * v[1] + m[2] * v[2], m[4] * v[0] + m[5] * v[1] + m[6] * v[2], m[8] * v[0] + m[9] * v[1] + m[10] * v[2]];
         let (wc, wp) = (self.world_transform(co), self.world_transform(po));
         let (wax, wn) = (turn_dir(&wc, ax), turn_dir(&wp, n));
         if (wax[0] * wn[0] + wax[1] * wn[1] + wax[2] * wn[2]).abs() < 0.999 {
             return; // not standing: the solve finds the way itself
         }
-        let moving = if !self.is_grounded(co) { co } else if !self.is_grounded(po) { po } else { return };
+        let moving = if !self.is_grounded(co) {
+            co
+        } else if !self.is_grounded(po) {
+            po
+        } else {
+            return;
+        };
         // a line across the axis: the world axis least aligned with it, made square to it
         let k = (0..3).min_by(|&i, &j| wax[i].abs().total_cmp(&wax[j].abs())).unwrap_or(0);
         let mut e = [0.0; 3];
@@ -2641,10 +2652,7 @@ impl Project {
             let c = self.connector(cid)?;
             self.anchor_sits_on_moving_part(c.owner, &c.anchor).then_some("j-fault-anchor-on-moving-part")
         };
-        self.joints
-            .iter()
-            .filter_map(|j| why(j.a).or_else(|| why(j.b)).or_else(|| on_moving_child(j.a)).or_else(|| on_moving_child(j.b)).map(|w| (j.id, w)))
-            .collect()
+        self.joints.iter().filter_map(|j| why(j.a).or_else(|| why(j.b)).or_else(|| on_moving_child(j.a)).or_else(|| on_moving_child(j.b)).map(|w| (j.id, w))).collect()
     }
 
     /// 3x4 matrix of a connector frame in the local space of its component.
@@ -2684,13 +2692,7 @@ impl Project {
             // Which bodies a constraint holds: for a group its members, for a width constraint the owners of
             // its anchors, for tangency the owners of its surfaces. A constraint belonging to another assembly
             // does not enter this list.
-            let touches: Vec<Id> = g
-                .members
-                .iter()
-                .copied()
-                .chain(g.anchors.iter().filter_map(|c| self.connector(*c).map(|x| x.owner)))
-                .chain(g.faces.iter().map(|(o, _)| *o))
-                .collect();
+            let touches: Vec<Id> = g.members.iter().copied().chain(g.anchors.iter().filter_map(|c| self.connector(*c).map(|x| x.owner))).chain(g.faces.iter().map(|(o, _)| *o)).collect();
             if !touches.iter().any(|&m| self.component_is_within(m, ctx)) {
                 continue;
             }
@@ -2744,7 +2746,18 @@ pub struct ImportNode {
 
 impl Default for ImportNode {
     fn default() -> Self {
-        Self { name: String::new(), place: crate::feature::PLACE_IDENTITY, body: None, solid: 0, color: None, face_colors: Vec::new(), tri_colors: Vec::new(), repeat_of: None, mesh: false, children: Vec::new() }
+        Self {
+            name: String::new(),
+            place: crate::feature::PLACE_IDENTITY,
+            body: None,
+            solid: 0,
+            color: None,
+            face_colors: Vec::new(),
+            tri_colors: Vec::new(),
+            repeat_of: None,
+            mesh: false,
+            children: Vec::new(),
+        }
     }
 }
 
@@ -2769,4 +2782,3 @@ pub struct ExportNode {
     /// Colours of single faces of the part's body, by the face's persistent id, as sRGB bytes.
     pub face_colors: Vec<(u32, [u8; 3])>,
 }
-

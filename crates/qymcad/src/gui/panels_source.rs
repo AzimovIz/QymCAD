@@ -138,15 +138,7 @@ mod tests {
         // `WINDOW_OPENERS` and `qymcad-ui-state` by `CTX_DECL`, and reporting them as unread would have been
         // the guard lying in the other direction. Membership rather than a count, so overlapping lists are
         // safe here - unlike the counting guards, where one list is passed for the reason in D17.
-        let lists = [
-            super::PANELS,
-            super::WINDOWS,
-            super::WINDOW_OPENERS,
-            super::CTX_USERS,
-            super::CTX_DECL,
-            crate::gui::render_source::RENDER,
-            crate::gui::sketch_source::SKETCH,
-        ];
+        let lists = [super::PANELS, super::WINDOWS, super::WINDOW_OPENERS, super::CTX_USERS, super::CTX_DECL, crate::gui::render_source::RENDER, crate::gui::sketch_source::SKETCH];
         // EVERY CRATE, not just the application's `gui`. The panels moved out into crates of their own, and
         // a walk rooted at one directory would from then on have reported full coverage of a shrinking part
         // of the interface - the same blindness recorded as D20 for the language guards. Found by widening:
@@ -195,10 +187,7 @@ mod tests {
             }
         }
         assert!(looked > 5, "suspiciously few drawing files were found ({looked}) - the sweep looked at nothing");
-        assert!(
-            unread.is_empty(),
-            "a file draws and no list reads it, so every source check is blind to it; put it in a list or name it in NOT_A_PANEL with a reason: {unread:?}"
-        );
+        assert!(unread.is_empty(), "a file draws and no list reads it, so every source check is blind to it; put it in a list or name it in NOT_A_PANEL with a reason: {unread:?}");
     }
 
     /// EVERY WINDOW HAS A WAY IN. A window that nothing opens does not exist for a person, and nothing else
@@ -211,9 +200,7 @@ mod tests {
         let mut lost = Vec::new();
         for k in WinKind::ALL {
             let name = format!("{k:?}");
-            let opened = ["open", "toggle", "set"]
-                .iter()
-                .any(|verb| super::WINDOW_OPENERS.contains(&format!(".{verb}(WinKind::{name}")));
+            let opened = ["open", "toggle", "set"].iter().any(|verb| super::WINDOW_OPENERS.contains(&format!(".{verb}(WinKind::{name}")));
             if !opened {
                 lost.push(name);
             }
@@ -298,16 +285,16 @@ mod tests {
     fn the_context_fields_held_by_value_are_the_reviewed_ones() {
         let seen: Vec<String> = fields_held_by_value().into_iter().map(|(c, f)| format!("{c}::{f}")).collect();
         let reviewed = [
-            "JointCtx::mode_3d",   // read: the glyphs are drawn only in 3D
-            "JointCtx::workbench", // read: which workbench is current
-            "PartCtx::workbench",  // read
-            "PropsCtx::workbench", // read
-            "StatusCtx::cursor",   // read: where the pointer is, printed as two numbers and changed by nobody
+            "JointCtx::mode_3d",         // read: the glyphs are drawn only in 3D
+            "JointCtx::workbench",       // read: which workbench is current
+            "PartCtx::workbench",        // read
+            "PropsCtx::workbench",       // read
+            "StatusCtx::cursor",         // read: where the pointer is, printed as two numbers and changed by nobody
             "TextCtx::tool_text_height", // read: the height the preview of the text tool is baked at
-            "TextCtx::writes_note", // read: a note asks its letters of the interface's font
-            "TreeCtx::workbench",  // read
-            "WinCtx::file_ask_open", // read: a window does not open a second file dialogue over the first
-            "WinCtx::workbench",     // read: the command search puts its own commands first
+            "TextCtx::writes_note",      // read: a note asks its letters of the interface's font
+            "TreeCtx::workbench",        // read
+            "WinCtx::file_ask_open",     // read: a window does not open a second file dialogue over the first
+            "WinCtx::workbench",         // read: the command search puts its own commands first
         ];
         assert_eq!(seen, reviewed, "the fields held by value have changed - look at each before changing this list");
     }

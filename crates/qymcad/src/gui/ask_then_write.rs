@@ -73,11 +73,7 @@ mod tests {
             if lhs.contains('(') || lhs.contains('[') || lhs.contains(' ') {
                 return Vec::new();
             }
-            lhs.split('.')
-                .skip(usize::from(skip_root))
-                .filter(|s| !s.is_empty() && *s != "self" && s.chars().all(|c| c.is_alphanumeric() || c == '_'))
-                .map(str::to_string)
-                .collect()
+            lhs.split('.').skip(usize::from(skip_root)).filter(|s| !s.is_empty() && *s != "self" && s.chars().all(|c| c.is_alphanumeric() || c == '_')).map(str::to_string).collect()
         }
         let mut out = std::collections::HashSet::new();
         for line in body.lines() {
@@ -310,7 +306,11 @@ mod tests {
     fn pushed_request(after: &str) -> Option<String> {
         let k = after.find("Ask::")? + 5;
         let name: String = after[k..].chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
-        if name.is_empty() { None } else { Some(name) }
+        if name.is_empty() {
+            None
+        } else {
+            Some(name)
+        }
     }
 
     /// Every place in one source that shows the shape.
@@ -338,7 +338,6 @@ mod tests {
         caught.dedup();
         caught
     }
-
 
     /// THE TABLE MUST SAY WHEN IT CANNOT SEE.
     ///
@@ -391,11 +390,7 @@ mod tests {
         for (where_, src) in PANELS {
             caught.extend(find_in(src).into_iter().map(|m| format!("{where_} {m}")));
         }
-        assert!(
-            caught.is_empty(),
-            "a click puts a request off and writes a tool at once; the deferred one wins and the button does nothing:\n{}",
-            caught.join("\n")
-        );
+        assert!(caught.is_empty(), "a click puts a request off and writes a tool at once; the deferred one wins and the button does nothing:\n{}", caught.join("\n"));
     }
 
     /// THE SIGNAL CATCHES THE SHAPE IT IS FOR, on the ruler exactly as it was written.

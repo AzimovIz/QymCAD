@@ -362,7 +362,11 @@ impl TreeWriter<'_> {
                 self.next += 1;
                 let own = n.color.and_then(|c| self.palette.iter().position(|p| *p == c));
                 // a triangle whose face has a colour of its own names it; the rest take the object's
-                let p1: Vec<Option<usize>> = if t.len() == m.tris.len() { t.iter().map(|c| c.and_then(|c| self.palette.iter().position(|p| *p == c)).filter(|k| Some(*k) != own)).collect() } else { Vec::new() };
+                let p1: Vec<Option<usize>> = if t.len() == m.tris.len() {
+                    t.iter().map(|c| c.and_then(|c| self.palette.iter().position(|p| *p == c)).filter(|k| Some(*k) != own)).collect()
+                } else {
+                    Vec::new()
+                };
                 mesh_object(&mut self.model, id, &n.name, own.map(|k| (1, k)), m, &p1);
                 id
             }),

@@ -11,13 +11,7 @@ use qymcad_core::model::{Id, Project};
 fn source_body_with_face(p: &mut Project, part: Id, z: f64) -> (Id, FaceKey) {
     p.set_active_component(Some(part));
     let body = p.add_box(10.0, 10.0, z);
-    let face = MeshFace {
-        triangles: Vec::new(),
-        normal: [0.0, 0.0, 1.0],
-        centroid: Point3::new(5.0, 5.0, z),
-        area: 100.0,
-        id: 1,
-    };
+    let face = MeshFace { triangles: Vec::new(), normal: [0.0, 0.0, 1.0], centroid: Point3::new(5.0, 5.0, z), area: 100.0, id: 1 };
     p.regen_faces.insert(body, vec![face]);
     (body, FaceKey { index: 0, centroid: [5.0, 5.0, z], normal: [0.0, 0.0, 1.0], id: 1 })
 }
@@ -145,17 +139,9 @@ fn deleting_the_source_body_freezes_the_consumer_sketch() {
     p.delete_body_cascade(body);
 
     assert!(p.external_ref_for(b, body).is_none(), "the dangling external reference was removed along with the body");
-    assert!(
-        matches!(p.sketches[si].plane, SketchPlane::Datum(_)),
-        "the sketch of the consumer has to freeze as a datum snapshot rather than hang on a dead face"
-    );
+    assert!(matches!(p.sketches[si].plane, SketchPlane::Datum(_)), "the sketch of the consumer has to freeze as a datum snapshot rather than hang on a dead face");
     let after = p.sketch_frame(si).expect("frame after the source is deleted");
     for k in 0..3 {
-        assert!(
-            (after.origin[k] - before.origin[k]).abs() < 1e-9,
-            "freezing moved the sketch: {:?} -> {:?}",
-            before.origin,
-            after.origin
-        );
+        assert!((after.origin[k] - before.origin[k]).abs() < 1e-9, "freezing moved the sketch: {:?} -> {:?}", before.origin, after.origin);
     }
 }

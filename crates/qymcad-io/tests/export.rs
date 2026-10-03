@@ -10,15 +10,7 @@ fn tmp(name: &str) -> String {
 
 /// A tetrahedron of four vertices and four faces: the minimal closed body for checking STL.
 fn tetra() -> Mesh {
-    Mesh {
-        verts: vec![
-            Point3::new(0.0, 0.0, 0.0),
-            Point3::new(10.0, 0.0, 0.0),
-            Point3::new(0.0, 10.0, 0.0),
-            Point3::new(0.0, 0.0, 10.0),
-        ],
-        tris: vec![[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]],
-    }
+    Mesh { verts: vec![Point3::new(0.0, 0.0, 0.0), Point3::new(10.0, 0.0, 0.0), Point3::new(0.0, 10.0, 0.0), Point3::new(0.0, 0.0, 10.0)], tris: vec![[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]] }
 }
 
 #[test]
@@ -59,10 +51,7 @@ fn svg_writes_exact_primitives() {
 
 #[test]
 fn dxf_roundtrip_recovers_entities() {
-    let edges = vec![
-        ProfEdge::Line { a: Point2::new(0.0, 0.0), b: Point2::new(40.0, 0.0) },
-        ProfEdge::Circle { center: Point2::new(70.0, 40.0), r: 15.0 },
-    ];
+    let edges = vec![ProfEdge::Line { a: Point2::new(0.0, 0.0), b: Point2::new(40.0, 0.0) }, ProfEdge::Circle { center: Point2::new(70.0, 40.0), r: 15.0 }];
     let path = tmp("qym_export_test.dxf");
     export_dxf(&edges, &path).expect("dxf ok");
     let s = std::fs::read_to_string(&path).unwrap();

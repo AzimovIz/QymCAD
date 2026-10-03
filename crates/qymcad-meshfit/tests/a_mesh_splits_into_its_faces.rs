@@ -138,5 +138,12 @@ fn a_wall_cut_by_a_boolean_is_one_region() {
         .collect();
     let off = p.mesh.verts.iter().filter(|v| v.z > 0.01 && v.z < 19.4).map(|v| ((v.x * v.x + v.y * v.y).sqrt() - 10.0).abs()).fold(0.0, f64::max);
     let one = walls.len() == 1 && (walls[0].1 - 10.0).abs() < 0.01;
-    assert!(one, "the wall came in {} cylinders {:?} (of {} regions); its corners stand up to {off:.1e} mm off the true wall, the distance tolerance is {:.1e}", walls.len(), &walls[..walls.len().min(6)], found.len(), tol.distance);
+    assert!(
+        one,
+        "the wall came in {} cylinders {:?} (of {} regions); its corners stand up to {off:.1e} mm off the true wall, the distance tolerance is {:.1e}",
+        walls.len(),
+        &walls[..walls.len().min(6)],
+        found.len(),
+        tol.distance
+    );
 }

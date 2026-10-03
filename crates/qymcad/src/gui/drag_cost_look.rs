@@ -183,8 +183,7 @@ mod tests {
         }
 
         let avg = |f: &dyn Fn(&Step) -> f64| steps.iter().map(f).sum::<f64>() / steps.len() as f64;
-        let (solve, rebuild, mesh, scene, draw) =
-            (avg(&|s| s.solve), avg(&|s| s.rebuild), avg(&|s| s.mesh), avg(&|s| s.scene), avg(&|s| s.draw));
+        let (solve, rebuild, mesh, scene, draw) = (avg(&|s| s.solve), avg(&|s| s.rebuild), avg(&|s| s.mesh), avg(&|s| s.scene), avg(&|s| s.draw));
         let whole = solve + rebuild + scene + draw;
         eprintln!(
             "MEASURED a drag of twenty steps on a part of three features\n  \
@@ -195,9 +194,6 @@ mod tests {
             app.project.bodies.len(),
             app.project.bodies.iter().map(|b| b.mesh.tris.len()).sum::<usize>(),
         );
-        assert_eq!(
-            rebuilt_steps, 0,
-            "a drag rebuilt the body {rebuilt_steps} times out of 20 - then meshing happens under the hand, and a draft accuracy is worth having"
-        );
+        assert_eq!(rebuilt_steps, 0, "a drag rebuilt the body {rebuilt_steps} times out of 20 - then meshing happens under the hand, and a draft accuracy is worth having");
     }
 }

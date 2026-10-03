@@ -215,7 +215,6 @@ probe! {
     }
 }
 
-
 probe! {
     /// ONE TICK IN THE HEADING: the tick before the word "Components" clears every part of the assembly in one
     /// click, and the next click brings every one of them back; the count at the right edge of the heading says

@@ -40,12 +40,6 @@ fn rebuild_says_it_ended(regen: &mut qymcad_ui_state::Rebuilding, status: &mut S
 }
 
 impl App {
-
-
-
-
-
-
     /// WAIT for background work (writing the project, fetching B-rep) and apply its result.
     /// Needed where there will be no "later": leaving the program with a save still in flight. In tests it
     /// is a synchronisation point instead of waiting for UI frames.
@@ -80,7 +74,6 @@ impl App {
         }
     }
 
-
     /// Restore the B-rep of imported solids from the embedded STEP in a separate thread.
     /// `regen = true` means a file with no stored geometry: show a modal spinner and rebuild the timeline
     /// once the restore is done. Otherwise it is a QUIET background fetch: the model is already on screen
@@ -98,7 +91,6 @@ impl App {
             self.regen.bg.push(Busy { started: std::time::Instant::now(), label: crate::i18n::tr("io-brep-restoring"), rx, kind: BgKind::ImportShapes, pulse: None, quiet: false });
         }
     }
-
 
     /// Integrating a loaded project into the application, on the UI thread: rebuilding the timeline and the
     /// faces is comparatively light here (the heavy STEP reparse was already done in the worker).
@@ -135,13 +127,7 @@ impl App {
                 self.live.faces.insert(body, f.clone()); // a cache keyed by body Id survives edits to the topology
             }
         }
-        let missing: Vec<Id> = self
-            .project
-            .timeline
-            .iter()
-            .filter_map(|n| n.kind.body())
-            .filter(|b| self.project.mesh_index(*b).is_none())
-            .collect();
+        let missing: Vec<Id> = self.project.timeline.iter().filter_map(|n| n.kind.body()).filter(|b| self.project.mesh_index(*b).is_none()).collect();
         for n in &mut self.project.timeline {
             if n.kind.body().is_some_and(|b| missing.contains(&b)) {
                 n.dirty = true;
@@ -169,7 +155,7 @@ impl App {
         self.viewing.view.initialized = false;
         self.viewing.cam.init = false;
         self.disk.edits.saved_key = qymcad_ui_state::edit_key(&self.draw_ctx()); // straight off the disk - there are no edits
-        // an autosave newer than the file means the previous session broke off after edits - offer to recover
+                                                                                 // an autosave newer than the file means the previous session broke off after edits - offer to recover
         if let Some(p) = self.disk.project_path.clone() {
             // ONE RULE FOR THE NAME, not a copy of it. This place used to build the autosave name itself, and
             // the moment `autosave_path` started taking the stem instead of the whole name the two would have
@@ -189,10 +175,6 @@ impl App {
         self.status = crate::i18n::tr("io-project-loaded");
     }
 
-
-
-
-
     /// Save (Ctrl+S): if the project has been saved before, write there silently; otherwise Save As.
     pub(crate) fn save_project(&mut self) {
         match self.disk.project_path.clone() {
@@ -207,7 +189,6 @@ impl App {
         }
     }
 
-
     /// Save As (Ctrl+Shift+S): always ask for the path and the name.
     pub(super) fn save_project_as(&mut self) {
         let start = self.disk.project_path.clone().unwrap_or_else(|| "project.qcad".into());
@@ -216,12 +197,10 @@ impl App {
             let path = path.to_string_lossy().into_owned();
             crate::gui::set_project_path(&mut app.disk.project_path, &mut app.set, path.clone());
             app.disk.io.saved_key = Some(qymcad_ui_state::edit_key(&app.draw_ctx())); // confirmed once the write actually succeeds
-            spawn_save(&mut app.disk.io, &mut app.live, &mut app.project, &mut app.regen, &mut app.status, path, false); // the write goes to the background
+            spawn_save(&mut app.disk.io, &mut app.live, &mut app.project, &mut app.regen, &mut app.status, path, false);
+            // the write goes to the background
         });
     }
-
-
-
 
     /// Finish editing a sketch.
     pub(super) fn finish_sketch_edit(&mut self) {
@@ -230,7 +209,7 @@ impl App {
         self.tools.cmd.ref_body = None; // highlighting the faces of a neighbour belongs to the creation session only
         self.tools.sel_sk.clear(); // the selection and whatever was waiting for it
         qymcad_ui_state::exit_draw_tools(&mut qymcad_ui_state::tools_of!(self)); // leaving a sketch drops all of its modes in one transition
-        // associativity: editing a sketch rebuilds the bodies built on it
+                                                                                 // associativity: editing a sketch rebuilds the bodies built on it
         if let Some(sid) = edited {
             // ...and there is NOTHING TO REBUILD THEM ON while no live B-rep exists. A project from a
             // bundle shows the geometry FROM THE FILE and has no `Shape` (the lazy B-rep): one sketch node
@@ -252,11 +231,6 @@ impl App {
         self.status = crate::i18n::tr("io-sketch-done");
     }
 
-
-
-
-
-
     /// SORTING the target bodies by [`ExportKind`] - ONE routine for both STEP and STL, so that two exports
     /// of one project do not drift apart silently (STEP used to skip a body with no B-rep while STL quietly
     /// wrote out its last mesh).
@@ -272,14 +246,11 @@ impl App {
         plan
     }
 
-
-
-
     /// Exporting a target into an exact file - STEP or IGES (exact B-rep, live `Shape`s from the core, every
     /// body in the world frame of the assembly).
     pub(super) fn export_exact(&mut self, format: qymcad_kernel::ExactFormat, target: ExportTarget) {
         ensure_brep(&mut self.rebuild_ctx()); // without a live B-rep the sort would count every body as B-rep-less and the file would come out empty
-        // the sort into "has a B-rep" and "has not" is done on the UI thread (self is needed)
+                                              // the sort into "has a B-rep" and "has not" is done on the UI thread (self is needed)
         let plan = self.export_plan(target); // the same sort STL uses
         if plan.brep.is_empty() {
             self.status = nothing_exact_to_write(format, &plan);
@@ -290,15 +261,12 @@ impl App {
         self.ask_save_file(dialog, move |app, path| write_exact_to(&mut app.live, &mut app.project, &mut app.regen, &mut app.status, &path, &job));
     }
 
-
-
-
     /// Exporting a target as a mesh (STL, OBJ) at a given detail (deflection in mm). A live `Shape` is
     /// re-tessellated to that quality; imported bodies with no shape use the stored mesh. Every mesh is placed
     /// into the world frame of the assembly.
     pub(super) fn export_mesh(&mut self, format: qymcad_ui_state::MeshFormat, target: ExportTarget, deflection: f64) {
         ensure_brep(&mut self.rebuild_ctx()); // the quality comes from re-tessellating the live B-rep - bring the cache up
-        // split into bodies with a live shape (tessellated in the worker) and raw meshes (a data clone is Send)
+                                              // split into bodies with a live shape (tessellated in the worker) and raw meshes (a data clone is Send)
         let plan = self.export_plan(target); // the same sort STEP uses
         let note = plan.note(false);
         let bodies = plan.stl_bodies();
@@ -307,11 +275,11 @@ impl App {
             return;
         }
         let dialog = mesh_dialog(format, &export_base_name(&self.project, &self.disk.project_path, target));
-        self.ask_save_file(dialog, move |app, path| { let job = mesh_job(&app.project, format, target, bodies, note, deflection); write_mesh_to(qymcad_ui_state::editing_of!(app), &mut app.live, &path, &job) });
+        self.ask_save_file(dialog, move |app, path| {
+            let job = mesh_job(&app.project, format, target, bodies, note, deflection);
+            write_mesh_to(qymcad_ui_state::editing_of!(app), &mut app.live, &path, &job)
+        });
     }
-
-
-
 
     /// Exporting a sketch to SVG or DXF (`dxf=true` -> DXF). Exact primitives, not a tessellation.
     pub(super) fn export_sketch(&mut self, si: usize, dxf: bool) {
@@ -331,12 +299,6 @@ impl App {
             }
         });
     }
-
-
-
-
-
-
 
     /// Move the rebuild of the timeline into a worker thread. It is a modal job: while it runs the window
     /// draws a spinner and input is blocked - otherwise edits would land on a stale copy of the project.
@@ -392,8 +354,6 @@ impl App {
         self.regen.busy = Some(Busy { started: std::time::Instant::now(), label, rx, kind: BgKind::Regen, pulse: Some(pulse), quiet });
     }
 
-
-
     /// Take the result of a background rebuild - IF it is still current.
     ///
     /// A rebuild is computed on a COPY of the document and replaces the document WHOLE. While it runs the
@@ -402,7 +362,15 @@ impl App {
     /// itself. Let one edit path appear that goes around the lock, and a person's work disappears without a
     /// trace and without an error. So currency is checked explicitly: if the document has moved on, the
     /// result is stale, and it is dropped and rebuilt again.
-    pub(super) fn finish_regen_checked(&mut self, stamp: u64, project: Project, shapes: Vec<(Id, qymcad_kernel::Shape)>, built: Vec<(Id, Vec<MeshFace>)>, errors: Vec<(Id, qymcad_core::errors::CoreError)>, cancelled: bool) {
+    pub(super) fn finish_regen_checked(
+        &mut self,
+        stamp: u64,
+        project: Project,
+        shapes: Vec<(Id, qymcad_kernel::Shape)>,
+        built: Vec<(Id, Vec<MeshFace>)>,
+        errors: Vec<(Id, qymcad_core::errors::CoreError)>,
+        cancelled: bool,
+    ) {
         // STOPPED BY THE PERSON - THE RESULT IS DROPPED WHOLE.
         //
         // The report is incomplete by construction: half the timeline was simply never reached, and "this
@@ -427,35 +395,34 @@ impl App {
         self.finish_regen(project, shapes, built, errors);
     }
 
-
     /// Take the model rebuilt in the thread. The caches are laid out exactly as in `regenerate_now`.
     pub(super) fn finish_regen(&mut self, mut project: Project, shapes: Vec<(Id, qymcad_kernel::Shape)>, built: Vec<(Id, Vec<MeshFace>)>, errors: Vec<(Id, qymcad_core::errors::CoreError)>) {
         project.take_source_data_from(&mut self.project); // the source bytes stayed on the UI thread
-        // THE PLACEMENT IS THE LIVE ONE, NOT THE ONE FROM THE SNAPSHOT. The rebuild took a copy of the
-        // document into the thread and brings it back WHOLE; the geometry in it is fresh, but "where the
-        // parts stand" is what it was at dispatch. While a part is being dragged those are different things,
-        // and taking the other placement means undoing that motion. The clash used to be resolved by
-        // dropping the whole result - hence both the endless blinking of the window and the rubber-band
-        // joints.
+                                                          // THE PLACEMENT IS THE LIVE ONE, NOT THE ONE FROM THE SNAPSHOT. The rebuild took a copy of the
+                                                          // document into the thread and brings it back WHOLE; the geometry in it is fresh, but "where the
+                                                          // parts stand" is what it was at dispatch. While a part is being dragged those are different things,
+                                                          // and taking the other placement means undoing that motion. The clash used to be resolved by
+                                                          // dropping the whole result - hence both the endless blinking of the window and the rubber-band
+                                                          // joints.
         project.take_placement_from(&self.project);
         self.project = project;
         self.project.solve_joints(); // live placement, new geometry - reconcile them at once, in this same frame
         qymcad_ui_state::settle_params_seen(&mut self.params_seen, &mut self.project); // the rebuild ARRIVED - the values from IT are the ones now "seen"
-        // LIVE SHAPES ARE ADDED, THEY DO NOT REPLACE THE CACHE WHOLE.
-        //
-        // THIS USED TO BE `self.live.shapes = shapes...`, AND IT WAS THE LATCH OF AN ENDLESS CIRCLE. A rebuild
-        // TAKES the cache with it into the thread (`mem::take` at dispatch) and returns its own copy. If the
-        // cache was empty at dispatch - and right after "Rebuild all" it is exactly empty - then the copy is
-        // empty, and the return WIPED everything that had come up while the thread was computing: the
-        // imports restored from the embedded STEP. The preparation then saw zero shapes again and asked for
-        // another rebuild.
-        //
-        // A MEASUREMENT IN A LIVE WINDOW caught it word for word: "B-rep preparation started: 136 live
-        // shapes" -> "rebuild result accepted" -> "B-rep preparation started: 0 live shapes". Without end.
-        //
-        // The same class as the placement just above: the copy from the thread is stale for EVERYTHING THE
-        // THREAD DID NOT COMPUTE. It brings back its own and lays it on top; it does not touch anyone
-        // else's.
+                                                                                       // LIVE SHAPES ARE ADDED, THEY DO NOT REPLACE THE CACHE WHOLE.
+                                                                                       //
+                                                                                       // THIS USED TO BE `self.live.shapes = shapes...`, AND IT WAS THE LATCH OF AN ENDLESS CIRCLE. A rebuild
+                                                                                       // TAKES the cache with it into the thread (`mem::take` at dispatch) and returns its own copy. If the
+                                                                                       // cache was empty at dispatch - and right after "Rebuild all" it is exactly empty - then the copy is
+                                                                                       // empty, and the return WIPED everything that had come up while the thread was computing: the
+                                                                                       // imports restored from the embedded STEP. The preparation then saw zero shapes again and asked for
+                                                                                       // another rebuild.
+                                                                                       //
+                                                                                       // A MEASUREMENT IN A LIVE WINDOW caught it word for word: "B-rep preparation started: 136 live
+                                                                                       // shapes" -> "rebuild result accepted" -> "B-rep preparation started: 0 live shapes". Without end.
+                                                                                       //
+                                                                                       // The same class as the placement just above: the copy from the thread is stale for EVERYTHING THE
+                                                                                       // THREAD DID NOT COMPUTE. It brings back its own and lays it on top; it does not touch anyone
+                                                                                       // else's.
         adopt_shapes(&mut self.live, shapes);
         qymcad_ui_state::keep_live_shapes(&mut self.live, &self.project);
         for (body, faces) in built {
@@ -479,8 +446,8 @@ impl App {
     pub(crate) fn tick_async(&mut self, ctx: &egui::Context) -> bool {
         crate::gui::ensure_logo(&mut self.logo_tex, ctx);
         self.regen.ui_running = true; // the window is alive -> a heavy rebuild goes to a thread
-        // a rebuild was asked for - start it in a thread. While it runs the `busy` branch below draws a
-        // spinner and refuses input: edits would land on a stale copy of the project.
+                                      // a rebuild was asked for - start it in a thread. While it runs the `busy` branch below draws a
+                                      // spinner and refuses input: edits would land on a stale copy of the project.
         if self.regen.wanted && self.regen.busy.is_none() {
             self.regen.wanted = false;
             self.spawn_regen();
@@ -557,10 +524,10 @@ impl App {
                     // input is muted: edits made during a rebuild would land on a stale copy of the project.
                     if busy.kind == BgKind::Regen && busy.quiet {
                         self.tools.dim.spinner = true; // the only sign: the body on screen is out of date
-                        // A PINPOINT EDIT GETS NO WINDOW. The thread is computing, the document on screen is
-                        // intact, and work can go on: an edit made while it computes will not be lost - the
-                        // stale result is rejected by the imprint check (`finish_regen_checked`) and the
-                        // rebuild repeats.
+                                                       // A PINPOINT EDIT GETS NO WINDOW. The thread is computing, the document on screen is
+                                                       // intact, and work can go on: an edit made while it computes will not be lost - the
+                                                       // stale result is rejected by the imprint check (`finish_regen_checked`) and the
+                                                       // rebuild repeats.
                         ctx.request_repaint();
                         return false;
                     }
@@ -588,10 +555,6 @@ impl App {
         }
         false
     }
-
-
-
-
 }
 
 /// AN IMPRINT OF WHAT THE REBUILD WAS COMPUTED FROM - to check whether its result has gone stale.
@@ -619,11 +582,11 @@ pub(crate) fn spawn_project_load(regen: &mut super::Rebuilding, path: String) {
         let res = match qymcad_io::load_project_with_brep(&path) {
             Ok(qymcad_io::LoadedProject { mut project, breps }) => {
                 project.ensure_document(); // normalisation: a root assembly plus reparenting of floating nodes
-                // The embedded STEP is NO LONGER parsed here (36 s on a real assembly) - the geometry
-                // comes from the bundle, and the B-rep of imports is fetched in the background once the
-                // model is already on screen.
-                // LIVE BODIES ARE PARSED RIGHT HERE, IN THE THREAD: on the UI thread this would be a
-                // freeze of exactly the kind we are getting away from.
+                                           // The embedded STEP is NO LONGER parsed here (36 s on a real assembly) - the geometry
+                                           // comes from the bundle, and the B-rep of imports is fetched in the background once the
+                                           // model is already on screen.
+                                           // LIVE BODIES ARE PARSED RIGHT HERE, IN THE THREAD: on the UI thread this would be a
+                                           // freeze of exactly the kind we are getting away from.
                 let shapes = {
                     let _gate = qymcad_kernel::kernel_gate();
                     breps.into_iter().filter_map(|(id, b)| qymcad_kernel::Shape::from_brep_bytes(&b).map(|s| (id, s))).collect()
@@ -743,7 +706,13 @@ pub(crate) fn write_mesh_to(ed: qymcad_ui_state::Editing, live: &mut LiveGeom, p
             moved.push((b, s, m));
         } else if let Some(i) = ed.project.mesh_index(b) {
             // a piece of a mesh coloured triangle by triangle keeps its colours on the way out
-            let tri = ed.project.tri_colors.get(&ed.project.lineage_root(b)).filter(|(_, places)| places.len() == ed.project.bodies[i].mesh.tris.len()).map(|(palette, places)| places.iter().map(|&k| palette.get(k as usize).copied()).collect()).unwrap_or_default();
+            let tri = ed
+                .project
+                .tri_colors
+                .get(&ed.project.lineage_root(b))
+                .filter(|(_, places)| places.len() == ed.project.bodies[i].mesh.tris.len())
+                .map(|(palette, places)| places.iter().map(|&k| palette.get(k as usize).copied()).collect())
+                .unwrap_or_default();
             raw.push((b, ed.project.bodies[i].mesh.clone(), m, tri));
         }
     }
@@ -775,10 +744,13 @@ pub(crate) fn write_mesh_to(ed: qymcad_ui_state::Editing, live: &mut LiveGeom, p
         let done = || crate::i18n::trn("io-mesh-done", &[("format", name), ("n", &n.to_string()), ("path", &p)]);
         // a tree goes out with every part in its own coordinates, placed by the tree; flat, every body where it stands
         let written = if tree.is_empty() {
-            let world: Vec<qymcad_core::geom::Mesh> = own.into_iter().map(|(_, mut mesh, m, _)| {
-                mesh.transform(&m);
-                mesh
-            }).collect();
+            let world: Vec<qymcad_core::geom::Mesh> = own
+                .into_iter()
+                .map(|(_, mut mesh, m, _)| {
+                    mesh.transform(&m);
+                    mesh
+                })
+                .collect();
             write_meshes(format, &world, &p)
         } else {
             let own: Vec<(Id, qymcad_core::geom::Mesh, Vec<Option<[u8; 3]>>)> = own.into_iter().map(|(id, mesh, _, tri)| (id, mesh, tri)).collect();
@@ -940,10 +912,7 @@ pub(crate) fn write_exact_to(live: &mut LiveGeom, project: &mut Project, regen: 
 /// The suggested file name for an export target (the component name or the project name).
 pub(crate) fn export_base_name(project: &Project, project_path: &Option<String>, target: ExportTarget) -> String {
     match target {
-        ExportTarget::Project => std::path::Path::new(project_path.as_deref().unwrap_or("project"))
-            .file_stem()
-            .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "project".into()),
+        ExportTarget::Project => std::path::Path::new(project_path.as_deref().unwrap_or("project")).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "project".into()),
         ExportTarget::Component(cid) => project.components.iter().find(|c| c.id == cid).map(|c| crate::i18n::name(&c.name)).unwrap_or_else(|| crate::i18n::tr("io-part-lower")),
     }
 }
@@ -980,7 +949,14 @@ pub(crate) fn spawn_save(io: &mut DocIo, live: &mut LiveGeom, project: &mut Proj
         let res = qymcad_io::save_project_guarded_with_brep(&proj, &p, &breps);
         let _ = tx.send(JobResult::Saved { path: p, autosave, error: res.err() });
     });
-    regen.bg.push(Busy { started: std::time::Instant::now(), label: if autosave { crate::i18n::tr("io-autosaving") } else { crate::i18n::tr("io-saving") }, rx, kind: BgKind::Save, pulse: None, quiet: false });
+    regen.bg.push(Busy {
+        started: std::time::Instant::now(),
+        label: if autosave { crate::i18n::tr("io-autosaving") } else { crate::i18n::tr("io-saving") },
+        rx,
+        kind: BgKind::Save,
+        pulse: None,
+        quiet: false,
+    });
     *status = if autosave { crate::i18n::tr("io-autosaving") } else { crate::i18n::tr1("io-saving-path", "path", &path) };
 }
 
@@ -991,14 +967,11 @@ pub(crate) fn save_part_window(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Con
     }
     let mut open = true;
     let (mut do_save, mut cancel) = (false, false);
-    egui::Window::new(format!("{} {}", ph::PACKAGE, crate::i18n::tr("io-save-as-part")))
-        .collapsible(false)
-        .resizable(false)
-        .open(&mut open)
-        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-        .show(ctx, |ui| {
+    egui::Window::new(format!("{} {}", ph::PACKAGE, crate::i18n::tr("io-save-as-part"))).collapsible(false).resizable(false).open(&mut open).anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0]).show(
+        ctx,
+        |ui| {
             let Some(d) = wc.parts.save.as_mut() else { return }; // the window may have closed
-            // the preview texture is loaded lazily
+                                                                  // the preview texture is loaded lazily
             if d.tex.is_none() {
                 if let Some(img) = &d.preview {
                     d.tex = Some(ctx.load_texture("save_part_thumb", img.clone(), egui::TextureOptions::LINEAR));
@@ -1055,7 +1028,8 @@ pub(crate) fn save_part_window(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Con
                 }
                 ui.label(egui::RichText::new(crate::i18n::tr("io-to-my-parts")).weak().small());
             });
-        });
+        },
+    );
     if do_save {
         match crate::gui::commit_save_part(wc.parts, wc.project, wc.tex_graveyard) {
             Ok(p) => *wc.status = crate::i18n::tr1("io-part-saved", "path", &p),

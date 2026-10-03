@@ -66,10 +66,15 @@ fn a_hole_with_a_lost_face_refuses_instead_of_being_rebound() {
     assert!(rep.rebinds.iter().all(|r| r.node != node), "a hole reference is no longer matched by resemblance: {:?}", rep.rebinds);
 
     // and it refuses honestly, naming what was sought
-    let r = p.timeline.iter().find(|n| n.id == node).and_then(|n| match n.kind {
-        FeatureKind::Hole { ref face, .. } => Some(face.clone()),
-        _ => None,
-    }).expect("the hole node is present");
+    let r = p
+        .timeline
+        .iter()
+        .find(|n| n.id == node)
+        .and_then(|n| match n.kind {
+            FeatureKind::Hole { ref face, .. } => Some(face.clone()),
+            _ => None,
+        })
+        .expect("the hole node is present");
     match p.resolve_face_ref(body, &r, "ref-what-hole-face") {
         Err(e) => assert_eq!(e.key(), "ref-lost", "a refusal has to be named by its kind rather than left empty"),
         Ok(c) => panic!("the reference matched face {} instead of refusing: the silent guess is back", c.desc),

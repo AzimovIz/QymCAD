@@ -46,8 +46,7 @@ fn main() {
     // OCCT 7.8 and later use consolidated modules.
     for lib in [
         // TKXCAF, TKLCAF, TKCAF, TKCDF: the document machinery that reads a STEP with its tree, names and colours
-        "TKXCAF", "TKLCAF", "TKCAF", "TKCDF",
-        "TKDESTEP", "TKDEIGES", "TKXSBase", "TKDE", "TKMesh", "TKShHealing", "TKFillet", "TKOffset", "TKBool", "TKPrim", "TKBO",
+        "TKXCAF", "TKLCAF", "TKCAF", "TKCDF", "TKDESTEP", "TKDEIGES", "TKXSBase", "TKDE", "TKMesh", "TKShHealing", "TKFillet", "TKOffset", "TKBool", "TKPrim", "TKBO",
         // TKFeat holds `BRepFeat_SplitShape`, which splits faces without cutting the body
         "TKFeat", "TKGeomAlgo", "TKTopAlgo", "TKBRep", "TKGeomBase", "TKG3d", "TKG2d", "TKMath", "TKernel",
     ] {

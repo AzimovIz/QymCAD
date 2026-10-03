@@ -101,16 +101,8 @@ mod tests {
             return; // a system without a notion of per-user directories has nothing to check
         };
         for dir in [d.config_dir(), d.data_dir()] {
-            assert!(
-                dir.to_string_lossy().to_lowercase().contains(super::FOLDER),
-                "the program's own directory does not carry the program's name: {}",
-                dir.display()
-            );
-            assert!(
-                !dir.components().any(|c| c.as_os_str() == "cad"),
-                "the folder is named after the last part of the id again, and any other CAD may claim it: {}",
-                dir.display()
-            );
+            assert!(dir.to_string_lossy().to_lowercase().contains(super::FOLDER), "the program's own directory does not carry the program's name: {}", dir.display());
+            assert!(!dir.components().any(|c| c.as_os_str() == "cad"), "the folder is named after the last part of the id again, and any other CAD may claim it: {}", dir.display());
         }
     }
 }

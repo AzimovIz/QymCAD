@@ -65,10 +65,7 @@ mod tests {
     /// UNDER THE OVERLAY A CLICK IS SWALLOWED. Exactly the reported complaint.
     #[test]
     fn under_the_overlay_a_click_is_swallowed() {
-        assert!(
-            !button_clicked_under(Some("Rebuilding...")),
-            "a click went THROUGH the dimming — during a rebuild an edit would land on a stale copy of the project"
-        );
+        assert!(!button_clicked_under(Some("Rebuilding...")), "a click went THROUGH the dimming — during a rebuild an edit would land on a stale copy of the project");
     }
 
     /// THE SPLASH IS A SMALL CARD IN THE CENTRE, NOT THE WHOLE SCREEN.

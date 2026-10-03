@@ -21,10 +21,7 @@ const PI: f64 = std::f64::consts::PI;
 
 /// A slab of space: a disc wide enough to swallow anything under test, `t` thick, its bottom at `z`.
 fn slab(t: f64, z: f64) -> Shape {
-    Shape::cylinder(50.0, t)
-        .expect("the slab")
-        .transformed(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, z])
-        .expect("the slab moved into place")
+    Shape::cylinder(50.0, t).expect("the slab").transformed(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, z]).expect("the slab moved into place")
 }
 
 /// M10x1.5 cut over the whole of a 30 mm rod, with no run-out at either end.
@@ -37,7 +34,21 @@ fn threaded_rod() -> (Shape, f64, f64, f64) {
     let g = spec.geometry();
     let rod = Shape::cylinder(g.stock_d * 0.5, 30.0).expect("the rod");
     let cut = rod
-        .helical_profile(qymcad_kernel::HelicalCut { axis: qymcad_core::feature::AxisLine { origin: [0.0, 0.0, 0.0], dir: [0.0, 0.0, 1.0] }, radius: g.stock_d * 0.5, profile: &encode_edges(&g.groove), length: 30.0, lead: g.lead, starts: spec.starts, hand: if spec.left { qymcad_kernel::Hand::Left } else { qymcad_kernel::Hand::Right }, kind: qymcad_kernel::Helix::Groove, lead_in: 0.0, lead_out: 0.0, gnames: &[], rnames: &[], crest_relief: 0.0 })
+        .helical_profile(qymcad_kernel::HelicalCut {
+            axis: qymcad_core::feature::AxisLine { origin: [0.0, 0.0, 0.0], dir: [0.0, 0.0, 1.0] },
+            radius: g.stock_d * 0.5,
+            profile: &encode_edges(&g.groove),
+            length: 30.0,
+            lead: g.lead,
+            starts: spec.starts,
+            hand: if spec.left { qymcad_kernel::Hand::Left } else { qymcad_kernel::Hand::Right },
+            kind: qymcad_kernel::Helix::Groove,
+            lead_in: 0.0,
+            lead_out: 0.0,
+            gnames: &[],
+            rnames: &[],
+            crest_relief: 0.0,
+        })
         .expect("the thread built");
     (cut, spec.pitch, g.major_d * 0.5, g.minor_d * 0.5)
 }

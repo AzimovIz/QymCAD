@@ -42,7 +42,7 @@ fn point_at(s: &mut Session, x: f64, y: f64) -> (f64, f64) {
 
 /// The direction of a line, from end to end.
 fn dir(l: ((f64, f64), (f64, f64))) -> (f64, f64) {
-    ((l.1.0 - l.0.0), (l.1.1 - l.0.1))
+    ((l.1 .0 - l.0 .0), (l.1 .1 - l.0 .1))
 }
 
 /// The length of a line.

@@ -24,7 +24,10 @@ mod tests {
 
     /// What is actually drawn right now — the list of body ids.
     fn drawn(app: &App) -> Vec<u64> {
-        { let pn = app.painting(); qymcad_ui_state::visible_mesh_items(&pn).iter().filter_map(|m| pn.project.mesh_id(m.index)).collect() }
+        {
+            let pn = app.painting();
+            qymcad_ui_state::visible_mesh_items(&pn).iter().filter_map(|m| pn.project.mesh_id(m.index)).collect()
+        }
     }
 
     /// A part: a plate with a fillet on it. Returns (application, id of the fillet node).
@@ -54,13 +57,7 @@ mod tests {
         app.apply_feat_cmd();
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
 
-        let fillet = app
-            .project
-            .timeline
-            .iter()
-            .find(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::Fillet { .. }))
-            .map(|n| n.id)
-            .expect("the fillet in the timeline");
+        let fillet = app.project.timeline.iter().find(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::Fillet { .. })).map(|n| n.id).expect("the fillet in the timeline");
         (app, fillet)
     }
 

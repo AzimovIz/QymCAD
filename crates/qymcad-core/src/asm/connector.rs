@@ -18,7 +18,6 @@
 
 use serde::{Deserialize, Serialize};
 
-
 /// Attach point on the selected geometry.
 ///
 /// Pointing at a face offers a centre, a vertex, an edge midpoint, or — on a cylinder — a point on the

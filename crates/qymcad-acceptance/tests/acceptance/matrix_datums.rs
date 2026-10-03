@@ -46,14 +46,16 @@ fn judged(d: &Datum, want: &Want) -> Option<String> {
     match *want {
         Want::Plane { through, normal } => {
             let off = dot(sub(through, d.at), unit(d.dir));
-            (d.kind != "plane" || !along(d.dir, normal) || off.abs() > 1e-6).then(|| format!("a {} at {:?} facing {:?}, {off} off the point {through:?}, not a plane square to {normal:?}", d.kind, d.at, d.dir))
+            (d.kind != "plane" || !along(d.dir, normal) || off.abs() > 1e-6)
+                .then(|| format!("a {} at {:?} facing {:?}, {off} off the point {through:?}, not a plane square to {normal:?}", d.kind, d.at, d.dir))
         }
         Want::Axis { through, along: way } => {
             let v = sub(through, d.at);
             let u = unit(d.dir);
             let t = dot(v, u);
             let apart = dot(v, v) - t * t;
-            (d.kind != "axis" || !along(d.dir, way) || apart.max(0.0).sqrt() > 1e-6).then(|| format!("a {} at {:?} along {:?}, {} from {through:?}, not an axis along {way:?}", d.kind, d.at, d.dir, apart.max(0.0).sqrt()))
+            (d.kind != "axis" || !along(d.dir, way) || apart.max(0.0).sqrt() > 1e-6)
+                .then(|| format!("a {} at {:?} along {:?}, {} from {through:?}, not an axis along {way:?}", d.kind, d.at, d.dir, apart.max(0.0).sqrt()))
         }
         Want::Point { at } => (d.kind != "point" || dot(sub(at, d.at), sub(at, d.at)).sqrt() > 1e-6).then(|| format!("a {} at {:?}, not a point at {at:?}", d.kind, d.at)),
         Want::Nothing => Some(format!("a {} at {:?} was made where nothing should be", d.kind, d.at)),

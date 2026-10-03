@@ -63,10 +63,24 @@ fn first_body_cases() -> Vec<Case> {
         case(&RECTANGLE, &[Pick::Bar("cmd-flip-btn")], 10.0, &[], block(10.0), "the rectangle, 10 flipped under the plane"),
         case(&CIRCLE, &[], 10.0, &[], built(PI * 100.0 * 10.0, faces(2, 1, 0)), "the circle, 10 up"),
         // several contours are picked by a click inside each, then Enter goes on to the size
-        case(&NESTED, &[Pick::Space([5.0, 5.0, 0.0]), Pick::Enter], 10.0, &[], built((1200.0 - PI * 25.0) * 10.0, faces(6, 1, 0)), "the ring between the rectangle and the circle, 10 up: a plate with a hole"),
+        case(
+            &NESTED,
+            &[Pick::Space([5.0, 5.0, 0.0]), Pick::Enter],
+            10.0,
+            &[],
+            built((1200.0 - PI * 25.0) * 10.0, faces(6, 1, 0)),
+            "the ring between the rectangle and the circle, 10 up: a plate with a hole",
+        ),
         case(&NESTED, &[Pick::Space([5.0, 5.0, 0.0]), Pick::Space([20.0, 15.0, 0.0]), Pick::Enter], 10.0, &[], block(10.0), "the ring and the circle, 10 up: the whole block"),
         // the first body may be in pieces, as text is (decided 26.09): two squares apart are two pieces of one part
-        case(&TWO_APART, &[Pick::Space([5.0, 5.0, 0.0]), Pick::Space([25.0, 5.0, 0.0]), Pick::Enter], 10.0, &[], Expect::Pieces { change: 2000.0, tol: 1.0, pieces: 2 }, "two squares apart: two pieces"),
+        case(
+            &TWO_APART,
+            &[Pick::Space([5.0, 5.0, 0.0]), Pick::Space([25.0, 5.0, 0.0]), Pick::Enter],
+            10.0,
+            &[],
+            Expect::Pieces { change: 2000.0, tol: 1.0, pieces: 2 },
+            "two squares apart: two pieces",
+        ),
     ];
     for (v, what) in [(0.0, "nothing"), (-5.0, "below zero")] {
         out.push(case(&RECTANGLE, &[], v, &[], Expect::Refused, &format!("the rectangle, {what}")));
@@ -112,7 +126,14 @@ fn revolve_cases() -> Vec<Case> {
         case(&RECTANGLE, &[], 90.0, &[], built(about_x / 4.0, faces(4, 1, 0)), "the rectangle about X, a quarter turn"),
         case(&RECTANGLE, &[], 1.0, &[], built(about_x / 360.0, faces(4, 1, 0)), "the rectangle about X, one degree"),
         // the other way is the button of the bar, not a sign: an angle is an opening, 0 < v <= 360
-        case(&RECTANGLE, &[Pick::Bar("cmd-flip-btn")], 90.0, &[], Expect::Magnitude { change: about_x / 4.0, tol: tol(about_x / 4.0), added: Some(faces(4, 1, 0)) }, "the rectangle about X, a quarter turn the other way"),
+        case(
+            &RECTANGLE,
+            &[Pick::Bar("cmd-flip-btn")],
+            90.0,
+            &[],
+            Expect::Magnitude { change: about_x / 4.0, tol: tol(about_x / 4.0), added: Some(faces(4, 1, 0)) },
+            "the rectangle about X, a quarter turn the other way",
+        ),
         case(&RECTANGLE, &[], -90.0, &[], Expect::Refused, "the rectangle about X, a turn below zero"),
         case(&CIRCLE, &[], 360.0, &[], built(2.0 * PI * 15.0 * PI * 100.0, faces(0, 0, 1)), "the circle about X, a whole turn: a ring"),
         case(&CIRCLE, &[y], 360.0, &[], built(2.0 * PI * 20.0 * PI * 100.0, faces(0, 0, 1)), "the circle about Y, a whole turn: a ring"),
@@ -162,8 +183,18 @@ macro_rules! sketch_matrix {
     };
 }
 
-sketch_matrix!(first_bodies_extruded, "EXTRUSION MAKING THE FIRST BODY: to a length, symmetric, two sides, flipped; a rectangle, a circle, a rectangle round a circle; two squares apart, zero and below refused.", EXTRUDE_NEW, first_body_cases);
-sketch_matrix!(extrusions_on_a_body, "EXTRUSION ON THE BLOCK: added, cut, through all, deeper than the block, intersected, symmetric, over an edge; what makes nothing, and nothing, refused.", EXTRUDE_ON, on_the_body_cases);
+sketch_matrix!(
+    first_bodies_extruded,
+    "EXTRUSION MAKING THE FIRST BODY: to a length, symmetric, two sides, flipped; a rectangle, a circle, a rectangle round a circle; two squares apart, zero and below refused.",
+    EXTRUDE_NEW,
+    first_body_cases
+);
+sketch_matrix!(
+    extrusions_on_a_body,
+    "EXTRUSION ON THE BLOCK: added, cut, through all, deeper than the block, intersected, symmetric, over an edge; what makes nothing, and nothing, refused.",
+    EXTRUDE_ON,
+    on_the_body_cases
+);
 sketch_matrix!(revolutions, "REVOLUTION about X and Y, whole, in part, the other way; a circle off the axis; across the axis, no turn and more than one refused.", REVOLVE, revolve_cases);
 sketch_matrix!(sweeps, "SWEEP of a square and a circle along a straight line and a quarter circle.", SWEEP, sweep_cases);
 sketch_matrix!(lofts, "LOFT between two squares, two circles and the same square twice.", LOFT, loft_cases);

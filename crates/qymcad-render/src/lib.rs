@@ -245,7 +245,12 @@ pub fn paint_gly(p: &egui::Painter, c: Pos2, h: f32, g: Gly, col: Color32) {
         }
         Gly::Fillet => {
             let cen = c + v(h * 0.5, h * 0.5);
-            let pts: Vec<Pos2> = (0..=8).map(|i| { let t = std::f32::consts::PI + std::f32::consts::FRAC_PI_2 * (i as f32 / 8.0); cen + v(h * t.cos(), h * t.sin()) }).collect();
+            let pts: Vec<Pos2> = (0..=8)
+                .map(|i| {
+                    let t = std::f32::consts::PI + std::f32::consts::FRAC_PI_2 * (i as f32 / 8.0);
+                    cen + v(h * t.cos(), h * t.sin())
+                })
+                .collect();
             p.add(egui::Shape::line(pts, st));
             p.line_segment([cen + v(-h, 0.0), cen + v(-h, h * 0.7)], st);
             p.line_segment([cen + v(0.0, -h), cen + v(-h * 0.7, -h)], st);
@@ -294,11 +299,23 @@ pub fn paint_gly(p: &egui::Painter, c: Pos2, h: f32, g: Gly, col: Color32) {
         }
         Gly::Ellipse => {
             let n = 24;
-            let pts: Vec<Pos2> = (0..=n).map(|i| { let a = std::f32::consts::TAU * i as f32 / n as f32; c + v(h * a.cos(), h * 0.6 * a.sin()) }).collect();
+            let pts: Vec<Pos2> = (0..=n)
+                .map(|i| {
+                    let a = std::f32::consts::TAU * i as f32 / n as f32;
+                    c + v(h * a.cos(), h * 0.6 * a.sin())
+                })
+                .collect();
             p.add(egui::Shape::line(pts, st));
         }
         Gly::Spline => {
-            let pts: Vec<Pos2> = (0..=16).map(|i| { let t = i as f32 / 16.0; let x = -h + 2.0 * h * t; let y = (t * std::f32::consts::TAU).sin() * h * 0.5; c + v(x, y) }).collect();
+            let pts: Vec<Pos2> = (0..=16)
+                .map(|i| {
+                    let t = i as f32 / 16.0;
+                    let x = -h + 2.0 * h * t;
+                    let y = (t * std::f32::consts::TAU).sin() * h * 0.5;
+                    c + v(x, y)
+                })
+                .collect();
             p.add(egui::Shape::line(pts, st));
         }
         Gly::Circle3 => {
@@ -511,8 +528,8 @@ pub fn modal_input_barrier_except(ctx: &egui::Context, hole: egui::Rect) {
         return;
     }
     let strips = [
-        egui::Rect::from_min_max(s.min, egui::pos2(s.max.x, hole.min.y)),                     // above
-        egui::Rect::from_min_max(egui::pos2(s.min.x, hole.max.y), s.max),                     // below
+        egui::Rect::from_min_max(s.min, egui::pos2(s.max.x, hole.min.y)),                              // above
+        egui::Rect::from_min_max(egui::pos2(s.min.x, hole.max.y), s.max),                              // below
         egui::Rect::from_min_max(egui::pos2(s.min.x, hole.min.y), egui::pos2(hole.min.x, hole.max.y)), // left
         egui::Rect::from_min_max(egui::pos2(hole.max.x, hole.min.y), egui::pos2(s.max.x, hole.max.y)), // right
     ];
@@ -563,14 +580,10 @@ pub fn draw_splash(logo_tex: &Option<egui::TextureHandle>, scheme: &SchemeUi, ct
     // `Foreground` while the card stayed an ordinary window (`Order::Middle`), and the fill painted over
     // the card: what appeared was an empty white rectangle filling the window. The layer decides who is
     // on top of whom, and "drawn later" does not mean "visible" here.
-    ctx.layer_painter(egui::LayerId::new(egui::Order::Background, egui::Id::new("splash_dim")))
-        .rect_filled(screen, 0.0, scheme.pal.splash_bg());
-    egui::Area::new(egui::Id::new("splash"))
-        .order(egui::Order::Foreground)
-        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-        .show(ctx, |ui| {
-            egui::Frame::popup(ui.style()).show(ui, |ui| {
-                ui.set_width(300.0);
+    ctx.layer_painter(egui::LayerId::new(egui::Order::Background, egui::Id::new("splash_dim"))).rect_filled(screen, 0.0, scheme.pal.splash_bg());
+    egui::Area::new(egui::Id::new("splash")).order(egui::Order::Foreground).anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0]).show(ctx, |ui| {
+        egui::Frame::popup(ui.style()).show(ui, |ui| {
+            ui.set_width(300.0);
             ui.vertical_centered(|ui| {
                 ui.add_space(10.0);
                 if let Some(tex) = &logo_tex {
@@ -583,9 +596,9 @@ pub fn draw_splash(logo_tex: &Option<egui::TextureHandle>, scheme: &SchemeUi, ct
                 ui.add_space(8.0);
                 ui.label(egui::RichText::new(label).size(13.0).color(scheme.pal.text_dim()));
                 ui.add_space(6.0);
-                });
             });
         });
+    });
 }
 
 /// THE CARD OF A LONG IMPORT: the same card as `draw_splash`, with the time it has taken and a way out.
@@ -597,34 +610,30 @@ pub fn draw_splash(logo_tex: &Option<egui::TextureHandle>, scheme: &SchemeUi, ct
 pub fn draw_import_card(logo_tex: &Option<egui::TextureHandle>, scheme: &SchemeUi, ctx: &egui::Context, label: &str, elapsed: std::time::Duration, cancel: &str) -> bool {
     let screen = ctx.viewport_rect();
     modal_input_barrier(ctx, "splash_modal_barrier");
-    ctx.layer_painter(egui::LayerId::new(egui::Order::Background, egui::Id::new("splash_dim")))
-        .rect_filled(screen, 0.0, scheme.pal.splash_bg());
+    ctx.layer_painter(egui::LayerId::new(egui::Order::Background, egui::Id::new("splash_dim"))).rect_filled(screen, 0.0, scheme.pal.splash_bg());
     let mut asked = false;
-    egui::Area::new(egui::Id::new("splash"))
-        .order(egui::Order::Foreground)
-        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-        .show(ctx, |ui| {
-            egui::Frame::popup(ui.style()).show(ui, |ui| {
-                ui.set_width(300.0);
-                ui.vertical_centered(|ui| {
-                    ui.add_space(10.0);
-                    if let Some(tex) = &logo_tex {
-                        ui.add(egui::Image::new(egui::load::SizedTexture::new(tex.id(), egui::vec2(64.0, 64.0))));
-                    }
-                    ui.add_space(8.0);
-                    ui.heading(egui::RichText::new("QymCAD").color(scheme.pal.text_strong()));
-                    ui.add_space(10.0);
-                    ui.add(egui::Spinner::new().size(22.0));
-                    ui.add_space(8.0);
-                    ui.label(egui::RichText::new(label).size(13.0).color(scheme.pal.text_dim()));
-                    let s = elapsed.as_secs();
-                    ui.label(egui::RichText::new(format!("{}:{:02}", s / 60, s % 60)).size(13.0).monospace().color(scheme.pal.text_dim()));
-                    ui.add_space(6.0);
-                    asked = ui.button(cancel).clicked();
-                    ui.add_space(6.0);
-                });
+    egui::Area::new(egui::Id::new("splash")).order(egui::Order::Foreground).anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0]).show(ctx, |ui| {
+        egui::Frame::popup(ui.style()).show(ui, |ui| {
+            ui.set_width(300.0);
+            ui.vertical_centered(|ui| {
+                ui.add_space(10.0);
+                if let Some(tex) = &logo_tex {
+                    ui.add(egui::Image::new(egui::load::SizedTexture::new(tex.id(), egui::vec2(64.0, 64.0))));
+                }
+                ui.add_space(8.0);
+                ui.heading(egui::RichText::new("QymCAD").color(scheme.pal.text_strong()));
+                ui.add_space(10.0);
+                ui.add(egui::Spinner::new().size(22.0));
+                ui.add_space(8.0);
+                ui.label(egui::RichText::new(label).size(13.0).color(scheme.pal.text_dim()));
+                let s = elapsed.as_secs();
+                ui.label(egui::RichText::new(format!("{}:{:02}", s / 60, s % 60)).size(13.0).monospace().color(scheme.pal.text_dim()));
+                ui.add_space(6.0);
+                asked = ui.button(cancel).clicked();
+                ui.add_space(6.0);
             });
         });
+    });
     asked
 }
 
@@ -731,11 +740,7 @@ pub fn joint_limits(dc: &DrawCtx, painter: &egui::Painter, rect: Rect, jid: Id, 
             let cross = [dir[1] * zero[2] - dir[2] * zero[1], dir[2] * zero[0] - dir[0] * zero[2], dir[0] * zero[1] - dir[1] * zero[0]];
             let at = |a: f64| {
                 let (s, c) = a.sin_cos();
-                [
-                    o[0] + l * (zero[0] * c + cross[0] * s),
-                    o[1] + l * (zero[1] * c + cross[1] * s),
-                    o[2] + l * (zero[2] * c + cross[2] * s),
-                ]
+                [o[0] + l * (zero[0] * c + cross[0] * s), o[1] + l * (zero[1] * c + cross[1] * s), o[2] + l * (zero[2] * c + cross[2] * s)]
             };
             let n = 24;
             let pts: Vec<Pos2> = (0..=n).map(|k| scr.at(at(lo + (hi - lo) * k as f64 / n as f64)).0).collect();
@@ -849,7 +854,12 @@ pub fn draw_entity_xform(pick: &PickCtx, painter: &egui::Painter, rect: Rect, si
     use qymcad_core::model::EntityKind;
     let Some(s) = pick.project.sketches.get(si) else { return };
     let Some(kind) = s.entities.iter().find(|e| e.id == eid).map(|e| e.kind) else { return };
-    let pt = |id: Id| s.points.iter().find(|q| q.id == id).map(|q| { let (x, y) = f(q.x, q.y); Point2::new(x, y) });
+    let pt = |id: Id| {
+        s.points.iter().find(|q| q.id == id).map(|q| {
+            let (x, y) = f(q.x, q.y);
+            Point2::new(x, y)
+        })
+    };
     match kind {
         EntityKind::Line { a, b } => {
             if let (Some(pa), Some(pb)) = (pt(a), pt(b)) {
@@ -857,7 +867,13 @@ pub fn draw_entity_xform(pick: &PickCtx, painter: &egui::Painter, rect: Rect, si
             }
         }
         EntityKind::Circle { center, r } => {
-            if let (Some(c), Some(redge)) = (pt(center), s.points.iter().find(|q| q.id == center).map(|q| { let (x, y) = f(q.x + r, q.y); Point2::new(x, y) })) {
+            if let (Some(c), Some(redge)) = (
+                pt(center),
+                s.points.iter().find(|q| q.id == center).map(|q| {
+                    let (x, y) = f(q.x + r, q.y);
+                    Point2::new(x, y)
+                }),
+            ) {
                 let sc = sh.at(c);
                 painter.circle_stroke(sc, sh.at(redge).distance(sc), stroke);
             }
@@ -872,7 +888,12 @@ pub fn draw_entity_xform(pick: &PickCtx, painter: &egui::Painter, rect: Rect, si
                 } else if !ccw && a1 > a0 {
                     a1 -= std::f64::consts::TAU;
                 }
-                let pts: Vec<Pos2> = (0..=40).map(|k| { let a = a0 + (a1 - a0) * k as f64 / 40.0; sh.at(Point2::new(c.x + r * a.cos(), c.y + r * a.sin())) }).collect();
+                let pts: Vec<Pos2> = (0..=40)
+                    .map(|k| {
+                        let a = a0 + (a1 - a0) * k as f64 / 40.0;
+                        sh.at(Point2::new(c.x + r * a.cos(), c.y + r * a.sin()))
+                    })
+                    .collect();
                 painter.add(egui::Shape::line(pts, stroke));
             }
         }
@@ -882,7 +903,13 @@ pub fn draw_entity_xform(pick: &PickCtx, painter: &egui::Painter, rect: Rect, si
                 let minor = ((pmi.x - pc.x).powi(2) + (pmi.y - pc.y).powi(2)).sqrt().max(1e-6);
                 let (ux, uy) = ((pma.x - pc.x) / major, (pma.y - pc.y) / major);
                 let (vx, vy) = (-uy, ux);
-                let pts: Vec<Pos2> = (0..=48).map(|k| { let t = std::f64::consts::TAU * k as f64 / 48.0; let (ct, st) = (t.cos(), t.sin()); sh.at(Point2::new(pc.x + major * ct * ux + minor * st * vx, pc.y + major * ct * uy + minor * st * vy)) }).collect();
+                let pts: Vec<Pos2> = (0..=48)
+                    .map(|k| {
+                        let t = std::f64::consts::TAU * k as f64 / 48.0;
+                        let (ct, st) = (t.cos(), t.sin());
+                        sh.at(Point2::new(pc.x + major * ct * ux + minor * st * vx, pc.y + major * ct * uy + minor * st * vy))
+                    })
+                    .collect();
                 painter.add(egui::Shape::line(pts, stroke));
             }
         }
@@ -905,7 +932,12 @@ pub fn draw_curve_trim_span(pick: &PickCtx, painter: &egui::Painter, rect: Rect,
     let click_ang = (cur.y - c.y).atan2(cur.x - c.x);
     let arc_poly = |painter: &egui::Painter, g0: f64, g1: f64| {
         let n = 24;
-        let pts: Vec<Pos2> = (0..=n).map(|k| { let g = g0 + (g1 - g0) * k as f64 / n as f64; (qymcad_ui_state::Sheet { view: *pick.view, rect: rect }).at(Point2::new(c.x + r * g.cos(), c.y + r * g.sin())) }).collect();
+        let pts: Vec<Pos2> = (0..=n)
+            .map(|k| {
+                let g = g0 + (g1 - g0) * k as f64 / n as f64;
+                (qymcad_ui_state::Sheet { view: *pick.view, rect: rect }).at(Point2::new(c.x + r * g.cos(), c.y + r * g.sin()))
+            })
+            .collect();
         painter.add(egui::Shape::line(pts, Stroke::new(3.0, col)));
     };
     match span {
@@ -952,12 +984,7 @@ pub fn active_sketch_contour_ids(armed: &qymcad_ui_state::Armed, cmd: &FeatComma
         .editing
         .and_then(|sid| project.sketches.iter().find(|s| s.id == sid))
         .map(|s| s.contour_ids.iter().copied().collect())
-        .or_else(|| {
-            (armed.commanding())
-                .then(|| cmd.sketch.and_then(|si| project.sketches.get(si)))
-                .flatten()
-                .map(|s| s.contour_ids.iter().copied().collect())
-        })
+        .or_else(|| (armed.commanding()).then(|| cmd.sketch.and_then(|si| project.sketches.get(si))).flatten().map(|s| s.contour_ids.iter().copied().collect()))
 }
 
 pub fn hidden_contour_ids(project: &Project, sketch_hidden: &std::collections::HashSet<Id>) -> std::collections::HashSet<Id> {
@@ -1052,7 +1079,12 @@ pub fn draw_clip_ghost(clip: &Clipboard, cursor: Option<Point2>, scheme: &Scheme
                     } else if !ccw && a1 > a0 {
                         a1 -= std::f64::consts::TAU;
                     }
-                    let pts: Vec<Pos2> = (0..=40).map(|k| { let a = a0 + (a1 - a0) * k as f64 / 40.0; sh.at(Point2::new(c.x + r * a.cos(), c.y + r * a.sin())) }).collect();
+                    let pts: Vec<Pos2> = (0..=40)
+                        .map(|k| {
+                            let a = a0 + (a1 - a0) * k as f64 / 40.0;
+                            sh.at(Point2::new(c.x + r * a.cos(), c.y + r * a.sin()))
+                        })
+                        .collect();
                     painter.add(egui::Shape::line(pts, stroke));
                 }
             }
@@ -1062,7 +1094,13 @@ pub fn draw_clip_ghost(clip: &Clipboard, cursor: Option<Point2>, scheme: &Scheme
                     let minor = ((pmi.x - pc.x).powi(2) + (pmi.y - pc.y).powi(2)).sqrt().max(1e-6);
                     let (ux, uy) = ((pma.x - pc.x) / major, (pma.y - pc.y) / major);
                     let (vx, vy) = (-uy, ux);
-                    let pts: Vec<Pos2> = (0..=48).map(|k| { let t = std::f64::consts::TAU * k as f64 / 48.0; let (ct, st) = (t.cos(), t.sin()); sh.at(Point2::new(pc.x + major * ct * ux + minor * st * vx, pc.y + major * ct * uy + minor * st * vy)) }).collect();
+                    let pts: Vec<Pos2> = (0..=48)
+                        .map(|k| {
+                            let t = std::f64::consts::TAU * k as f64 / 48.0;
+                            let (ct, st) = (t.cos(), t.sin());
+                            sh.at(Point2::new(pc.x + major * ct * ux + minor * st * vx, pc.y + major * ct * uy + minor * st * vy))
+                        })
+                        .collect();
                     painter.add(egui::Shape::line(pts, stroke));
                 }
             }
@@ -1192,10 +1230,7 @@ pub fn draw_array_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
     let basis = pn.cam.basis();
     let st = Stroke::new(1.2, qymcad_scheme::a(pn.scheme.pal.preview_array(), 170));
     let (mn, mx) = (bb.min, bb.max);
-    let base: [[f64; 3]; 8] = [
-        [mn.x, mn.y, mn.z], [mx.x, mn.y, mn.z], [mx.x, mx.y, mn.z], [mn.x, mx.y, mn.z],
-        [mn.x, mn.y, mx.z], [mx.x, mn.y, mx.z], [mx.x, mx.y, mx.z], [mn.x, mx.y, mx.z],
-    ];
+    let base: [[f64; 3]; 8] = [[mn.x, mn.y, mn.z], [mx.x, mn.y, mn.z], [mx.x, mx.y, mn.z], [mn.x, mx.y, mn.z], [mn.x, mn.y, mx.z], [mx.x, mn.y, mx.z], [mx.x, mx.y, mx.z], [mn.x, mx.y, mx.z]];
     const EDGES: [(usize, usize); 12] = [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7)];
     let draw_box = |wc: [[f64; 3]; 8]| {
         let pts: [Pos2; 8] = std::array::from_fn(|i| qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis }.at(wc[i]).0);
@@ -1223,11 +1258,7 @@ pub fn draw_array_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
                     if i == 0 && j == 0 && l == 0 {
                         continue; // the original is already drawn as the body (or as the source while editing)
                     }
-                    let (tx, ty, tz) = (
-                        i as f64 * dx + j as f64 * dx2 + l as f64 * dx3,
-                        i as f64 * dy + j as f64 * dy2 + l as f64 * dy3,
-                        i as f64 * dz + j as f64 * dz2 + l as f64 * dz3,
-                    );
+                    let (tx, ty, tz) = (i as f64 * dx + j as f64 * dx2 + l as f64 * dx3, i as f64 * dy + j as f64 * dy2 + l as f64 * dy3, i as f64 * dz + j as f64 * dz2 + l as f64 * dz3);
                     draw_box(std::array::from_fn(|k| [base[k][0] + tx, base[k][1] + ty, base[k][2] + tz]));
                 }
             }
@@ -1269,7 +1300,12 @@ pub fn draw_prim_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
         qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis }.at(w).0
     };
     let ring_xy = |r: f64, z: f64, n: usize| -> Vec<Pos2> {
-        (0..=n).map(|i| { let a = std::f64::consts::TAU * i as f64 / n as f64; pr([r * a.cos(), r * a.sin(), z]) }).collect()
+        (0..=n)
+            .map(|i| {
+                let a = std::f64::consts::TAU * i as f64 / n as f64;
+                pr([r * a.cos(), r * a.sin(), z])
+            })
+            .collect()
     };
     let poly = |painter: &egui::Painter, pts: &[Pos2]| {
         for w in pts.windows(2) {
@@ -1301,7 +1337,15 @@ pub fn draw_prim_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
         12 => {
             let r = v("r");
             poly(painter, &ring_xy(r, 0.0, 48));
-            let ring_v = |swap: bool| -> Vec<Pos2> { (0..=48).map(|i| { let a = std::f64::consts::TAU * i as f64 / 48.0; let (c, s) = (r * a.cos(), r * a.sin()); pr(if swap { [0.0, c, s] } else { [c, 0.0, s] }) }).collect() };
+            let ring_v = |swap: bool| -> Vec<Pos2> {
+                (0..=48)
+                    .map(|i| {
+                        let a = std::f64::consts::TAU * i as f64 / 48.0;
+                        let (c, s) = (r * a.cos(), r * a.sin());
+                        pr(if swap { [0.0, c, s] } else { [c, 0.0, s] })
+                    })
+                    .collect()
+            };
             poly(painter, &ring_v(false));
             poly(painter, &ring_v(true));
         }
@@ -1347,7 +1391,11 @@ pub fn draw_body_edges(pn: &Painting, painter: &egui::Painter, rect: Rect) {
     let wt = pn.edges.body.map(|b| pn.project.body_display_transform(b, qymcad_ui_state::current_ctx_id(pn.active_path, pn.project))).unwrap_or(qymcad_core::feature::PLACE_IDENTITY);
     let tp = |p: &[f32; 3]| -> [f64; 3] {
         let v = [p[0] as f64, p[1] as f64, p[2] as f64];
-        if qymcad_core::feature::is_identity12(&wt) { v } else { qymcad_core::feature::apply12(&wt, v) }
+        if qymcad_core::feature::is_identity12(&wt) {
+            v
+        } else {
+            qymcad_core::feature::apply12(&wt, v)
+        }
     };
     let picked: Vec<bool> = pn.edges.ids.iter().map(|id| *id != 0 && pn.gsel.edges.contains(id)).collect();
     for i in edges_to_draw(&pn.edges.polys, &picked, EDGE_SEGMENTS_DRAWN) {
@@ -1406,7 +1454,8 @@ pub fn draw_edge_blend_preview(pn: &Painting, painter: &egui::Painter, rect: Rec
         };
         // the kernel lays the first leg on the reference face when one is named; with none named its own order of the
         // faces decides, which the mesh does not tell - there the face the trial built stands for the preview alone
-        let reference = (pn.chamfer.ref_face != 0).then(|| pn.project.mesh_index(body).and_then(|mi| pn.project.bodies[mi].faces.iter().find(|f| f.id == pn.chamfer.ref_face)).map(|f| f.normal)).flatten();
+        let reference =
+            (pn.chamfer.ref_face != 0).then(|| pn.project.mesh_index(body).and_then(|mi| pn.project.bodies[mi].faces.iter().find(|f| f.id == pn.chamfer.ref_face)).map(|f| f.normal)).flatten();
         if pn.chamfer.mode != ChamferMode::Symmetric && reference.is_none() && qymcad_ui_state::trial_faces(painter.ctx()).is_some() {
             return;
         }
@@ -1584,7 +1633,7 @@ pub fn draw_contours(pn: &Painting, painter: &egui::Painter, rect: Rect) {
             continue; // the sketch is hidden by its own checkbox in the tree
         }
         match &edit_only {
-            Some(only) if !cid.is_some_and(|id| only.contains(&id)) => continue, // not the current sketch
+            Some(only) if !cid.is_some_and(|id| only.contains(&id)) => continue,  // not the current sketch
             None if cid.is_some_and(|id| foreign_cids.contains(&id)) => continue, // another component
             _ => {}
         }
@@ -1847,7 +1896,9 @@ pub fn draw_sketch_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
             // a tangent arc: once started (at the end of a curve), an arc from s to the cursor, smooth into the base
             if pn.tool.pts.len() == 1 {
                 let s = pn.tool.pts[0];
-                if let Some((t, _)) = qymcad_ui_state::edit_si(pn.project, &pn.sketch_ses).and_then(|si| qymcad_pick::arc_tangent_ref(&DrawCtx { cam: &pn.cam, set: pn.set, scheme: pn.scheme, project: pn.project, active_path: pn.active_path }, si, s)) {
+                if let Some((t, _)) = qymcad_ui_state::edit_si(pn.project, &pn.sketch_ses)
+                    .and_then(|si| qymcad_pick::arc_tangent_ref(&DrawCtx { cam: &pn.cam, set: pn.set, scheme: pn.scheme, project: pn.project, active_path: pn.active_path }, si, s))
+                {
                     if let Some((cx, cy, r, ccw)) = qymcad_ui_state::tangent_arc(s, t, cur) {
                         let a0 = (s.y - cy).atan2(s.x - cx);
                         let mut a1 = (cur.y - cy).atan2(cur.x - cx);
@@ -1856,7 +1907,12 @@ pub fn draw_sketch_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
                         } else if !ccw && a1 > a0 {
                             a1 -= std::f64::consts::TAU;
                         }
-                        let pts: Vec<Pos2> = (0..=40).map(|k| { let a = a0 + (a1 - a0) * k as f64 / 40.0; sh.at(Point2::new(cx + r * a.cos(), cy + r * a.sin())) }).collect();
+                        let pts: Vec<Pos2> = (0..=40)
+                            .map(|k| {
+                                let a = a0 + (a1 - a0) * k as f64 / 40.0;
+                                sh.at(Point2::new(cx + r * a.cos(), cy + r * a.sin()))
+                            })
+                            .collect();
                         painter.add(egui::Shape::line(pts, stroke));
                     } else {
                         painter.line_segment([sh.at(s), sc], stroke);
@@ -1884,7 +1940,12 @@ pub fn draw_sketch_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
                             a1 -= std::f64::consts::TAU;
                         }
                         let r = ((s.x - cx).powi(2) + (s.y - cy).powi(2)).sqrt();
-                        let pts: Vec<Pos2> = (0..=40).map(|k| { let t = a0 + (a1 - a0) * k as f64 / 40.0; sh.at(Point2::new(cen.x + r * t.cos(), cen.y + r * t.sin())) }).collect();
+                        let pts: Vec<Pos2> = (0..=40)
+                            .map(|k| {
+                                let t = a0 + (a1 - a0) * k as f64 / 40.0;
+                                sh.at(Point2::new(cen.x + r * t.cos(), cen.y + r * t.sin()))
+                            })
+                            .collect();
                         painter.add(egui::Shape::line(pts, stroke));
                     } else {
                         painter.line_segment([sh.at(s), sc], stroke);
@@ -1950,14 +2011,13 @@ pub fn draw_sketch_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
                 painter.add(egui::Shape::line(sp, stroke));
             }
         }
-        10
-            if pn.tool.pts.len() == 2 => {
-                if let Some((cx, cy, r)) = qymcad_ui_state::circumcircle(pn.tool.pts[0], pn.tool.pts[1], cur) {
-                    let scn = sh.at(Point2::new(cx, cy));
-                    let rp = (sh.at(Point2::new(cx + r, cy)).x - scn.x).abs();
-                    painter.circle_stroke(scn, rp, stroke);
-                }
+        10 if pn.tool.pts.len() == 2 => {
+            if let Some((cx, cy, r)) = qymcad_ui_state::circumcircle(pn.tool.pts[0], pn.tool.pts[1], cur) {
+                let scn = sh.at(Point2::new(cx, cy));
+                let rp = (sh.at(Point2::new(cx + r, cy)).x - scn.x).abs();
+                painter.circle_stroke(scn, rp, stroke);
             }
+        }
         _ => {}
     }
     // under ANY tool, show the automatic constraint that the cursor's snap implies (coincident, on-edge):
@@ -1981,7 +2041,11 @@ pub fn draw_trim_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
     let Some(cur) = pn.cursor else { return };
     let Sel::Sketch(si) = pn.sel else { return };
     let pos = sh.at(cur);
-    let Some(eid) = qymcad_pick::nearest_line_eid(&PickCtx { project: pn.project, set: pn.set, view: &pn.view }, rect, pos, si).or_else(|| qymcad_pick::nearest_circle_entity(&PickCtx { project: pn.project, set: pn.set, view: &pn.view }, rect, pos, si)) else { return };
+    let Some(eid) = qymcad_pick::nearest_line_eid(&PickCtx { project: pn.project, set: pn.set, view: &pn.view }, rect, pos, si)
+        .or_else(|| qymcad_pick::nearest_circle_entity(&PickCtx { project: pn.project, set: pn.set, view: &pn.view }, rect, pos, si))
+    else {
+        return;
+    };
     let Some(s) = pn.project.sketches.get(si) else { return };
     let Some(kind) = s.entities.iter().find(|e| e.id == eid).map(|e| e.kind) else { return };
     let pt = |id: Id| s.points.iter().find(|q| q.id == id).map(|q| Point2::new(q.x, q.y));
@@ -2129,7 +2193,10 @@ pub fn draw_pattern_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) 
                 .map(|k| {
                     let ang = (step * k as f64).to_radians();
                     let (s_, c_) = (ang.sin(), ang.cos());
-                    Box::new(move |x: f64, y: f64| { let (vx, vy) = (x - cx, y - cy); (cx + vx * c_ - vy * s_, cy + vx * s_ + vy * c_) }) as Box<dyn Fn(f64, f64) -> (f64, f64)>
+                    Box::new(move |x: f64, y: f64| {
+                        let (vx, vy) = (x - cx, y - cy);
+                        (cx + vx * c_ - vy * s_, cy + vx * s_ + vy * c_)
+                    }) as Box<dyn Fn(f64, f64) -> (f64, f64)>
                 })
                 .collect()
         }
@@ -2184,13 +2251,8 @@ pub fn draw_comp_array_preview(pn: &Painting, painter: &egui::Painter, rect: Rec
     // finished pattern places a copy differently: `mat_mul12(step, base)` in the source's PARENT frame
     // (`resolve_comp_patterns`). The two agreed only while the parent sat at the origin; as soon as the
     // source lay in an assembly with a position of its own, the ghosts drifted off the step.
-    let (base, parent) = pn
-        .project
-        .components
-        .iter()
-        .find(|c| c.id == pn.carr.src)
-        .map(|c| (c.transform, c.parent.unwrap_or(pn.project.root)))
-        .unwrap_or((qymcad_core::feature::PLACE_IDENTITY, pn.project.root));
+    let (base, parent) =
+        pn.project.components.iter().find(|c| c.id == pn.carr.src).map(|c| (c.transform, c.parent.unwrap_or(pn.project.root))).unwrap_or((qymcad_core::feature::PLACE_IDENTITY, pn.project.root));
     let pre = pn.project.relative_transform(parent, ctx);
     // EDITING A FINISHED PATTERN: the copies already stand on the screen. Drawing ghosts on top of them
     // would show twice as many frames as there are bodies.
@@ -2201,10 +2263,7 @@ pub fn draw_comp_array_preview(pn: &Painting, painter: &egui::Painter, rect: Rec
     let basis = pn.cam.basis();
     let st = Stroke::new(1.3, qymcad_scheme::a(pn.scheme.pal.preview_datum(), 190));
     let (mn, mx) = (bb.min, bb.max);
-    let corners: [[f64; 3]; 8] = [
-        [mn.x, mn.y, mn.z], [mx.x, mn.y, mn.z], [mx.x, mx.y, mn.z], [mn.x, mx.y, mn.z],
-        [mn.x, mn.y, mx.z], [mx.x, mn.y, mx.z], [mx.x, mx.y, mx.z], [mn.x, mx.y, mx.z],
-    ];
+    let corners: [[f64; 3]; 8] = [[mn.x, mn.y, mn.z], [mx.x, mn.y, mn.z], [mx.x, mx.y, mn.z], [mn.x, mx.y, mn.z], [mn.x, mn.y, mx.z], [mx.x, mn.y, mx.z], [mx.x, mx.y, mx.z], [mn.x, mx.y, mx.z]];
     const EDGES: [(usize, usize); 12] = [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7)];
     // GHOSTS ONLY FOR THE COPIES (i from 1): instance zero is the source itself, which is on screen anyway
     for m in comp_array_ghosts(pn, &pre, &base, already) {
@@ -2350,7 +2409,12 @@ pub fn draw_sketch_dims(pn: &Painting, painter: &egui::Painter, rect: Rect, si: 
                     let rp = (sh.at(Point2::new(c.x + r, c.y)).x - sc.x).abs();
                     // a dashed circle, as segments
                     let n = 48;
-                    let pts: Vec<Pos2> = (0..=n).map(|k| { let a = std::f64::consts::TAU * k as f64 / n as f64; sc + egui::vec2((rp as f64 * a.cos()) as f32, (rp as f64 * a.sin()) as f32) }).collect();
+                    let pts: Vec<Pos2> = (0..=n)
+                        .map(|k| {
+                            let a = std::f64::consts::TAU * k as f64 / n as f64;
+                            sc + egui::vec2((rp as f64 * a.cos()) as f32, (rp as f64 * a.sin()) as f32)
+                        })
+                        .collect();
                     painter.add(egui::Shape::dashed_line(&pts, Stroke::new(1.0, aux_col), 6.0, 4.0));
                 }
             }
@@ -2390,11 +2454,7 @@ pub fn draw_sketch_dims(pn: &Painting, painter: &egui::Painter, rect: Rect, si: 
         };
         // a reference (driven) dimension is grey and in brackets (it does not drive the geometry)
         let driven = c.is_driven();
-        let dim_col = if driven && Some(ci) != pn.gsel.constraint && Some(ci) != pn.hover.constraint {
-            pn.scheme.pal.dimension_driven()
-        } else {
-            dim_col
-        };
+        let dim_col = if driven && Some(ci) != pn.gsel.constraint && Some(ci) != pn.hover.constraint { pn.scheme.pal.dimension_driven() } else { dim_col };
         let label = caption(c); // taken before the match: the arms bind their own `c`
         match *c {
             Constraint::Distance { a, b, d, off: doff, axis, .. } => {
@@ -2478,9 +2538,9 @@ pub fn draw_sketch_dims(pn: &Painting, painter: &egui::Painter, rect: Rect, si: 
                 let Some(ab) = qymcad_ui_state::line_screen_dir(pn.project, &pn.view, si, a, b, rect) else { continue };
                 let t = (sp - sa).dot(ab);
                 let foot = sa + ab * t; // the foot of the perpendicular on the line
-                // the leader is offset ALONG the line (ab), so the dimension line can be raised or lowered
-                // over the geometry. It used to be offset along perp, and then the label could only travel
-                // along the axis being measured.
+                                        // the leader is offset ALONG the line (ab), so the dimension line can be raised or lowered
+                                        // over the geometry. It used to be offset along perp, and then the label could only travel
+                                        // along the axis being measured.
                 let off = ab * (doff as f32 * sc);
                 let (lp, lf) = (sp + off, foot + off);
                 painter.line_segment([sp, lp], Stroke::new(0.7, dim_col));
@@ -2513,7 +2573,10 @@ pub fn draw_sketch_dims(pn: &Painting, painter: &egui::Painter, rect: Rect, si: 
             }
             Constraint::ArcLength { c, a, b, off, len, .. } => {
                 // the arc length: a leader from the middle of the arc
-                let (Some(cp), Some(pa), Some(pb)) = (qymcad_ui_state::sketch_pt(pn.project, si, c), qymcad_ui_state::sketch_pt(pn.project, si, a), qymcad_ui_state::sketch_pt(pn.project, si, b)) else { continue };
+                let (Some(cp), Some(pa), Some(pb)) = (qymcad_ui_state::sketch_pt(pn.project, si, c), qymcad_ui_state::sketch_pt(pn.project, si, a), qymcad_ui_state::sketch_pt(pn.project, si, b))
+                else {
+                    continue;
+                };
                 let r = ((pa.x - cp.x).powi(2) + (pa.y - cp.y).powi(2)).sqrt();
                 let mid = Point2::new((pa.x + pb.x) / 2.0 - cp.x, (pa.y + pb.y) / 2.0 - cp.y);
                 let ml = (mid.x * mid.x + mid.y * mid.y).sqrt().max(1e-9);
@@ -2528,11 +2591,7 @@ pub fn draw_sketch_dims(pn: &Painting, painter: &egui::Painter, rect: Rect, si: 
     // the radii and diameters of circle entities and of arcs and fillets:
     // the selected entity (in sk_sel) or the one being edited is highlighted
     for e in &s.entities {
-        let dim_col = if pn.sel_sk.items.contains(&(1, e.id)) || pn.inline.circle() == Some(e.id) {
-            pn.scheme.pal.selected()
-        } else {
-            dim_col
-        };
+        let dim_col = if pn.sel_sk.items.contains(&(1, e.id)) || pn.inline.circle() == Some(e.id) { pn.scheme.pal.selected() } else { dim_col };
         match e.kind {
             EntityKind::Circle { center, r } => {
                 // if the circle already carries a diameter or radius dimension (a Diameter constraint), that loop draws it
@@ -2563,7 +2622,9 @@ pub fn draw_sketch_dims(pn: &Painting, painter: &egui::Painter, rect: Rect, si: 
                 // the rim (r+14) - the same style and position that passive_radius_label_at grabs, otherwise
                 // the two would not line up.
                 if !has_dim {
-                    if let (Some(cp), Some(pa), Some(pb)) = (qymcad_ui_state::sketch_pt(pn.project, si, center), qymcad_ui_state::sketch_pt(pn.project, si, a), qymcad_ui_state::sketch_pt(pn.project, si, b)) {
+                    if let (Some(cp), Some(pa), Some(pb)) =
+                        (qymcad_ui_state::sketch_pt(pn.project, si, center), qymcad_ui_state::sketch_pt(pn.project, si, a), qymcad_ui_state::sketch_pt(pn.project, si, b))
+                    {
                         let r = ((pa.x - cp.x).powi(2) + (pa.y - cp.y).powi(2)).sqrt();
                         let sc = sh.at(cp);
                         let r_px = (sh.at(Point2::new(cp.x + r, cp.y)) - sc).length();
@@ -2632,24 +2693,24 @@ pub fn draw_mesh(pn: &Painting, painter: &egui::Painter, rect: Rect) {
                     .collect()
             };
             for t in sub {
-            let (a, da) = proj(t[0]);
-            let (b, db) = proj(t[1]);
-            let (c, dc) = proj(t[2]);
-            let zc = (da + db + dc) / 3.0;
-            let shade = ((zc - dmin) / span).clamp(0.0, 1.0) as f32;
-            // Lighting: the floor comes from the palette, 1.0 at the nearest face. The palette stores the
-            // body colour AS IT IS ON THE BRIGHTEST FACE - deeper down it simply fades proportionally.
-            let k = qymcad_scheme::lit(pn.scheme.pal.shade_floor_mesh, shade);
-            let col = if ghost {
-                // a ghost: dim and translucent, so the sketch on top of it reads
-                qymcad_scheme::a(qymcad_scheme::tint(pn.scheme.pal.body_ghost(), k), 72)
-            } else if clash {
-                // the "collision" fill, keeping the shading by depth
-                qymcad_scheme::tint(pn.scheme.pal.body_clash(), k)
-            } else {
-                qymcad_scheme::tint(pn.scheme.pal.body_face(), k)
-            };
-            tris.push((zc, [sh.at(a), sh.at(b), sh.at(c)], col));
+                let (a, da) = proj(t[0]);
+                let (b, db) = proj(t[1]);
+                let (c, dc) = proj(t[2]);
+                let zc = (da + db + dc) / 3.0;
+                let shade = ((zc - dmin) / span).clamp(0.0, 1.0) as f32;
+                // Lighting: the floor comes from the palette, 1.0 at the nearest face. The palette stores the
+                // body colour AS IT IS ON THE BRIGHTEST FACE - deeper down it simply fades proportionally.
+                let k = qymcad_scheme::lit(pn.scheme.pal.shade_floor_mesh, shade);
+                let col = if ghost {
+                    // a ghost: dim and translucent, so the sketch on top of it reads
+                    qymcad_scheme::a(qymcad_scheme::tint(pn.scheme.pal.body_ghost(), k), 72)
+                } else if clash {
+                    // the "collision" fill, keeping the shading by depth
+                    qymcad_scheme::tint(pn.scheme.pal.body_clash(), k)
+                } else {
+                    qymcad_scheme::tint(pn.scheme.pal.body_face(), k)
+                };
+                tris.push((zc, [sh.at(a), sh.at(b), sh.at(c)], col));
             }
         }
         tris.sort_by(|a, b| a.0.total_cmp(&b.0)); // the bottom first, the top over it
@@ -2696,7 +2757,6 @@ pub fn draw_mesh(pn: &Painting, painter: &egui::Painter, rect: Rect) {
     }
 }
 
-
 /// Software rasterisation of the visible bodies into RGBA with a Z buffer. The buffer holds the
 /// screen-linear `ndc_z` (`depth_ndc`), so the linear interpolation in `raster_band` is exact both in
 /// orthographic and in perspective. The background is transparent.
@@ -2739,7 +2799,11 @@ pub fn rasterize_3d(pn: &Painting, rect: Rect, basis: &([f64; 3], [f64; 3], [f64
             let pw = |vi: u32| {
                 let p = mesh.verts[vi as usize];
                 let a = [p.x, p.y, p.z];
-                if ident { a } else { qymcad_core::feature::apply12(&wt, a) }
+                if ident {
+                    a
+                } else {
+                    qymcad_core::feature::apply12(&wt, a)
+                }
             };
             let (a, b, c) = (pw(tri_idx[0]), pw(tri_idx[1]), pw(tri_idx[2]));
             let n = qymcad_ui_state::v_norm(qymcad_ui_state::v_cross(qymcad_ui_state::v_sub(b, a), qymcad_ui_state::v_sub(c, a)));
@@ -2770,7 +2834,11 @@ pub fn rasterize_3d(pn: &Painting, rect: Rect, basis: &([f64; 3], [f64; 3], [f64
                 ],
                 cols,
             };
-            if ghost { ghost_tris.push(tri) } else { tris.push(tri) }
+            if ghost {
+                ghost_tris.push(tri)
+            } else {
+                tris.push(tri)
+            }
         }
     }
 
@@ -2804,7 +2872,6 @@ pub fn rasterize_3d(pn: &Painting, rect: Rect, basis: &([f64; 3], [f64; 3], [f64
     }
     Some(egui::ColorImage { size: [w, h], source_size: egui::Vec2::new([w, h][0] as f32, [w, h][1] as f32), pixels: color })
 }
-
 
 /// Draw ONE plane or face of the click-pick in the given colour: a world or datum plane as a square frame
 /// (+/-60 in its frame); a part's face as a fill of its triangles (as one mesh, with no "needles" from the
@@ -2908,7 +2975,9 @@ pub fn draw_sketch_plane_picker(pn: &Painting, painter: &egui::Painter, rect: Re
         // the origin snap marker - only for a NEW sketch (not for a mirror, a datum or an import)
         if pn.picking.is_sketch_plane() {
             if let Some(pos) = painter.ctx().pointer_hover_pos() {
-                if let Some((uv, fr)) = qymcad_pick::sketch_origin_snap(pn, rect, pos, sp).zip(qymcad_ui_state::world_frame_of_plane(&DrawCtx { cam: &pn.cam, set: pn.set, scheme: pn.scheme, project: pn.project, active_path: pn.active_path }, sp)) {
+                if let Some((uv, fr)) = qymcad_pick::sketch_origin_snap(pn, rect, pos, sp)
+                    .zip(qymcad_ui_state::world_frame_of_plane(&DrawCtx { cam: &pn.cam, set: pn.set, scheme: pn.scheme, project: pn.project, active_path: pn.active_path }, sp))
+                {
                     let w = fr.lift(uv);
                     let s = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis }.at([w.x, w.y, w.z]).0;
                     painter.circle_filled(s, 4.0, pn.scheme.pal.snap_point());
@@ -3019,7 +3088,11 @@ pub fn draw_joint_pick_highlight(pn: &Painting, painter: &egui::Painter, rect: R
             let wt = pn.project.body_display_transform(body, ctx);
             let tp = |p: &[f32; 3]| -> [f64; 3] {
                 let v = [p[0] as f64, p[1] as f64, p[2] as f64];
-                if qymcad_core::feature::is_identity12(&wt) { v } else { qymcad_core::feature::apply12(&wt, v) }
+                if qymcad_core::feature::is_identity12(&wt) {
+                    v
+                } else {
+                    qymcad_core::feature::apply12(&wt, v)
+                }
             };
             for (poly, id) in polys.iter().zip(ids.iter().copied()) {
                 if id == eid {
@@ -3050,7 +3123,11 @@ pub fn draw_joint_pick_highlight(pn: &Painting, painter: &egui::Painter, rect: R
             let wt = pn.project.body_display_transform(body, ctx);
             let tp = |p: &[f32; 3]| -> [f64; 3] {
                 let v = [p[0] as f64, p[1] as f64, p[2] as f64];
-                if qymcad_core::feature::is_identity12(&wt) { v } else { qymcad_core::feature::apply12(&wt, v) }
+                if qymcad_core::feature::is_identity12(&wt) {
+                    v
+                } else {
+                    qymcad_core::feature::apply12(&wt, v)
+                }
             };
             for (poly, id) in polys.iter().zip(ids.iter().copied()) {
                 if id == eid && poly.len() >= 2 {
@@ -3176,7 +3253,10 @@ pub fn draw_datum_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
             // an orthonormal frame (u,v) in the plane
             let up = if nn[2].abs() < 0.9 { [0.0, 0.0, 1.0] } else { [1.0, 0.0, 0.0] };
             let cross = |a: [f64; 3], b: [f64; 3]| [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-            let normd = |a: [f64; 3]| { let l = (a[0] * a[0] + a[1] * a[1] + a[2] * a[2]).sqrt().max(1e-9); [a[0] / l, a[1] / l, a[2] / l] };
+            let normd = |a: [f64; 3]| {
+                let l = (a[0] * a[0] + a[1] * a[1] + a[2] * a[2]).sqrt().max(1e-9);
+                [a[0] / l, a[1] / l, a[2] / l]
+            };
             let u = normd(cross(up, nn));
             let v = cross(nn, u);
             let h = 30.0;
@@ -3191,7 +3271,11 @@ pub fn draw_datum_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
                 match pn.datum.pt_vert {
                     Some((body, _, _, at)) => {
                         let wt = pn.project.body_display_transform(body, qymcad_ui_state::current_ctx_id(pn.active_path, pn.project));
-                        if is_identity12(&wt) { at } else { apply12(&wt, at) }
+                        if is_identity12(&wt) {
+                            at
+                        } else {
+                            apply12(&wt, at)
+                        }
                     }
                     None => {
                         // nothing picked yet - only the snap highlight of the candidate under the cursor
@@ -3221,7 +3305,10 @@ pub fn draw_datum_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
         }
         22 => {
             let od = if pn.datum.axis_mode == 1 {
-                Some(([qymcad_ui_state::cmd_val(pn.cmd, "ox"), qymcad_ui_state::cmd_val(pn.cmd, "oy"), qymcad_ui_state::cmd_val(pn.cmd, "oz")], [qymcad_ui_state::cmd_val(pn.cmd, "dx"), qymcad_ui_state::cmd_val(pn.cmd, "dy"), qymcad_ui_state::cmd_val(pn.cmd, "dz")]))
+                Some((
+                    [qymcad_ui_state::cmd_val(pn.cmd, "ox"), qymcad_ui_state::cmd_val(pn.cmd, "oy"), qymcad_ui_state::cmd_val(pn.cmd, "oz")],
+                    [qymcad_ui_state::cmd_val(pn.cmd, "dx"), qymcad_ui_state::cmd_val(pn.cmd, "dy"), qymcad_ui_state::cmd_val(pn.cmd, "dz")],
+                ))
             } else {
                 pn.datum.axis_ref
             };
@@ -3341,10 +3428,7 @@ pub fn draw_mirror_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
     let wt = pn.project.body_display_transform(src, ctx);
     let st = Stroke::new(1.3, qymcad_scheme::a(pn.scheme.pal.preview_datum(), 190));
     let (mn, mx) = (bb.min, bb.max);
-    let base: [[f64; 3]; 8] = [
-        [mn.x, mn.y, mn.z], [mx.x, mn.y, mn.z], [mx.x, mx.y, mn.z], [mn.x, mx.y, mn.z],
-        [mn.x, mn.y, mx.z], [mx.x, mn.y, mx.z], [mx.x, mx.y, mx.z], [mn.x, mx.y, mx.z],
-    ];
+    let base: [[f64; 3]; 8] = [[mn.x, mn.y, mn.z], [mx.x, mn.y, mn.z], [mx.x, mx.y, mn.z], [mn.x, mx.y, mn.z], [mn.x, mn.y, mx.z], [mx.x, mn.y, mx.z], [mx.x, mx.y, mx.z], [mn.x, mx.y, mx.z]];
     const EDGES: [(usize, usize); 12] = [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7)];
     // reflecting a point through the plane (o, nn): p' = p - 2*((p-o).nn)*nn (local -> world by the display transform first)
     let reflect = |p: [f64; 3]| -> [f64; 3] {
@@ -3431,7 +3515,11 @@ pub fn draw_split_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
 
 /// Draw the DOF gizmo: only the handles of the joint's freedoms (rings/arrows along the motion axes) + a readout.
 pub fn draw_joint_gizmo(pn: &Painting, painter: &egui::Painter, rect: Rect, jid: Id) {
-    let Some(qymcad_ui_state::JointGizmo { origin: o, handles: hs }) = qymcad_ui_state::joint_giz_handles(&DrawCtx { cam: &pn.cam, set: pn.set, scheme: pn.scheme, project: pn.project, active_path: pn.active_path }, jid) else { return };
+    let Some(qymcad_ui_state::JointGizmo { origin: o, handles: hs }) =
+        qymcad_ui_state::joint_giz_handles(&DrawCtx { cam: &pn.cam, set: pn.set, scheme: pn.scheme, project: pn.project, active_path: pn.active_path }, jid)
+    else {
+        return;
+    };
     let basis = pn.cam.basis();
     let l = 60.0 / pn.cam.scale as f64;
     let scr = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis };
@@ -3478,11 +3566,7 @@ pub fn draw_joint_gizmo(pn: &Painting, painter: &egui::Painter, rect: Rect, jid:
     painter.circle_stroke(s0, 3.0, Stroke::new(1.5, col_ring));
     // the readout of the current value during a drag
     if let Some((val, ring)) = qymcad_ui_state::joint_giz_value(pn.joint, pn.set, pn.comp_giz.snap) {
-        let txt = if ring {
-            format!("{val:+.1}{}", qymcad_i18n::tr("unit-deg-suffix"))
-        } else {
-            qymcad_i18n::tr1("unit-mm-value", "v", &qymcad_i18n::num_signed(val, 2))
-        };
+        let txt = if ring { format!("{val:+.1}{}", qymcad_i18n::tr("unit-deg-suffix")) } else { qymcad_i18n::tr1("unit-mm-value", "v", &qymcad_i18n::num_signed(val, 2)) };
         let suffix = if pn.comp_giz.snap { "  snap" } else { "" };
         painter.text(s0 + egui::vec2(14.0, -14.0), egui::Align2::LEFT_BOTTOM, format!("{txt}{suffix}"), egui::FontId::proportional(13.0), pn.scheme.pal.gizmo_label());
     }
@@ -3535,11 +3619,7 @@ pub fn draw_section_gizmo(pn: &Painting, painter: &egui::Painter, rect: Rect) {
     painter.line_segment([a, b], Stroke::new(2.5, edge));
     let dirv = (b - a).normalized();
     let nn = egui::vec2(-dirv.y, dirv.x);
-    painter.add(egui::Shape::convex_polygon(
-        vec![b, b - dirv * 12.0 + nn * 5.0, b - dirv * 12.0 - nn * 5.0],
-        edge,
-        Stroke::NONE,
-    ));
+    painter.add(egui::Shape::convex_polygon(vec![b, b - dirv * 12.0 + nn * 5.0, b - dirv * 12.0 - nn * 5.0], edge, Stroke::NONE));
     let hot = pn.section.drag;
     painter.circle_filled(b, if hot { 7.0 } else { 5.5 }, if hot { pn.scheme.pal.active() } else { edge });
 }
@@ -3565,11 +3645,7 @@ pub fn draw_fillet_vertices(pn: &Painting, painter: &egui::Painter, rect: Rect) 
             continue;
         }
         // THE NAME IS ASKED FOR, NOT CREATED: drawing has no business adding to the document's table.
-        let own = pn
-            .project
-            .names
-            .vertex_desc(&qymcad_core::names::VertexName::new(ids))
-            .is_some_and(|d| pn.cmd.params.iter().any(|p| p.key == format!("at{d}")));
+        let own = pn.project.names.vertex_desc(&qymcad_core::names::VertexName::new(ids)).is_some_and(|d| pn.cmd.params.iter().any(|p| p.key == format!("at{d}")));
         let sc = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect: rect, basis: &basis }.at(pt).0;
         let (r, col) = if own { (4.5, pn.scheme.pal.active()) } else { (3.0, pn.scheme.pal.handle_face()) };
         painter.circle_filled(sc, r, col);

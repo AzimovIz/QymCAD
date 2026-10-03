@@ -29,11 +29,7 @@ fn ghosts(p: &Project) -> Vec<Id> {
 }
 
 fn brick(p: &mut Project, name: &str, w: f64, h: f64, up: f64) -> Id {
-    let sid = p.add_line_sketch(
-        name,
-        vec![Point2::new(0.0, 0.0), Point2::new(w, 0.0), Point2::new(w, h), Point2::new(0.0, h)],
-        true,
-    );
+    let sid = p.add_line_sketch(name, vec![Point2::new(0.0, 0.0), Point2::new(w, 0.0), Point2::new(w, h), Point2::new(0.0, h)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {
@@ -50,11 +46,7 @@ fn brick(p: &mut Project, name: &str, w: f64, h: f64, up: f64) -> Id {
 fn deleting_a_sketch_leaves_no_ghost() {
     let mut p = Project::default();
     p.new_document();
-    let sid = p.add_line_sketch(
-        "sq",
-        vec![Point2::new(0.0, 0.0), Point2::new(12.0, 0.0), Point2::new(12.0, 9.0), Point2::new(0.0, 9.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("sq", vec![Point2::new(0.0, 0.0), Point2::new(12.0, 0.0), Point2::new(12.0, 9.0), Point2::new(0.0, 9.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     p.add_sketch_node(sid, "sq");
@@ -84,14 +76,7 @@ fn deleting_a_component_leaves_no_ghost() {
 fn deleting_a_plane_leaves_no_ghost() {
     let mut p = Project::default();
     p.new_document();
-    let pl = p.add_plane(WorkPlane {
-        id: 0,
-        name: "z5".into(),
-        origin: [0.0, 0.0, 5.0],
-        normal: [0.0, 0.0, 1.0],
-        rot_deg: 0.0,
-        def: Default::default(),
-    });
+    let pl = p.add_plane(WorkPlane { id: 0, name: "z5".into(), origin: [0.0, 0.0, 5.0], normal: [0.0, 0.0, 1.0], rot_deg: 0.0, def: Default::default() });
     let si = p.new_sketch("on the plane");
     let sid = p.sketches[si].id;
     p.sketches[si].plane = SketchPlane::Datum(pl);
@@ -197,11 +182,7 @@ fn a_connector_does_not_outlive_its_body_after_a_sketch_delete() {
     p.new_document();
     let comp = p.add_component("Part");
     p.set_active_component(Some(comp));
-    let sid = p.add_line_sketch(
-        "sq",
-        vec![Point2::new(0.0, 0.0), Point2::new(12.0, 0.0), Point2::new(12.0, 9.0), Point2::new(0.0, 9.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("sq", vec![Point2::new(0.0, 0.0), Point2::new(12.0, 0.0), Point2::new(12.0, 9.0), Point2::new(0.0, 9.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     p.add_sketch_node(sid, "sq");
@@ -213,8 +194,8 @@ fn a_connector_does_not_outlive_its_body_after_a_sketch_delete() {
     assert_eq!(p.connectors.len(), 1, "the connector was placed");
 
     p.delete_sketch_with_dependents(sid); // the body goes with its sketch only when asked; without it the body stays at its last good state
-    // Same new contract: the connector stays, but a frame on the deleted body does not resolve —
-    // there is nowhere for a garbage frame to come from, and the person's work is intact.
+                                          // Same new contract: the connector stays, but a frame on the deleted body does not resolve —
+                                          // there is nowhere for a garbage frame to come from, and the person's work is intact.
     assert_eq!(p.connectors.len(), 1, "the connector was removed — a joint on it would have nothing left to repair");
     let c = p.connectors[0].id;
     assert!(p.connector_matrix(c).is_none(), "an anchor frame on a deleted body resolves — that is a garbage frame");
@@ -233,11 +214,7 @@ fn a_connector_does_not_outlive_its_body_after_a_sketch_delete() {
 fn a_sketch_on_a_deleted_face_freezes_in_place() {
     let mut p = Project::default();
     p.new_document();
-    let sid = p.add_line_sketch(
-        "sq",
-        vec![Point2::new(0.0, 0.0), Point2::new(20.0, 0.0), Point2::new(20.0, 14.0), Point2::new(0.0, 14.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("sq", vec![Point2::new(0.0, 0.0), Point2::new(20.0, 0.0), Point2::new(20.0, 14.0), Point2::new(0.0, 14.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {
@@ -248,12 +225,7 @@ fn a_sketch_on_a_deleted_face_freezes_in_place() {
     let body = p.add_extrude_multi(sid, closed, 8.0, qymcad_core::feature::Reach::Forward, 0.0, vec![]);
     qymcad_testkit::regenerate(&mut p);
 
-    let top = p.regen_faces[&body]
-        .iter()
-        .filter(|f| f.normal[2] > 0.9)
-        .max_by(|a, b| a.area.total_cmp(&b.area))
-        .cloned()
-        .expect("top face");
+    let top = p.regen_faces[&body].iter().filter(|f| f.normal[2] > 0.9).max_by(|a, b| a.area.total_cmp(&b.area)).cloned().expect("top face");
     let s2 = p.new_sketch("on the face");
     let sid2 = p.sketches[s2].id;
     p.sketches[s2].plane = SketchPlane::Face(body, key_of(&top));
@@ -265,16 +237,10 @@ fn a_sketch_on_a_deleted_face_freezes_in_place() {
     p.delete_body_cascade(body);
 
     let i = p.sketch_index(sid2).expect("the sketch survived the body removal — it is not doomed by itself");
-    assert!(
-        matches!(p.sketches[i].plane, SketchPlane::Datum(_)),
-        "the sketch must freeze into a datum imprint instead of hanging on a face of a body that is gone"
-    );
+    assert!(matches!(p.sketches[i].plane, SketchPlane::Datum(_)), "the sketch must freeze into a datum imprint instead of hanging on a face of a body that is gone");
     let after = p.sketch_frame(i).expect("frame after the removal").origin;
     for k in 0..3 {
-        assert!(
-            (after[k] - before[k]).abs() < 1e-9,
-            "the freeze moved the sketch: {before:?} -> {after:?}"
-        );
+        assert!((after[k] - before[k]).abs() < 1e-9, "the freeze moved the sketch: {before:?} -> {after:?}");
     }
 }
 
@@ -285,11 +251,7 @@ fn a_sketch_on_a_deleted_face_freezes_in_place() {
 fn the_freeze_survives_a_save_and_reload() {
     let mut p = Project::default();
     p.new_document();
-    let sid = p.add_line_sketch(
-        "sq",
-        vec![Point2::new(0.0, 0.0), Point2::new(20.0, 0.0), Point2::new(20.0, 14.0), Point2::new(0.0, 14.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("sq", vec![Point2::new(0.0, 0.0), Point2::new(20.0, 0.0), Point2::new(20.0, 14.0), Point2::new(0.0, 14.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {
@@ -303,12 +265,7 @@ fn the_freeze_survives_a_save_and_reload() {
     // deletion, and the "no ghosts" check passes by itself while checking nothing: an empty cache is
     // empty with or without any cleanup. The neighbour makes the question real.
     let neighbour = brick(&mut p, "neighbour", 9.0, 7.0, 4.0);
-    let top = p.regen_faces[&body]
-        .iter()
-        .filter(|f| f.normal[2] > 0.9)
-        .max_by(|a, b| a.area.total_cmp(&b.area))
-        .cloned()
-        .expect("top face");
+    let top = p.regen_faces[&body].iter().filter(|f| f.normal[2] > 0.9).max_by(|a, b| a.area.total_cmp(&b.area)).cloned().expect("top face");
     let s2 = p.new_sketch("on the top");
     let sid2 = p.sketches[s2].id;
     p.sketches[s2].plane = SketchPlane::Face(body, key_of(&top));
@@ -338,8 +295,5 @@ fn the_freeze_survives_a_save_and_reload() {
     let produced: std::collections::HashSet<Id> = back.timeline.iter().flat_map(|n| n.kind.bodies()).collect();
     let after_ghosts: Vec<Id> = back.regen_faces.keys().copied().filter(|b| !produced.contains(b)).collect();
     assert_eq!(after_ghosts, Vec::<Id>::new(), "no ghosts after reopening and rebuilding");
-    assert!(
-        back.regen_faces.contains_key(&neighbour),
-        "the neighbour must survive both the removal of the first body and the save — otherwise the ghost check is vacuous"
-    );
+    assert!(back.regen_faces.contains_key(&neighbour), "the neighbour must survive both the removal of the first body and the save — otherwise the ghost check is vacuous");
 }

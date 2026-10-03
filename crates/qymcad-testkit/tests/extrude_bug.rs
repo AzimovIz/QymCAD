@@ -1,5 +1,7 @@
 use qymcad_core::model::Project;
-fn load() -> Project { qymcad_core::model::from_ron(include_str!("doc2.ron")).expect("load doc2") }
+fn load() -> Project {
+    qymcad_core::model::from_ron(include_str!("doc2.ron")).expect("load doc2")
+}
 #[test]
 fn sketch_extrudes() {
     let mut p = load();
@@ -17,6 +19,8 @@ fn sketch_extrudes() {
     let _ = &report;
     let s = shapes.get(&body);
     eprintln!("the body was extruded: {}", s.is_some());
-    if let Some(s)=s { eprintln!("valid={}, V={:.1}", s.is_valid(), s.volume()); }
+    if let Some(s) = s {
+        eprintln!("valid={}, V={:.1}", s.is_valid(), s.volume());
+    }
     assert!(s.is_some(), "the sketch extruded into a body");
 }

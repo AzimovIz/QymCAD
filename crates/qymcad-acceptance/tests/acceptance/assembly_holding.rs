@@ -265,4 +265,3 @@ probe! {
         assert!(now != before, "the relation did not carry the turn to the other mate: the third part looks {now:?} as before");
     }
 }
-

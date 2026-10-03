@@ -79,7 +79,11 @@ pub fn user_category_paths() -> Vec<String> {
 pub fn sanitize_part_stem(name: &str) -> String {
     let s: String = name.chars().map(|c| if "<>:\"/\\|?*".contains(c) || c.is_control() { '_' } else { c }).collect();
     let s = s.trim().trim_matches('.').trim().to_string();
-    if s.is_empty() { "part".into() } else { s }
+    if s.is_empty() {
+        "part".into()
+    } else {
+        s
+    }
 }
 
 /// The relative paths of the category folders under `root` (recursively, sorted). Split out of
@@ -103,7 +107,6 @@ fn category_paths_in(root: &Path) -> Vec<String> {
     out.sort();
     out
 }
-
 
 /// Build the tree: the built-in catalogue from the baked-in bytes plus a scan of the user's data
 /// directory.
@@ -176,12 +179,7 @@ fn build_embedded(dir: &Dir, title_override: &str) -> CatNode {
                     let path = f.path().to_string_lossy().to_string();
                     let manifest = qymcad_io::load_part_manifest_bytes(f.contents()).ok();
                     let stem = fname.rsplit_once('.').map(|(s, _)| s).unwrap_or(fname).to_string();
-                    node.parts.push(PartEntry {
-                        name: manifest.as_ref().map(|m| m.name.clone()).unwrap_or_else(|| stem.clone()),
-                        file_stem: stem,
-                        source: PartSource::Embedded(path),
-                        manifest,
-                    });
+                    node.parts.push(PartEntry { name: manifest.as_ref().map(|m| m.name.clone()).unwrap_or_else(|| stem.clone()), file_stem: stem, source: PartSource::Embedded(path), manifest });
                 }
             }
         }
@@ -191,10 +189,7 @@ fn build_embedded(dir: &Dir, title_override: &str) -> CatNode {
 
 /// Build the node of a user category by scanning a folder on disk. `title_override` is for the root.
 fn build_user(dir: &Path, title_override: &str) -> CatNode {
-    let mut node = CatNode {
-        title: if title_override.is_empty() { folder_name(dir) } else { title_override.to_string() },
-        ..Default::default()
-    };
+    let mut node = CatNode { title: if title_override.is_empty() { folder_name(dir) } else { title_override.to_string() }, ..Default::default() };
     // the metadata of THIS folder
     if let Ok(bytes) = std::fs::read(dir.join("category.ron")) {
         apply_meta(&mut node, parse_category_meta(&bytes));
@@ -207,12 +202,7 @@ fn build_user(dir: &Path, title_override: &str) -> CatNode {
         } else if path.extension().and_then(|s| s.to_str()).map(|e| e.eq_ignore_ascii_case("qpart")).unwrap_or(false) {
             let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
             let manifest = qymcad_io::load_part_manifest(&path.to_string_lossy()).ok();
-            node.parts.push(PartEntry {
-                name: manifest.as_ref().map(|m| m.name.clone()).unwrap_or_else(|| stem.clone()),
-                file_stem: stem,
-                source: PartSource::User(path),
-                manifest,
-            });
+            node.parts.push(PartEntry { name: manifest.as_ref().map(|m| m.name.clone()).unwrap_or_else(|| stem.clone()), file_stem: stem, source: PartSource::User(path), manifest });
         }
     }
     node

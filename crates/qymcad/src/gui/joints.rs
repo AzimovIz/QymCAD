@@ -3,54 +3,12 @@
 pub(crate) use qymcad_assembly::*;
 use super::*;
 
-
 impl App {
-
-
-
-
-
-
-
-
-
-
     /// The DOF gizmo handle under the cursor: (slot, whether it is a ring). Arrows take priority over rings,
     /// as in the six-degree gizmo.
     pub(super) fn joint_handle_hit(&mut self, jid: Id, rect: Rect, basis: &([f64; 3], [f64; 3], [f64; 3]), pp: Pos2) -> Option<(u8, bool)> {
         joint_handle_hit(&mut self.joint_ctx(), jid, rect, basis, pp)
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     /// The one doorway into the assembly workbench: built in a single place so the borrows stay disjoint.
     pub(crate) fn joint_ctx(&mut self) -> JointCtx<'_> {
@@ -77,30 +35,6 @@ impl App {
         }
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     /// TOGGLE THE GROUNDING TOOL. Through one door, like joint picking: it now has two ways in - the panel
     /// button and the command search.
     pub(crate) fn start_ground_pick(&mut self) {
@@ -121,8 +55,6 @@ impl App {
         start_group_pick_armed(&mut self.joint_ctx(), on);
     }
 
-
-
     /// TOGGLE THE TANGENCY TOOL.
     ///
     /// Tangency needs no connectors - two surfaces are enough, so there is nothing to confirm: the second
@@ -133,7 +65,6 @@ impl App {
         self.cancel_all_tools(); // mutually exclusive with the other tools
         start_tangent_pick_armed(&mut self.joint_ctx(), on);
     }
-
 
     /// TOGGLE THE WIDTH TOOL.
     ///
@@ -146,8 +77,6 @@ impl App {
         start_width_pick_armed(&mut self.joint_ctx(), on);
     }
 
-
-
     /// TOGGLE THE ANCHOR TOOL - creating a standalone connector.
     pub(crate) fn start_conn_pick(&mut self) {
         // THE FLAG IS READ BEFORE THE CLEARING: `cancel_all_tools` wipes the very field it asks about.
@@ -155,7 +84,6 @@ impl App {
         self.cancel_all_tools(); // mutually exclusive with the other tools
         start_conn_pick_armed(&mut self.joint_ctx(), on);
     }
-
 
     /// TOGGLE THE RELATION TOOL.
     ///
@@ -168,10 +96,6 @@ impl App {
         self.cancel_all_tools(); // mutually exclusive with the other tools
         start_relation_pick_armed(&mut self.joint_ctx(), on);
     }
-
-
-
-
 
     /// LAUNCH A COMMAND BY ITS CATALOGUE CODE.
     ///
@@ -194,7 +118,6 @@ impl App {
         }
     }
 
-
     /// START PICKING A JOINT. One door for every way in: the workbench button, the button in the
     /// properties, the `J` key. The body of this launch used to be written straight into the panel button,
     /// and a second way in would have had to copy it - and a copy falls behind sooner or later.
@@ -211,8 +134,6 @@ impl App {
         self.status = crate::i18n::tr2("jt-pick-a-then-b", "kind", &crate::i18n::tr(self.side.joint.new_kind.label()), "what", &what);
     }
 
-
-
     /// THE TEST FACADES. A test must walk the same path a person does - through the command and its picks
     /// - rather than poking at fields directly, or it only ever checks an invention of its own.
     #[cfg(test)]
@@ -225,38 +146,6 @@ impl App {
             self.side.joint.anchor_mode = mode; // the check picks the anchor mode itself
         }
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     /// GRABBING THE PART ITSELF: take a part in the frame and pull, and it moves along the degrees of
     /// freedom it has left.
@@ -277,24 +166,4 @@ impl App {
         let Some((body, _)) = self.pick_part_face_at(rect, from) else { return false };
         joint_grab_part(&mut self.joint_ctx(), body, rect, towards, basis)
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 }

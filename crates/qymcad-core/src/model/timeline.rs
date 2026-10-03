@@ -171,12 +171,7 @@ impl Project {
     /// the sketch hanging on a dead face.
     fn break_external_refs_of_dead_bodies(&mut self) {
         let live: std::collections::HashSet<Id> = self.timeline.iter().flat_map(|n| n.kind.bodies()).collect();
-        let dead: Vec<Id> = self
-            .external_refs
-            .iter()
-            .filter(|r| r.source_body().is_some_and(|b| !live.contains(&b)))
-            .map(|r| r.id)
-            .collect();
+        let dead: Vec<Id> = self.external_refs.iter().filter(|r| r.source_body().is_some_and(|b| !live.contains(&b))).map(|r| r.id).collect();
         for rid in dead {
             self.break_external_ref(rid);
         }
@@ -212,8 +207,8 @@ impl Project {
                 pl.def = crate::model::PlaneDef::FaceGone;
             }
             self.mark_node_dirty(sid); // the rebuild visits it and marks it red
-            // The snapshot has to land exactly where the live frame stood: freezing does not move the
-            // sketch.
+                                       // The snapshot has to land exactly where the live frame stood: freezing does not move the
+                                       // sketch.
             if let (Some(before), Some(pi)) = (before, self.planes.iter().position(|p| p.id == pid)) {
                 self.planes[pi].origin = before.origin;
                 self.planes[pi].normal = before.normal();
@@ -334,10 +329,14 @@ impl Project {
                 // The base goes alone: its consumers keep naming its bodies, find none on the rebuild and go red.
                 let gone: std::collections::HashSet<Id> = outs.into_iter().collect();
                 // a datum on a face or an edge of it names the body in its definition rather than among its inputs
-                let datums: std::collections::HashSet<Id> = self.timeline.iter().filter_map(|n| match n.kind {
-                    crate::feature::FeatureKind::Plane { plane: d } | crate::feature::FeatureKind::DatumAxis { axis: d } => self.datum_base_body(d).filter(|b| gone.contains(b)).map(|_| n.id),
-                    _ => None,
-                }).collect();
+                let datums: std::collections::HashSet<Id> = self
+                    .timeline
+                    .iter()
+                    .filter_map(|n| match n.kind {
+                        crate::feature::FeatureKind::Plane { plane: d } | crate::feature::FeatureKind::DatumAxis { axis: d } => self.datum_base_body(d).filter(|b| gone.contains(b)).map(|_| n.id),
+                        _ => None,
+                    })
+                    .collect();
                 for n in self.timeline.iter_mut() {
                     if n.kind.inputs().iter().any(|i| gone.contains(i)) || datums.contains(&n.id) {
                         n.dirty = true;
@@ -569,7 +568,14 @@ impl Project {
         use crate::feature::{FeatureKind, FeatureNode};
         let body = self.alloc_id();
         let parent = Some(self.body_parent());
-        self.push_timeline(FeatureNode { id: body, name: "feat-name-extrude".into(), kind: FeatureKind::Extrude { sketch, profiles: vec![profile], height, reach, down, fill: Vec::new(), body }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode {
+            id: body,
+            name: "feat-name-extrude".into(),
+            kind: FeatureKind::Extrude { sketch, profiles: vec![profile], height, reach, down, fill: Vec::new(), body },
+            parent,
+            dirty: true,
+            suppressed: false,
+        });
         body
     }
 
@@ -579,7 +585,14 @@ impl Project {
         use crate::feature::{FeatureKind, FeatureNode};
         let body = self.alloc_id();
         let parent = Some(self.body_parent());
-        self.push_timeline(FeatureNode { id: body, name: "feat-name-extrude".into(), kind: FeatureKind::Extrude { sketch, profiles, height, reach, down, fill, body }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode {
+            id: body,
+            name: "feat-name-extrude".into(),
+            kind: FeatureKind::Extrude { sketch, profiles, height, reach, down, fill, body },
+            parent,
+            dirty: true,
+            suppressed: false,
+        });
         body
     }
 
@@ -588,7 +601,14 @@ impl Project {
     /// the id of a sketch centreline (zero means none) and takes priority over the datum and the sketch axes.
     /// The axis has to lie in the sketch plane.
     pub fn add_revolve_axis(&mut self, sketch: Id, profiles: Vec<Id>, axis: u8, angle: f64, axis_datum: Id, axis_line: Id) -> Id {
-        self.add_revolve_multi_op(sketch, profiles, super::RevolveAxis { axis: axis, datum: axis_datum, line: axis_line }, super::RevolveTurn { angle: angle, reach: crate::feature::Reach::default() }, 0, 1)
+        self.add_revolve_multi_op(
+            sketch,
+            profiles,
+            super::RevolveAxis { axis: axis, datum: axis_datum, line: axis_line },
+            super::RevolveTurn { angle: angle, reach: crate::feature::Reach::default() },
+            0,
+            1,
+        )
     }
 
     /// Revolve every contour and apply the boolean against body `src` within one node.
@@ -633,7 +653,14 @@ impl Project {
         use crate::feature::{FeatureKind, FeatureNode};
         let body = self.alloc_id();
         let parent = Some(self.body_parent());
-        self.push_timeline(FeatureNode { id: body, name: "feat-name-sweep".into(), kind: FeatureKind::Sweep { sketch, profiles, path_sketch, path, src, op, body, pieces: Vec::new() }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode {
+            id: body,
+            name: "feat-name-sweep".into(),
+            kind: FeatureKind::Sweep { sketch, profiles, path_sketch, path, src, op, body, pieces: Vec::new() },
+            parent,
+            dirty: true,
+            suppressed: false,
+        });
         body
     }
 
@@ -648,10 +675,16 @@ impl Project {
         use crate::feature::{FeatureKind, FeatureNode};
         let body = self.alloc_id();
         let parent = Some(self.body_parent());
-        self.push_timeline(FeatureNode { id: body, name: "feat-name-loft".into(), kind: FeatureKind::Loft { sketches, contours, ruled, src, op, surface, body, pieces: Vec::new() }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode {
+            id: body,
+            name: "feat-name-loft".into(),
+            kind: FeatureKind::Loft { sketches, contours, ruled, src, op, surface, body, pieces: Vec::new() },
+            parent,
+            dirty: true,
+            suppressed: false,
+        });
         body
     }
-
 
     /// Owning component of a timeline node, by id (the node parent); `None` is the document root.
     pub fn node_component(&self, node_id: Id) -> Option<Id> {
@@ -847,12 +880,8 @@ impl Project {
                     na.id = map[&axis];
                     na.def = match na.def {
                         AxisDef::TwoPoints { a, b } => AxisDef::TwoPoints { a: map.get(&a).copied().unwrap_or(a), b: map.get(&b).copied().unwrap_or(b) },
-                        AxisDef::FromEdge { body, edge } => {
-                            AxisDef::FromEdge { body: map.get(&body).copied().unwrap_or(body), edge: nmap.get(&edge).copied().unwrap_or(edge) }
-                        }
-                        AxisDef::FromFace { body, face } => {
-                            AxisDef::FromFace { body: map.get(&body).copied().unwrap_or(body), face: nmap.get(&face).copied().unwrap_or(face) }
-                        }
+                        AxisDef::FromEdge { body, edge } => AxisDef::FromEdge { body: map.get(&body).copied().unwrap_or(body), edge: nmap.get(&edge).copied().unwrap_or(edge) },
+                        AxisDef::FromFace { body, face } => AxisDef::FromFace { body: map.get(&body).copied().unwrap_or(body), face: nmap.get(&face).copied().unwrap_or(face) },
                         other => other,
                     };
                     dest.datum_axes.push(na);
@@ -874,8 +903,7 @@ impl Project {
         }
 
         // Clone the parametric body dimensions (`feat_dims` under the new body ids).
-        let dim_clones: Vec<(Id, std::collections::HashMap<String, String>)> =
-            from.feat_dims.iter().filter_map(|(k, v)| map.get(k).map(|nk| (*nk, v.clone()))).collect();
+        let dim_clones: Vec<(Id, std::collections::HashMap<String, String>)> = from.feat_dims.iter().filter_map(|(k, v)| map.get(k).map(|nk| (*nk, v.clone()))).collect();
         for (nk, v) in dim_clones {
             dest.feat_dims.insert(nk, v);
         }
@@ -886,18 +914,12 @@ impl Project {
     /// Owning component of a sketch, by id, through its timeline node. `None` means the sketch has no node
     /// yet.
     pub fn sketch_owner(&self, sketch: Id) -> Option<Id> {
-        self.timeline
-            .iter()
-            .find(|n| matches!(n.kind, crate::feature::FeatureKind::Sketch { sketch: s } if s == sketch))
-            .and_then(|n| n.parent)
+        self.timeline.iter().find(|n| matches!(n.kind, crate::feature::FeatureKind::Sketch { sketch: s } if s == sketch)).and_then(|n| n.parent)
     }
 
     /// Owning component of a datum plane, through its `Plane` node; `None` when it was not found.
     pub fn plane_owner(&self, plane: Id) -> Option<Id> {
-        self.timeline
-            .iter()
-            .find(|n| matches!(n.kind, crate::feature::FeatureKind::Plane { plane: p } if p == plane))
-            .and_then(|n| n.parent)
+        self.timeline.iter().find(|n| matches!(n.kind, crate::feature::FeatureKind::Plane { plane: p } if p == plane)).and_then(|n| n.parent)
     }
 
     /// Add a box primitive as a dirty node. Returns the body id.
@@ -971,7 +993,14 @@ impl Project {
         let body = self.alloc_id();
         let parent = Some(self.body_parent());
         let name = ["feat-name-combine-cut", "feat-name-combine-boss", "feat-name-combine-intersect"][(op as usize).min(2)].to_string();
-        self.push_timeline(FeatureNode { id: body, name, kind: FeatureKind::Combine { src, sketch, profiles, height, op, extent: ext, down, fill, body, pieces: Vec::new() }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode {
+            id: body,
+            name,
+            kind: FeatureKind::Combine { src, sketch, profiles, height, op, extent: ext, down, fill, body, pieces: Vec::new() },
+            parent,
+            dirty: true,
+            suppressed: false,
+        });
         body
     }
 
@@ -984,7 +1013,14 @@ impl Project {
         use crate::feature::{FeatureKind, FeatureNode};
         let body = self.alloc_id();
         let parent = Some(self.body_parent());
-        self.push_timeline(FeatureNode { id: body, name: "feat-name-fillet".into(), kind: FeatureKind::Fillet { src, radius, edges, at_vertices: Vec::new(), body }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode {
+            id: body,
+            name: "feat-name-fillet".into(),
+            kind: FeatureKind::Fillet { src, radius, edges, at_vertices: Vec::new(), body },
+            parent,
+            dirty: true,
+            suppressed: false,
+        });
         body
     }
 
@@ -1009,7 +1045,14 @@ impl Project {
         let body = self.alloc_id();
         let parent = Some(self.body_parent());
         self.capture_edge_refs(body, src, &edges);
-        self.push_timeline(FeatureNode { id: body, name: "feat-name-fillet".into(), kind: FeatureKind::Fillet { src, radius, edges: crate::refs::Ref::picks(&edges), at_vertices: Vec::new(), body }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode {
+            id: body,
+            name: "feat-name-fillet".into(),
+            kind: FeatureKind::Fillet { src, radius, edges: crate::refs::Ref::picks(&edges), at_vertices: Vec::new(), body },
+            parent,
+            dirty: true,
+            suppressed: false,
+        });
         body
     }
 
@@ -1071,7 +1114,14 @@ impl Project {
         use crate::feature::{FeatureKind, FeatureNode};
         let body = self.alloc_id();
         let parent = self.timeline.iter().find(|n| n.kind.owns_body(src)).and_then(|n| n.parent).or_else(|| Some(self.body_parent()));
-        self.push_timeline(FeatureNode { id: body, name: "feat-name-mesh-recognised".into(), kind: FeatureKind::MeshRecognised { src, body, tol, sharp, simplify }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode {
+            id: body,
+            name: "feat-name-mesh-recognised".into(),
+            kind: FeatureKind::MeshRecognised { src, body, tol, sharp, simplify },
+            parent,
+            dirty: true,
+            suppressed: false,
+        });
         body
     }
 
@@ -1143,7 +1193,14 @@ impl Project {
         let body = self.alloc_id();
         let parent = Some(self.body_parent());
         self.capture_edge_refs(body, src, &edges);
-        self.push_timeline(FeatureNode { id: body, name: "feat-name-chamfer".into(), kind: FeatureKind::Chamfer { src, dist, edges: crate::refs::Ref::picks(&edges), mode, d2, flip, ref_face, body }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode {
+            id: body,
+            name: "feat-name-chamfer".into(),
+            kind: FeatureKind::Chamfer { src, dist, edges: crate::refs::Ref::picks(&edges), mode, d2, flip, ref_face, body },
+            parent,
+            dirty: true,
+            suppressed: false,
+        });
         body
     }
 
@@ -1152,7 +1209,14 @@ impl Project {
         use crate::feature::{FeatureKind, FeatureNode};
         let body = self.alloc_id();
         let parent = Some(self.body_parent());
-        self.push_timeline(FeatureNode { id: body, name: "feat-name-shell".into(), kind: FeatureKind::Shell { src, thickness, faces: crate::refs::Ref::picks(&faces), side, body }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode {
+            id: body,
+            name: "feat-name-shell".into(),
+            kind: FeatureKind::Shell { src, thickness, faces: crate::refs::Ref::picks(&faces), side, body },
+            parent,
+            dirty: true,
+            suppressed: false,
+        });
         body
     }
 
@@ -1164,7 +1228,14 @@ impl Project {
         use crate::feature::{FeatureKind, FeatureNode};
         let body = self.alloc_id();
         let parent = Some(self.body_parent());
-        self.push_timeline(FeatureNode { id: body, name: "feat-name-push-face".into(), kind: FeatureKind::PushFace { src, face: crate::refs::Ref::one(face.id, crate::refs::Fingerprint { centroid: face.centroid, normal: face.normal }), dist, body }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode {
+            id: body,
+            name: "feat-name-push-face".into(),
+            kind: FeatureKind::PushFace { src, face: crate::refs::Ref::one(face.id, crate::refs::Fingerprint { centroid: face.centroid, normal: face.normal }), dist, body },
+            parent,
+            dirty: true,
+            suppressed: false,
+        });
         body
     }
 
@@ -1174,7 +1245,14 @@ impl Project {
         use crate::feature::{FeatureKind, FeatureNode};
         let body = self.alloc_id();
         let parent = Some(self.body_parent());
-        self.push_timeline(FeatureNode { id: body, name: "feat-name-remove-face".into(), kind: FeatureKind::RemoveFace { src, faces: crate::refs::Ref::picks(&faces.iter().map(|f| f.id).collect::<Vec<_>>()), body }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode {
+            id: body,
+            name: "feat-name-remove-face".into(),
+            kind: FeatureKind::RemoveFace { src, faces: crate::refs::Ref::picks(&faces.iter().map(|f| f.id).collect::<Vec<_>>()), body },
+            parent,
+            dirty: true,
+            suppressed: false,
+        });
         body
     }
 
@@ -1217,7 +1295,11 @@ impl Project {
         // leave two bodies in the part, the previous one and the new one.
         let join = if self.bodies.iter().any(|b| b.id == src && b.sheet) {
             let origin = self.sheet_origin_body(src);
-            if origin == 0 { 0 } else { self.live_body(origin) }
+            if origin == 0 {
+                0
+            } else {
+                self.live_body(origin)
+            }
         } else {
             0
         };
@@ -1237,7 +1319,14 @@ impl Project {
         use crate::feature::{FeatureKind, FeatureNode};
         let body = self.alloc_id();
         let parent = Some(self.body_parent());
-        self.push_timeline(FeatureNode { id: body, name: "feat-name-split-face".into(), kind: FeatureKind::SplitFace { src, plane, datum, offset, body, face: None }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode {
+            id: body,
+            name: "feat-name-split-face".into(),
+            kind: FeatureKind::SplitFace { src, plane, datum, offset, body, face: None },
+            parent,
+            dirty: true,
+            suppressed: false,
+        });
         body
     }
 
@@ -1254,7 +1343,14 @@ impl Project {
         let bodies: Vec<Id> = (0..pieces).map(|_| self.alloc_id()).collect();
         let parent = Some(self.body_parent());
         let id = bodies[0];
-        self.push_timeline(FeatureNode { id, name: "feat-name-split-body".into(), kind: FeatureKind::SplitBody { src, plane, datum, offset, bodies: bodies.clone(), face: None }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode {
+            id,
+            name: "feat-name-split-body".into(),
+            kind: FeatureKind::SplitBody { src, plane, datum, offset, bodies: bodies.clone(), face: None },
+            parent,
+            dirty: true,
+            suppressed: false,
+        });
         bodies
     }
 
@@ -1262,7 +1358,14 @@ impl Project {
         use crate::feature::{FeatureKind, FeatureNode};
         let body = self.alloc_id();
         let parent = Some(self.body_parent());
-        self.push_timeline(FeatureNode { id: body, name: "feat-name-draft".into(), kind: FeatureKind::Draft { src, faces: crate::refs::Ref::picks(&faces), neutral: crate::refs::Ref::one(neutral, crate::refs::Fingerprint::default()), angle, flip, body }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode {
+            id: body,
+            name: "feat-name-draft".into(),
+            kind: FeatureKind::Draft { src, faces: crate::refs::Ref::picks(&faces), neutral: crate::refs::Ref::one(neutral, crate::refs::Fingerprint::default()), angle, flip, body },
+            parent,
+            dirty: true,
+            suppressed: false,
+        });
         body
     }
 
@@ -1275,7 +1378,14 @@ impl Project {
         let (count, count2, count3) = (axes[0].count, axes[1].count, axes[2].count);
         let body = self.alloc_id();
         let parent = Some(self.body_parent());
-        self.push_timeline(FeatureNode { id: body, name: "feat-name-linear-array".into(), kind: FeatureKind::LinearArray { src, dx, dy, dz, count, dx2, dy2, dz2, count2, dx3, dy3, dz3, count3, body }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode {
+            id: body,
+            name: "feat-name-linear-array".into(),
+            kind: FeatureKind::LinearArray { src, dx, dy, dz, count, dx2, dy2, dz2, count2, dx3, dy3, dz3, count3, body },
+            parent,
+            dirty: true,
+            suppressed: false,
+        });
         body
     }
 
@@ -1285,7 +1395,14 @@ impl Project {
         use crate::feature::{FeatureKind, FeatureNode};
         let body = self.alloc_id();
         let parent = Some(self.body_parent());
-        self.push_timeline(FeatureNode { id: body, name: "feat-name-circular-array".into(), kind: FeatureKind::CircularArray { src, count, angle, axis, body }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode {
+            id: body,
+            name: "feat-name-circular-array".into(),
+            kind: FeatureKind::CircularArray { src, count, angle, axis, body },
+            parent,
+            dirty: true,
+            suppressed: false,
+        });
         body
     }
 
@@ -1338,7 +1455,14 @@ impl Project {
         // A pick gives a specific face, which becomes an `Id` query. The fingerprint travels with it not for
         // matching but so that a refusal can one day say where that face was when it was picked.
         let face = crate::refs::Ref::one(face.id, crate::refs::Fingerprint { centroid: face.centroid, normal: face.normal });
-        self.push_timeline(FeatureNode { id: body, name: "feat-name-hole".into(), kind: FeatureKind::Hole { src, face, point, normal, diameter, depth, kind, dia2, depth2, sketch: 0, flip: false, body, pieces: Vec::new() }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode {
+            id: body,
+            name: "feat-name-hole".into(),
+            kind: FeatureKind::Hole { src, face, point, normal, diameter, depth, kind, dia2, depth2, sketch: 0, flip: false, body, pieces: Vec::new() },
+            parent,
+            dirty: true,
+            suppressed: false,
+        });
         body
     }
 
@@ -1354,7 +1478,14 @@ impl Project {
         // The sketch-driven form picks no face at all: the reference is empty and never reaches
         // resolution.
         let face = crate::refs::Ref::one(0, crate::refs::Fingerprint::default());
-        self.push_timeline(FeatureNode { id: body, name: "feat-name-holes-sketch".into(), kind: FeatureKind::Hole { src, face, point: [0.0; 3], normal: [0.0, 0.0, 1.0], diameter, depth, kind, dia2, depth2, sketch, flip, body, pieces: Vec::new() }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode {
+            id: body,
+            name: "feat-name-holes-sketch".into(),
+            kind: FeatureKind::Hole { src, face, point: [0.0; 3], normal: [0.0, 0.0, 1.0], diameter, depth, kind, dia2, depth2, sketch, flip, body, pieces: Vec::new() },
+            parent,
+            dirty: true,
+            suppressed: false,
+        });
         body
     }
 
@@ -1366,7 +1497,14 @@ impl Project {
         use crate::feature::{FeatureKind, FeatureNode};
         let body = self.alloc_id();
         let parent = Some(self.body_parent());
-        self.push_timeline(FeatureNode { id: body, name: "feat-name-thread".into(), kind: FeatureKind::Thread { src, edge, spec, length, lead_in, lead_out, body }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode {
+            id: body,
+            name: "feat-name-thread".into(),
+            kind: FeatureKind::Thread { src, edge, spec, length, lead_in, lead_out, body },
+            parent,
+            dirty: true,
+            suppressed: false,
+        });
         body
     }
 
@@ -1375,7 +1513,14 @@ impl Project {
         use crate::feature::{FeatureKind, FeatureNode};
         let body = self.alloc_id();
         let parent = Some(self.body_parent());
-        self.push_timeline(FeatureNode { id: body, name: "feat-name-auger".into(), kind: FeatureKind::Auger { src, edge, spec, length, lead_in, lead_out, body }, parent, dirty: true, suppressed: false });
+        self.push_timeline(FeatureNode {
+            id: body,
+            name: "feat-name-auger".into(),
+            kind: FeatureKind::Auger { src, edge, spec, length, lead_in, lead_out, body },
+            parent,
+            dirty: true,
+            suppressed: false,
+        });
         body
     }
 
@@ -1439,9 +1584,7 @@ impl Project {
     /// or point.
     pub fn mark_datum_consumers_dirty(&mut self) {
         use crate::feature::{FeatureKind, SketchPlane};
-        let on_datum = |p: &Self, sid: Id| -> bool {
-            p.sketches.iter().find(|s| s.id == sid).is_some_and(|s| matches!(s.plane, SketchPlane::Datum(_)))
-        };
+        let on_datum = |p: &Self, sid: Id| -> bool { p.sketches.iter().find(|s| s.id == sid).is_some_and(|s| matches!(s.plane, SketchPlane::Datum(_))) };
         let ids: Vec<Id> = self
             .timeline
             .iter()
@@ -1590,23 +1733,13 @@ impl Project {
     /// yet. That is why one document could end up with different sets of bodies — building along the way left
     /// the mirror on the old body and it survived, while building once at the end made it fail.
     pub fn active_body_before(&self, ctx: Id, upto: usize) -> Option<Id> {
-        let consumed: std::collections::HashSet<Id> = self
-            .timeline
-            .iter()
-            .enumerate()
-            .filter(|(ti, _)| *ti < self.rollback.unwrap_or(usize::MAX) && *ti < upto)
-            .flat_map(|(_, n)| n.kind.consumed())
-            .collect();
+        let consumed: std::collections::HashSet<Id> =
+            self.timeline.iter().enumerate().filter(|(ti, _)| *ti < self.rollback.unwrap_or(usize::MAX) && *ti < upto).flat_map(|(_, n)| n.kind.consumed()).collect();
         // The rollback bar counts: bodies below it are not built (their mesh was removed during regenerate)
         // and cannot be active. Without this a cut or a shell would target a rolled-back body with no mesh and
         // the feature would fail.
         let limit = self.rollback.unwrap_or(usize::MAX).min(upto);
-        self.timeline
-            .iter()
-            .take(limit)
-            .rev()
-            .flat_map(|n| n.kind.bodies())
-            .find(|b| !consumed.contains(b) && !self.is_sheet_body(*b) && self.body_owner(*b) == Some(ctx))
+        self.timeline.iter().take(limit).rev().flat_map(|n| n.kind.bodies()).find(|b| !consumed.contains(b) && !self.is_sheet_body(*b) && self.body_owner(*b) == Some(ctx))
     }
 
     /// Is `body` a sheet - a surface with no volume, a face copy or a patch? A sheet stands beside the part's solid and
@@ -1895,10 +2028,9 @@ impl Project {
             match &mut n.kind {
                 // Translated names are written back only for a hand-picked set: a descriptive query stores no
                 // names, and replacing it with a list of numbers would take away everything it exists for.
-                crate::feature::FeatureKind::Fillet { edges, .. } | crate::feature::FeatureKind::Chamfer { edges, .. }
-                    if !edges.query.picked_descs().is_empty() => {
-                        *edges = crate::refs::Ref::picks(&out);
-                    }
+                crate::feature::FeatureKind::Fillet { edges, .. } | crate::feature::FeatureKind::Chamfer { edges, .. } if !edges.query.picked_descs().is_empty() => {
+                    *edges = crate::refs::Ref::picks(&out);
+                }
                 _ => {}
             }
         }
@@ -1911,5 +2043,4 @@ impl Project {
         }
         out
     }
-
 }

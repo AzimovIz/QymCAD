@@ -47,11 +47,7 @@ mod tests {
             let _ = crate::gui::render_scene::scene_looks(&app.painting());
         }
         let looks_ms = t4.elapsed().as_secs_f64() * 100.0;
-        let rss = std::fs::read_to_string("/proc/self/statm")
-            .ok()
-            .and_then(|s| s.split_whitespace().nth(1).and_then(|p| p.parse::<u64>().ok()))
-            .map(|pages| pages * 4096 / 1048576)
-            .unwrap_or(0);
+        let rss = std::fs::read_to_string("/proc/self/statm").ok().and_then(|s| s.split_whitespace().nth(1).and_then(|p| p.parse::<u64>().ok())).map(|pages| pages * 4096 / 1048576).unwrap_or(0);
 
         let stats = app.cache.scene_stats.get();
         eprintln!(

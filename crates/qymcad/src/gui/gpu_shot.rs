@@ -58,15 +58,7 @@ pub(crate) mod eyes {
             ghost_alpha: pn.set.ghost_alpha as f32 / 255.0,
             ghost_target: [gt[0] as f32 / 255.0, gt[1] as f32 / 255.0, gt[2] as f32 / 255.0],
         };
-        let cam = crate::viewport_gpu::CamRaw::new(
-            &basis,
-            pn.cam.scale,
-            pn.cam.target,
-            rect.size(),
-            inv_d as f32,
-            crate::viewport_gpu::ZRange { near: z_near as f32, far: z_far as f32 },
-            shade,
-        );
+        let cam = crate::viewport_gpu::CamRaw::new(&basis, pn.cam.scale, pn.cam.target, rect.size(), inv_d as f32, crate::viewport_gpu::ZRange { near: z_near as f32, far: z_far as f32 }, shade);
         let size_px = [rect.width().round().max(1.0) as u32, rect.height().round().max(1.0) as u32];
         let scene = crate::gui::render_scene::gpu_scene(pn);
         let paint = crate::viewport_gpu::MeshPaint::new(cam, size_px, Some(scene.pieces), scene.looks, key);
@@ -89,10 +81,7 @@ pub(crate) mod eyes {
         });
         encoder.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo { texture: &tex, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
-            wgpu::TexelCopyBufferInfo {
-                buffer: &buf,
-                layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row), rows_per_image: Some(size_px[1]) },
-            },
+            wgpu::TexelCopyBufferInfo { buffer: &buf, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row), rows_per_image: Some(size_px[1]) } },
             wgpu::Extent3d { width: size_px[0], height: size_px[1], depth_or_array_layers: 1 },
         );
         queue.submit(extra.into_iter().chain(std::iter::once(encoder.finish())));

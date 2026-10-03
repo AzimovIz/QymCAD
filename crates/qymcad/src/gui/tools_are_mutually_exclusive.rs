@@ -88,10 +88,6 @@ mod tests {
                 }
             }
         }
-        assert!(
-            both.is_empty(),
-            "two tools at once: the click goes to the wrong one while the person is certain they work with the last taken:\n{}",
-            both.join("\n")
-        );
+        assert!(both.is_empty(), "two tools at once: the click goes to the wrong one while the person is certain they work with the last taken:\n{}", both.join("\n"));
     }
 }

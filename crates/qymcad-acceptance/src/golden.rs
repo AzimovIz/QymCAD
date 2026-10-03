@@ -110,7 +110,12 @@ fn check(signed: &std::path::Path, candidates: &std::path::Path, name: &str, got
             if outcome.is_ok() {
                 std::fs::write(&marks, marked(&want, got).png()).expect("the marks write");
             }
-            panic!("the window does not look as signed as {name:?}: {outcome:?} pixels differ past {CHANNEL_TOLERANCE} steps, {} allowed; the candidate is {}, the differences {}", (PIXEL_SHARE * (want.width * want.height) as f64) as usize, candidate.display(), marks.display());
+            panic!(
+                "the window does not look as signed as {name:?}: {outcome:?} pixels differ past {CHANNEL_TOLERANCE} steps, {} allowed; the candidate is {}, the differences {}",
+                (PIXEL_SHARE * (want.width * want.height) as f64) as usize,
+                candidate.display(),
+                marks.display()
+            );
         }
     }
 }

@@ -184,11 +184,7 @@ fn matrix_fillet_cube_to_cylinder() {
         let e = p.add_extrude_multi(sid, vec![cid], 4.0, qymcad_core::feature::Reach::Forward, 0.0, vec![]);
         let cube = p.finish_base_body(e, 1);
         let _ = qymcad_testkit::regenerate(&mut p);
-        let verts: Vec<u32> = p
-            .regen_edges
-            .get(&cube)
-            .map(|es| es.iter().filter(|ed| (ed.a[2] - ed.b[2]).abs() > 3.0).map(|ed| ed.id).collect())
-            .unwrap_or_default();
+        let verts: Vec<u32> = p.regen_edges.get(&cube).map(|es| es.iter().filter(|ed| (ed.a[2] - ed.b[2]).abs() > 3.0).map(|ed| ed.id).collect()).unwrap_or_default();
         if verts.len() != 4 {
             fails.push(format!("r={r}: {} vertical edges (expected 4)", verts.len()));
             continue;
@@ -272,11 +268,7 @@ fn matrix_chamfer_exact_on_small_cube() {
         let mut p = Project::default();
         let cube = mk(&mut p);
         let _ = qymcad_testkit::regenerate(&mut p);
-        let verts: Vec<u32> = p
-            .regen_edges
-            .get(&cube)
-            .map(|es| es.iter().filter(|e| (e.a[2] - e.b[2]).abs() > 2.0).map(|e| e.id).take(nedges).collect())
-            .unwrap_or_default();
+        let verts: Vec<u32> = p.regen_edges.get(&cube).map(|es| es.iter().filter(|e| (e.a[2] - e.b[2]).abs() > 2.0).map(|e| e.id).take(nedges).collect()).unwrap_or_default();
         if verts.len() != nedges {
             fails.push(format!("{label}: {} edges (expected {nedges})", verts.len()));
             continue;
@@ -323,7 +315,13 @@ fn matrix_fillet_short_step_edges() {
         // the outer one (the step ring) is a 1 mm pocket; the inner one goes all the way through
         // the sketch is on world XY (z=0 is the bottom of the plate), so the tool grows UP (flip=false)
         let cut1 = p.add_combine_multi_op(plate, sid2, vec![outer], qymcad_core::model::CombineSpan { height: 1.0, down: 0.0, extent: qymcad_core::feature::Extent::default(), fill: &[] }, 0);
-        let cut2 = p.add_combine_multi_op(cut1, sid2, vec![inner], qymcad_core::model::CombineSpan { height: 2.0, down: 0.0, extent: qymcad_core::feature::Extent { through: true, ..Default::default() }, fill: &[] }, 0);
+        let cut2 = p.add_combine_multi_op(
+            cut1,
+            sid2,
+            vec![inner],
+            qymcad_core::model::CombineSpan { height: 2.0, down: 0.0, extent: qymcad_core::feature::Extent { through: true, ..Default::default() }, fill: &[] },
+            0,
+        );
         (p, cut2)
     };
     // did the geometry build at all?
@@ -345,11 +343,8 @@ fn matrix_fillet_short_step_edges() {
         let (mut p, body) = build();
         let _ = qymcad_testkit::regenerate(&mut p);
         // the vertical step edges: 1 mm long (z from 1 to 2), on the contour of the inner pocket
-        let short: Vec<u32> = p
-            .regen_edges
-            .get(&body)
-            .map(|es| es.iter().filter(|e| ((e.a[2] - e.b[2]).abs() - 1.0).abs() < 1e-3 && e.a[2].min(e.b[2]) > 0.5).map(|e| e.id).collect())
-            .unwrap_or_default();
+        let short: Vec<u32> =
+            p.regen_edges.get(&body).map(|es| es.iter().filter(|e| ((e.a[2] - e.b[2]).abs() - 1.0).abs() < 1e-3 && e.a[2].min(e.b[2]) > 0.5).map(|e| e.id).collect()).unwrap_or_default();
         if short.is_empty() {
             fails.push(format!("r={r}: the short step edges were not found"));
             continue;
@@ -396,11 +391,7 @@ fn matrix_revolve_direction_and_symmetry() {
         s.boolean(&bx, 2).map(|c| c.volume()).unwrap_or(0.0)
     };
     use qymcad_core::feature::Reach;
-    for (label, reach, want_neg, want_pos) in [
-        ("default (-Z)", Reach::Forward, true, false),
-        ("flipped (+Z)", Reach::Backward, false, true),
-        ("both ways", Reach::BothWays, true, true),
-    ] {
+    for (label, reach, want_neg, want_pos) in [("default (-Z)", Reach::Forward, true, false), ("flipped (+Z)", Reach::Backward, false, true), ("both ways", Reach::BothWays, true, true)] {
         let mut p = Project::default();
         p.new_document();
         let si = p.new_sketch("s");

@@ -132,11 +132,7 @@ fn points_outwards(m: &qymcad_core::geom::Mesh, tri: [u32; 3]) -> Option<bool> {
     }
     let n = [n[0] / len, n[1] / len, n[2] / len];
     let eps = 1e-4;
-    let o = [
-        (a.x + b.x + c.x) / 3.0 + n[0] * eps,
-        (a.y + b.y + c.y) / 3.0 + n[1] * eps,
-        (a.z + b.z + c.z) / 3.0 + n[2] * eps,
-    ];
+    let o = [(a.x + b.x + c.x) / 3.0 + n[0] * eps, (a.y + b.y + c.y) / 3.0 + n[1] * eps, (a.z + b.z + c.z) / 3.0 + n[2] * eps];
     // Moeller-Trumbore against every triangle of the body
     let mut hits = 0usize;
     for t in &m.tris {
@@ -199,11 +195,7 @@ fn how_many_faces_go_missing_and_at_which_accuracy() {
             Some(f) => {
                 let (mesh, faces) = f.tessellate(0.5).into_iter().next().expect("the sewn solid tessellates");
                 let (open, longest) = open_edges(&mesh);
-                eprintln!(
-                    "  sewn with {tol} mm: {} faces, open edges {open} (the longest {longest:.3} mm); the kernel calls it {}",
-                    faces.len(),
-                    if f.is_valid() { "sound" } else { "NOT sound" }
-                );
+                eprintln!("  sewn with {tol} mm: {} faces, open edges {open} (the longest {longest:.3} mm); the kernel calls it {}", faces.len(), if f.is_valid() { "sound" } else { "NOT sound" });
             }
             None => eprintln!("  sewing with {tol} mm was refused"),
         }
@@ -367,10 +359,7 @@ fn how_many_faces_go_missing_and_at_which_accuracy() {
                 let (unmeshed, all_faces) = qymcad_kernel::unmeshed_faces(&shape, defl);
                 let flipped = faces_against_their_own_normal(mesh, faces);
                 let area: f64 = flipped.iter().map(|(_, a)| a).sum();
-                eprintln!(
-                    "    of {all_faces} faces of the solid, {unmeshed} have no triangulation; {} are triangulated against their own normal ({area:.0} mm^2)",
-                    flipped.len()
-                );
+                eprintln!("    of {all_faces} faces of the solid, {unmeshed} have no triangulation; {} are triangulated against their own normal ({area:.0} mm^2)", flipped.len());
                 eprintln!(
                     "  deflection {defl:.3} mm: {} faces, {} triangles, open edges {open} (the longest {longest:.3} mm), \
                      wound against a neighbour {against} of {shared} shared, {:.0} ms",

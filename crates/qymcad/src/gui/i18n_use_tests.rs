@@ -121,12 +121,7 @@ fn a_catalogue_value_is_never_wrapped_in_bare_quotes() {
             }
         }
     }
-    assert!(
-        bad.is_empty(),
-        "a value of the catalogue is wrapped in quotes and they will reach the screen literally ({}):\n{}\nedge spaces are written as {{ \" ... \" }}",
-        bad.len(),
-        bad.join("\n")
-    );
+    assert!(bad.is_empty(), "a value of the catalogue is wrapped in quotes and they will reach the screen literally ({}):\n{}\nedge spaces are written as {{ \" ... \" }}", bad.len(), bad.join("\n"));
 }
 
 /// THE COVERAGE OF EVERY LANGUAGE — both a report and a check.
@@ -198,10 +193,12 @@ fn check_partial(ftl: &str, key: &str) -> String {
     let mut b = FluentBundle::new(vec![li]);
     b.set_use_isolating(false);
     b.add_resource(FluentResource::try_new(ftl.to_string()).expect("the parsing")).expect("the adding");
-    let own = b.get_message(key).and_then(|m| m.value().map(|p| {
-        let mut e = Vec::new();
-        b.format_pattern(p, None, &mut e).to_string()
-    }));
+    let own = b.get_message(key).and_then(|m| {
+        m.value().map(|p| {
+            let mut e = Vec::new();
+            b.format_pattern(p, None, &mut e).to_string()
+        })
+    });
     own.unwrap_or_else(|| qymcad_i18n::tr_in(qymcad_i18n::FALLBACK, key).unwrap_or_else(|| key.to_string()))
 }
 
@@ -218,10 +215,7 @@ fn the_menu_bar_actually_uses_the_catalogue() {
     // AND THE OTHER WAY ROUND, BY THE MECHANISM RATHER THAN BY FORMER WORDS: no menu is opened with a
     // caption typed straight into the code. A guard keyed on the old literals would stop meaning anything
     // the moment somebody wrote them back in another language.
-    let bare: Vec<&str> = panels
-        .match_indices("menu_button(\"")
-        .map(|(i, _)| panels[i..].lines().next().unwrap_or(""))
-        .collect();
+    let bare: Vec<&str> = panels.match_indices("menu_button(\"").map(|(i, _)| panels[i..].lines().next().unwrap_or("")).collect();
     assert!(bare.is_empty(), "the caption of a menu must come from the localisation:\n{}", bare.join("\n"));
 }
 
@@ -264,18 +258,21 @@ fn the_language_setting_survives_a_restart_and_is_applied() {
     );
     // THE SETTINGS RECORD LIVES IN `state.rs` NOW, not beside the application. The rule is unchanged - the
     // language is a field of the settings, and so travels with them into the file - only the address is.
-    assert!(
-        crate::gui::render_source::has(include_str!("../../../qymcad-ui-state/src/lib.rs"), "language: String"),
-        "the language must live in the settings (and so be saved)"
-    );
+    assert!(crate::gui::render_source::has(include_str!("../../../qymcad-ui-state/src/lib.rs"), "language: String"), "the language must live in the settings (and so be saved)");
 
     // an empty setting means "nothing was chosen", so the system decides rather than a silent English
     let mut app = crate::gui::App::default();
     assert!(crate::gui::settings_language_is_empty(&app.set), "by default there is no choice");
-    { app.set.language = "ru".to_string(); crate::gui::apply_language(&app.set); }
+    {
+        app.set.language = "ru".to_string();
+        crate::gui::apply_language(&app.set);
+    }
     let other = qymcad_i18n::tr("menu-file");
     assert_ne!(other, "File", "the chosen language is applied");
-    { app.set.language = "en".to_string(); crate::gui::apply_language(&app.set); }
+    {
+        app.set.language = "en".to_string();
+        crate::gui::apply_language(&app.set);
+    }
     assert_eq!(qymcad_i18n::tr("menu-file"), "File");
 }
 
@@ -292,10 +289,7 @@ fn the_language_setting_survives_a_restart_and_is_applied() {
 #[test]
 fn the_build_watches_the_language_catalogue() {
     let build = include_str!("../../build.rs");
-    assert!(
-        build.contains("cargo:rerun-if-changed=../../i18n"),
-        "without watching the catalogue an added language is not picked up until a forced rebuild"
-    );
+    assert!(build.contains("cargo:rerun-if-changed=../../i18n"), "without watching the catalogue an added language is not picked up until a forced rebuild");
 }
 
 /// EVERY KERNEL ERROR HAS WORDS — in both languages.
@@ -431,12 +425,7 @@ fn keys_asked_in(text: &str) -> Vec<String> {
     // a `#[cfg(test)] mod` beside the code is scaffolding as much as a `_tests.rs` file is
     let text = qymcad_i18n::ratchet::working_part(text);
     let mut keys: Vec<String> = Vec::new();
-    for m in text
-        .match_indices("i18n::tr(\"")
-        .chain(text.match_indices("i18n::tr1(\""))
-        .chain(text.match_indices("i18n::tr2(\""))
-        .chain(text.match_indices("i18n::trn(\""))
-    {
+    for m in text.match_indices("i18n::tr(\"").chain(text.match_indices("i18n::tr1(\"")).chain(text.match_indices("i18n::tr2(\"")).chain(text.match_indices("i18n::trn(\"")) {
         let rest = &text[m.0 + m.1.len()..];
         if let Some(end) = rest.find('"') {
             let k = rest[..end].to_string();
@@ -623,11 +612,7 @@ fn the_expression_parser_returns_codes_not_words() {
     let src = include_str!("../../../qymcad-core/src/expr.rs");
     assert!(src.contains("ExprError"), "the expression parser must return codes");
     let code = src.split("#[cfg(test)]").next().unwrap_or(src);
-    let cyr: Vec<&str> = code
-        .lines()
-        .filter(|l| !l.trim_start().starts_with("//"))
-        .filter(|l| l.contains('"') && l.chars().any(|c| ('а'..='я').contains(&c) || ('А'..='Я').contains(&c)))
-        .collect();
+    let cyr: Vec<&str> = code.lines().filter(|l| !l.trim_start().starts_with("//")).filter(|l| l.contains('"') && l.chars().any(|c| ('а'..='я').contains(&c) || ('А'..='Я').contains(&c))).collect();
     assert!(cyr.is_empty(), "words have crept back into the expression parser:\n{}", cyr.join("\n"));
 
     // and the code reaches text in EVERY language
@@ -640,7 +625,6 @@ fn the_expression_parser_returns_codes_not_words() {
     }
     qymcad_i18n::set_language(&prev);
 }
-
 
 /// EVERY CODE THE CORE AND THE BRIDGES EMIT HAS WORDS IN EVERY LANGUAGE.
 ///
@@ -655,7 +639,6 @@ fn the_expression_parser_returns_codes_not_words() {
 /// by the prefixes that mark them.
 #[test]
 fn every_code_the_libraries_emit_has_words_in_every_language() {
-
     let crates_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().expect("the crates directory").to_path_buf();
     let mut codes: Vec<(String, String)> = Vec::new(); // (code, where it was found)
     let mut stack = vec![crates_dir.clone()];
@@ -687,9 +670,7 @@ fn every_code_the_libraries_emit_has_words_in_every_language() {
                     let lit = &after[..b];
                     // a code is the WHOLE literal (`name-plane`) or its head up to `#` (`name-body#{n}`)
                     let key = lit.split('#').next().unwrap_or(lit);
-                    let looks_like_code = WATCHED_PREFIXES.iter().any(|p| key.starts_with(p))
-                        && key.len() > 2
-                        && key.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+                    let looks_like_code = WATCHED_PREFIXES.iter().any(|p| key.starts_with(p)) && key.len() > 2 && key.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
                     if looks_like_code && !codes.iter().any(|(k, _)| k == key) {
                         codes.push((key.to_string(), where_.clone()));
                     }
@@ -724,9 +705,9 @@ fn every_code_the_libraries_emit_has_words_in_every_language() {
 /// watched. Whole families of interface words could have been missing in a language with every check
 /// green.
 const WATCHED_PREFIXES: [&str; 52] = [
-    "name-", "recognise-", "rebind-", "joint-", "thread-", "material-", "conn-", "f-", "feat-", "m3-", "cad-", "io-", "post-", "verify-", "error-",
-    "act-", "anchor-", "bool-", "cmd-", "con-", "dof-", "ent-", "expand-", "font-", "g-", "giz-", "hint-", "in-", "j-", "jt-", "mp-", "msg-",
-    "node-", "opt-", "par-", "piece-", "pk-", "pp-", "scheme-", "sec-", "sk-", "sketch-", "status-", "tb-", "tool-", "tree-", "unit-", "vp-", "wb-", "hotkey-", "menu-", "win-",
+    "name-", "recognise-", "rebind-", "joint-", "thread-", "material-", "conn-", "f-", "feat-", "m3-", "cad-", "io-", "post-", "verify-", "error-", "act-", "anchor-", "bool-", "cmd-", "con-", "dof-",
+    "ent-", "expand-", "font-", "g-", "giz-", "hint-", "in-", "j-", "jt-", "mp-", "msg-", "node-", "opt-", "par-", "piece-", "pk-", "pp-", "scheme-", "sec-", "sk-", "sketch-", "status-", "tb-",
+    "tool-", "tree-", "unit-", "vp-", "wb-", "hotkey-", "menu-", "win-",
 ];
 
 /// THE LIST OF PREFIXES MUST SAY WHAT IT CANNOT SEE.
@@ -1001,8 +982,8 @@ fn the_fallback_speaks_words_not_a_key() {
 fn the_catalogue_speaks_like_a_program() {
     // the familiar imperative - the very thing that reads as chatting with the person
     const FAMILIAR: &[&str] = &[
-        "выбери", "кликни", "нажми", "укажи", "поставь", "возьми", "потяни", "открой", "закрой", "введи", "наведи", "щёлкни", "щелкни", "перетащи", "отпусти", "начни", "проверь", "задай",
-        "жми", "ткни", "двигай", "тяни", "смотри", "сделай", "изволь",
+        "выбери", "кликни", "нажми", "укажи", "поставь", "возьми", "потяни", "открой", "закрой", "введи", "наведи", "щёлкни", "щелкни", "перетащи", "отпусти", "начни", "проверь", "задай", "жми",
+        "ткни", "двигай", "тяни", "смотри", "сделай", "изволь",
     ];
     let mut bad: Vec<String> = Vec::new();
     for lang in ["ru", "en"] {

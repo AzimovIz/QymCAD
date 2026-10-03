@@ -46,12 +46,7 @@ mod tests {
     }
 
     fn flat_face(app: &App, body: Id) -> FaceKey {
-        let f = app
-            .project
-            .regen_faces
-            .get(&body)
-            .and_then(|fs| fs.iter().find(|f| f.normal[2] > 0.99).cloned())
-            .expect("a planar face");
+        let f = app.project.regen_faces.get(&body).and_then(|fs| fs.iter().find(|f| f.normal[2] > 0.99).cloned()).expect("a planar face");
         FaceKey { index: 0, centroid: [f.centroid.x, f.centroid.y, f.centroid.z], normal: f.normal, id: f.id }
     }
 
@@ -121,7 +116,13 @@ mod tests {
         let (plate, _shaft) = plate_and_shaft(&mut app);
         let f = flat_face(&app, plate);
         // the other plane of the plate: the face looking down, a face of its own
-        let g = app.project.regen_faces.get(&plate).and_then(|fs| fs.iter().position(|x| x.normal[2] < -0.99).map(|i| (i, fs[i].clone()))).map(|(i, x)| FaceKey { index: i as u32 + 1, centroid: [x.centroid.x, x.centroid.y, x.centroid.z], normal: x.normal, id: x.id }).expect("the bottom face");
+        let g = app
+            .project
+            .regen_faces
+            .get(&plate)
+            .and_then(|fs| fs.iter().position(|x| x.normal[2] < -0.99).map(|i| (i, fs[i].clone())))
+            .map(|(i, x)| FaceKey { index: i as u32 + 1, centroid: [x.centroid.x, x.centroid.y, x.centroid.z], normal: x.normal, id: x.id })
+            .expect("the bottom face");
         app.start_tangent_pick();
         qymcad_assembly::tangent_pick_click(&mut app.joint_ctx(), plate, f);
         qymcad_assembly::tangent_pick_click(&mut app.joint_ctx(), plate, g);

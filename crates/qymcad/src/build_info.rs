@@ -161,14 +161,8 @@ mod tests {
     #[test]
     fn the_tag_is_stamped_and_a_changed_tag_rebuilds() {
         let src = std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("build.rs")).expect("build.rs reads");
-        assert!(
-            src.contains("rustc-env=QYMCAD_RELEASE"),
-            "build.rs no longer stamps the release tag, so no build can say which release it is"
-        );
-        assert!(
-            src.contains("QYMCAD_VERSION"),
-            "build.rs stamps the tag from something other than QYMCAD_VERSION, which is the name the release run sets"
-        );
+        assert!(src.contains("rustc-env=QYMCAD_RELEASE"), "build.rs no longer stamps the release tag, so no build can say which release it is");
+        assert!(src.contains("QYMCAD_VERSION"), "build.rs stamps the tag from something other than QYMCAD_VERSION, which is the name the release run sets");
         assert!(
             src.contains("rerun-if-env-changed=QYMCAD_VERSION"),
             "the tag is stamped without asking cargo to rebuild when it changes: a tagged build in a warm target directory would carry the previous tag"
@@ -204,7 +198,10 @@ mod tests {
             pinned >= floor,
             "the packaging image is pinned to rust {}.{} while the manifest asks for {}.{} at least - \
              the image will refuse AFTER building the kernel, which is the most expensive place to find out",
-            pinned.0, pinned.1, floor.0, floor.1
+            pinned.0,
+            pinned.1,
+            floor.0,
+            floor.1
         );
     }
 
@@ -223,12 +220,8 @@ mod tests {
         for line in flow.lines() {
             let Some(path) = line.trim().strip_prefix("body_path:") else { continue };
             let path = path.trim();
-            let text = std::fs::read_to_string(root.join(path))
-                .unwrap_or_else(|_| panic!("the workflow puts `{path}` on the release page and there is no such file"));
-            assert!(
-                text.contains("## What changed"),
-                "`{path}` is what people read on the release page and it no longer says what changed"
-            );
+            let text = std::fs::read_to_string(root.join(path)).unwrap_or_else(|_| panic!("the workflow puts `{path}` on the release page and there is no such file"));
+            assert!(text.contains("## What changed"), "`{path}` is what people read on the release page and it no longer says what changed");
             named += 1;
         }
         assert_eq!(named, 1, "the release page is made from exactly one text; found {named} of them");

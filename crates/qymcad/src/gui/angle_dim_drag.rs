@@ -24,7 +24,17 @@ mod tests {
         let c = if shared {
             Constraint::Angle { a: pt(&app, 40.0, 0.0), b: pt(&app, 0.0, 0.0), c: pt(&app, 30.0, 30.0), deg: 45.0, expr: String::new(), driven: false, off: 0.0, at: None }
         } else {
-            Constraint::AngleLines { a: pt(&app, 10.0, 0.0), b: pt(&app, 50.0, 0.0), c: pt(&app, 10.0, 20.0), d: pt(&app, 40.0, 50.0), deg: 45.0, expr: String::new(), driven: false, off: 0.0, at: None }
+            Constraint::AngleLines {
+                a: pt(&app, 10.0, 0.0),
+                b: pt(&app, 50.0, 0.0),
+                c: pt(&app, 10.0, 20.0),
+                d: pt(&app, 40.0, 50.0),
+                deg: 45.0,
+                expr: String::new(),
+                driven: false,
+                off: 0.0,
+                at: None,
+            }
         };
         app.project.sketches[si].constraints.push(c);
         let ci = app.project.sketches[si].constraints.len() - 1;

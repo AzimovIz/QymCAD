@@ -30,13 +30,18 @@ mod tests {
     /// hotkey. The guard looks at every place at once and therefore finds what nobody remembered.
     #[test]
     fn no_delete_button_bypasses_the_question() {
-        let files: [(&str, &str); 3] = [
-            ("panels.rs", crate::gui::panels_source::PANELS),
-            ("gui.rs", include_str!("../gui.rs")),
-            ("sketching.rs", crate::gui::sketch_source::SKETCH),
-        ];
+        let files: [(&str, &str); 3] = [("panels.rs", crate::gui::panels_source::PANELS), ("gui.rs", include_str!("../gui.rs")), ("sketching.rs", crate::gui::sketch_source::SKETCH)];
         // the destroyers of the document: from the interface they may only be called through `execute_delete`
-        let killers = ["delete_feature(", "delete_contour(", "delete_sketch_full(", "delete_body_mesh(", "delete_plane(", "delete_datum_axis(", "delete_datum_point(", "delete_component("];
+        let killers = [
+            "delete_feature(",
+            "delete_contour(",
+            "delete_sketch_full(",
+            "delete_body_mesh(",
+            "delete_plane(",
+            "delete_datum_axis(",
+            "delete_datum_point(",
+            "delete_component(",
+        ];
         let mut leaks: Vec<String> = Vec::new();
         for (fname, src) in &files {
             let mut in_fn = String::new(); // the function the line is inside, for the delegation case below

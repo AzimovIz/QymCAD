@@ -94,12 +94,8 @@ fn write_report(info: &std::panic::PanicHookInfo<'_>) -> Option<PathBuf> {
     let path = next_report_path()?;
     // The payload is a `&str` for `panic!("literal")` and a `String` for a formatted one; anything else
     // has no text to show.
-    let message = info
-        .payload()
-        .downcast_ref::<&str>()
-        .map(|s| s.to_string())
-        .or_else(|| info.payload().downcast_ref::<String>().cloned())
-        .unwrap_or_else(|| "(the panic carried no message)".to_string());
+    let message =
+        info.payload().downcast_ref::<&str>().map(|s| s.to_string()).or_else(|| info.payload().downcast_ref::<String>().cloned()).unwrap_or_else(|| "(the panic carried no message)".to_string());
     let place = info.location().map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column())).unwrap_or_else(|| "(unknown)".into());
     write_note(&path, "Panic", &message, &without_home(&place))
 }
@@ -319,10 +315,7 @@ mod tests {
 
         // Shown once: after that it is renamed rather than deleted, so it can still be attached.
         super::mark_seen(&report);
-        assert!(
-            !super::unseen_reports().contains(&report),
-            "the report is offered a second time"
-        );
+        assert!(!super::unseen_reports().contains(&report), "the report is offered a second time");
         assert!(report.with_extension("seen.txt").exists(), "marking it seen deleted the file");
 
         super::use_dir_for_test(None);

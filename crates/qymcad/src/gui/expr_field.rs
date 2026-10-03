@@ -18,8 +18,6 @@
 pub(crate) use qymcad_ui_state::{expr_field, name_field, LIST_OPEN};
 use crate::gui::{App};
 
-
-
 /// WAS A DRIVER LIST OPEN WHEN THE KEY WAS PRESSED — asked once, and the answer is taken away.
 ///
 /// The frame's keys are handled BEFORE anything is drawn, so a field cannot answer for a frame that has not
@@ -35,5 +33,4 @@ pub(super) fn take_list_open(ctx: &egui::Context) -> bool {
     })
 }
 
-impl App {
-}
+impl App {}

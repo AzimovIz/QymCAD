@@ -66,14 +66,7 @@ fn sandbox(case: &str, deps: Deps) -> PathBuf {
     // `-change` is the only call that rewrites a path; the stubborn case records the call and rewrites
     // nothing, which is what a library the tool cannot touch looks like from outside.
     let records = if deps == Deps::Stubborn { "" } else { "[ \"$1\" = -change ] && : > \"$MARKS/$(basename \"$4\")\"\n" };
-    executable(&write(
-        "bin/install_name_tool",
-        &format!(
-            "#!/usr/bin/env bash\nMARKS={marks}\nprintf '%s\\n' \"$*\" >> {calls}\n{records}exit 0\n",
-            marks = marks.display(),
-            calls = calls.display()
-        ),
-    ));
+    executable(&write("bin/install_name_tool", &format!("#!/usr/bin/env bash\nMARKS={marks}\nprintf '%s\\n' \"$*\" >> {calls}\n{records}exit 0\n", marks = marks.display(), calls = calls.display())));
 
     // `otool -L` prints the file, then its dependencies, one per tab-indented line. The first of them is
     // the file's own name, and the script skips only the header line - so the shape matters, not the text.
@@ -144,7 +137,14 @@ fn a_bundle_where_nothing_names_the_build_machine_is_still_assembled() {
     assert!(out.status.success(), "the script refused although every path was already @rpath:\n{}", said(&out));
 
     let held = archive(&dir);
-    for entry in ["QymCAD.app/Contents/MacOS/qymcad", "QymCAD.app/Contents/Info.plist", "QymCAD.app/Contents/Resources/qymcad.icns", "QymCAD.app/Contents/Resources/LICENSE.txt", "QymCAD.app/Contents/Resources/THIRD-PARTY-NOTICES.md", "README.txt"] {
+    for entry in [
+        "QymCAD.app/Contents/MacOS/qymcad",
+        "QymCAD.app/Contents/Info.plist",
+        "QymCAD.app/Contents/Resources/qymcad.icns",
+        "QymCAD.app/Contents/Resources/LICENSE.txt",
+        "QymCAD.app/Contents/Resources/THIRD-PARTY-NOTICES.md",
+        "README.txt",
+    ] {
         assert!(held.contains(entry), "the archive does not hold {entry}:\n{held}");
     }
     // Both notes travel, in both languages; the second is named in an alphabet this file does not spell out.

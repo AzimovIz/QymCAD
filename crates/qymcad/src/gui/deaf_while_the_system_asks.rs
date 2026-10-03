@@ -29,11 +29,7 @@ mod tests {
                 _ => {}
             }
         }
-        let raw = egui::RawInput {
-            screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), SCREEN)),
-            events,
-            ..Default::default()
-        };
+        let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), SCREEN)), events, ..Default::default() };
         let out = ctx.run_ui(raw, |ui| app.draw_frame(ui));
         let mut texts = Vec::new();
         for cs in &out.shapes {
@@ -91,10 +87,7 @@ mod tests {
         let (_tx, rx) = std::sync::mpsc::channel();
         app.arm_file_ask(rx, |_app, _p| {});
         frame(&mut app, &ctx, press(egui::Key::F1));
-        assert!(
-            !app.win.help.open,
-            "the help opened over an open file chooser - the interface is meant to be deaf until the system window is answered"
-        );
+        assert!(!app.win.help.open, "the help opened over an open file chooser - the interface is meant to be deaf until the system window is answered");
     }
 
     /// A CLICK BEHIND THE CHOOSER OPENS NO MENU. The keys are read straight off the context and are held

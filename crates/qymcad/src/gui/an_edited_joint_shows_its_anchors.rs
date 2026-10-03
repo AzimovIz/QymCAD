@@ -80,9 +80,6 @@ mod tests {
         // draws the panel background), otherwise there is nothing to compare against and a passing
         // test means nothing.
         assert!(quiet <= 1, "GUARD: without editing the highlight draws {quiet} shapes, so the difference proves nothing");
-        assert!(
-            lit > quiet,
-            "the joint is open for editing and its anchors are not lit ({quiet} shapes before, {lit} after) — a person cannot see what it holds on to"
-        );
+        assert!(lit > quiet, "the joint is open for editing and its anchors are not lit ({quiet} shapes before, {lit} after) — a person cannot see what it holds on to");
     }
 }

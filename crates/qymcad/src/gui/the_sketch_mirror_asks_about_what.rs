@@ -65,11 +65,7 @@ mod tests {
         press_mirror(&mut app);
 
         assert!(!app.tools.sel_sk.mirror_of.is_empty(), "the tool must hold what it was told to mirror and wait for the axis");
-        assert_eq!(
-            app.project.sketches[si].entities.len(),
-            before,
-            "nothing may be mirrored yet: the tool has been told what, and not yet about what"
-        );
+        assert_eq!(app.project.sketches[si].entities.len(), before, "nothing may be mirrored yet: the tool has been told what, and not yet about what");
     }
 
     /// PRESSING IT WITH NOTHING SELECTED ASKS FOR THE GEOMETRY, and does not mirror anything.
@@ -133,11 +129,7 @@ mod tests {
 
         press_mirror(&mut app);
 
-        assert_eq!(
-            app.tools.sel_sk.items.len(),
-            chosen,
-            "the selection vanished from the screen when the tool took it: a person cannot tell what is about to be mirrored"
-        );
+        assert_eq!(app.tools.sel_sk.items.len(), chosen, "the selection vanished from the screen when the tool took it: a person cannot tell what is about to be mirrored");
         assert!(!app.tools.sel_sk.mirror_of.is_empty(), "and the tool holds it");
     }
 

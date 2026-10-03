@@ -110,15 +110,8 @@ mod tests {
 
         let made = app.project.joints.last().map(|j| j.id).expect("a joint on edges must be created");
         let faults = app.project.joint_faults();
-        assert!(
-            !faults.iter().any(|(id, _)| *id == made),
-            "a joint on an edge was born FAULTY: {faults:?}; status: {}",
-            app.status
-        );
-        assert!(
-            app.project.joint_slot_axis(made, 1, qymcad_ui_state::current_ctx_id(&app.active_path, &app.project)).is_some(),
-            "a sound joint must have an axis of travel, and there is none"
-        );
+        assert!(!faults.iter().any(|(id, _)| *id == made), "a joint on an edge was born FAULTY: {faults:?}; status: {}", app.status);
+        assert!(app.project.joint_slot_axis(made, 1, qymcad_ui_state::current_ctx_id(&app.active_path, &app.project)).is_some(), "a sound joint must have an axis of travel, and there is none");
 
         // AND IT SURVIVES CLOSING. That is exactly where the first fix was caught out: joints on
         // edges worked in the session they were made in and died on the next opening — "the anchor is
@@ -134,10 +127,7 @@ mod tests {
         again.drain_bg_for_test();
         qymcad_ui_state::rebuild_if_dirty(&mut again.rebuild_ctx());
         let faults = again.project.joint_faults();
-        assert!(
-            !faults.iter().any(|(id, _)| *id == made),
-            "a joint on an edge DID NOT SURVIVE closing the document: {faults:?}"
-        );
+        assert!(!faults.iter().any(|(id, _)| *id == made), "a joint on an edge DID NOT SURVIVE closing the document: {faults:?}");
         // and it must MOVE rather than merely count as sound
         let owner = again.project.connector(again.project.joints.iter().find(|x| x.id == made).map(|x| x.b).expect("the joint")).map(|c| c.owner).expect("the owner of the driven part");
         let was = again.project.world_transform(owner);

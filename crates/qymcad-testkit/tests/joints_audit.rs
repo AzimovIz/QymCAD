@@ -67,11 +67,15 @@ fn every_joint_kind_removes_exactly_the_degrees_it_promises() {
 
     // Rigid: 0 DOF — a full coincidence
     let (o, _) = solved(JointKind::Rigid, off);
-    if d(o) > 1e-6 { bad.push(format!("Rigid: must make the origins coincide, deviation {:.3}", d(o))); }
+    if d(o) > 1e-6 {
+        bad.push(format!("Rigid: must make the origins coincide, deviation {:.3}", d(o)));
+    }
 
     // Revolute: 1R about Z — translation removed ENTIRELY
     let (o, _) = solved(JointKind::Revolute, off);
-    if d(o) > 1e-6 { bad.push(format!("Revolute: translation must be removed, deviation {:.3}", d(o))); }
+    if d(o) > 1e-6 {
+        bad.push(format!("Revolute: translation must be removed, deviation {:.3}", d(o)));
+    }
 
     // Slider: 1T along Z. The freedom is expressed by the joint SLOT (see
     // a_slider_slides_by_its_offset_slot), not by residual position: at zero offset the parts are
@@ -90,11 +94,15 @@ fn every_joint_kind_removes_exactly_the_degrees_it_promises() {
 
     // Planar: 2T in XY plus 1R — translation along the normal removed (in-plane freedom is set by slots)
     let (o, _) = solved(JointKind::Planar, off);
-    if o[2].abs() > 1e-6 { bad.push(format!("Planar: translation along the normal must be removed, and Z={:.3}", o[2])); }
+    if o[2].abs() > 1e-6 {
+        bad.push(format!("Planar: translation along the normal must be removed, and Z={:.3}", o[2]));
+    }
 
     // Ball: 3R about a point — translation removed entirely
     let (o, _) = solved(JointKind::Ball, off);
-    if d(o) > 1e-6 { bad.push(format!("Ball: translation must be removed, deviation {:.3}", d(o))); }
+    if d(o) > 1e-6 {
+        bad.push(format!("Ball: translation must be removed, deviation {:.3}", d(o)));
+    }
 
     assert!(bad.is_empty(), "MATES — {} failures:\n  {}", bad.len(), bad.join("\n  "));
 }
@@ -208,9 +216,7 @@ fn a_hinge_on_holes_of_different_depth_does_not_drag_the_part() {
     assert!(r.errors.is_empty(), "did not build: {:?}", r.errors);
 
     let hole_key = |p: &Project, body: u64, cx: f64| -> FaceKey {
-        let f = p.regen_faces.get(&body).unwrap().iter().find(|f| {
-            (f.centroid.x - cx).abs() < 5.0 && (f.centroid.y - 10.0).abs() < 5.0 && f.normal[2].abs() < 0.5
-        }).expect("the bore face").clone();
+        let f = p.regen_faces.get(&body).unwrap().iter().find(|f| (f.centroid.x - cx).abs() < 5.0 && (f.centroid.y - 10.0).abs() < 5.0 && f.normal[2].abs() < 0.5).expect("the bore face").clone();
         FaceKey { index: 0, centroid: [f.centroid.x, f.centroid.y, f.centroid.z], normal: f.normal, id: f.id }
     };
     let ka = hole_key(&p, ba, 10.0);
@@ -273,14 +279,7 @@ fn a_hinge_matched_by_hole_ends_lands_exactly() {
     assert!(r.errors.is_empty(), "did not build: {:?}", r.errors);
 
     let hole_key = |p: &Project, body: u64, cx: f64| -> FaceKey {
-        let f = p
-            .regen_faces
-            .get(&body)
-            .unwrap()
-            .iter()
-            .find(|f| (f.centroid.x - cx).abs() < 5.0 && (f.centroid.y - 10.0).abs() < 5.0 && f.normal[2].abs() < 0.5)
-            .expect("the bore face")
-            .clone();
+        let f = p.regen_faces.get(&body).unwrap().iter().find(|f| (f.centroid.x - cx).abs() < 5.0 && (f.centroid.y - 10.0).abs() < 5.0 && f.normal[2].abs() < 0.5).expect("the bore face").clone();
         FaceKey { index: 0, centroid: [f.centroid.x, f.centroid.y, f.centroid.z], normal: f.normal, id: f.id }
     };
     let a = p.add_connector(ca_comp, qymcad_core::feature::AnchorRef::FaceCenter(ba, hole_key(&p, ba, 10.0)));

@@ -151,7 +151,11 @@ mod tests {
         assert_eq!((v.viewcube_size, v.gpu_viewport, v.projection, v.shading), (d.viewcube_size, d.gpu_viewport, d.projection, d.shading));
         let sk = after(Sec::Sketch);
         assert_eq!((sk.snap.on, sk.snap.grid, sk.snap.rot_deg, sk.auto_constrain), (d.snap.on, d.snap.grid, d.snap.rot_deg, d.auto_constrain));
-        assert_eq!((sk.dim_show_name, sk.dim_show_formula, sk.dim_font, sk.dim_text), (d.dim_show_name, d.dim_show_formula, d.dim_font, d.dim_text), "the labels of the dimensions belong to the sketch section");
+        assert_eq!(
+            (sk.dim_show_name, sk.dim_show_formula, sk.dim_font, sk.dim_text),
+            (d.dim_show_name, d.dim_show_formula, d.dim_font, d.dim_text),
+            "the labels of the dimensions belong to the sketch section"
+        );
         let pt = after(Sec::Part);
         assert_eq!((pt.defaults.extrude_h, pt.defaults.offset_2d), (d.defaults.extrude_h, d.defaults.offset_2d));
         let asm = after(Sec::Assembly);
@@ -186,12 +190,7 @@ mod tests {
         let got = ron::ser::to_string_pretty(&s, Default::default()).expect("the settings serialise");
         let want = ron::ser::to_string_pretty(&d, Default::default()).expect("the factory ones serialise");
         let diff: Vec<String> = got.lines().zip(want.lines()).filter(|(a, b)| a != b).map(|(a, b)| format!("  got {} — want {}", a.trim(), b.trim())).collect();
-        assert!(
-            diff.is_empty(),
-            "EVERY section was reset and the settings did not become the factory ones ({}) — so no section resets these fields:\n{}",
-            diff.len(),
-            diff.join("\n")
-        );
+        assert!(diff.is_empty(), "EVERY section was reset and the settings did not become the factory ones ({}) — so no section resets these fields:\n{}", diff.len(), diff.join("\n"));
     }
 
     /// THE LIST OF ROWS AND THE WINDOW ITSELF DO NOT DIVERGE — checked IN BOTH DIRECTIONS.
@@ -236,7 +235,6 @@ mod tests {
         let code = src.split("#[cfg(test)]").next().expect("the working part");
         assert!(!code.contains("settings-units-mm"), "the label about millimetre units is back in the settings window while there is still no choice of units");
     }
-
 }
 
 /// A SETTING THAT DOES NOT APPLY DOES NOT PRETEND TO WORK.
@@ -267,13 +265,21 @@ mod applicability_tests {
         app.win.open(WinKind::Settings);
         app.scheme.section = super::super::settings_sections::SettingsSection::Viewport;
         app.set.projection = Projection::Ortho;
-        let ortho = super::super::screen_keys::tests::frame_text(&mut app, |a, c| { let mut asks = Vec::new(); crate::gui::panels_windows::settings_window(&mut a.win_ctx(&mut asks), c); a.do_win_asks(asks, c); });
+        let ortho = super::super::screen_keys::tests::frame_text(&mut app, |a, c| {
+            let mut asks = Vec::new();
+            crate::gui::panels_windows::settings_window(&mut a.win_ctx(&mut asks), c);
+            a.do_win_asks(asks, c);
+        });
 
         let mut app2 = App::default();
         app2.win.open(WinKind::Settings);
         app2.scheme.section = super::super::settings_sections::SettingsSection::Viewport;
         app2.set.projection = Projection::Perspective;
-        let persp = super::super::screen_keys::tests::frame_text(&mut app2, |a, c| { let mut asks = Vec::new(); crate::gui::panels_windows::settings_window(&mut a.win_ctx(&mut asks), c); a.do_win_asks(asks, c); });
+        let persp = super::super::screen_keys::tests::frame_text(&mut app2, |a, c| {
+            let mut asks = Vec::new();
+            crate::gui::panels_windows::settings_window(&mut a.win_ctx(&mut asks), c);
+            a.do_win_asks(asks, c);
+        });
         crate::i18n::set_language(&prev);
 
         assert!(ortho.iter().any(|t| t.contains(&why)), "under an orthographic projection it is not said why the field of view does not work: {ortho:?}");
@@ -290,7 +296,16 @@ mod applicability_tests {
         let sec = &src[src.find("Sec::Viewport => {").expect("the viewport section")..];
         let sec = &sec[..sec.find("Sec::Sketch => {").unwrap_or(sec.len())];
         let at = |k: &str| sec.find(&format!("show(\"{k}\")")).unwrap_or_else(|| panic!("the row {k} has gone from the section"));
-        let order = ["settings-engine", "settings-projection", "settings-shading", "settings-viewcube", "settings-pick-precision", "settings-ghost-alpha", "settings-fov", "settings-msaa"];
+        let order = [
+            "settings-engine",
+            "settings-projection",
+            "settings-shading",
+            "settings-viewcube",
+            "settings-pick-precision",
+            "settings-ghost-alpha",
+            "settings-fov",
+            "settings-msaa",
+        ];
         let mut prev = 0;
         for k in order {
             let p = at(k);

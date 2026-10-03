@@ -59,10 +59,7 @@ impl App {
                 }
                 any
             }
-            super::TreeDrop::Onto => ed
-                .project()
-                .group_components_into_assembly(&moving, target, crate::i18n::tr("tree-group-name"))
-                .is_some(),
+            super::TreeDrop::Onto => ed.project().group_components_into_assembly(&moving, target, crate::i18n::tr("tree-group-name")).is_some(),
             super::TreeDrop::Before | super::TreeDrop::After => {
                 // "after the target" means "before the next sibling"; the last one has no next, and then it is
                 // the end of the list.
@@ -95,13 +92,10 @@ impl App {
         changed
     }
 
-
-
     /// Copy or cut the selected node into the TREE clipboard: a sketch (outside editing), a part or a subassembly.
     pub(super) fn tree_clipboard_copy(&mut self, cut: bool) {
         tree_copy(&self.chosen, &self.project, &mut self.side.clip, &mut self.status, cut);
     }
-
 
     /// Paste from the tree clipboard into a target component (the selected one, otherwise the active context).
     /// A copy is a deep clone (new Ids); a cut re-parents the node (keeping its Id and its associativity).
@@ -115,7 +109,9 @@ impl App {
             self.status = crate::i18n::tr("tree-clipboard-empty");
             return;
         };
-        if let TreeClip::Feature { nid } = clip { return qymcad_part::paste_feature(&mut self.part_ctx(), nid); } // the tool, opened with the copy's values
+        if let TreeClip::Feature { nid } = clip {
+            return qymcad_part::paste_feature(&mut self.part_ctx(), nid);
+        } // the tool, opened with the copy's values
         use qymcad_core::feature::ComponentKind;
         let root = self.project.root;
         // The target depends on what is in the clipboard.
@@ -184,13 +180,6 @@ impl App {
         }
     }
 
-
-
-
-
-
-
-
     /// AN ACTION ON A TREE NODE - the same thing a context-menu item does, but without the menu.
     ///
     /// The codes: 1 edit, 2 roll back to here, 3 clear the rollback, 4 up, 5 down, 6 delete, 7 suppress or
@@ -236,11 +225,6 @@ impl App {
             _ => {}
         }
     }
-
-
-
-
-
 }
 
 /// WHAT A FEATURE'S SET IS DEFINED BY - IN WORDS, not as a number.
@@ -317,8 +301,12 @@ pub(crate) fn feature_row_label(project: &qymcad_core::model::Project, ti: usize
         FeatureKind::Trim { .. } => format!("{} {}", ph::SCISSORS, crate::i18n::tr("feat-trim")),
         FeatureKind::Stitch { ref parts, .. } => format!("{} {}", ph::INTERSECT_SQUARE, crate::i18n::tr1("feat-stitch", "n", &parts.len().to_string())),
         // A BODY MADE OF A MESH THAT DID NOT CLOSE says so in its own row; the viewport shows where
-        FeatureKind::MeshSolid { body, .. } => format!("{} {}", ph::CUBE, crate::i18n::tr(if project.mesh_index(body).is_some_and(|mi| project.bodies[mi].sheet) { "feat-mesh-solid-open" } else { "feat-mesh-solid" })),
-        FeatureKind::MeshRecognised { body, .. } => format!("{} {}", ph::CUBE, crate::i18n::tr(if project.mesh_index(body).is_some_and(|mi| project.bodies[mi].sheet) { "feat-mesh-recognised-open" } else { "feat-mesh-recognised" })),
+        FeatureKind::MeshSolid { body, .. } => {
+            format!("{} {}", ph::CUBE, crate::i18n::tr(if project.mesh_index(body).is_some_and(|mi| project.bodies[mi].sheet) { "feat-mesh-solid-open" } else { "feat-mesh-solid" }))
+        }
+        FeatureKind::MeshRecognised { body, .. } => {
+            format!("{} {}", ph::CUBE, crate::i18n::tr(if project.mesh_index(body).is_some_and(|mi| project.bodies[mi].sheet) { "feat-mesh-recognised-open" } else { "feat-mesh-recognised" }))
+        }
         FeatureKind::Patch { ref edges, .. } => format!("{} {}", ph::BANDAIDS, crate::i18n::tr1("feat-patch", "n", &edges.query.picked_descs().len().to_string())),
         FeatureKind::SurfaceReplace { ref faces, .. } => format!("{} {}", ph::SWAP, crate::i18n::tr1("feat-surface-replace", "n", &faces.query.picked_descs().len().to_string())),
         FeatureKind::FaceCopy { ref faces, .. } => format!("{} {}", ph::COPY_SIMPLE, crate::i18n::tr1("feat-face-copy", "n", &faces.query.picked_descs().len().to_string())),
@@ -345,8 +333,12 @@ pub(crate) fn feature_row_label(project: &qymcad_core::model::Project, ti: usize
             let off = if offset.abs() < 1e-9 { String::new() } else { format!(" {offset:+.1}") };
             format!("{} {}{}", ph::SQUARE_SPLIT_HORIZONTAL, crate::i18n::tr1("feat-split-body", "n", &bodies.len().to_string()), off)
         }
-        FeatureKind::Draft { ref faces, angle, .. } => format!("{} {}", ph::ANGLE, crate::i18n::trn("feat-draft", &[("angle", &crate::i18n::num(angle, 0)), ("n", &faces.query.picked_descs().len().to_string())])),
-        FeatureKind::Box3 { dx, dy, dz, .. } => format!("{} {}", ph::CUBE, crate::i18n::trn("feat-box", &[("x", &crate::i18n::num(dx, 0)), ("y", &crate::i18n::num(dy, 0)), ("z", &crate::i18n::num(dz, 0))])),
+        FeatureKind::Draft { ref faces, angle, .. } => {
+            format!("{} {}", ph::ANGLE, crate::i18n::trn("feat-draft", &[("angle", &crate::i18n::num(angle, 0)), ("n", &faces.query.picked_descs().len().to_string())]))
+        }
+        FeatureKind::Box3 { dx, dy, dz, .. } => {
+            format!("{} {}", ph::CUBE, crate::i18n::trn("feat-box", &[("x", &crate::i18n::num(dx, 0)), ("y", &crate::i18n::num(dy, 0)), ("z", &crate::i18n::num(dz, 0))]))
+        }
         FeatureKind::Cylinder { r, h, .. } => format!("{} {}", ph::CYLINDER, crate::i18n::trn("feat-cylinder", &[("d", &crate::i18n::num(2.0 * r, 0)), ("h", &crate::i18n::num(h, 0))])),
         FeatureKind::Sphere { r, .. } => format!("{} {}", ph::CIRCLE, crate::i18n::tr1("feat-sphere", "d", &crate::i18n::num(2.0 * r, 0))),
         FeatureKind::Combine { op, height, .. } => {
@@ -365,13 +357,27 @@ pub(crate) fn feature_row_label(project: &qymcad_core::model::Project, ti: usize
             };
             format!("{} {}", ph::TRIANGLE, crate::i18n::trn("feat-chamfer", &[("size", &size), ("which", &ref_summary(edges))]))
         }
-        FeatureKind::Cone { r1, r2, h, .. } => format!("{} {}", ph::CUBE, crate::i18n::trn("feat-cone", &[("d1", &crate::i18n::num(2.0 * r1, 0)), ("d2", &crate::i18n::num(2.0 * r2, 0)), ("h", &crate::i18n::num(h, 0))])),
+        FeatureKind::Cone { r1, r2, h, .. } => {
+            format!("{} {}", ph::CUBE, crate::i18n::trn("feat-cone", &[("d1", &crate::i18n::num(2.0 * r1, 0)), ("d2", &crate::i18n::num(2.0 * r2, 0)), ("h", &crate::i18n::num(h, 0))]))
+        }
         FeatureKind::Torus { major, minor, .. } => format!("{} {}", ph::CIRCLE, crate::i18n::trn("feat-torus", &[("r", &crate::i18n::num(major, 0)), ("r2", &crate::i18n::num(minor, 0))])),
-        FeatureKind::Prism { r, n, h, .. } => format!("{} {}", ph::HEXAGON, crate::i18n::trn("feat-prism", &[("n", &n.to_string()), ("d", &crate::i18n::num(2.0 * r, 0)), ("h", &crate::i18n::num(h, 0))])),
-        FeatureKind::Shell { thickness, ref faces, .. } => format!("{} {}", ph::BOUNDING_BOX, crate::i18n::trn("feat-shell", &[("t", &crate::i18n::num(thickness, 1)), ("n", &faces.query.picked_descs().len().to_string())])),
-        FeatureKind::LinearArray { count, count2, .. } => format!("{} {}", ph::DOTS_THREE_OUTLINE, crate::i18n::tr1("feat-linear-array", "n", &if count2 > 1 { format!("×{count}×{count2}") } else { format!("×{count}") })),
-        FeatureKind::CircularArray { count, angle, .. } => format!("{} {}", ph::ARROWS_CLOCKWISE, crate::i18n::trn("feat-circular-array", &[("n", &count.to_string()), ("angle", &crate::i18n::num(angle, 0))])),
-        FeatureKind::Mirror { plane, datum, .. } => format!("{} {}", ph::FLIP_HORIZONTAL, crate::i18n::tr1("feat-mirror", "plane", &if datum != 0 { crate::i18n::tr("ref-datum") } else { ["XY", "XZ", "YZ"][(plane as usize).min(2)].to_string() })),
+        FeatureKind::Prism { r, n, h, .. } => {
+            format!("{} {}", ph::HEXAGON, crate::i18n::trn("feat-prism", &[("n", &n.to_string()), ("d", &crate::i18n::num(2.0 * r, 0)), ("h", &crate::i18n::num(h, 0))]))
+        }
+        FeatureKind::Shell { thickness, ref faces, .. } => {
+            format!("{} {}", ph::BOUNDING_BOX, crate::i18n::trn("feat-shell", &[("t", &crate::i18n::num(thickness, 1)), ("n", &faces.query.picked_descs().len().to_string())]))
+        }
+        FeatureKind::LinearArray { count, count2, .. } => {
+            format!("{} {}", ph::DOTS_THREE_OUTLINE, crate::i18n::tr1("feat-linear-array", "n", &if count2 > 1 { format!("×{count}×{count2}") } else { format!("×{count}") }))
+        }
+        FeatureKind::CircularArray { count, angle, .. } => {
+            format!("{} {}", ph::ARROWS_CLOCKWISE, crate::i18n::trn("feat-circular-array", &[("n", &count.to_string()), ("angle", &crate::i18n::num(angle, 0))]))
+        }
+        FeatureKind::Mirror { plane, datum, .. } => format!(
+            "{} {}",
+            ph::FLIP_HORIZONTAL,
+            crate::i18n::tr1("feat-mirror", "plane", &if datum != 0 { crate::i18n::tr("ref-datum") } else { ["XY", "XZ", "YZ"][(plane as usize).min(2)].to_string() })
+        ),
         FeatureKind::Hole { diameter, depth, sketch, .. } => {
             if sketch != 0 {
                 let n = project.sketch_isolated_points(sketch).len();
@@ -380,7 +386,9 @@ pub(crate) fn feature_row_label(project: &qymcad_core::model::Project, ti: usize
                 format!("{} {}", ph::CIRCLE, crate::i18n::trn("feat-hole", &[("d", &crate::i18n::num(diameter, 1)), ("h", &crate::i18n::num(depth, 1))]))
             }
         }
-        FeatureKind::BodyBoolean { op, .. } => format!("{} {}", ph::INTERSECT, [crate::i18n::tr("feat-body-cut"), crate::i18n::tr("feat-body-union"), crate::i18n::tr("feat-body-intersect")][(op as usize).min(2)]),
+        FeatureKind::BodyBoolean { op, .. } => {
+            format!("{} {}", ph::INTERSECT, [crate::i18n::tr("feat-body-cut"), crate::i18n::tr("feat-body-union"), crate::i18n::tr("feat-body-intersect")][(op as usize).min(2)])
+        }
         FeatureKind::Move { .. } => format!("{} {}", ph::ARROWS_OUT_CARDINAL, crate::i18n::tr("feat-move")),
         // a piece made a part of its own: the part it came from, whose cut still shapes it
         FeatureKind::Piece { src, .. } => {
@@ -396,12 +404,32 @@ pub(crate) fn feature_row_label(project: &qymcad_core::model::Project, ti: usize
                 qymcad_core::thread::ThreadStandard::RoundRd => format!("Rd{:.0}×{:.1}", g.major_d, g.pitch),
                 _ => format!("Ø{:.1}×{:.2}", g.major_d, g.pitch),
             };
-            format!("{} {}{}", ph::SPIRAL, crate::i18n::trn("feat-thread", &[("name", &name), ("side", &if spec.internal { crate::i18n::tr("thread-internal") } else { crate::i18n::tr("thread-external") }), ("len", &crate::i18n::num(length, 0))]), if spec.starts > 1 { crate::i18n::tr1("count-starts", "n", &spec.starts.to_string()) } else { String::new() })
+            format!(
+                "{} {}{}",
+                ph::SPIRAL,
+                crate::i18n::trn(
+                    "feat-thread",
+                    &[
+                        ("name", &name),
+                        ("side", &if spec.internal { crate::i18n::tr("thread-internal") } else { crate::i18n::tr("thread-external") }),
+                        ("len", &crate::i18n::num(length, 0))
+                    ]
+                ),
+                if spec.starts > 1 { crate::i18n::tr1("count-starts", "n", &spec.starts.to_string()) } else { String::new() }
+            )
         }
-        FeatureKind::Auger { spec, length, .. } => format!("{} {}", ph::SPIRAL, crate::i18n::trn("feat-auger", &[("d", &crate::i18n::num(spec.outer_d, 0)), ("pitch", &crate::i18n::num(spec.pitch, 0)), ("len", &crate::i18n::num(length, 0))])),
+        FeatureKind::Auger { spec, length, .. } => format!(
+            "{} {}",
+            ph::SPIRAL,
+            crate::i18n::trn("feat-auger", &[("d", &crate::i18n::num(spec.outer_d, 0)), ("pitch", &crate::i18n::num(spec.pitch, 0)), ("len", &crate::i18n::num(length, 0))])
+        ),
         // an import's row names the file it came from: editing it asks again about the file's units and scale
-        FeatureKind::Import { source, .. } => format!("{} {}", ph::FILE_ARROW_DOWN, crate::i18n::tr1("feat-import", "file", &project.sources.iter().find(|s| s.id == source).map(|s| s.name.clone()).unwrap_or_default())),
-        FeatureKind::MeshPiece { source, .. } => format!("{} {}", ph::FILE_ARROW_DOWN, crate::i18n::tr1("feat-mesh-piece", "file", &project.sources.iter().find(|s| s.id == source).map(|s| s.name.clone()).unwrap_or_default())),
+        FeatureKind::Import { source, .. } => {
+            format!("{} {}", ph::FILE_ARROW_DOWN, crate::i18n::tr1("feat-import", "file", &project.sources.iter().find(|s| s.id == source).map(|s| s.name.clone()).unwrap_or_default()))
+        }
+        FeatureKind::MeshPiece { source, .. } => {
+            format!("{} {}", ph::FILE_ARROW_DOWN, crate::i18n::tr1("feat-mesh-piece", "file", &project.sources.iter().find(|s| s.id == source).map(|s| s.name.clone()).unwrap_or_default()))
+        }
         // a kind of feature that has no row of its own here (sketches and datums have their own rows)
         _ => return String::new(),
     };
@@ -466,7 +494,6 @@ pub(crate) fn tree_select_component(project: &Project, sel: &mut Sel, tree_sel: 
     *sel = Sel::Component(ci);
 }
 
-
 pub(crate) fn tree_datum_row(tc: &mut qymcad_ui_state::TreeCtx, ui: &mut egui::Ui, _id: Id, kind: &qymcad_core::feature::FeatureKind) {
     use qymcad_core::feature::FeatureKind as FK;
     match *kind {
@@ -483,7 +510,8 @@ pub(crate) fn tree_datum_row(tc: &mut qymcad_ui_state::TreeCtx, ui: &mut egui::U
                         *tc.sel = Sel::Plane(pi);
                     }
                     if r.double_clicked() {
-                        tc.ask.push(qymcad_ui_state::TreeAsk::EditFeature(plane)); // reopen the plane command
+                        tc.ask.push(qymcad_ui_state::TreeAsk::EditFeature(plane));
+                        // reopen the plane command
                     }
                     let mut ren = false;
                     r.context_menu(|ui| {
@@ -511,7 +539,8 @@ pub(crate) fn tree_datum_row(tc: &mut qymcad_ui_state::TreeCtx, ui: &mut egui::U
                         *tc.sel = Sel::DatumPoint(pi); // a datum point is selectable (in sync with 3D)
                     }
                     if r.double_clicked() {
-                        tc.ask.push(qymcad_ui_state::TreeAsk::EditFeature(point)); // reopen the point command
+                        tc.ask.push(qymcad_ui_state::TreeAsk::EditFeature(point));
+                        // reopen the point command
                     }
                     let mut ren = false;
                     r.context_menu(|ui| {
@@ -539,7 +568,8 @@ pub(crate) fn tree_datum_row(tc: &mut qymcad_ui_state::TreeCtx, ui: &mut egui::U
                         *tc.sel = Sel::DatumAxis(ai); // a datum axis is selectable
                     }
                     if r.double_clicked() {
-                        tc.ask.push(qymcad_ui_state::TreeAsk::EditFeature(axis)); // reopen the axis command
+                        tc.ask.push(qymcad_ui_state::TreeAsk::EditFeature(axis));
+                        // reopen the axis command
                     }
                     let mut ren = false;
                     r.context_menu(|ui| {
@@ -628,8 +658,8 @@ pub(crate) fn tree_sketch_row(tc: &mut qymcad_ui_state::TreeCtx, ui: &mut egui::
     let name = crate::i18n::name(&tc.project.sketches[si].name);
     let icon = if editing { ph::PENCIL_SIMPLE } else { ph::POLYGON };
     let raw = format!("{icon} {name}"); // the icon (a pencil while editing) already tells the mode apart
-    // A PLAIN selectable row (with no expansion into contours). Editing starts on a double click; the right
-    // button offers rename (inline) and delete. Only the visibility checkbox and the name.
+                                        // A PLAIN selectable row (with no expansion into contours). Editing starts on a double click; the right
+                                        // button offers rename (inline) and delete. Only the visibility checkbox and the name.
     let mut act: Option<u8> = None; // 1 rename-start, 2 delete
     ui.horizontal(|ui| {
         let mut vis = !tc.sketch_hidden.contains(&sid);
@@ -733,8 +763,8 @@ pub(crate) fn tree_feature_row(tc: &mut qymcad_ui_state::TreeCtx, ui: &mut egui:
     let suppressed = tc.project.rollback.is_some_and(|rb| ti >= rb) || tc.project.timeline[ti].suppressed;
     let node_suppressed = tc.project.timeline[ti].suppressed;
     let mut act: Option<u8> = None; // 1 edit,2 rollback,3 clear-rb,4 up,5 down,6 delete,7 suppress-toggle,8 rename
-    // the neighbouring FEATURES of the same parent: Up/Down reorder among FEATURES (not among sketches or
-    // datums), and go grey when the move would break the dependencies (a linear fillet-over-extrude chain).
+                                    // the neighbouring FEATURES of the same parent: Up/Down reorder among FEATURES (not among sketches or
+                                    // datums), and go grey when the move would break the dependencies (a linear fillet-over-extrude chain).
     let parent = tc.project.timeline[ti].parent;
     let prev_feat = (0..ti).rev().find(|&j| tc.project.timeline[j].parent == parent && tc.project.timeline[j].kind.body().is_some());
     let next_feat = (ti + 1..n).find(|&j| tc.project.timeline[j].parent == parent && tc.project.timeline[j].kind.body().is_some());
@@ -744,12 +774,7 @@ pub(crate) fn tree_feature_row(tc: &mut qymcad_ui_state::TreeCtx, ui: &mut egui:
     // the tree. There is now ONE row per operation span, so an error on ANY node of the span (a hidden one
     // included) must turn the row red - otherwise the feature silently fails to apply with no marker at all.
     // A KERNEL ERROR IS A CODE; the text in the reader's language is assembled here (see i18n::error_text)
-    let node_err = tc
-        .project
-        .feature_op_span(nid)
-        .iter()
-        .find_map(|id| tc.project.regen_errors.get(id))
-        .map(crate::gui::error_words::error_text);
+    let node_err = tc.project.feature_op_span(nid).iter().find_map(|id| tc.project.regen_errors.get(id)).map(crate::gui::error_words::error_text);
     // BUILT, BUT NOT ALL OF IT: a rounding that could not take some edges did the rest - yellow, with the words
     let node_warn = if node_err.is_none() { tc.project.regen_warnings.get(&nid).map(crate::gui::error_words::error_text) } else { None };
     ui.horizontal(|ui| {
@@ -885,46 +910,47 @@ pub(crate) fn tree_panel(tc: &mut qymcad_ui_state::TreeCtx, ui: &mut egui::Ui) {
     egui::ScrollArea::vertical().id_salt("geomscroll").show(ui, |ui| {
         ui.add_space(4.0);
 
-
         // ONE build tree (the history in order, grouped by component)
         build_tree(tc, ui);
 
         // the embedded originals of the imports (dxf/svg/stl)
         if !tc.project.sources.is_empty() {
             ui.separator();
-            egui::CollapsingHeader::new(format!("{} {}", ph::FILE, crate::i18n::tr1("tree-import-sources", "n", &tc.project.sources.len().to_string())))
-                .id_salt("sources")
-                .show(ui, |ui| {
-                    let (mut del, mut again): (Option<usize>, Option<usize>) = (None, None);
-                    for si in 0..tc.project.sources.len() {
-                        let s = &tc.project.sources[si];
-                        ui.horizontal(|ui| {
-                            // the right button on the row opens what can be done with the file, as on any row of the tree
-                            ui.add(egui::Label::new(crate::i18n::tr2("tree-source-size", "name", &crate::i18n::name(&s.name), "kb", &crate::i18n::num(s.data.len() as f64 / 1024.0, 1))).sense(egui::Sense::click())).context_menu(|ui| {
-                                if ui.button(format!("{} {}", ph::ARROW_CLOCKWISE, crate::i18n::tr("tree-source-again"))).clicked() {
-                                    again = Some(si);
-                                    ui.close();
-                                }
-                                if ui.button(format!("{} {}", ph::TRASH, crate::i18n::tr("tree-source-delete"))).clicked() {
-                                    del = Some(si);
-                                    ui.close();
-                                }
-                            });
-                            if ui.small_button(ph::ARROW_CLOCKWISE).on_hover_text(crate::i18n::tr("tree-source-again")).clicked() {
+            egui::CollapsingHeader::new(format!("{} {}", ph::FILE, crate::i18n::tr1("tree-import-sources", "n", &tc.project.sources.len().to_string()))).id_salt("sources").show(ui, |ui| {
+                let (mut del, mut again): (Option<usize>, Option<usize>) = (None, None);
+                for si in 0..tc.project.sources.len() {
+                    let s = &tc.project.sources[si];
+                    ui.horizontal(|ui| {
+                        // the right button on the row opens what can be done with the file, as on any row of the tree
+                        ui.add(
+                            egui::Label::new(crate::i18n::tr2("tree-source-size", "name", &crate::i18n::name(&s.name), "kb", &crate::i18n::num(s.data.len() as f64 / 1024.0, 1)))
+                                .sense(egui::Sense::click()),
+                        )
+                        .context_menu(|ui| {
+                            if ui.button(format!("{} {}", ph::ARROW_CLOCKWISE, crate::i18n::tr("tree-source-again"))).clicked() {
                                 again = Some(si);
+                                ui.close();
                             }
-                            if ui.small_button(ph::TRASH).clicked() {
+                            if ui.button(format!("{} {}", ph::TRASH, crate::i18n::tr("tree-source-delete"))).clicked() {
                                 del = Some(si);
+                                ui.close();
                             }
                         });
-                    }
-                    if let Some(i) = again {
-                        bring_in_again(tc, i);
-                    }
-                    if let Some(i) = del {
-                        tc.project.sources.remove(i);
-                    }
-                });
+                        if ui.small_button(ph::ARROW_CLOCKWISE).on_hover_text(crate::i18n::tr("tree-source-again")).clicked() {
+                            again = Some(si);
+                        }
+                        if ui.small_button(ph::TRASH).clicked() {
+                            del = Some(si);
+                        }
+                    });
+                }
+                if let Some(i) = again {
+                    bring_in_again(tc, i);
+                }
+                if let Some(i) = del {
+                    tc.project.sources.remove(i);
+                }
+            });
         }
         ui.separator();
     });
@@ -953,7 +979,11 @@ pub(crate) fn rollback_bar(tc: &mut qymcad_ui_state::TreeCtx, ui: &mut egui::Ui,
         painter.add(tri(egui::pos2(gx, y - 6.0), egui::pos2(gx - 4.0, y - 1.5), egui::pos2(gx + 4.0, y - 1.5)));
         painter.add(tri(egui::pos2(gx, y + 6.0), egui::pos2(gx - 4.0, y + 1.5), egui::pos2(gx + 4.0, y + 1.5)));
     }
-    let tip = if active_k >= n { crate::i18n::tr1("rollback-all", "n", &n.to_string()) } else { crate::i18n::tr2("rollback-part", "k", &active_k.to_string(), "n", &n.to_string()) };
+    let tip = if active_k >= n {
+        crate::i18n::tr1("rollback-all", "n", &n.to_string())
+    } else {
+        crate::i18n::tr2("rollback-part", "k", &active_k.to_string(), "n", &n.to_string())
+    };
     let resp = resp.on_hover_text(tip).on_hover_cursor(egui::CursorIcon::ResizeVertical);
     if resp.dragged() {
         tc.rollback.accum += resp.drag_delta().y;
@@ -1009,12 +1039,7 @@ pub(crate) fn build_tree(tc: &mut qymcad_ui_state::TreeCtx, ui: &mut egui::Ui) {
             if !tc.tree.search.is_empty() && ui.small_button(ph::X).on_hover_text(crate::i18n::tr("tree-search-clear")).clicked() {
                 tc.tree.search.clear();
             }
-            ui.add(
-                egui::TextEdit::singleline(&mut tc.tree.search)
-                    .id(egui::Id::new("tree_search_field"))
-                    .hint_text(crate::i18n::tr("tree-search"))
-                    .desired_width(f32::INFINITY),
-            );
+            ui.add(egui::TextEdit::singleline(&mut tc.tree.search).id(egui::Id::new("tree_search_field")).hint_text(crate::i18n::tr("tree-search")).desired_width(f32::INFINITY));
         });
     });
     // The mates appear only in an Assembly or a subassembly. ONLY the active assembly's joints are shown:
@@ -1023,21 +1048,13 @@ pub(crate) fn build_tree(tc: &mut qymcad_ui_state::TreeCtx, ui: &mut egui::Ui) {
     if matches!(tc.workbench, Workbench::Assembly) {
         // THE SHARED contours toggle belongs here only. Inside a Part a sketch's visibility is governed by
         // its own checkbox in the tree, and a second, shared one would be superfluous there.
-        ui.checkbox(&mut tc.set.show_contours, format!("{}  {}", ph::POLYGON, crate::i18n::tr("tree-contours-toggle")))
-            .on_hover_text(crate::i18n::tr("tree-contours-hint"));
+        ui.checkbox(&mut tc.set.show_contours, format!("{}  {}", ph::POLYGON, crate::i18n::tr("tree-contours-toggle"))).on_hover_text(crate::i18n::tr("tree-contours-hint"));
         ui.checkbox(&mut tc.set.show_joints, crate::i18n::tr("tree-show-joints")).on_hover_text(crate::i18n::tr("tree-joints-hint"));
-        if ui
-            .checkbox(&mut tc.set.show_interference, crate::i18n::tr("tree-interference"))
-            .on_hover_text(crate::i18n::tr("tree-interference-hint"))
-            .changed()
-        {
+        if ui.checkbox(&mut tc.set.show_interference, crate::i18n::tr("tree-interference")).on_hover_text(crate::i18n::tr("tree-interference-hint")).changed() {
             tc.interference.rev = u64::MAX; // force a recompute when it is toggled
         }
         if tc.set.show_interference && !tc.interference.pairs.is_empty() {
-            ui.colored_label(
-                tc.scheme.pal.error(),
-                format!("{} {}", ph::WARNING, crate::i18n::tr1("tree-interference-n", "n", &tc.interference.pairs.len().to_string())),
-            );
+            ui.colored_label(tc.scheme.pal.error(), format!("{} {}", ph::WARNING, crate::i18n::tr1("tree-interference-n", "n", &tc.interference.pairs.len().to_string())));
         }
     }
     ui.separator();
@@ -1075,11 +1092,14 @@ pub(crate) fn build_tree(tc: &mut qymcad_ui_state::TreeCtx, ui: &mut egui::Ui) {
             .filter(|&mi| !tc.project.bodies[mi].sheet && tree_text_matches(&*tc.tree, &crate::i18n::name(&tc.project.mesh_name(mi))))
             .collect();
         if !rows.is_empty() {
-            egui::CollapsingHeader::new(format!("{} {}", ph::CUBE, crate::i18n::tr1("tree-part-bodies", "n", &rows.len().to_string()))).id_salt(("part-bodies", ctx)).default_open(true).show(ui, |ui| {
-                for mi in rows {
-                    tree_body_row(tc, ui, mi);
-                }
-            });
+            egui::CollapsingHeader::new(format!("{} {}", ph::CUBE, crate::i18n::tr1("tree-part-bodies", "n", &rows.len().to_string()))).id_salt(("part-bodies", ctx)).default_open(true).show(
+                ui,
+                |ui| {
+                    for mi in rows {
+                        tree_body_row(tc, ui, mi);
+                    }
+                },
+            );
         }
     }
 
@@ -1211,7 +1231,13 @@ pub(crate) fn build_tree(tc: &mut qymcad_ui_state::TreeCtx, ui: &mut egui::Ui) {
     }
     if !children.is_empty() {
         let mut fold = false;
-        let listed: Vec<(Id, bool)> = rows.iter().filter_map(|row| match row { TreeCompRow::Comp(ci, cid, _, _) => tc.project.components.get(*ci).map(|c| (*cid, c.visible)), _ => None }).collect();
+        let listed: Vec<(Id, bool)> = rows
+            .iter()
+            .filter_map(|row| match row {
+                TreeCompRow::Comp(ci, cid, _, _) => tc.project.components.get(*ci).map(|c| (*cid, c.visible)),
+                _ => None,
+            })
+            .collect();
 
         let listed_count = listed.len();
         let shown_count = listed.iter().filter(|(_, vis)| *vis).count();
@@ -1304,11 +1330,7 @@ pub(crate) fn build_tree(tc: &mut qymcad_ui_state::TreeCtx, ui: &mut egui::Ui) {
                     // stay where they were.
                     let carried = tc.tree.drag.is_some_and(|src| src == cid || (tc.tree_sel.multi.contains(&src) && tc.tree_sel.multi.contains(&cid)));
                     let picked = *tc.sel == Sel::Component(ci) || in_multi;
-                    let row = |ui: &mut egui::Ui| {
-                        ui.selectable_label(picked, format!("{icon} {name}"))
-                            .interact(egui::Sense::click_and_drag())
-                            .on_hover_text(crate::i18n::tr("tree-component-hint"))
-                    };
+                    let row = |ui: &mut egui::Ui| ui.selectable_label(picked, format!("{icon} {name}")).interact(egui::Sense::click_and_drag()).on_hover_text(crate::i18n::tr("tree-component-hint"));
                     let resp = if carried {
                         let layer = egui::LayerId::new(egui::Order::Tooltip, ui.id().with(("carry", cid)));
                         let inner = ui.scope_builder(egui::UiBuilder::new().layer_id(layer), |ui| row(ui));
@@ -1365,7 +1387,10 @@ pub(crate) fn build_tree(tc: &mut qymcad_ui_state::TreeCtx, ui: &mut egui::Ui) {
                         }
                         ui.separator();
                         let (cl, xl) = if multi_n > 1 {
-                            (format!("{} {}", ph::COPY, crate::i18n::tr1("act-copy-selected", "n", &multi_n.to_string())), format!("{} {}", ph::SCISSORS, crate::i18n::tr1("act-cut-selected", "n", &multi_n.to_string())))
+                            (
+                                format!("{} {}", ph::COPY, crate::i18n::tr1("act-copy-selected", "n", &multi_n.to_string())),
+                                format!("{} {}", ph::SCISSORS, crate::i18n::tr1("act-cut-selected", "n", &multi_n.to_string())),
+                            )
                         } else {
                             (format!("{} {}", ph::COPY, crate::i18n::tr("act-copy-ctrl-c")), format!("{} {}", ph::SCISSORS, crate::i18n::tr("act-cut-ctrl-x")))
                         };
@@ -1566,18 +1591,22 @@ pub(super) fn tree_copy(chosen: &qymcad_ui_state::Chosen, project: &Project, cli
                 }
                 clip.tree = Some(TreeClip::Component { id, cut });
                 clip.os_ping = true; // a marker into the OS clipboard, so that Ctrl+V (Event::Paste) starts working
-                let what = if project.component_kind(id) == Some(qymcad_core::feature::ComponentKind::Assembly) { crate::i18n::tr("node-subassembly") } else { crate::i18n::tr("node-part") };
+                let what = if project.component_kind(id) == Some(qymcad_core::feature::ComponentKind::Assembly) {
+                    crate::i18n::tr("node-subassembly")
+                } else {
+                    crate::i18n::tr("node-part")
+                };
                 *status = crate::i18n::tr2("clip-node", "what", &what, "how", &if cut { crate::i18n::tr("action-cut") } else { crate::i18n::tr("action-copy") });
             }
         }
         Sel::Feature(fi) => {
-        if let Some(n) = project.timeline.get(fi) {
-            clip.tree = Some(TreeClip::Feature { nid: n.id });
-            clip.os_ping = true; // a marker into the OS clipboard, so that Ctrl+V (Event::Paste) starts working
-            *status = crate::i18n::tr2("clip-node", "what", &crate::i18n::name(&n.name), "how", &crate::i18n::tr("action-copy"));
+            if let Some(n) = project.timeline.get(fi) {
+                clip.tree = Some(TreeClip::Feature { nid: n.id });
+                clip.os_ping = true; // a marker into the OS clipboard, so that Ctrl+V (Event::Paste) starts working
+                *status = crate::i18n::tr2("clip-node", "what", &crate::i18n::name(&n.name), "how", &crate::i18n::tr("action-copy"));
+            }
         }
-    }
-    _ => *status = crate::i18n::tr("tree-copy-pick-first"),
+        _ => *status = crate::i18n::tr("tree-copy-pick-first"),
     }
 }
 

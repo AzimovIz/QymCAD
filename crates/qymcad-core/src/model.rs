@@ -15,7 +15,6 @@ pub enum Units {
     Inch,
 }
 
-
 /// Stable identifier of an entity (contour, mesh and so on). Operations reference entities by `Id`
 /// rather than by array index, so a reference survives insertion, removal and reordering.
 pub type Id = u64;
@@ -368,7 +367,6 @@ pub enum PointDef {
     AtVertex { body: Id, edge: u32, end: bool },
 }
 
-
 /// A datum point: a named point in 3D. Planes, sketches and joints reference one by id.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DatumPoint {
@@ -646,12 +644,7 @@ impl Sketch {
                 }
             }
         }
-        let want: [(Id, f64, f64); 4] = [
-            (self.frame, 0.0, 0.0),
-            (self.origin, 0.0, 0.0),
-            (self.axis_pts[0], 1.0, 0.0),
-            (self.axis_pts[1], 0.0, 1.0),
-        ];
+        let want: [(Id, f64, f64); 4] = [(self.frame, 0.0, 0.0), (self.origin, 0.0, 0.0), (self.axis_pts[0], 1.0, 0.0), (self.axis_pts[1], 0.0, 1.0)];
         let mut moved = false;
         for (id, x, y) in want {
             if id == 0 {
@@ -808,7 +801,12 @@ pub enum PatternKind {
         #[serde(default)]
         count2: u32,
     },
-    Circular { cx: f64, cy: f64, count: u32, total_deg: f64 },
+    Circular {
+        cx: f64,
+        cy: f64,
+        count: u32,
+        total_deg: f64,
+    },
 }
 
 /// An editable sketch pattern: source entities plus layout parameters produce derived instances.
@@ -1104,14 +1102,29 @@ impl Constraint {
     /// not a dimension.
     pub fn dim_expr(&self) -> Option<&str> {
         match self {
-            Constraint::Distance { expr, .. } | Constraint::Angle { expr, .. } | Constraint::AngleLines { expr, .. } | Constraint::Diameter { expr, .. } | Constraint::DistancePL { expr, .. } | Constraint::EdgeDistance { expr, .. } | Constraint::ArcLength { expr, .. } => Some(expr),
+            Constraint::Distance { expr, .. }
+            | Constraint::Angle { expr, .. }
+            | Constraint::AngleLines { expr, .. }
+            | Constraint::Diameter { expr, .. }
+            | Constraint::DistancePL { expr, .. }
+            | Constraint::EdgeDistance { expr, .. }
+            | Constraint::ArcLength { expr, .. } => Some(expr),
             _ => None,
         }
     }
 
     /// A reference (driven) dimension or angle: it does not constrain the geometry, only displays a value.
     pub fn is_driven(&self) -> bool {
-        matches!(self, Constraint::Distance { driven: true, .. } | Constraint::Angle { driven: true, .. } | Constraint::DistancePL { driven: true, .. } | Constraint::Diameter { driven: true, .. } | Constraint::AngleLines { driven: true, .. } | Constraint::ArcLength { driven: true, .. } | Constraint::EdgeDistance { driven: true, .. })
+        matches!(
+            self,
+            Constraint::Distance { driven: true, .. }
+                | Constraint::Angle { driven: true, .. }
+                | Constraint::DistancePL { driven: true, .. }
+                | Constraint::Diameter { driven: true, .. }
+                | Constraint::AngleLines { driven: true, .. }
+                | Constraint::ArcLength { driven: true, .. }
+                | Constraint::EdgeDistance { driven: true, .. }
+        )
     }
 }
 
@@ -1192,11 +1205,7 @@ pub fn orient_axis_into_mesh(center: [f64; 3], axis: [f64; 3], verts: &[crate::g
 /// Value of dimension `key`: the expression from `dims` when it is present and evaluates against `vars`,
 /// otherwise `fallback`.
 fn eval_dim(dims: Option<&std::collections::HashMap<String, String>>, key: &str, fallback: f64, vars: &std::collections::HashMap<String, f64>) -> f64 {
-    dims.and_then(|m| m.get(key))
-        .map(|e| e.trim())
-        .filter(|e| !e.is_empty())
-        .and_then(|e| crate::expr::eval(e, vars).ok())
-        .unwrap_or(fallback)
+    dims.and_then(|m| m.get(key)).map(|e| e.trim()).filter(|e| !e.is_empty()).and_then(|e| crate::expr::eval(e, vars).ok()).unwrap_or(fallback)
 }
 
 /// A sketch point with a stable id, referenced by entities and dimensions.
@@ -1408,10 +1417,7 @@ fn line_ellipse_roots(a: [f64; 2], b: [f64; 2], c: [f64; 2], u: [f64; 2], major:
 /// Parameters t along the segment `a-b`, within [0,1] plus an endpoint tolerance, where it crosses an
 /// ellipse.
 fn seg_ellipse_t(a: [f64; 2], b: [f64; 2], c: [f64; 2], u: [f64; 2], major: f64, minor: f64) -> Vec<f64> {
-    line_ellipse_roots(a, b, c, u, major, minor)
-        .into_iter()
-        .filter(|&t| t > -1e-9 && t < 1.0 + 1e-9)
-        .collect()
+    line_ellipse_roots(a, b, c, u, major, minor).into_iter().filter(|&t| t > -1e-9 && t < 1.0 + 1e-9).collect()
 }
 
 /// Intersection points of a circle (cx, cy, r) with an ellipse (centre ce, major-axis unit vector u,
@@ -1621,10 +1627,7 @@ fn remap_constraint_point(c: &mut Constraint, from: Id, to: Id) {
     };
     match c {
         Constraint::Fixed { p } => fix(p),
-        Constraint::Horizontal { a, b }
-        | Constraint::Vertical { a, b }
-        | Constraint::Coincident { a, b }
-        | Constraint::Distance { a, b, .. } => {
+        Constraint::Horizontal { a, b } | Constraint::Vertical { a, b } | Constraint::Coincident { a, b } | Constraint::Distance { a, b, .. } => {
             fix(a);
             fix(b);
         }
@@ -1711,18 +1714,25 @@ pub fn palette_of(colours: &[[u8; 3]]) -> (Vec<[u8; 3]>, Vec<u8>) {
         b.sort_unstable_by_key(|(c, _)| c[ch]);
         let total: u64 = b.iter().map(|(_, n)| n).sum();
         let mut acc = 0;
-        let cut = b.iter().position(|(_, n)| {
-            acc += n;
-            acc * 2 >= total
-        }).map_or(1, |k| k + 1).clamp(1, b.len() - 1);
+        let cut = b
+            .iter()
+            .position(|(_, n)| {
+                acc += n;
+                acc * 2 >= total
+            })
+            .map_or(1, |k| k + 1)
+            .clamp(1, b.len() - 1);
         let rest = b.split_off(cut);
         boxes.push(b);
         boxes.push(rest);
     }
-    let palette: Vec<[u8; 3]> = boxes.iter().map(|b| {
-        let total: u64 = b.iter().map(|(_, n)| n).sum();
-        std::array::from_fn(|ch| ((b.iter().map(|(c, n)| u64::from(c[ch]) * n).sum::<u64>() + total / 2) / total) as u8)
-    }).collect();
+    let palette: Vec<[u8; 3]> = boxes
+        .iter()
+        .map(|b| {
+            let total: u64 = b.iter().map(|(_, n)| n).sum();
+            std::array::from_fn(|ch| ((b.iter().map(|(c, n)| u64::from(c[ch]) * n).sum::<u64>() + total / 2) / total) as u8)
+        })
+        .collect();
     let near = |c: &[u8; 3]| (0..palette.len()).min_by_key(|&k| (0..3).map(|i| u32::from(palette[k][i].abs_diff(c[i])).pow(2)).sum::<u32>()).unwrap_or(0) as u8;
     let nearest: std::collections::HashMap<[u8; 3], u8> = place.keys().map(|c| (*c, near(c))).collect();
     let places = colours.iter().map(|c| nearest[c]).collect();
@@ -1781,7 +1791,6 @@ pub enum PlaneDef {
     PlaneGone,
 }
 
-
 /// A work plane (a construction element): an origin, a normal and a rotation about that normal.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct WorkPlane {
@@ -1809,14 +1818,7 @@ impl Default for WorkPlane {
 impl WorkPlane {
     /// Build a plane from a recognised mesh face.
     pub fn from_face(name: impl Into<String>, face: &crate::geom::MeshFace) -> Self {
-        Self {
-            id: 0,
-            name: name.into(),
-            origin: [face.centroid.x, face.centroid.y, face.centroid.z],
-            normal: face.normal,
-            rot_deg: 0.0,
-            def: PlaneDef::Manual,
-        }
+        Self { id: 0, name: name.into(), origin: [face.centroid.x, face.centroid.y, face.centroid.z], normal: face.normal, rot_deg: 0.0, def: PlaneDef::Manual }
     }
 }
 
@@ -1841,9 +1843,7 @@ pub(crate) mod comp_pattern;
 pub use comp_pattern::{CompPattern, CompPatternKind};
 mod projection;
 
-
 impl Project {
-
     /// Hand out a new stable id.
     pub fn alloc_id(&mut self) -> Id {
         self.next_id += 1;
@@ -1852,7 +1852,6 @@ impl Project {
 
     // --- Contours. Mutations happen only here, so the parallel id array cannot drift out of step. ---
 
-
     /// Add a set of contours (a DXF or SVG import, for example).
     pub fn add_contours(&mut self, cs: impl IntoIterator<Item = Contour>) {
         for c in cs {
@@ -1860,55 +1859,9 @@ impl Project {
         }
     }
 
-
-
-
-
-
-
-
-
-
-
-
     // --- Typed sketch: points plus entities. ---
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     // --- Editing and duplicating sketch entities, by selected entity ids. ---
-
-
-
-
-
-
-
-
-
-
-
-
 
     /// Mirror the entities (as a copy) about the line (ax,ay)-(bx,by).
     pub fn mirror_entities(&mut self, si: usize, eids: &[Id], ax: f64, ay: f64, bx: f64, by: f64) {
@@ -1917,13 +1870,18 @@ impl Project {
         if len2 < 1e-12 {
             return;
         }
-        self.dup_entities(si, eids, |x, y| {
-            let (vx, vy) = (x - ax, y - ay);
-            let t = (vx * dx + vy * dy) / len2;
-            let (projx, projy) = (dx * t, dy * t);
-            let (perpx, perpy) = (vx - projx, vy - projy);
-            (x - 2.0 * perpx, y - 2.0 * perpy)
-        }, false);
+        self.dup_entities(
+            si,
+            eids,
+            |x, y| {
+                let (vx, vy) = (x - ax, y - ay);
+                let t = (vx * dx + vy * dy) / len2;
+                let (projx, projy) = (dx * t, dy * t);
+                let (perpx, perpy) = (vx - projx, vy - projy);
+                (x - 2.0 * perpx, y - 2.0 * perpy)
+            },
+            false,
+        );
     }
 
     /// Duplicate the selected entities with an offset of (dx, dy) and return the ids of the copies. Used by
@@ -1931,8 +1889,6 @@ impl Project {
     pub fn copy_entities(&mut self, si: usize, eids: &[Id], dx: f64, dy: f64) -> Vec<Id> {
         self.dup_entities(si, eids, |x, y| (x + dx, y + dy), true) // a copy carries its internal constraints and dimensions
     }
-
-
 
     /// Linear array: `count` copies spaced by (dx, dy).
     pub fn array_linear(&mut self, si: usize, eids: &[Id], dx: f64, dy: f64, count: u32) {
@@ -1950,10 +1906,15 @@ impl Project {
         for k in 1..count {
             let ang = (step * k as f64).to_radians();
             let (s_, c_) = (ang.sin(), ang.cos());
-            self.dup_entities(si, eids, move |x, y| {
-                let (vx, vy) = (x - cx, y - cy);
-                (cx + vx * c_ - vy * s_, cy + vx * s_ + vy * c_)
-            }, false);
+            self.dup_entities(
+                si,
+                eids,
+                move |x, y| {
+                    let (vx, vy) = (x - cx, y - cy);
+                    (cx + vx * c_ - vy * s_, cy + vx * s_ + vy * c_)
+                },
+                false,
+            );
         }
     }
 
@@ -1979,42 +1940,20 @@ impl Project {
                 for k in 1..count {
                     let ang = (step * k as f64).to_radians();
                     let (s_, c_) = (ang.sin(), ang.cos());
-                    out.extend(self.dup_entities(si, source, move |x, y| {
-                        let (vx, vy) = (x - cx, y - cy);
-                        (cx + vx * c_ - vy * s_, cy + vx * s_ + vy * c_)
-                    }, false));
+                    out.extend(self.dup_entities(
+                        si,
+                        source,
+                        move |x, y| {
+                            let (vx, vy) = (x - cx, y - cy);
+                            (cx + vx * c_ - vy * s_, cy + vx * s_ + vy * c_)
+                        },
+                        false,
+                    ));
                 }
             }
         }
         out
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     /// Fillet the corner at vertex `pid`, when exactly two edges meet there. The inner side is chosen by
     /// the bisector of the chords. Used both by click-on-corner and by the chain command. Returns whether
@@ -2054,10 +1993,15 @@ impl Project {
     /// A rectangle 40 x 30 takes up to 15, half its short side, where one corner alone takes 30.
     pub fn all_corners_limit(&self, si: usize, only: Option<&std::collections::HashSet<Id>>) -> Option<f64> {
         let s = self.sketches.get(si)?;
-        let lines: Vec<(Id, Id, Id)> = s.entities.iter().filter(|e| only.is_none_or(|o| o.contains(&e.id))).filter_map(|e| match e.kind {
-            EntityKind::Line { a, b } => Some((e.id, a, b)),
-            _ => None,
-        }).collect();
+        let lines: Vec<(Id, Id, Id)> = s
+            .entities
+            .iter()
+            .filter(|e| only.is_none_or(|o| o.contains(&e.id)))
+            .filter_map(|e| match e.kind {
+                EntityKind::Line { a, b } => Some((e.id, a, b)),
+                _ => None,
+            })
+            .collect();
         // the cotangent of half the angle at every corner of two lines, the corners being the points two lines of the set meet at
         let mut cot: std::collections::HashMap<Id, f64> = std::collections::HashMap::new();
         for &(_, a, b) in &lines {
@@ -2067,7 +2011,13 @@ impl Project {
                 }
                 if let Some(l) = self.corner_limit(si, p, false) {
                     let (pcx, pcy) = self.point_xy(si, p)?;
-                    let ends: Vec<f64> = self.vertex_edges(si, p).iter().filter_map(|e| self.line_ends(si, *e)).filter_map(|(x, y)| self.point_xy(si, if x == p { y } else { x })).map(|(ox, oy)| (ox - pcx).hypot(oy - pcy)).collect();
+                    let ends: Vec<f64> = self
+                        .vertex_edges(si, p)
+                        .iter()
+                        .filter_map(|e| self.line_ends(si, *e))
+                        .filter_map(|(x, y)| self.point_xy(si, if x == p { y } else { x }))
+                        .map(|(ox, oy)| (ox - pcx).hypot(oy - pcy))
+                        .collect();
                     let shorter = ends.iter().copied().fold(f64::INFINITY, f64::min);
                     cot.insert(p, shorter / l); // corner_limit = shorter * tan(theta / 2)
                 }
@@ -2106,16 +2056,12 @@ impl Project {
         self.fillet_curves(si, e1, e2, r, near.0, near.1)
     }
 
-
     /// Fillet every corner (each vertex with exactly two edges) with radius `r`, returning how many
     /// corners were filleted. The vertex list is snapshotted first, because filleting removes the old
     /// vertex.
     pub fn fillet_all_corners(&mut self, si: usize, r: f64) -> usize {
         self.fillet_all_corners_of(si, r, None)
     }
-
-
-
 
     /// Solve the sketch constraints (moving the points) and re-tessellate the contour.
     /// Map of global parameter names (lower-cased) to values, used to evaluate feature and command
@@ -2133,7 +2079,6 @@ impl Project {
         }
         m
     }
-
 
     /// Name a driver: either a sketch dimension or a feature parameter.
     ///
@@ -2179,8 +2124,7 @@ impl Project {
         if nm.is_empty() {
             return false;
         }
-        self.parameters.iter().any(|p| p.name.eq_ignore_ascii_case(nm))
-            || self.named_dims.iter().any(|n| n.name.eq_ignore_ascii_case(nm) && n.target != *target)
+        self.parameters.iter().any(|p| p.name.eq_ignore_ascii_case(nm)) || self.named_dims.iter().any(|n| n.name.eq_ignore_ascii_case(nm) && n.target != *target)
     }
 
     /// The same for a sketch dimension, addressed by entities the way the popup addresses it.
@@ -2245,19 +2189,13 @@ impl Project {
             DimTarget::Sketch { sketch, refs } => {
                 let Some(si) = self.sketch_index(*sketch) else { return false };
                 let want: std::collections::BTreeSet<Id> = refs.iter().copied().collect();
-                let Some(ci) = self.sketches[si]
-                    .constraints
-                    .iter()
-                    .position(|c| Self::dim_refs(c).is_some_and(|r| r.into_iter().collect::<std::collections::BTreeSet<Id>>() == want))
-                else {
+                let Some(ci) = self.sketches[si].constraints.iter().position(|c| Self::dim_refs(c).is_some_and(|r| r.into_iter().collect::<std::collections::BTreeSet<Id>>() == want)) else {
                     return false;
                 };
                 // An entered value overrides the expression: a typed number has to stay, instead of losing
                 // to the previous formula on the next evaluation.
                 match self.sketches[si].constraints.get_mut(ci) {
-                    Some(Constraint::Distance { d, expr, .. })
-                    | Some(Constraint::Diameter { d, expr, .. })
-                    | Some(Constraint::EdgeDistance { d, expr, .. }) => {
+                    Some(Constraint::Distance { d, expr, .. }) | Some(Constraint::Diameter { d, expr, .. }) | Some(Constraint::EdgeDistance { d, expr, .. }) => {
                         *d = v;
                         expr.clear();
                     }
@@ -2319,30 +2257,18 @@ impl Project {
         self.feat_dims.get(&id).and_then(|m| m.get(key)).map(|s| s.as_str())
     }
 
-
-
     /// Mark as dirty the features whose expressions reference parameter `name`, and their consumers.
     ///
     /// Marking every feature that has any expression means rebuilding a project with a hundred dimensions
     /// after a single keystroke, so only the expressions that actually mention the name are considered.
     pub fn mark_param_dependents_dirty_for(&mut self, name: &str) {
-        let ids: Vec<Id> = self
-            .feat_dims
-            .iter()
-            .filter(|(_, m)| m.values().any(|e| crate::expr::mentions(e, name)))
-            .map(|(id, _)| *id)
-            .collect();
+        let ids: Vec<Id> = self.feat_dims.iter().filter(|(_, m)| m.values().any(|e| crate::expr::mentions(e, name))).map(|(id, _)| *id).collect();
         for id in ids {
             self.mark_node_dirty(id);
         }
         // Sketch dimensions using this parameter: the sketch is re-solved and its consumers follow it down
         // the timeline.
-        let sids: Vec<Id> = self
-            .sketches
-            .iter()
-            .filter(|s| s.constraints.iter().any(|c| c.expr().is_some_and(|e| crate::expr::mentions(e, name))))
-            .map(|s| s.id)
-            .collect();
+        let sids: Vec<Id> = self.sketches.iter().filter(|s| s.constraints.iter().any(|c| c.expr().is_some_and(|e| crate::expr::mentions(e, name)))).map(|s| s.id).collect();
         for sid in sids {
             self.mark_sketch_dirty(sid);
         }
@@ -2452,8 +2378,6 @@ impl Project {
         crate::expr::eval(src, &self.param_map())
     }
 
-
-
     pub fn solve_sketch(&mut self, si: usize) -> f64 {
         self.solve_sketch_drag(si, None)
     }
@@ -2476,23 +2400,6 @@ impl Project {
         self.solve_sketch_inner(si, drag, 40)
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     /// Add a regular polygon as a parametric group of entities: a construction circumscribed circle plus n
     /// side lines held by constraints (each vertex on the circle, equal sides, a radius dimension). The
     /// centre and the first vertex give the radius and the orientation.
@@ -2505,17 +2412,7 @@ impl Project {
         self.add_polygon_param(si, Point2::new(cx, cy), Point2::new(vx, vy), n, crate::feature::Purpose::of(construction)).1
     }
 
-
-
-
-
     // --- Sketches: the grouping layer above contours. ---
-
-
-
-
-
-
 
     /// Delete a sketch together with its contours and its embedded source.
     pub fn remove_sketch(&mut self, sketch_index: usize) {
@@ -2532,10 +2429,6 @@ impl Project {
             self.sources.retain(|s| s.id != src);
         }
     }
-
-
-
-
 
     // --- Meshes. ---
 
@@ -2554,10 +2447,6 @@ impl Project {
             self.add_mesh(m);
         }
     }
-
-
-
-
 
     /// Name map from body `from` to body `to`, matched by place.
     ///
@@ -2675,24 +2564,13 @@ impl Project {
         removed
     }
 
-
-
     /// Delete a body by index (mesh, id and name together). A manual colour, keyed by lineage root, stays in
     /// `part_colors`: a harmless leftover entry once the root is gone too.
     pub fn remove_mesh(&mut self, index: usize) {
         if index < self.bodies.len() {
             self.bodies.remove(index);
-
         }
     }
-
-
-
-
-
-
-
-
 
     pub fn mesh_index(&self, id: Id) -> Option<usize> {
         self.bodies.iter().position(|b| b.id == id)
@@ -2793,8 +2671,6 @@ impl Project {
         }
     }
 
-
-
     /// Repair lost face references in one pass before the build, instead of guessing inside every resolve.
     ///
     /// Falling back to a geometric fingerprint (co-directed normal plus nearest centre) inside each resolve
@@ -2808,19 +2684,13 @@ impl Project {
         self.rebind_lost_face_refs(report);
     }
 
-
-
     fn rebind_lost_face_refs(&mut self, report: &mut crate::feature::RegenReport) {
         use crate::feature::{Rebind, SketchPlane};
         // Candidate by fingerprint among the faces of the body: co-directed normal, nearest centre.
         let candidate = |faces: &[crate::geom::MeshFace], key: &crate::feature::FaceKey| -> Option<u32> {
             let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
             let d2 = |c: &crate::geom::Point3| (c.x - key.centroid[0]).powi(2) + (c.y - key.centroid[1]).powi(2) + (c.z - key.centroid[2]).powi(2);
-            faces
-                .iter()
-                .filter(|f| f.id != 0 && dot(f.normal, key.normal) > 0.9)
-                .min_by(|a, b| d2(&a.centroid).partial_cmp(&d2(&b.centroid)).unwrap_or(std::cmp::Ordering::Equal))
-                .map(|f| f.id)
+            faces.iter().filter(|f| f.id != 0 && dot(f.normal, key.normal) > 0.9).min_by(|a, b| d2(&a.centroid).partial_cmp(&d2(&b.centroid)).unwrap_or(std::cmp::Ordering::Equal)).map(|f| f.id)
         };
         let known = |me: &Self, body: Id, id: u32| -> bool { id != 0 && me.regen_faces.get(&body).is_some_and(|fs| fs.iter().any(|f| f.id == id)) };
         // Holes are deliberately not handled here: their reference became a query, which needs no matching
@@ -2849,13 +2719,6 @@ impl Project {
             report.rebinds.push(Rebind { node: sid, body, what });
         }
     }
-
-
-
-
-
-
-
 
     /// Every face of a body as reference resolution sees it: the pool a query is evaluated against.
     ///
@@ -2987,10 +2850,7 @@ impl Project {
         let pool = self.face_pool(body);
         let found = r.resolve(what, &pool, &self.names, &pool)?;
         let d = found.first().copied().unwrap_or(0);
-        pool.iter()
-            .find(|c| c.desc == d)
-            .copied()
-            .ok_or_else(|| crate::refs::RefError::Lost { what: what.into(), was: r.hint })
+        pool.iter().find(|c| c.desc == d).copied().ok_or_else(|| crate::refs::RefError::Lost { what: what.into(), was: r.hint })
     }
 
     pub fn resolve_face(&self, body: Id, key: &crate::feature::FaceKey) -> ([f64; 3], [f64; 3]) {
@@ -3010,24 +2870,16 @@ impl Project {
         (key.centroid, key.normal)
     }
 
-
     /// Frame of a sketch plane, by sketch id.
     pub fn sketch_frame_by_id(&self, sid: Id) -> Option<crate::feature::PlaneFrame> {
         self.sketch_index(sid).and_then(|si| self.sketch_frame(si))
     }
-
-
-
-
-
 
     /// Profile of a sketch by id: its first closed contour, flattened to XY.
     pub fn sketch_profile_by_id(&self, sid: Id) -> Option<Vec<f64>> {
         let si = self.sketch_index(sid)?;
         self.sketch_profile_xy(si).map(|(_, xy)| xy)
     }
-
-
 
     /// Profile for a feature: the specific contour `profile` when it is set, otherwise the first closed
     /// contour of the sketch.
@@ -3046,16 +2898,10 @@ impl Project {
         self.feature_profile_encoded_fill(sketch, profile, &[])
     }
 
-
-
-
-
     /// Face-name descriptor from its recipe, interned in the document name table.
     pub fn intern_name(&mut self, feature: Id, role: crate::names::Role, src: Id) -> u32 {
         self.names.intern_face(crate::names::GeoName::new(feature, role, src))
     }
-
-
 
     /// Names of the operation caps: the start (the profile itself) and the end (its translated copy). They
     /// are passed to the kernel as separate parameters, because a cap is not produced by a profile edge and
@@ -3064,14 +2910,6 @@ impl Project {
         [self.intern_name(feature, crate::names::Role::CapStart, 0), self.intern_name(feature, crate::names::Role::CapEnd, 0)]
     }
 
-
-
-
-
-
-
-
-
     /// Loft encoding. For each section sketch the contour is taken (`contours[i]`, or the first closed one)
     /// and the result is the concatenation of `loop_block`s, `offsets[nsec+1]` marking where each section
     /// starts, and `places[nsec*12]` holding the 3x4 placements of the section planes. `None` when fewer
@@ -3079,11 +2917,6 @@ impl Project {
     pub fn loft_encoded(&self, sketches: &[Id], contours: &[Id]) -> Option<(Vec<f64>, Vec<usize>, Vec<f64>)> {
         self.loft_encoded_with(sketches, contours, &std::collections::HashMap::new())
     }
-
-
-
-
-
 
     /// Write the mesh of a body by id: replace the existing one or create a new body with that id.
     pub fn set_body_mesh(&mut self, id: Id, m: crate::geom::Mesh) {
@@ -3095,18 +2928,10 @@ impl Project {
         }
     }
 
-
-
-
-
     /// Extrude the first closed contour of a sketch. Returns the id of the resulting body.
     pub fn add_extrude(&mut self, sketch: Id, height: f64) -> Id {
         self.add_extrude_on(sketch, 0, height, crate::feature::Reach::Forward, 0.0)
     }
-
-
-
-
 
     /// Revolve every closed contour of a sketch as one node.
     pub fn add_revolve(&mut self, sketch: Id, axis: u8, angle: f64) -> Id {
@@ -3119,20 +2944,6 @@ impl Project {
         let profiles = if profile == 0 { Vec::new() } else { vec![profile] };
         self.add_revolve_axis(sketch, profiles, axis, angle, 0, 0)
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     /// Add a datum point (a `DatumPoint` timeline node) and return its id.
     pub fn add_datum_point(&mut self, mut dp: DatumPoint) -> Id {
@@ -3174,7 +2985,8 @@ impl Project {
         let Some(gone) = self.planes.iter().find(|p| p.id == id).cloned() else { return false };
         let on_plane: Vec<(usize, Id)> = self.sketches.iter().enumerate().filter(|(_, s)| matches!(s.plane, SketchPlane::Datum(pid) if pid == id)).map(|(si, s)| (si, s.id)).collect();
         if !on_plane.is_empty() {
-            let snap = self.add_plane(WorkPlane { name: "name-plane-deleted-frozen".into(), origin: gone.origin, normal: gone.normal, rot_deg: gone.rot_deg, def: PlaneDef::PlaneGone, ..Default::default() });
+            let snap =
+                self.add_plane(WorkPlane { name: "name-plane-deleted-frozen".into(), origin: gone.origin, normal: gone.normal, rot_deg: gone.rot_deg, def: PlaneDef::PlaneGone, ..Default::default() });
             for (si, sid) in on_plane {
                 self.sketches[si].plane = SketchPlane::Datum(snap);
                 self.mark_node_dirty(sid); // the rebuild visits it and marks it red
@@ -3282,11 +3094,10 @@ impl Project {
                         n.dirty = true;
                     }
                 }
-                FeatureKind::CircularArray { axis, .. }
-                    if *axis == id => {
-                        *axis = 0;
-                        n.dirty = true;
-                    }
+                FeatureKind::CircularArray { axis, .. } if *axis == id => {
+                    *axis = 0;
+                    n.dirty = true;
+                }
                 _ => {}
             }
         }
@@ -3294,12 +3105,6 @@ impl Project {
         self.timeline.retain(|n| !matches!(n.kind, FeatureKind::DatumAxis { axis } if axis == id));
         had
     }
-
-
-
-
-
-
 
     /// Initialise a new document: the root assembly plus one active, empty part.
     ///
@@ -3365,9 +3170,6 @@ impl Project {
         root
     }
 
-
-
-
     /// A part in the active context.
     pub fn add_part(&mut self, name: impl Into<String>) -> Id {
         self.add_component_kind(name, crate::feature::ComponentKind::Part)
@@ -3377,8 +3179,6 @@ impl Project {
     pub fn add_assembly(&mut self, name: impl Into<String>) -> Id {
         self.add_component_kind(name, crate::feature::ComponentKind::Assembly)
     }
-
-
 
     /// Whether a context may hold bodies. The root and any assembly may not; only a part may.
     pub fn ctx_holds_bodies(&self, ctx: Id) -> bool {
@@ -3390,27 +3190,12 @@ impl Project {
         self.add_part(name)
     }
 
-
-
-
-
-
-
-
-
     // --- Mates (joints). ---
-
-
-
-
-
-
 
     /// Whether the cross-component reference from `consumer` to `body` is authorised by an explicit external reference.
     pub fn external_authorized(&self, consumer: Id, body: Id) -> bool {
         self.external_ref_for(consumer, body).is_some()
     }
-
 
     /// Break an external reference: the geometry stays exactly where it is and the associativity ends.
     ///
@@ -3470,34 +3255,6 @@ impl Project {
         self.regen_edges.get(&body)?.iter().find(|e| e.id == edge_id).map(|e| (e.mid, e.dir))
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     /// Home assembly of a mate: the lowest common ancestor of its connector owners.
     ///
     /// A mate belongs to exactly one assembly — between parts of the root it belongs to the root, between
@@ -3508,11 +3265,6 @@ impl Project {
         let ob = self.connector(j.b)?.owner;
         self.common_ancestor(oa, ob)
     }
-
-
-
-
-
 
     /// Delete component `id` with everything it holds: subcomponents, bodies, sketches, datums, and the
     /// connectors and joints that reference them.
@@ -3586,15 +3338,8 @@ impl Project {
         // sketch deletion (since fixed) and here.
         self.drop_orphan_bodies();
         // External references whose source body or consumer component is inside the subtree are cut.
-        let dead_refs: Vec<Id> = self
-            .external_refs
-            .iter()
-            .filter(|e| {
-                subtree.contains(&e.from_component)
-                    || e.source_body().and_then(|b| self.body_owner(b)).is_some_and(|o| subtree.contains(&o))
-            })
-            .map(|e| e.id)
-            .collect();
+        let dead_refs: Vec<Id> =
+            self.external_refs.iter().filter(|e| subtree.contains(&e.from_component) || e.source_body().and_then(|b| self.body_owner(b)).is_some_and(|o| subtree.contains(&o))).map(|e| e.id).collect();
         self.external_refs.retain(|e| !dead_refs.contains(&e.id));
         // The components themselves.
         self.components.retain(|c| !subtree.contains(&c.id));
@@ -3620,7 +3365,6 @@ impl Project {
 
     // --- Tree clipboard: copying and cutting sketches, parts and subassemblies. ---
 
-
     /// Clone a single sketch (from the tree clipboard) into a target component. Returns the id of the clone.
     pub fn clone_sketch_node(&mut self, sid: Id, target_parent: Id) -> Option<Id> {
         self.clone_sketch_impl(sid, target_parent, &std::collections::HashMap::new())
@@ -3640,7 +3384,6 @@ impl Project {
         }
     }
 
-
     /// Deep clone of component `id`, with its whole subtree (subcomponents, sketches, datums, features,
     /// bodies), under `target_parent`.
     ///
@@ -3656,8 +3399,6 @@ impl Project {
         self.name_apart(&[copy], &|n| n.to_string()); // a copy is told from its original: "Part 1 (2)"
         Some(copy)
     }
-
-
 
     /// Extract a product: build a new minimal `Project` whose root assembly holds a deep clone of component
     /// `component` and its subtree. The `.qpart` format is the serialisation of that project.
@@ -3697,7 +3438,6 @@ impl Project {
         self.next_id = self.next_id.max(other.next_id);
         first
     }
-
 
     /// World transform of a body, through its owning component. A body with no owner (a raw import) gets
     /// the identity.
@@ -3747,47 +3487,23 @@ impl Project {
         self.ctx_holds_bodies(self.current_ctx())
     }
 
-
-
-
-
-
     /// Owning component of a node reference (a body or a sketch). Planes, datums and anything unknown give
     /// `None`: isolation does not restrict those, since they are not geometry of another part.
     pub fn ref_owner(&self, id: Id) -> Option<Id> {
         self.body_owner(id).or_else(|| self.sketch_owner(id))
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
     /// Operation using the first closed contour of a sketch against body `src`.
     pub fn add_combine(&mut self, src: Id, sketch: Id, height: f64, op: u8) -> Id {
         self.add_combine_on(src, sketch, 0, crate::model::CombineSpan { height: height, down: 0.0, extent: crate::feature::Extent::default(), fill: &[] }, op)
     }
 
-
-
-
-
     /// Capture geometric snapshots of faces `faces` of body `src` and attach them to feature `fid`, the way
     /// `capture_edge_refs` does for edges.
     pub(crate) fn capture_face_refs(&mut self, fid: Id, src: Id, faces: &[u32]) {
         let Some(fs) = self.regen_faces.get(&src) else { return };
-        let refs: Vec<ElemSnapshot> = faces
-            .iter()
-            .filter_map(|&id| fs.iter().find(|f| f.id == id).map(|f| ElemSnapshot { id, at: [f.centroid.x, f.centroid.y, f.centroid.z], dir: f.normal }))
-            .collect();
+        let refs: Vec<ElemSnapshot> =
+            faces.iter().filter_map(|&id| fs.iter().find(|f| f.id == id).map(|f| ElemSnapshot { id, at: [f.centroid.x, f.centroid.y, f.centroid.z], dir: f.normal })).collect();
         if !refs.is_empty() {
             self.face_refs.insert(fid, refs);
         }
@@ -4032,19 +3748,11 @@ impl Project {
         out
     }
 
-
-
-
-
-
-
     /// Add a chamfer on edges of body `src` (an empty `edges` means every edge). Returns the id of the result.
     pub fn add_chamfer(&mut self, src: Id, dist: f64, edges: Vec<u32>) -> Id {
         use crate::feature::ChamferMode;
         self.add_chamfer_ex(src, dist, ChamferShape { mode: ChamferMode::Symmetric, d2: 0.0, flip: false, ref_face: 0 }, edges)
     }
-
-
 
     /// Add a shell of body `src`: remove faces `faces` and leave a wall of `thickness`. Returns the id of the
     /// result.
@@ -4052,10 +3760,6 @@ impl Project {
         let side = if outward { crate::feature::ShellSide::Outward } else { crate::feature::ShellSide::Inward };
         self.add_shell_mode(src, thickness, faces, side)
     }
-
-
-
-
 
     /// Add a linear pattern of body `src`: `count` copies spaced by (dx, dy, dz). Returns the result id.
     pub fn add_linear_array(&mut self, src: Id, dx: f64, dy: f64, dz: f64, count: u32) -> Id {
@@ -4070,15 +3774,11 @@ impl Project {
         self.add_linear_array_grid3(src, [ArrayAxis { d: [dx, dy, dz], count: count }, ArrayAxis { d: [dx2, dy2, dz2], count: count2 }, ArrayAxis::none()])
     }
 
-
-
     /// Add a circular pattern of body `src`: `count` copies over `angle` degrees. `axis` is a datum axis id,
     /// or 0 for world Z.
     pub fn add_circular_array(&mut self, src: Id, count: u32, angle: f64) -> Id {
         self.add_circular_array_axis(src, count, angle, 0)
     }
-
-
 
     /// Mirrored component in an assembly: a new sibling of the source whose body is the reflection of the
     /// active body of `src_comp` through the world plane `wo`/`wn` (a click on XY, XZ, YZ, a datum or a
@@ -4098,12 +3798,7 @@ impl Project {
         if self.component_is_part(src_comp) {
             return vec![self.add_mirror_part(src_comp, wo, wn)];
         }
-        let (src_name, src_parent) = self
-            .components
-            .iter()
-            .find(|c| c.id == src_comp)
-            .map(|c| (c.name.clone(), c.parent))
-            .unwrap_or(("name-assembly".into(), None));
+        let (src_name, src_parent) = self.components.iter().find(|c| c.id == src_comp).map(|c| (c.name.clone(), c.parent)).unwrap_or(("name-assembly".into(), None));
         let saved = self.active_component;
         self.active_component = src_parent.or(saved);
         let asm = self.add_assembly(format!("name-mirror-of#{src_name}"));
@@ -4123,21 +3818,13 @@ impl Project {
         let ap = self.components.iter().find(|c| c.id == asm).and_then(|c| c.parent).map(|pp| self.world_transform(pp)).unwrap_or(crate::feature::PLACE_IDENTITY);
         self.set_component_transform(asm, crate::feature::mat_mul12(&crate::feature::mat_inv12(&ap), &rfull));
         // Every part in the subtree that holds bodies (`src_comp` itself is an assembly, so walk its descendants).
-        let parts: Vec<Id> = self
-            .descendants(src_comp)
-            .into_iter()
-            .filter(|&c| self.component_is_part(c) && self.timeline.iter().any(|n| n.parent == Some(c) && n.kind.body().is_some()))
-            .collect();
+        let parts: Vec<Id> = self.descendants(src_comp).into_iter().filter(|&c| self.component_is_part(c) && self.timeline.iter().any(|n| n.parent == Some(c) && n.kind.body().is_some())).collect();
         let mut out = Vec::new();
         for part in parts {
             out.push(self.add_mirror_part_rigid(part, src_comp, n_sa, wn, asm));
         }
         out
     }
-
-
-
-
 
     /// Datum plane offset from a face by `dist`, used by mirrors and by sketches on a face. Associative: it
     /// is resolved during regenerate.
@@ -4223,8 +3910,6 @@ impl Project {
         self.add_datum_axis(DatumAxis { name: "name-datum-axis".into(), def: AxisDef::FromFace { body, face }, ..Default::default() })
     }
 
-
-
     /// Add a hole to body `src` (a cylinder of `diameter` and `depth`, at `point` along `normal`).
     ///
     /// The hole is placed by a face reference (`face`, with a persistent id): the centre and normal are
@@ -4233,22 +3918,6 @@ impl Project {
     pub fn add_hole(&mut self, src: Id, face: crate::feature::FaceKey, diameter: f64, depth: f64) -> Id {
         self.add_hole_typed(src, face, HoleTool { kind: 0, diameter: diameter, depth: depth, dia2: 0.0, depth2: 0.0 })
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     /// Copy of the project without the bytes of the embedded sources. The `sources` records themselves stay,
     /// with their name, extension and an empty `data`.
@@ -4485,9 +4154,15 @@ impl Project {
                 // writes it, and including it would declare every solve an edit, outside any operation
                 // boundary.
                 for slot in 0..3 {
-                    if let Some(v) = j.drive[slot] { bits(v, &mut h) }
-                    if let Some(v) = j.limit_min[slot] { bits(v, &mut h) }
-                    if let Some(v) = j.limit_max[slot] { bits(v, &mut h) }
+                    if let Some(v) = j.drive[slot] {
+                        bits(v, &mut h)
+                    }
+                    if let Some(v) = j.limit_min[slot] {
+                        bits(v, &mut h)
+                    }
+                    if let Some(v) = j.limit_max[slot] {
+                        bits(v, &mut h)
+                    }
                     (j.drive[slot].is_some(), j.limit_min[slot].is_some(), j.limit_max[slot].is_some()).hash(&mut h);
                 }
                 j.global.hash(&mut h);
@@ -4569,32 +4244,6 @@ impl Project {
         h.finish()
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     /// Every id a node depends on, that is, everything that has to be produced before it: bodies and
     /// sketches (`inputs`) plus datum references — a sketch on a datum or a face, an offset plane, an axis
     /// through two points or along an edge or face, and a mirror, revolve or pattern around a datum.
@@ -4640,25 +4289,6 @@ impl Project {
         r
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     /// Span of a body along a normal: the projection of the bounding box of `body` onto axis `n`, measured
     /// from `origin`.
     ///
@@ -4667,10 +4297,14 @@ impl Project {
     fn body_span_along(&self, body: Id, origin: [f64; 3], n: [f64; 3]) -> Option<(f64, f64)> {
         let bb = self.mesh_index(body).and_then(|i| self.bodies[i].mesh.bounds())?;
         let corners = [
-            [bb.min.x, bb.min.y, bb.min.z], [bb.max.x, bb.min.y, bb.min.z],
-            [bb.min.x, bb.max.y, bb.min.z], [bb.max.x, bb.max.y, bb.min.z],
-            [bb.min.x, bb.min.y, bb.max.z], [bb.max.x, bb.min.y, bb.max.z],
-            [bb.min.x, bb.max.y, bb.max.z], [bb.max.x, bb.max.y, bb.max.z],
+            [bb.min.x, bb.min.y, bb.min.z],
+            [bb.max.x, bb.min.y, bb.min.z],
+            [bb.min.x, bb.max.y, bb.min.z],
+            [bb.max.x, bb.max.y, bb.min.z],
+            [bb.min.x, bb.min.y, bb.max.z],
+            [bb.max.x, bb.min.y, bb.max.z],
+            [bb.min.x, bb.max.y, bb.max.z],
+            [bb.max.x, bb.max.y, bb.max.z],
         ];
         let (mut tmin, mut tmax) = (f64::MAX, f64::MIN);
         for c in corners {
@@ -4680,8 +4314,6 @@ impl Project {
         }
         Some((tmin, tmax))
     }
-
-
 
     /// Remove a body from view: the mesh and the face and edge caches go together.
     ///
@@ -4695,8 +4327,6 @@ impl Project {
         self.regen_faces.remove(&b);
         self.regen_edges.remove(&b);
     }
-
-
 
     /// Seams: a face with no provenance is identified by its neighbours, exactly as an edge is.
     ///
@@ -4783,7 +4413,6 @@ impl Project {
         true
     }
 
-
     fn name_face_splits_of(&mut self, body: Id, kernel: &dyn crate::feature::Kernel) {
         let splits = kernel.face_splits(body);
         if splits.is_empty() {
@@ -4828,10 +4457,7 @@ impl Project {
             }
             let own: std::collections::HashSet<u32> = members.iter().copied().collect();
             let key = |f: u32| -> Vec<u32> {
-                let mut v: Vec<u32> = nb
-                    .get(&f)
-                    .map(|ns| ns.iter().copied().filter(|n| crate::names::NameTable::is_named(*n) && !own.contains(n)).collect())
-                    .unwrap_or_default();
+                let mut v: Vec<u32> = nb.get(&f).map(|ns| ns.iter().copied().filter(|n| crate::names::NameTable::is_named(*n) && !own.contains(n)).collect()).unwrap_or_default();
                 v.sort_unstable();
                 v.dedup();
                 v
@@ -4885,8 +4511,6 @@ impl Project {
             }
         }
     }
-
-
 
     /// Edge names from the pair of faces, plus exact translation of references.
     ///
@@ -4992,23 +4616,6 @@ impl Project {
         kernel.rename_edges(body, &renames);
         emap.entry(body).or_default().extend(renames);
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 }
 
 /// Tessellate a sketch into several contours: each circle becomes its own contour, while lines and arcs are
@@ -5288,7 +4895,7 @@ mod ellipse_intersect_tests {
     #[test]
     fn circle_ellipse_four_points() {
         let (ux, uy, ma, mi) = axes(); // a=4,b=2
-        // A circle of radius 3 at the centre: |E(t)| = 3 when 16*cos^2 + 4*sin^2 = 9, that is 12*cos^2 = 5, giving four symmetric points.
+                                       // A circle of radius 3 at the centre: |E(t)| = 3 when 16*cos^2 + 4*sin^2 = 9, that is 12*cos^2 = 5, giving four symmetric points.
         let pts = circle_ellipse_pts([0.0, 0.0], 3.0, [0.0, 0.0], [ux, uy], ma, mi);
         assert_eq!(pts.len(), 4, "a circle of r = 3 must meet the ellipse four times: {pts:?}");
         for (x, y) in &pts {
@@ -5439,17 +5046,10 @@ mod drive_joint_tests {
         let (mut p, _root, sub, leaf) = nested_tree();
         p.set_component_transform(sub, tr(10.0)); // world(sub) = +10 along X
         p.set_component_transform(leaf, tr(5.0)); // world(leaf) = +15 along X, so rel(leaf, sub) = +5
-        // Body A belongs to leaf and has one edge whose midpoint is [1,0,0] in leaf local space.
+                                                  // Body A belongs to leaf and has one edge whose midpoint is [1,0,0] in leaf local space.
         let body = p.alloc_id();
         let nid = p.alloc_id();
-        p.timeline.push(FeatureNode {
-            id: nid,
-            name: "b".into(),
-            kind: FeatureKind::Box3 { dx: 1.0, dy: 1.0, dz: 1.0, body },
-            parent: Some(leaf),
-            dirty: false,
-            suppressed: false,
-        });
+        p.timeline.push(FeatureNode { id: nid, name: "b".into(), kind: FeatureKind::Box3 { dx: 1.0, dy: 1.0, dz: 1.0, body }, parent: Some(leaf), dirty: false, suppressed: false });
         p.regen_edges.insert(body, vec![crate::geom::MeshEdge { id: 7, mid: [1.0, 0.0, 0.0], dir: [1.0, 0.0, 0.0], a: [0.5, 0.0, 0.0], b: [1.5, 0.0, 0.0], ..Default::default() }]);
         assert_eq!(p.body_owner(body), Some(leaf), "the owner of the body is the leaf");
         // The connector is owned by subassembly sub (the placement owner) while its anchor is an edge of the leaf body.
@@ -5638,9 +5238,13 @@ mod drive_joint_tests {
         p.solve_joints(); // Placement goes through the single solver.
         let wb = p.world_transform(pb);
         let mid = apply12(&wb, [0.0, 0.0, 0.0]); // World midpoint of the edge of B.
-        // A tolerance of 1e-6 mm is picometres: a numeric solver converges to a tolerance, and demanding a
-        // bit-exact zero from it is meaningless.
-        assert!(mid[0].abs() < 1e-6 && mid[1].abs() < 1e-6 && (mid[2] - 10.0).abs() < 1e-6, "the axes must be coaxial (the perpendicular offset removed) with the position along the axis kept at z = 10: {:?}", mid);
+                                                 // A tolerance of 1e-6 mm is picometres: a numeric solver converges to a tolerance, and demanding a
+                                                 // bit-exact zero from it is meaningless.
+        assert!(
+            mid[0].abs() < 1e-6 && mid[1].abs() < 1e-6 && (mid[2] - 10.0).abs() < 1e-6,
+            "the axes must be coaxial (the perpendicular offset removed) with the position along the axis kept at z = 10: {:?}",
+            mid
+        );
         let x = apply12_dir(&wb, [1.0, 0.0, 0.0]);
         assert!((x[0] - 1.0).abs() < 1e-6, "no spurious rotation: +X -> {:?}", x);
     }

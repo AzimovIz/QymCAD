@@ -126,10 +126,7 @@ mod tests {
     #[test]
     fn anchor_follows_its_body() {
         let a = Anchor::from_axes(0, Vector3::new(10.0, 0.0, 0.0), Vector3::z(), Vector3::x()).expect("axes");
-        let body = Isometry3::from_parts(
-            Translation3::new(0.0, 5.0, 0.0),
-            UnitQuaternion::from_axis_angle(&Vector3::z_axis(), std::f64::consts::FRAC_PI_2),
-        );
+        let body = Isometry3::from_parts(Translation3::new(0.0, 5.0, 0.0), UnitQuaternion::from_axis_angle(&Vector3::z_axis(), std::f64::consts::FRAC_PI_2));
         // Body turned 90 degrees about Z: an anchor at (10,0,0) moves to (0,10,0), plus the (0,5,0) translation.
         let o = a.world_origin(&body);
         assert!((o - Vector3::new(0.0, 15.0, 0.0)).norm() < 1e-12, "the anchor must travel with its body instead of staying in local space: {o:?}");

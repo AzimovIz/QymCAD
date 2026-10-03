@@ -117,7 +117,11 @@ mod tests {
     fn both_help_settings_reach_the_settings_window() {
         let mut app = App::default();
         app.win.open(WinKind::Settings);
-        let texts = super::super::screen_keys::tests::frame_text(&mut app, |a, c| { let mut asks = Vec::new(); crate::gui::panels_windows::settings_window(&mut a.win_ctx(&mut asks), c); a.do_win_asks(asks, c); });
+        let texts = super::super::screen_keys::tests::frame_text(&mut app, |a, c| {
+            let mut asks = Vec::new();
+            crate::gui::panels_windows::settings_window(&mut a.win_ctx(&mut asks), c);
+            a.do_win_asks(asks, c);
+        });
         for k in ["settings-help-lang", "settings-help-open"] {
             let label = crate::i18n::tr(k);
             assert!(texts.iter().any(|t| t.contains(&label)), "the \"{label}\" setting is not in the window: {texts:?}");

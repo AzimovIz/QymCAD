@@ -20,11 +20,7 @@ use qymcad_core::model::Project;
 fn through_shell() -> (Project, u64) {
     let mut p = Project::default();
     p.new_document();
-    let sid = p.add_line_sketch(
-        "Sketch 1",
-        vec![Point2::new(0.0, 0.0), Point2::new(40.0, 0.0), Point2::new(40.0, 30.0), Point2::new(0.0, 30.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("Sketch 1", vec![Point2::new(0.0, 0.0), Point2::new(40.0, 0.0), Point2::new(40.0, 30.0), Point2::new(0.0, 30.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {
@@ -39,7 +35,6 @@ fn through_shell() -> (Project, u64) {
     qymcad_testkit::regenerate(&mut p);
     (p, shell)
 }
-
 
 /// AND A SOUND OPERATION GOES THROUGH AS BEFORE — the barrier does not choke working cases.
 #[test]

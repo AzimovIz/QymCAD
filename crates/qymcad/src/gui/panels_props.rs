@@ -6,7 +6,6 @@
 
 use super::*;
 
-
 /// The name of a component, for a row of the panel. It used to be a closure taking `&Self` - the whole
 /// application to reach one field - and that alone kept the panel inside the crate declaring `App`.
 fn comp_name(project: &qymcad_core::model::Project, id: Id) -> String {
@@ -20,14 +19,6 @@ impl App {
         crate::gui::panels_props::properties_panel(&mut self.props_ctx(&mut asks), ui);
         self.do_props_asks(asks);
     }
-
-
-
-
-
-
-
-
 }
 
 pub(crate) fn contour_props(ed: qymcad_ui_state::Editing, array: &mut ArrayTool, boolean: &mut BoolCommand, deferred: &mut DeferredUi, set: &mut Settings, ui: &mut egui::Ui, i: usize) {
@@ -37,7 +28,10 @@ pub(crate) fn contour_props(ed: qymcad_ui_state::Editing, array: &mut ArrayTool,
         let c = &ed.project.contours[i];
         (c.closed, c.points.len(), c.area(), c.bbox(), c.centroid())
     };
-    ui.label(crate::i18n::trn("cp-summary", &[("state", &if closed { crate::i18n::tr("cp-closed") } else { crate::i18n::tr("cp-open") }), ("n", &npts.to_string()), ("area", &crate::i18n::num(area, 1))]));
+    ui.label(crate::i18n::trn(
+        "cp-summary",
+        &[("state", &if closed { crate::i18n::tr("cp-closed") } else { crate::i18n::tr("cp-open") }), ("n", &npts.to_string()), ("area", &crate::i18n::num(area, 1))],
+    ));
     ui.separator();
 
     // 2D edits: they create copies of the contour (offset, mirror, pattern)
@@ -153,8 +147,8 @@ pub(crate) fn contour_props(ed: qymcad_ui_state::Editing, array: &mut ArrayTool,
         for (lbl, ang) in [("CCW 90", 90.0), ("CCW 15", 15.0), ("CW 15", -15.0), ("CW 90", -90.0)] {
             if ui.button(lbl).clicked() {
                 if let Some(c) = ed.project.contours.get_mut(i) {
-                c.rotate(centroid, ang);
-            }
+                    c.rotate(centroid, ang);
+                }
                 qymcad_ui_state::invalidate(ed.regen);
             }
         }
@@ -335,8 +329,7 @@ pub(crate) fn joints_panel(pr: &mut qymcad_ui_state::PropsCtx, ui: &mut egui::Ui
             // move, and there is no explanation.
             match e.state {
                 MateState::Faulty(why) => {
-                    ui.label(egui::RichText::new(format!("{} {}", ph::WARNING, crate::i18n::tr(why))).color(pr.scheme.pal.error_mild()).small())
-                        .on_hover_text(crate::i18n::tr(&format!("{why}-hint")));
+                    ui.label(egui::RichText::new(format!("{} {}", ph::WARNING, crate::i18n::tr(why))).color(pr.scheme.pal.error_mild()).small()).on_hover_text(crate::i18n::tr(&format!("{why}-hint")));
                 }
                 MateState::Violated => {
                     ui.label(egui::RichText::new(format!("{} {}", ph::WARNING, crate::i18n::tr("jp-dof-conflict"))).color(pr.scheme.pal.error()).small());
@@ -358,12 +351,7 @@ pub(crate) fn joints_panel(pr: &mut qymcad_ui_state::PropsCtx, ui: &mut egui::Ui
                     .joints
                     .iter()
                     .find(|x| x.id == e.id)
-                    .map(|j| {
-                        (0..3usize)
-                            .flat_map(|s| [(s, false, j.limit_min[s]), (s, true, j.limit_max[s])])
-                            .filter_map(|(s, up, b)| b.map(|_| (s, up)))
-                            .collect()
-                    })
+                    .map(|j| (0..3usize).flat_map(|s| [(s, false, j.limit_min[s]), (s, true, j.limit_max[s])]).filter_map(|(s, up, b)| b.map(|_| (s, up))).collect())
                     .unwrap_or_default();
                 if !bounds.is_empty() {
                     ui.menu_button(ph::ARROWS_IN_LINE_HORIZONTAL, |ui| {
@@ -564,7 +552,17 @@ pub(crate) fn plane_props(pr: &mut qymcad_ui_state::PropsCtx, ui: &mut egui::Ui,
             start_pick_face = true;
         }
         let p = &pr.project.planes[i];
-        ui.label(egui::RichText::new(crate::i18n::tr2("pp-origin-normal", "o", &format!("[{}, {}, {}]", crate::i18n::num(p.origin[0],1), crate::i18n::num(p.origin[1],1), crate::i18n::num(p.origin[2],1)), "n", &format!("[{}, {}, {}]", crate::i18n::num(p.normal[0],2), crate::i18n::num(p.normal[1],2), crate::i18n::num(p.normal[2],2)))).weak().small());
+        ui.label(
+            egui::RichText::new(crate::i18n::tr2(
+                "pp-origin-normal",
+                "o",
+                &format!("[{}, {}, {}]", crate::i18n::num(p.origin[0], 1), crate::i18n::num(p.origin[1], 1), crate::i18n::num(p.origin[2], 1)),
+                "n",
+                &format!("[{}, {}, {}]", crate::i18n::num(p.normal[0], 2), crate::i18n::num(p.normal[1], 2), crate::i18n::num(p.normal[2], 2)),
+            ))
+            .weak()
+            .small(),
+        );
     } else if let PlaneDef::OffsetBase { mut base, mut dist } = pr.project.planes[i].def {
         ui.horizontal(|ui| {
             ui.label(crate::i18n::tr("pp-from"));
@@ -578,9 +576,19 @@ pub(crate) fn plane_props(pr: &mut qymcad_ui_state::PropsCtx, ui: &mut egui::Ui,
         });
         pr.project.planes[i].def = PlaneDef::OffsetBase { base, dist };
         qymcad_ui_state::dim_expr_field_in(&mut pr.rebuild(), ui, pid, "dist", ""); // the distance is an expression over the global variables (parametric)
-        // the origin and normal are derived, so they are shown for information
+                                                                                    // the origin and normal are derived, so they are shown for information
         let p = &pr.project.planes[i];
-        ui.label(egui::RichText::new(crate::i18n::tr2("pp-origin-normal", "o", &format!("[{}, {}, {}]", crate::i18n::num(p.origin[0],1), crate::i18n::num(p.origin[1],1), crate::i18n::num(p.origin[2],1)), "n", &format!("[{}, {}, {}]", crate::i18n::num(p.normal[0],2), crate::i18n::num(p.normal[1],2), crate::i18n::num(p.normal[2],2)))).weak().small());
+        ui.label(
+            egui::RichText::new(crate::i18n::tr2(
+                "pp-origin-normal",
+                "o",
+                &format!("[{}, {}, {}]", crate::i18n::num(p.origin[0], 1), crate::i18n::num(p.origin[1], 1), crate::i18n::num(p.origin[2], 1)),
+                "n",
+                &format!("[{}, {}, {}]", crate::i18n::num(p.normal[0], 2), crate::i18n::num(p.normal[1], 2), crate::i18n::num(p.normal[2], 2)),
+            ))
+            .weak()
+            .small(),
+        );
     } else {
         // MANUAL: direct editors for the origin, the normal and the roll
         let p = &mut pr.project.planes[i];
@@ -720,7 +728,9 @@ pub(crate) fn properties_panel(pr: &mut qymcad_ui_state::PropsCtx, ui: &mut egui
         match *pr.sel {
             Sel::Mesh(i) if i < pr.project.bodies.len() => crate::gui::mesh_props(&mut *pr.deferred, &mut *pr.project, &mut *pr.regen, ui, i),
             Sel::Face(mi, fi) if pr.project.bodies.get(mi).is_some_and(|b| fi < b.faces.len()) => crate::gui::face_props(&mut *pr.project, ui, mi, fi, !pr.gsel.faces.is_empty()),
-            Sel::Contour(i) if i < pr.project.contours.len() => crate::gui::panels_props::contour_props(qymcad_ui_state::editing_in!(pr), &mut *pr.array, &mut *pr.boolean, &mut *pr.deferred, &mut *pr.set, ui, i),
+            Sel::Contour(i) if i < pr.project.contours.len() => {
+                crate::gui::panels_props::contour_props(qymcad_ui_state::editing_in!(pr), &mut *pr.array, &mut *pr.boolean, &mut *pr.deferred, &mut *pr.set, ui, i)
+            }
             Sel::Sketch(i) if i < pr.project.sketches.len() => crate::gui::sketching::sketch_props(pr, ui, i),
             Sel::Plane(i) if i < pr.project.planes.len() => plane_props(pr, ui, i),
             Sel::DatumPoint(i) if i < pr.project.datum_points.len() => crate::gui::datum_point_props(&mut *pr.datum, &mut *pr.deferred, &mut *pr.project, ui, i),
@@ -729,10 +739,10 @@ pub(crate) fn properties_panel(pr: &mut qymcad_ui_state::PropsCtx, ui: &mut egui
             Sel::Edge(body, id) => crate::gui::props_pick::edge_props(pr, ui, body, id),
             Sel::Vertex(body, id, far) => crate::gui::props_pick::vertex_props(pr, ui, body, id, far),
             Sel::Feature(i) if i < pr.project.timeline.len() => feature_props(pr, ui, i),
-                                    _ => {
+            _ => {
                 ui.heading(crate::i18n::tr("props-title"));
                 ui.label(egui::RichText::new(crate::i18n::tr("props-pick-in-tree")).weak());
-                                        ui.separator();
+                ui.separator();
                 ui.label(egui::RichText::new(crate::i18n::tr("props-new-sketch-on")).strong());
                 use qymcad_core::feature::BasePlane;
                 ui.horizontal(|ui| {
@@ -746,7 +756,6 @@ pub(crate) fn properties_panel(pr: &mut qymcad_ui_state::PropsCtx, ui: &mut egui
                         pr.ask.push(qymcad_ui_state::PropsAsk::SketchOnBasePlane(BasePlane::YZ));
                     }
                 });
-            
             }
         }
         // the mates are always available in an Assembly context
@@ -776,7 +785,8 @@ pub(crate) fn component_props(pr: &mut qymcad_ui_state::PropsCtx, ui: &mut egui:
     } else {
         ui.label(egui::RichText::new(crate::i18n::tr("comp-not-active")).weak());
         if ui.button(format!("{} {}", ph::CUBE, crate::i18n::tr("props-enter-component"))).clicked() {
-            pr.ask.push(qymcad_ui_state::PropsAsk::SetContext(pr.project.instance_origin(cid))); // a clone opens its original
+            pr.ask.push(qymcad_ui_state::PropsAsk::SetContext(pr.project.instance_origin(cid)));
+            // a clone opens its original
         }
     }
     // the contents
@@ -948,7 +958,17 @@ pub(crate) fn datum_axis_props(pr: &mut qymcad_ui_state::PropsCtx, ui: &mut egui
         }
         pr.project.datum_axes[i].def = AxisDef::TwoPoints { a, b };
         let d = &pr.project.datum_axes[i];
-        ui.label(egui::RichText::new(crate::i18n::tr2("dax-origin-dir", "o", &format!("[{}, {}, {}]", crate::i18n::num(d.origin()[0],1), crate::i18n::num(d.origin()[1],1), crate::i18n::num(d.origin()[2],1)), "d", &format!("[{}, {}, {}]", crate::i18n::num(d.dir()[0],2), crate::i18n::num(d.dir()[1],2), crate::i18n::num(d.dir()[2],2)))).weak().small());
+        ui.label(
+            egui::RichText::new(crate::i18n::tr2(
+                "dax-origin-dir",
+                "o",
+                &format!("[{}, {}, {}]", crate::i18n::num(d.origin()[0], 1), crate::i18n::num(d.origin()[1], 1), crate::i18n::num(d.origin()[2], 1)),
+                "d",
+                &format!("[{}, {}, {}]", crate::i18n::num(d.dir()[0], 2), crate::i18n::num(d.dir()[1], 2), crate::i18n::num(d.dir()[2], 2)),
+            ))
+            .weak()
+            .small(),
+        );
     } else {
         // a COPY is edited and the result put back through set_manual - the coordinates do not live beside a
         // parametric definition, they ARE the definition of a manual axis.
@@ -993,4 +1013,3 @@ pub(crate) fn datum_axis_props(pr: &mut qymcad_ui_state::PropsCtx, ui: &mut egui
         qymcad_ui_state::ask_delete(&mut *pr.deferred, Sel::DatumAxis(i));
     }
 }
-

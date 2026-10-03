@@ -16,11 +16,7 @@ use qymcad_core::refs::Ref;
 fn open_box() -> (Project, u64) {
     let mut p = Project::default();
     p.new_document();
-    let sid = p.add_line_sketch(
-        "Sketch 1",
-        vec![Point2::new(0.0, 0.0), Point2::new(40.0, 0.0), Point2::new(40.0, 30.0), Point2::new(0.0, 30.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("Sketch 1", vec![Point2::new(0.0, 0.0), Point2::new(40.0, 0.0), Point2::new(40.0, 30.0), Point2::new(0.0, 30.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {
@@ -49,11 +45,7 @@ fn rim_edges(p: &Project, body: u64) -> Vec<u32> {
         }
     }
     let on_border = |q: [f64; 3]| (q[0] - x0).abs() < 1e-6 || (q[0] - x1).abs() < 1e-6 || (q[1] - y0).abs() < 1e-6 || (q[1] - y1).abs() < 1e-6;
-    p.regen_edges[&body]
-        .iter()
-        .filter(|e| (e.a[2] - top).abs() < 1e-6 && (e.b[2] - top).abs() < 1e-6 && on_border(e.a) && on_border(e.b))
-        .map(|e| e.id)
-        .collect()
+    p.regen_edges[&body].iter().filter(|e| (e.a[2] - top).abs() < 1e-6 && (e.b[2] - top).abs() < 1e-6 && on_border(e.a) && on_border(e.b)).map(|e| e.id).collect()
 }
 
 /// A SHEET PLUS A THICKNESS IS A SOLID, AND IT GOES BACK INTO ITS OWN PART.

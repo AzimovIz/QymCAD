@@ -229,20 +229,21 @@ fn a_flat_triangle_that_closes_a_seam_is_mended() {
     assert!(p.holes.is_empty(), "holes {:?}", p.holes);
     assert_eq!(p.mesh.tris.len(), 14);
     assert!(p.slivers.is_empty(), "the flat triangle is still kept: {:?}", p.slivers);
-    let flat = (0..p.mesh.tris.len()).filter(|&t| { let [a, b, c] = p.mesh.triangle(t); let n = cross(sub(b, a), sub(c, a)); dot(n, n) < 1e-18 }).count();
-    assert_eq!(flat, 0, "a triangle without an area is left");
-    let facing_in = (0..p.mesh.tris.len())
-        .filter(|&t| !p.slivers.contains(&(t as u32)))
-        .filter(|&t| dot(p.normals[t], centroid(&p.mesh.triangle(t))) <= 0.0)
+    let flat = (0..p.mesh.tris.len())
+        .filter(|&t| {
+            let [a, b, c] = p.mesh.triangle(t);
+            let n = cross(sub(b, a), sub(c, a));
+            dot(n, n) < 1e-18
+        })
         .count();
+    assert_eq!(flat, 0, "a triangle without an area is left");
+    let facing_in = (0..p.mesh.tris.len()).filter(|&t| !p.slivers.contains(&(t as u32))).filter(|&t| dot(p.normals[t], centroid(&p.mesh.triangle(t))) <= 0.0).count();
     assert_eq!(facing_in, 0, "every triangle with an area faces out");
 }
 
 #[test]
 fn the_angle_across_every_side_is_known() {
-    let angles = |p: &Prepared| -> Vec<f64> {
-        (0..p.mesh.tris.len()).flat_map(|t| (0..3).filter_map(move |k| p.dihedral_deg(t, k))).collect()
-    };
+    let angles = |p: &Prepared| -> Vec<f64> { (0..p.mesh.tris.len()).flat_map(|t| (0..3).filter_map(move |k| p.dihedral_deg(t, k))).collect() };
     // The corners are moved by up to 6e-9 mm, which tilts a flat pair by about 1e-6 deg.
     let near = |v: &[f64], want: f64| v.iter().filter(|a| (*a - want).abs() < 1e-4).count();
 

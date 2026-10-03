@@ -118,4 +118,3 @@ probe! {
         assert!(now.len() == 1, "a union of the pieces brings the part back to one body, and it holds {}", now.len());
     }
 }
-

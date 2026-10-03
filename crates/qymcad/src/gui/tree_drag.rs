@@ -234,12 +234,7 @@ mod tests {
         };
         let start = a.center();
         let end = egui::pos2(b.center().x, b.top() + b.height() * part);
-        let ev = |pos: egui::Pos2, pressed: bool| egui::Event::PointerButton {
-            pos,
-            button: egui::PointerButton::Primary,
-            pressed,
-            modifiers: Default::default(),
-        };
+        let ev = |pos: egui::Pos2, pressed: bool| egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
         // pressed
         let mut i2 = egui::RawInput { screen_rect: Some(screen), ..Default::default() };
         i2.events.push(egui::Event::PointerMoved(start));
@@ -269,11 +264,7 @@ mod tests {
         let before = app.project.components.len();
 
         assert!(drag_row_onto(&mut app, a, c, 0.5), "the rows of the tree were not found in the frame");
-        assert_eq!(
-            app.project.components.len(),
-            before + 1,
-            "the mouse dropped onto a part and no subassembly was created — the gesture never reached the handler"
-        );
+        assert_eq!(app.project.components.len(), before + 1, "the mouse dropped onto a part and no subassembly was created — the gesture never reached the handler");
     }
 
     #[test]
@@ -310,12 +301,7 @@ mod tests {
         let _ = ctx.run_ui(egui::RawInput { screen_rect: Some(screen), ..Default::default() }, |c| draw(&mut app, c));
         let at = app.tree.row_rects.iter().find(|(c, _)| *c == a).map(|(_, r)| r.center()).expect("row A is in the frame");
 
-        let ev = |pos: egui::Pos2, pressed: bool| egui::Event::PointerButton {
-            pos,
-            button: egui::PointerButton::Primary,
-            pressed,
-            modifiers: Default::default(),
-        };
+        let ev = |pos: egui::Pos2, pressed: bool| egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
         let mut i2 = egui::RawInput { screen_rect: Some(screen), ..Default::default() };
         i2.events.push(egui::Event::PointerMoved(at));
         i2.events.push(ev(at, true));
@@ -513,20 +499,12 @@ mod tests {
         // moved by only 4 — egui SMOOTHS scrolling over time, and in the check the clock stood still. In
         // the program the frames run for real, so the clock is moved here too.
         for k in 0..15 {
-            let mut i3 = egui::RawInput {
-                screen_rect: Some(screen),
-                time: Some(1.0 + k as f64 / 60.0),
-                predicted_dt: 1.0 / 60.0,
-                ..Default::default()
-            };
+            let mut i3 = egui::RawInput { screen_rect: Some(screen), time: Some(1.0 + k as f64 / 60.0), predicted_dt: 1.0 / 60.0, ..Default::default() };
             i3.events.push(egui::Event::PointerMoved(edge));
             let _ = ctx.run_ui(i3, |c| draw(&mut app, c));
         }
         let after = app.tree.row_rects.first().copied().expect("the rows are in place").1.top();
 
-        assert!(
-            after < before - 10.0,
-            "the list did not travel under a cursor at the bottom edge: the first row was at {before:.0} and became {after:.0}"
-        );
+        assert!(after < before - 10.0, "the list did not travel under a cursor at the bottom edge: the first row was at {before:.0} and became {after:.0}");
     }
 }

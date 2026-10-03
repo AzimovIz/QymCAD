@@ -326,7 +326,14 @@ fn describe(p: &Prepared, found: &[Region], b: &Boundaries, curves: &[Curve]) ->
                 b.poles.clone() // a fitted wall hands its poles, row by row
             } else if matches!(s, Surface::Free { .. }) {
                 let step = r.tris.len().div_ceil(400).max(1);
-                r.tris.iter().step_by(step).map(|&t| { let [a, b, c] = p.mesh.triangle(t as usize); [(a.x + b.x + c.x) / 3.0, (a.y + b.y + c.y) / 3.0, (a.z + b.z + c.z) / 3.0] }).collect()
+                r.tris
+                    .iter()
+                    .step_by(step)
+                    .map(|&t| {
+                        let [a, b, c] = p.mesh.triangle(t as usize);
+                        [(a.x + b.x + c.x) / 3.0, (a.y + b.y + c.y) / 3.0, (a.z + b.z + c.z) / 3.0]
+                    })
+                    .collect()
             } else {
                 Vec::new()
             };
@@ -335,11 +342,7 @@ fn describe(p: &Prepared, found: &[Region], b: &Boundaries, curves: &[Curve]) ->
             Some(BoundedFace { surface, outward, inside: amid(p, r), loops: walks, points })
         })
         .collect();
-    let loose: Vec<[[f64; 3]; 3]> = found
-        .iter()
-        .filter(|r| r.surface.is_none())
-        .flat_map(|r| r.tris.iter().map(|&t| p.mesh.triangle(t as usize).map(|q| [q.x, q.y, q.z])))
-        .collect();
+    let loose: Vec<[[f64; 3]; 3]> = found.iter().filter(|r| r.surface.is_none()).flat_map(|r| r.tris.iter().map(|&t| p.mesh.triangle(t as usize).map(|q| [q.x, q.y, q.z]))).collect();
     Described { corners, edges, faces, loose, owners, regions: found.len() }
 }
 

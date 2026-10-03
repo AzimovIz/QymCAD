@@ -31,12 +31,7 @@ mod tests {
 
     fn aim(app: &App, body: Id) -> [f64; 3] {
         let wt = app.project.body_display_transform(body, qymcad_ui_state::current_ctx_id(&app.active_path, &app.project));
-        let f = app
-            .project
-            .regen_faces
-            .get(&body)
-            .and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z)))
-            .expect("the body has faces");
+        let f = app.project.regen_faces.get(&body).and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z))).expect("the body has faces");
         qymcad_core::feature::apply12(&wt, [f.centroid.x, f.centroid.y, f.centroid.z])
     }
 
@@ -92,7 +87,10 @@ mod tests {
         let ctx = egui::Context::default();
         super::super::install_fonts(&ctx);
         let _ = ctx.run_ui(frame(Vec::new()), |c| app.viewport(c));
-        let _ = { let (v, oc) = crate::gui::render_scene::gpu_scene_flat(&app.painting()); (v.len(), oc) }; // the first pass: there are no blocks yet, everything is built — that is legitimate
+        let _ = {
+            let (v, oc) = crate::gui::render_scene::gpu_scene_flat(&app.painting());
+            (v.len(), oc)
+        }; // the first pass: there are no blocks yet, everything is built — that is legitimate
 
         let basis = app.viewing.cam.basis();
         let at = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: viewport(), basis: &basis }.at(aim(&app, body)).0;
@@ -106,7 +104,10 @@ mod tests {
         let mut shifted = 0u32;
         for k in 1..=6 {
             let _ = ctx.run_ui(frame(vec![egui::Event::PointerMoved(at + egui::vec2(12.0 * k as f32, 0.0))]), |c| app.viewport(c));
-            let _ = { let (v, oc) = crate::gui::render_scene::gpu_scene_flat(&app.painting()); (v.len(), oc) };
+            let _ = {
+                let (v, oc) = crate::gui::render_scene::gpu_scene_flat(&app.painting());
+                (v.len(), oc)
+            };
             if k >= 3 {
                 let st = app.cache.scene_stats.get();
                 rebuilt += st[0];
@@ -155,8 +156,14 @@ mod tests {
         let ctx = egui::Context::default();
         super::super::install_fonts(&ctx);
         let _ = ctx.run_ui(frame(Vec::new()), |c| app.viewport(c));
-        let _ = { let (v, oc) = crate::gui::render_scene::gpu_scene_flat(&app.painting()); (v.len(), oc) };
-        let _ = { let (v, oc) = crate::gui::render_scene::gpu_scene_flat(&app.painting()); (v.len(), oc) };
+        let _ = {
+            let (v, oc) = crate::gui::render_scene::gpu_scene_flat(&app.painting());
+            (v.len(), oc)
+        };
+        let _ = {
+            let (v, oc) = crate::gui::render_scene::gpu_scene_flat(&app.painting());
+            (v.len(), oc)
+        };
         assert_eq!(app.cache.scene_stats.get()[0], 0, "setup: with no motion there is nothing to rebuild");
 
         // turn the part 30 deg about Z — by the same means the document turns it
@@ -165,7 +172,10 @@ mod tests {
         let r = [c, -s, 0.0, m[3], s, c, 0.0, m[7], 0.0, 0.0, 1.0, m[11]];
         app.project.set_component_transform(comp, r);
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
-        let _ = { let (v, oc) = crate::gui::render_scene::gpu_scene_flat(&app.painting()); (v.len(), oc) };
+        let _ = {
+            let (v, oc) = crate::gui::render_scene::gpu_scene_flat(&app.painting());
+            (v.len(), oc)
+        };
         assert!(app.cache.scene_stats.get()[0] > 0, "the part was turned and the block was not rebuilt: the shading is left over from the previous turn");
     }
 }

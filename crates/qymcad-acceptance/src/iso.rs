@@ -38,4 +38,3 @@ pub fn inner_groove(d: f64, p: f64, hole: f64, length: f64) -> f64 {
     let width = |r: f64| p * (0.75 - 0.625 * (r - minor / 2.0) / ((d - minor) / 2.0));
     groove(width, hole / 2.0, d / 2.0, p, length)
 }
-

@@ -20,22 +20,11 @@ use qymcad_core::model::{Constraint, Id, Param, Project};
 fn part_with_driver(p: &mut Project, part: &str, sketch_name: &str, driver: &str, len: f64) -> (Id, Id) {
     let comp = p.add_component(part);
     p.set_active_component(Some(comp));
-    let sid = p.add_line_sketch(
-        sketch_name,
-        vec![Point2::new(0.0, 0.0), Point2::new(len, 0.0), Point2::new(len, 10.0), Point2::new(0.0, 10.0)],
-        true,
-    );
+    let sid = p.add_line_sketch(sketch_name, vec![Point2::new(0.0, 0.0), Point2::new(len, 0.0), Point2::new(len, 10.0), Point2::new(0.0, 10.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.add_sketch_node(sid, sketch_name);
     let pts: Vec<Id> = p.sketches[si].points.iter().map(|q| q.id).collect();
-    p.sketches[si].constraints.push(Constraint::Distance {
-        a: pts[0],
-        b: pts[1],
-        d: len,
-        off: 0.0,
-        expr: String::new(),
-        driven: false,
-        axis: 0, at: None });
+    p.sketches[si].constraints.push(Constraint::Distance { a: pts[0], b: pts[1], d: len, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
     assert!(p.add_named_dim(driver.into(), sid, vec![pts[0], pts[1]]), "the dimension is named as a driver");
     (comp, sid)
 }
@@ -119,22 +108,11 @@ fn a_nested_part_shows_the_whole_chain() {
     p.set_active_component(Some(asm));
     let part = p.add_component("Cover");
     p.set_active_component(Some(part));
-    let sid = p.add_line_sketch(
-        "Outline",
-        vec![Point2::new(0.0, 0.0), Point2::new(30.0, 0.0), Point2::new(30.0, 10.0), Point2::new(0.0, 10.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("Outline", vec![Point2::new(0.0, 0.0), Point2::new(30.0, 0.0), Point2::new(30.0, 10.0), Point2::new(0.0, 10.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.add_sketch_node(sid, "Outline");
     let pts: Vec<Id> = p.sketches[si].points.iter().map(|q| q.id).collect();
-    p.sketches[si].constraints.push(Constraint::Distance {
-        a: pts[0],
-        b: pts[1],
-        d: 30.0,
-        off: 0.0,
-        expr: String::new(),
-        driven: false,
-        axis: 0, at: None });
+    p.sketches[si].constraints.push(Constraint::Distance { a: pts[0], b: pts[1], d: 30.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
     assert!(p.add_named_dim("shirina".into(), sid, vec![pts[0], pts[1]]));
 
     let d = p.drivers().into_iter().find(|d| d.name == "shirina").expect("the driver is in the list");
@@ -182,21 +160,10 @@ fn a_name_prefix_outranks_a_path_match() {
 fn a_sketch_without_a_timeline_node_still_shows_its_name() {
     let mut p = Project::default();
     p.new_document();
-    let sid = p.add_line_sketch(
-        "Orphan",
-        vec![Point2::new(0.0, 0.0), Point2::new(12.0, 0.0), Point2::new(12.0, 5.0), Point2::new(0.0, 5.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("Orphan", vec![Point2::new(0.0, 0.0), Point2::new(12.0, 0.0), Point2::new(12.0, 5.0), Point2::new(0.0, 5.0)], true);
     let si = p.sketch_index(sid).unwrap();
     let pts: Vec<Id> = p.sketches[si].points.iter().map(|q| q.id).collect();
-    p.sketches[si].constraints.push(Constraint::Distance {
-        a: pts[0],
-        b: pts[1],
-        d: 12.0,
-        off: 0.0,
-        expr: String::new(),
-        driven: false,
-        axis: 0, at: None });
+    p.sketches[si].constraints.push(Constraint::Distance { a: pts[0], b: pts[1], d: 12.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
     assert!(p.add_named_dim("bez_uzla".into(), sid, vec![pts[0], pts[1]]));
 
     let d = p.drivers().into_iter().find(|d| d.name == "bez_uzla").expect("the driver is in the list");

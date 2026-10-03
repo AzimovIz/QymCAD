@@ -239,12 +239,21 @@ pub fn simplify(mesh: &Mesh, tol: f64) -> Mesh {
         // HOW FAR THE SURFACE HAS MOVED, bounded: what each corner carried already, and the farthest the new corner stands
         // from the planes of the triangles round the two. The mean the quadric keeps let one corner of a ball of 10 drift
         // 0.094 mm off it at a deviation of 0.01.
-        let from_planes = [a, b].iter().flat_map(|&v| around[v].iter().copied()).filter(|&t| alive[t as usize]).map(|t| {
-            let p = tris[t as usize].map(|w| pos[w as usize]);
-            let nrm = cross(sub(p[1], p[0]), sub(p[2], p[0]));
-            let len = norm(nrm);
-            if len <= 1e-300 { 0.0 } else { dot(nrm, sub(c.at, p[0])).abs() / len }
-        }).fold(0.0, f64::max);
+        let from_planes = [a, b]
+            .iter()
+            .flat_map(|&v| around[v].iter().copied())
+            .filter(|&t| alive[t as usize])
+            .map(|t| {
+                let p = tris[t as usize].map(|w| pos[w as usize]);
+                let nrm = cross(sub(p[1], p[0]), sub(p[2], p[0]));
+                let len = norm(nrm);
+                if len <= 1e-300 {
+                    0.0
+                } else {
+                    dot(nrm, sub(c.at, p[0])).abs() / len
+                }
+            })
+            .fold(0.0, f64::max);
         let carried = drift[a].max(drift[b]) + from_planes;
         if carried > tol {
             continue;

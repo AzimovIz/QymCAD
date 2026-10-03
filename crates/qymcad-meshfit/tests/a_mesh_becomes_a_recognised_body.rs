@@ -43,7 +43,15 @@ fn a_washer_mesh_becomes_the_washer() {
     let b = boundaries(&p, &found);
     let made = solid(&p, &found, &b, &curves(&b, &found, &tol), &tol).expect("the washer");
     for (r, took) in made.areas.iter().enumerate() {
-        let own: f64 = found[r].tris.iter().map(|&t| { let [a, b, c] = p.mesh.triangle(t as usize); let (u, w) = ([b.x - a.x, b.y - a.y, b.z - a.z], [c.x - a.x, c.y - a.y, c.z - a.z]); 0.5 * ((u[1] * w[2] - u[2] * w[1]).powi(2) + (u[2] * w[0] - u[0] * w[2]).powi(2) + (u[0] * w[1] - u[1] * w[0]).powi(2)).sqrt() }).sum();
+        let own: f64 = found[r]
+            .tris
+            .iter()
+            .map(|&t| {
+                let [a, b, c] = p.mesh.triangle(t as usize);
+                let (u, w) = ([b.x - a.x, b.y - a.y, b.z - a.z], [c.x - a.x, c.y - a.y, c.z - a.z]);
+                0.5 * ((u[1] * w[2] - u[2] * w[1]).powi(2) + (u[2] * w[0] - u[0] * w[2]).powi(2) + (u[0] * w[1] - u[1] * w[0]).powi(2)).sqrt()
+            })
+            .sum();
         assert!(took.is_some_and(|t| (t / own - 1.0).abs() < 0.1), "the face of region {r} took {took:?} of a region of {own:.1} mm^2");
     }
     assert!(!sheet, "the washer came back a sheet, not a solid");
@@ -91,7 +99,13 @@ fn a_dent_in_a_flat_face_leaves_the_body_whole() {
     let made = solid(&p, &found, &b, &c, &tol).unwrap_or_else(|| panic!("no body - {:?}", last_kernel_refusal()));
     let (body, areas) = (made.shape, made.areas);
     let want = p.mesh.volume();
-    assert!(!body.is_sheet(), "the dented cube came back a sheet: {} of {} faces built, regions {:?}", areas.iter().flatten().count(), found.len(), found.iter().map(|r| (r.tris.len(), r.surface.clone())).collect::<Vec<_>>());
+    assert!(
+        !body.is_sheet(),
+        "the dented cube came back a sheet: {} of {} faces built, regions {:?}",
+        areas.iter().flatten().count(),
+        found.len(),
+        found.iter().map(|r| (r.tris.len(), r.surface.clone())).collect::<Vec<_>>()
+    );
     assert!((body.volume() - want).abs() < 10.0, "the dented cube holds {}, not {want}: regions {:?}", body.volume(), found.iter().map(|r| (r.tris.len(), r.surface.clone())).collect::<Vec<_>>());
 }
 
@@ -212,7 +226,6 @@ fn gridded_cube(grid: usize, side: f64, dent: f64) -> qymcad_core::geom::Mesh {
     Mesh { verts, tris }
 }
 
-
 /// A mesh of `shape` whose every corner is moved along its radius by up to `amp`, the same way every time: the noise of
 /// a scan or of a coarse export, larger than the tolerance a mesh from a CAD gets. `radial` names what the radius is
 /// taken from - all three axes for a sphere, the two across Z for a cylinder. Returns the mesh and the volume it holds.
@@ -229,7 +242,14 @@ fn noisy(shape: &Shape, amp: f64, radial: [f64; 3]) -> (qymcad_core::geom::Mesh,
         v.y += v.y * radial[1] / r * k;
         v.z += v.z * radial[2] / r * k;
     }
-    let held = mesh.tris.iter().map(|t| { let (a, b, c) = (mesh.verts[t[0] as usize], mesh.verts[t[1] as usize], mesh.verts[t[2] as usize]); (a.x * (b.y * c.z - b.z * c.y) - a.y * (b.x * c.z - b.z * c.x) + a.z * (b.x * c.y - b.y * c.x)) / 6.0 }).sum();
+    let held = mesh
+        .tris
+        .iter()
+        .map(|t| {
+            let (a, b, c) = (mesh.verts[t[0] as usize], mesh.verts[t[1] as usize], mesh.verts[t[2] as usize]);
+            (a.x * (b.y * c.z - b.z * c.y) - a.y * (b.x * c.z - b.z * c.x) + a.z * (b.x * c.y - b.y * c.x)) / 6.0
+        })
+        .sum();
     (mesh, held)
 }
 
@@ -275,7 +295,14 @@ fn noisy_meshes_are_measured() {
             let b = boundaries(&p, &found);
             let c = curves(&b, &found, &tol);
             match solid(&p, &found, &b, &c, &tol) {
-                Some(m) => println!("NOISY {name} {amp}: {} regions, {} tris, free {}, sheet {}, volume {:.2} against {held:.2}", found.len(), mesh.tris.len(), m.free_edges, m.shape.is_sheet(), m.shape.volume()),
+                Some(m) => println!(
+                    "NOISY {name} {amp}: {} regions, {} tris, free {}, sheet {}, volume {:.2} against {held:.2}",
+                    found.len(),
+                    mesh.tris.len(),
+                    m.free_edges,
+                    m.shape.is_sheet(),
+                    m.shape.volume()
+                ),
                 None => println!("NOISY {name} {amp}: {} regions - no body", found.len()),
             }
         }
@@ -304,7 +331,19 @@ fn a_slanted_cut_of_a_cylinder_is_an_ellipse() {
         Curve::Ellipse { major, minor, .. } => Some((*major, *minor)),
         _ => None,
     });
-    assert!(ellipse.is_some_and(|(a, m)| (a - 10.0 / c).abs() < 0.01 && (m - 10.0).abs() < 0.01), "the slanted top is not an ellipse of 11.547 and 10: {ellipse:?}; curves {:?}", traced.iter().map(|k| match k { Curve::Line { .. } => "line", Curve::Circle { .. } => "circle", Curve::Points(_) => "points", _ => "other" }).collect::<Vec<_>>());
+    assert!(
+        ellipse.is_some_and(|(a, m)| (a - 10.0 / c).abs() < 0.01 && (m - 10.0).abs() < 0.01),
+        "the slanted top is not an ellipse of 11.547 and 10: {ellipse:?}; curves {:?}",
+        traced
+            .iter()
+            .map(|k| match k {
+                Curve::Line { .. } => "line",
+                Curve::Circle { .. } => "circle",
+                Curve::Points(_) => "points",
+                _ => "other",
+            })
+            .collect::<Vec<_>>()
+    );
     let made = solid(&p, &found, &b, &traced, &tol).expect("a body");
     assert!(!made.shape.is_sheet() && (made.shape.volume() - cut.volume()).abs() < 1e-3 * cut.volume(), "the body holds {} against the kernel's {}", made.shape.volume(), cut.volume());
 }
@@ -321,8 +360,20 @@ fn a_noisy_mesh_at_a_wider_tolerance_falls_into_its_faces() {
     let mut tol = Tolerance::for_mesh(&p);
     tol.distance *= 100.0;
     let found = regions(&p, &tol);
-    let walls: Vec<f64> = found.iter().filter_map(|r| match r.surface { Some(qymcad_meshfit::Surface::Cylinder { radius, .. }) => Some(radius), _ => None }).collect();
-    assert!(found.len() == 3 && walls.len() == 1 && (walls[0] - 10.0).abs() < 0.02, "at a tolerance of {:.4} the noisy cylinder is {} regions, walls {walls:?}: {:?}", tol.distance, found.len(), found.iter().map(|r| (r.tris.len(), r.surface.clone())).collect::<Vec<_>>());
+    let walls: Vec<f64> = found
+        .iter()
+        .filter_map(|r| match r.surface {
+            Some(qymcad_meshfit::Surface::Cylinder { radius, .. }) => Some(radius),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        found.len() == 3 && walls.len() == 1 && (walls[0] - 10.0).abs() < 0.02,
+        "at a tolerance of {:.4} the noisy cylinder is {} regions, walls {walls:?}: {:?}",
+        tol.distance,
+        found.len(),
+        found.iter().map(|r| (r.tris.len(), r.surface.clone())).collect::<Vec<_>>()
+    );
     let b = boundaries(&p, &found);
     let made = solid(&p, &found, &b, &curves(&b, &found, &tol), &tol).expect("a body");
     assert!(!made.shape.is_sheet() && (made.shape.volume() - held).abs() < 0.01 * held, "the body holds {} against the mesh's {held}", made.shape.volume());
@@ -338,8 +389,19 @@ fn a_narrow_conical_band_is_a_cone() {
     let p = prepare(&mesh, weld_tolerance(&mesh));
     let tol = Tolerance::for_mesh(&p);
     let found = regions(&p, &tol);
-    let cones: Vec<f64> = found.iter().filter_map(|r| match r.surface { Some(qymcad_meshfit::Surface::Cone { half_angle, .. }) => Some(half_angle.to_degrees()), _ => None }).collect();
-    assert!(found.len() == 5 && cones.len() == 1 && (cones[0] - 45.0).abs() < 0.1, "the chamfered washer is {} regions, cones {cones:?}: {:?}", found.len(), found.iter().map(|r| (r.tris.len(), r.surface.clone())).collect::<Vec<_>>());
+    let cones: Vec<f64> = found
+        .iter()
+        .filter_map(|r| match r.surface {
+            Some(qymcad_meshfit::Surface::Cone { half_angle, .. }) => Some(half_angle.to_degrees()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        found.len() == 5 && cones.len() == 1 && (cones[0] - 45.0).abs() < 0.1,
+        "the chamfered washer is {} regions, cones {cones:?}: {:?}",
+        found.len(),
+        found.iter().map(|r| (r.tris.len(), r.surface.clone())).collect::<Vec<_>>()
+    );
     let b = boundaries(&p, &found);
     let made = solid(&p, &found, &b, &curves(&b, &found, &tol), &tol).expect("a body");
     assert!(!made.shape.is_sheet() && (made.shape.volume() - washer.volume()).abs() < 1e-3 * washer.volume(), "the body holds {} against the kernel's {}", made.shape.volume(), washer.volume());
@@ -396,7 +458,12 @@ fn a_free_form_wall_is_one_face() {
     assert!(
         faces == kernel_faces.len() && !made.shape.is_sheet() && (made.shape.volume() - loft.volume()).abs() < 0.005 * loft.volume(),
         "the loft of {} faces came back as {faces} faces from {} regions ({} left as mesh), {}, holding {} against {}",
-        kernel_faces.len(), found.len(), found.iter().filter(|r| r.surface.is_none()).count(), if made.shape.is_sheet() { "a shell" } else { "a solid" }, made.shape.volume(), loft.volume()
+        kernel_faces.len(),
+        found.len(),
+        found.iter().filter(|r| r.surface.is_none()).count(),
+        if made.shape.is_sheet() { "a shell" } else { "a solid" },
+        made.shape.volume(),
+        loft.volume()
     );
 }
 
@@ -419,8 +486,16 @@ fn a_thread_is_measured() {
         let b = boundaries(&p, &found);
         let made = solid(&p, &found, &b, &curves(&b, &found, &tol), &tol);
         let (faces, sheet, v) = made.as_ref().map_or((0, true, 0.0), |m| (m.shape.tessellate(defl).into_iter().next().map(|(_, f)| f.len()).unwrap_or(0), m.shape.is_sheet(), m.shape.volume()));
-        println!("THREAD defl {defl}: {} triangles, kernel faces {}, {} regions {kinds:?}; body {faces} faces, {}, volume {v:.3} against {:.3}, free {:?}, {:.1} s",
-            mesh.tris.len(), kfaces.len(), found.len(), if sheet { "a shell" } else { "a solid" }, cut.volume(), made.as_ref().map(|m| m.free_edges), t.elapsed().as_secs_f64());
+        println!(
+            "THREAD defl {defl}: {} triangles, kernel faces {}, {} regions {kinds:?}; body {faces} faces, {}, volume {v:.3} against {:.3}, free {:?}, {:.1} s",
+            mesh.tris.len(),
+            kfaces.len(),
+            found.len(),
+            if sheet { "a shell" } else { "a solid" },
+            cut.volume(),
+            made.as_ref().map(|m| m.free_edges),
+            t.elapsed().as_secs_f64()
+        );
     }
 }
 
@@ -437,7 +512,21 @@ fn thread_of(standard: qymcad_core::thread::ThreadStandard, pitch: f64, rod: f64
     let g = spec.geometry();
     Shape::cylinder(g.stock_d * 0.5, rod)
         .expect("the rod")
-        .helical_profile(qymcad_kernel::HelicalCut { axis: qymcad_core::feature::AxisLine { origin: [0.0, 0.0, from], dir: [0.0, 0.0, 1.0] }, radius: g.stock_d * 0.5, profile: &encode_edges(&g.groove), length, lead: g.lead, starts: spec.starts, hand: qymcad_kernel::Hand::Right, kind: qymcad_kernel::Helix::Groove, lead_in: 0.0, lead_out: 0.0, gnames: &[], rnames: &[], crest_relief: 0.0 })
+        .helical_profile(qymcad_kernel::HelicalCut {
+            axis: qymcad_core::feature::AxisLine { origin: [0.0, 0.0, from], dir: [0.0, 0.0, 1.0] },
+            radius: g.stock_d * 0.5,
+            profile: &encode_edges(&g.groove),
+            length,
+            lead: g.lead,
+            starts: spec.starts,
+            hand: qymcad_kernel::Hand::Right,
+            kind: qymcad_kernel::Helix::Groove,
+            lead_in: 0.0,
+            lead_out: 0.0,
+            gnames: &[],
+            rnames: &[],
+            crest_relief: 0.0,
+        })
         .expect("the thread")
 }
 
@@ -462,7 +551,11 @@ fn a_thread_comes_back_in_a_few_smooth_faces() {
         assert!(
             !made.shape.is_sheet() && (made.shape.volume() - cut.volume()).abs() < 0.005 * cut.volume() && faces < 150,
             "the thread from {from} of a rod of {rod} came back {} of {faces} faces ({helices} helices, {} regions of {} triangles), holding {} against {}",
-            if made.shape.is_sheet() { "a shell" } else { "a solid" }, found.len(), mesh.tris.len(), made.shape.volume(), cut.volume()
+            if made.shape.is_sheet() { "a shell" } else { "a solid" },
+            found.len(),
+            mesh.tris.len(),
+            made.shape.volume(),
+            cut.volume()
         );
     }
 }
@@ -483,7 +576,11 @@ fn a_spring_of_round_wire_comes_back_a_tube() {
         let normal = [-c, -s, 0.0];
         let binormal = [tangent[1] * normal[2] - tangent[2] * normal[1], tangent[2] * normal[0] - tangent[0] * normal[2], tangent[0] * normal[1] - tangent[1] * normal[0]];
         let (sp, cp) = phi.sin_cos();
-        qymcad_core::geom::Point3::new(radius * c + wire * (cp * normal[0] + sp * binormal[0]), radius * s + wire * (cp * normal[1] + sp * binormal[1]), rise * t + wire * (cp * normal[2] + sp * binormal[2]))
+        qymcad_core::geom::Point3::new(
+            radius * c + wire * (cp * normal[0] + sp * binormal[0]),
+            radius * s + wire * (cp * normal[1] + sp * binormal[1]),
+            rise * t + wire * (cp * normal[2] + sp * binormal[2]),
+        )
     };
     let (mut verts, mut tris) = (Vec::new(), Vec::new());
     for i in 0..=along {
@@ -518,7 +615,10 @@ fn a_spring_of_round_wire_comes_back_a_tube() {
     assert!(
         !made.shape.is_sheet() && (made.shape.volume() - exact).abs() < 0.005 * exact && faces < 10,
         "the spring came back {} of {faces} faces ({} regions of {} triangles), holding {} against {exact}",
-        if made.shape.is_sheet() { "a shell" } else { "a solid" }, found.len(), mesh.tris.len(), made.shape.volume()
+        if made.shape.is_sheet() { "a shell" } else { "a solid" },
+        found.len(),
+        mesh.tris.len(),
+        made.shape.volume()
     );
 }
 
@@ -531,7 +631,21 @@ fn an_auger_comes_back_in_a_few_smooth_faces() {
     let a = AugerSpec { shaft_d: 10.0, outer_d: 30.0, pitch: 20.0, thickness: 3.0, edge_r: 0.8, ..Default::default() };
     let auger = Shape::cylinder(a.shaft_d * 0.5, 50.0)
         .expect("the shaft")
-        .helical_profile(qymcad_kernel::HelicalCut { axis: qymcad_core::feature::AxisLine { origin: [0.0, 0.0, 5.0], dir: [0.0, 0.0, 1.0] }, radius: a.shaft_d * 0.5, profile: &encode_edges(&a.flight_profile()), length: 40.0, lead: a.lead(), starts: 1, hand: qymcad_kernel::Hand::Right, kind: qymcad_kernel::Helix::Rib, lead_in: 0.0, lead_out: 0.0, gnames: &[], rnames: &[], crest_relief: 0.0 })
+        .helical_profile(qymcad_kernel::HelicalCut {
+            axis: qymcad_core::feature::AxisLine { origin: [0.0, 0.0, 5.0], dir: [0.0, 0.0, 1.0] },
+            radius: a.shaft_d * 0.5,
+            profile: &encode_edges(&a.flight_profile()),
+            length: 40.0,
+            lead: a.lead(),
+            starts: 1,
+            hand: qymcad_kernel::Hand::Right,
+            kind: qymcad_kernel::Helix::Rib,
+            lead_in: 0.0,
+            lead_out: 0.0,
+            gnames: &[],
+            rnames: &[],
+            crest_relief: 0.0,
+        })
         .expect("the auger");
     let (mesh, kernel_faces) = auger.tessellate(0.05).into_iter().next().expect("a mesh");
     let p = prepare(&mesh, weld_tolerance(&mesh));
@@ -543,6 +657,11 @@ fn an_auger_comes_back_in_a_few_smooth_faces() {
     assert!(
         !made.shape.is_sheet() && (made.shape.volume() - auger.volume()).abs() < 0.005 * auger.volume() && faces < 2 * kernel_faces.len(),
         "the auger of {} faces came back {} of {faces} faces ({} regions of {} triangles), holding {} against {}",
-        kernel_faces.len(), if made.shape.is_sheet() { "a shell" } else { "a solid" }, found.len(), mesh.tris.len(), made.shape.volume(), auger.volume()
+        kernel_faces.len(),
+        if made.shape.is_sheet() { "a shell" } else { "a solid" },
+        found.len(),
+        mesh.tris.len(),
+        made.shape.volume(),
+        auger.volume()
     );
 }

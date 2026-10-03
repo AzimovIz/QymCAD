@@ -53,10 +53,13 @@ fn take(s: &mut Session, hint: &str) {
 /// Every case, each in a session of its own; all that go wrong reported at once.
 fn run(cases: Vec<(String, Box<dyn Fn()>)>) {
     let n = cases.len();
-    let failed: Vec<String> = cases.into_iter().filter_map(|(what, c)| {
-        let problem = qymcad_acceptance::refusal(|| c());
-        (!problem.is_empty()).then(|| format!("{what}: {problem}"))
-    }).collect();
+    let failed: Vec<String> = cases
+        .into_iter()
+        .filter_map(|(what, c)| {
+            let problem = qymcad_acceptance::refusal(|| c());
+            (!problem.is_empty()).then(|| format!("{what}: {problem}"))
+        })
+        .collect();
     assert!(failed.is_empty(), "{} of {n} cases went wrong:\n{}", failed.len(), failed.join("\n"));
 }
 

@@ -59,12 +59,7 @@ mod tests {
         app.tools.gsel.faces_body = Some(body);
         app.apply_feat_cmd();
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
-        app.project
-            .timeline
-            .iter()
-            .find(|n| matches!(n.kind, FeatureKind::Chamfer { .. }))
-            .map(|n| n.id)
-            .expect("the chamfer in the timeline")
+        app.project.timeline.iter().find(|n| matches!(n.kind, FeatureKind::Chamfer { .. })).map(|n| n.id).expect("the chamfer in the timeline")
     }
 
     /// AN EDIT AFTER LOSING EDGES KEEPS EXACTLY WHAT THE PERSON PICKED.
@@ -87,11 +82,7 @@ mod tests {
 
         // THE PERSON OPENS THE EDIT AND PICKS FOUR LIVE EDGES.
         crate::gui::commands::start_feat_cmd_edit(&mut app.part_ctx(), fid);
-        assert!(
-            app.tools.gsel.edges.is_empty(),
-            "the edit raised LOST references into the selection ({} of them) — a person neither sees them nor picked them",
-            app.tools.gsel.edges.len()
-        );
+        assert!(app.tools.gsel.edges.is_empty(), "the edit raised LOST references into the selection ({} of them) — a person neither sees them nor picked them", app.tools.gsel.edges.len());
         crate::gui::commands::refresh_edges(&mut app.part_ctx());
         let four: Vec<u32> = live_edges(&app, body).into_iter().take(4).collect();
         for e in &four {
@@ -100,12 +91,7 @@ mod tests {
         app.apply_feat_cmd();
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
 
-        assert_eq!(
-            refs_in_chamfer(&app),
-            4,
-            "after the edit the chamfer holds {} references instead of four — the lost ones survived the edit",
-            refs_in_chamfer(&app)
-        );
+        assert_eq!(refs_in_chamfer(&app), 4, "after the edit the chamfer holds {} references instead of four — the lost ones survived the edit", refs_in_chamfer(&app));
     }
 
     /// The live face descriptors of the body.

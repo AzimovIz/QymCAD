@@ -76,7 +76,8 @@ fn m10_inside_a_blind_hole_takes_the_iso_groove() {
         let h = p.add_hole_at(block, key, key.centroid, HoleTool { kind: 0, diameter: 8.5, depth: 8.0, dia2: 0.0, depth2: 0.0 });
         let (_, shapes) = qymcad_testkit::regenerate(&mut p);
         let before = shapes.get(&h).map(|s| s.volume()).expect("the drilled block");
-        let rim = p.regen_edges.get(&h).and_then(|es| es.iter().filter(|e| (e.radius - 4.25).abs() < 0.05).max_by(|a, b| a.center[2].total_cmp(&b.center[2])).map(|e| e.id)).expect("the rim at the top");
+        let rim =
+            p.regen_edges.get(&h).and_then(|es| es.iter().filter(|e| (e.radius - 4.25).abs() < 0.05).max_by(|a, b| a.center[2].total_cmp(&b.center[2])).map(|e| e.id)).expect("the rim at the top");
         let spec = ThreadSpec { standard: ThreadStandard::MetricIso, nominal_d: 10.0, pitch: 1.5, internal: true, fit: 0.0, ..Default::default() };
         let t = p.add_thread(h, rim, spec, length, 0.0, 0.0);
         let (report, shapes) = qymcad_testkit::regenerate(&mut p);

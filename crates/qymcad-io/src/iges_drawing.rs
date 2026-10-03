@@ -388,10 +388,12 @@ impl Pen {
             t1 += std::f64::consts::TAU;
         }
         let n = 32;
-        let pts: Vec<[f64; 3]> = (0..=n).map(|k| {
-            let t = t0 + (t1 - t0) * k as f64 / n as f64;
-            [centre[0] + r * t.cos(), centre[1] + r * t.sin(), zt]
-        }).collect();
+        let pts: Vec<[f64; 3]> = (0..=n)
+            .map(|k| {
+                let t = t0 + (t1 - t0) * k as f64 / n as f64;
+                [centre[0] + r * t.cos(), centre[1] + r * t.sin(), zt]
+            })
+            .collect();
         for w in pts.windows(2) {
             self.line(m, w[0], w[1]);
         }
@@ -415,11 +417,13 @@ impl Pen {
             while span < k && knots[span + 1] <= t {
                 span += 1;
             }
-            let mut dp: Vec<[f64; 4]> = (0..=deg).map(|j| {
-                let i = span - deg + j;
-                let ww = if w[i] == 0.0 { 1.0 } else { w[i] };
-                [cp[i][0] * ww, cp[i][1] * ww, cp[i][2] * ww, ww]
-            }).collect();
+            let mut dp: Vec<[f64; 4]> = (0..=deg)
+                .map(|j| {
+                    let i = span - deg + j;
+                    let ww = if w[i] == 0.0 { 1.0 } else { w[i] };
+                    [cp[i][0] * ww, cp[i][1] * ww, cp[i][2] * ww, ww]
+                })
+                .collect();
             for r in 1..=deg {
                 for j in (r..=deg).rev() {
                     let i = span - deg + j;

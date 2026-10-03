@@ -87,8 +87,14 @@ mod tests {
     #[test]
     fn startup_and_import_use_the_same_door() {
         let gui = include_str!("../gui.rs");
-        assert!(crate::gui::render_source::has(gui, "adopt_settings(&mut app.regen, &mut app.scheme, &mut app.set, &mut app.status, v, ctx)"), "startup stopped adopting the settings through the common handle");
-        assert!(crate::gui::render_source::has(gui, "adopt_settings(&mut self.regen, &mut self.scheme, &mut self.set, &mut self.status, s, ctx)"), "import stopped adopting the settings through the common handle");
+        assert!(
+            crate::gui::render_source::has(gui, "adopt_settings(&mut app.regen, &mut app.scheme, &mut app.set, &mut app.status, v, ctx)"),
+            "startup stopped adopting the settings through the common handle"
+        );
+        assert!(
+            crate::gui::render_source::has(gui, "adopt_settings(&mut self.regen, &mut self.scheme, &mut self.set, &mut self.status, s, ctx)"),
+            "import stopped adopting the settings through the common handle"
+        );
         // and nothing assigns the record past it
         let code: String = qymcad_i18n::ratchet::working_part(gui).lines().map(|l| l.split("//").next().unwrap_or("")).collect::<Vec<_>>().join("\n");
         // EVERY SHAPE THE ASSIGNMENT CAN TAKE. Inside the handle the record is now reached through a

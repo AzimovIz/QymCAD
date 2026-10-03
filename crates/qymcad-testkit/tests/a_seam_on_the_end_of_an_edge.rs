@@ -22,7 +22,11 @@ fn an_upright_edge_under_the_seam_of_a_cylinder_takes_a_rounding() {
     let (report, shapes) = qymcad_testkit::regenerate(&mut p);
     assert!(report.errors.is_empty(), "setup: the cut did not build: {:?}", report.errors);
     // the upright edge at (5, 0) from z 0 to 4, on the seam line
-    let edge = p.regen_edges.get(&cut).and_then(|es| es.iter().find(|e| (e.mid[0] - 5.0).abs() < 1e-3 && e.mid[1].abs() < 1e-3 && (e.mid[2] - 2.0).abs() < 1e-3).map(|e| e.id)).expect("the upright edge on the seam line");
+    let edge = p
+        .regen_edges
+        .get(&cut)
+        .and_then(|es| es.iter().find(|e| (e.mid[0] - 5.0).abs() < 1e-3 && e.mid[1].abs() < 1e-3 && (e.mid[2] - 2.0).abs() < 1e-3).map(|e| e.id))
+        .expect("the upright edge on the seam line");
     let before = shapes.get(&cut).map(|s| s.volume()).expect("the cut cylinder");
     let round = p.add_fillet(cut, 1.0, vec![edge]);
     let (report, shapes) = qymcad_testkit::regenerate(&mut p);
@@ -46,7 +50,11 @@ fn an_upright_edge_under_the_seam_of_a_cylinder_takes_a_chamfer() {
     let c: Vec<u64> = p.sketches[si].contour_ids.iter().copied().filter(|c| p.contour_profile_xy(*c).is_some()).collect();
     let cut = p.add_combine_multi_op(cyl, sid, c, CombineSpan { height: 4.0, down: 0.0, extent: qymcad_core::feature::Extent { reach: Reach::Forward, ..Default::default() }, fill: &[] }, 0);
     let (_, shapes) = qymcad_testkit::regenerate(&mut p);
-    let edge = p.regen_edges.get(&cut).and_then(|es| es.iter().find(|e| (e.mid[0] - 5.0).abs() < 1e-3 && e.mid[1].abs() < 1e-3 && (e.mid[2] - 2.0).abs() < 1e-3).map(|e| e.id)).expect("the upright edge on the seam line");
+    let edge = p
+        .regen_edges
+        .get(&cut)
+        .and_then(|es| es.iter().find(|e| (e.mid[0] - 5.0).abs() < 1e-3 && e.mid[1].abs() < 1e-3 && (e.mid[2] - 2.0).abs() < 1e-3).map(|e| e.id))
+        .expect("the upright edge on the seam line");
     let before = shapes.get(&cut).map(|s| s.volume()).expect("the cut cylinder");
     let bevel = p.add_chamfer(cut, 1.0, vec![edge]);
     let (report, shapes) = qymcad_testkit::regenerate(&mut p);

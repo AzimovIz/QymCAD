@@ -294,9 +294,7 @@ impl Project {
         if want.len() != ents.len() {
             return false;
         }
-        ents.iter().zip(want).all(|(e, w)| {
-            s.entities.iter().find(|x| x.id == *e).is_some_and(|ent| matches!((ent.kind, w), (EntityKind::Line { .. }, 0) | (EntityKind::Circle { .. }, 1)))
-        })
+        ents.iter().zip(want).all(|(e, w)| s.entities.iter().find(|x| x.id == *e).is_some_and(|ent| matches!((ent.kind, w), (EntityKind::Line { .. }, 0) | (EntityKind::Circle { .. }, 1))))
     }
 
     /// The structure is unchanged, so this is only a move: new coordinates, the same ids, and the constraints

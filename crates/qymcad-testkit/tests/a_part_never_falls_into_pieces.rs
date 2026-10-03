@@ -44,4 +44,3 @@ fn an_addition_across_the_edge_joins_the_block() {
     let body = shapes.get(&add).expect("the joined body");
     assert_eq!(body.solid_count(), 1, "the joined body is {} pieces", body.solid_count());
 }
-

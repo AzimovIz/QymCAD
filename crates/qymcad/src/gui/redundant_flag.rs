@@ -32,7 +32,11 @@ mod tests {
         let (app, si) = slot();
         let raw = app.project.sketch_redundant_constraints(si);
         assert!(!raw.is_empty(), "the rank analysis found no redundancy on the slot — the guard is checking emptiness and the scene must be changed");
-        assert!(qymcad_ui_state::flagged_redundant(&app.cache, &app.project, si).is_empty(), "the slot is marked as overconstrained: {:?}", qymcad_ui_state::flagged_redundant(&app.cache, &app.project, si));
+        assert!(
+            qymcad_ui_state::flagged_redundant(&app.cache, &app.project, si).is_empty(),
+            "the slot is marked as overconstrained: {:?}",
+            qymcad_ui_state::flagged_redundant(&app.cache, &app.project, si)
+        );
     }
 
     /// AND A REAL REDUNDANCY IS MARKED. Without this half the guard is green for the rule "never mark
@@ -64,15 +68,7 @@ mod tests {
     fn constraints_entangled_with_tangency_are_not_flagged_either() {
         let (app, si) = slot();
         let raw = app.project.sketch_redundant_constraints(si);
-        let non_tangent = raw
-            .iter()
-            .filter(|ci| {
-                !matches!(
-                    app.project.sketches[si].constraints.get(**ci),
-                    Some(Constraint::Tangent { .. }) | Some(Constraint::CircleTangent { .. }) | None
-                )
-            })
-            .count();
+        let non_tangent = raw.iter().filter(|ci| !matches!(app.project.sketches[si].constraints.get(**ci), Some(Constraint::Tangent { .. }) | Some(Constraint::CircleTangent { .. }) | None)).count();
         // the scene may yield no entangled constraints — then there is nothing to check here, but the
         // rule stands: NOTHING must be marked
         assert!(qymcad_ui_state::flagged_redundant(&app.cache, &app.project, si).is_empty(), "something is marked in a sketch with tangencies (non-tangencies in the raw list: {non_tangent})");

@@ -149,10 +149,7 @@ fn the_limit_mask_agrees_with_where_subdivision_actually_goes() {
     let mut skewed = Cage::cube(10.0);
     skewed.verts[6] = [9.0, 4.0, 7.5];
     skewed.verts[3] = [-6.0, 6.5, -4.0];
-    let tetra = Cage {
-        verts: vec![[0.0, 0.0, 0.0], [10.0, 0.0, 0.0], [5.0, 9.0, 0.0], [5.0, 3.0, 8.0]],
-        faces: vec![vec![0, 2, 1], vec![0, 1, 3], vec![1, 2, 3], vec![2, 0, 3]],
-    };
+    let tetra = Cage { verts: vec![[0.0, 0.0, 0.0], [10.0, 0.0, 0.0], [5.0, 9.0, 0.0], [5.0, 3.0, 8.0]], faces: vec![vec![0, 2, 1], vec![0, 1, 3], vec![1, 2, 3], vec![2, 0, 3]] };
 
     for (what, cage) in [("cube", Cage::cube(10.0)), ("skewed cage", skewed), ("tetrahedron", tetra)] {
         let limit = cage.limit_points();
@@ -222,10 +219,7 @@ fn the_surface_never_escapes_its_cage() {
 #[test]
 fn a_cage_of_odd_polygons_becomes_quads_after_one_step() {
     // a tetrahedron: four triangles
-    let cage = Cage {
-        verts: vec![[0.0, 0.0, 0.0], [10.0, 0.0, 0.0], [5.0, 9.0, 0.0], [5.0, 3.0, 8.0]],
-        faces: vec![vec![0, 2, 1], vec![0, 1, 3], vec![1, 2, 3], vec![2, 0, 3]],
-    };
+    let cage = Cage { verts: vec![[0.0, 0.0, 0.0], [10.0, 0.0, 0.0], [5.0, 9.0, 0.0], [5.0, 3.0, 8.0]], faces: vec![vec![0, 2, 1], vec![0, 1, 3], vec![1, 2, 3], vec![2, 0, 3]] };
     assert!(cage.is_closed(), "the tetrahedron is closed");
     let s = cage.subdivide();
     assert_eq!(s.faces.len(), 12, "four triangles give twelve quadrilaterals");
@@ -297,12 +291,7 @@ fn neighbouring_patches_meet_along_their_seam() {
             // the direct way: on both patches find the side whose ends coincide with the ends of the shared
             // edge
             let side = |patch: &super::patch::BezierPatch| -> Option<Vec<[f64; 3]>> {
-                let ends = [
-                    ((0.0, 0.0), (1.0, 0.0)),
-                    ((1.0, 0.0), (1.0, 1.0)),
-                    ((1.0, 1.0), (0.0, 1.0)),
-                    ((0.0, 1.0), (0.0, 0.0)),
-                ];
+                let ends = [((0.0, 0.0), (1.0, 0.0)), ((1.0, 0.0), (1.0, 1.0)), ((1.0, 1.0), (0.0, 1.0)), ((0.0, 1.0), (0.0, 0.0))];
                 let (la, lb) = (refined.limit_points()[a as usize], refined.limit_points()[b as usize]);
                 for (s, e) in ends {
                     let (ps, pe) = (patch.eval(s.0, s.1), patch.eval(e.0, e.1));

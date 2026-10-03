@@ -35,7 +35,8 @@ impl App {
         if open_search {
             crate::gui::command_search::toggle_command_search(&mut self.win);
         }
-        if ctx.input(|i| i.key_pressed(egui::Key::F1)) { // F1 types nothing: a field holding the keyboard does not stop it
+        if ctx.input(|i| i.key_pressed(egui::Key::F1)) {
+            // F1 types nothing: a field holding the keyboard does not stop it
             let a = self.help_for_context();
             self.open_help(a);
         }
@@ -68,11 +69,7 @@ impl App {
         // Ctrl+Enter finishes the current context (leaving a sketch, a part or a subassembly one level
         // up) without the mouse. Only when no command or array is active — otherwise Enter applies
         // those.
-        if self.tools.armed.cmd_kind() == 0
-            && self.tools.armed.pat_op() == 0
-            && !ctx.egui_wants_keyboard_input()
-            && ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Enter))
-        {
+        if self.tools.armed.cmd_kind() == 0 && self.tools.armed.pat_op() == 0 && !ctx.egui_wants_keyboard_input() && ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Enter)) {
             self.exit_context();
         }
         // ESC cancels a typing mode or a drawing, otherwise it clears the selection (the whole ladder
@@ -115,10 +112,7 @@ impl App {
             // sketch, a datum, a mate) brings up a yes-or-no confirmation. DEL used to do nothing at all
             // for datums and sketches.
             if self.sketch_ses.editing.is_none() {
-                if matches!(
-                    self.chosen.sel,
-                    Sel::Feature(_) | Sel::Mesh(_) | Sel::Sketch(_) | Sel::Plane(_) | Sel::DatumPoint(_) | Sel::DatumAxis(_) | Sel::Joint(_) | Sel::Component(_)
-                ) {
+                if matches!(self.chosen.sel, Sel::Feature(_) | Sel::Mesh(_) | Sel::Sketch(_) | Sel::Plane(_) | Sel::DatumPoint(_) | Sel::DatumAxis(_) | Sel::Joint(_) | Sel::Component(_)) {
                     self.deferred.delete = Some(self.chosen.sel);
                 }
             } else if let Sel::Sketch(si) = self.chosen.sel {
@@ -341,8 +335,29 @@ impl App {
                 return None;
             }
             const KEYS: [Key; 23] = [
-                Key::S, Key::L, Key::R, Key::C, Key::A, Key::P, Key::G, Key::D, Key::E, Key::O, Key::N, Key::T, Key::F, Key::M, Key::X,
-                Key::K, Key::Q, Key::H, Key::U, Key::J, Key::I, Key::B, Key::Y,
+                Key::S,
+                Key::L,
+                Key::R,
+                Key::C,
+                Key::A,
+                Key::P,
+                Key::G,
+                Key::D,
+                Key::E,
+                Key::O,
+                Key::N,
+                Key::T,
+                Key::F,
+                Key::M,
+                Key::X,
+                Key::K,
+                Key::Q,
+                Key::H,
+                Key::U,
+                Key::J,
+                Key::I,
+                Key::B,
+                Key::Y,
             ];
             KEYS.into_iter().find(|&k| i.key_pressed(k))
         });

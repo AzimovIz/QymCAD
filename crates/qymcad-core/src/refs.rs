@@ -291,20 +291,14 @@ impl EdgeGeom {
         };
         if self.radius > 1e-9 {
             let r = [p[0] - self.center[0], p[1] - self.center[1], p[2] - self.center[2]];
-            return norm([
-                self.axis[1] * r[2] - self.axis[2] * r[1],
-                self.axis[2] * r[0] - self.axis[0] * r[2],
-                self.axis[0] * r[1] - self.axis[1] * r[0],
-            ]);
+            return norm([self.axis[1] * r[2] - self.axis[2] * r[1], self.axis[2] * r[0] - self.axis[0] * r[2], self.axis[0] * r[1] - self.axis[1] * r[0]]);
         }
         norm([self.b[0] - self.a[0], self.b[1] - self.a[1], self.b[2] - self.a[2]])
     }
 
     /// The vertex shared with another edge, or `None`.
     pub fn shared_vertex(&self, other: &EdgeGeom) -> Option<[f64; 3]> {
-        let close = |x: [f64; 3], y: [f64; 3]| {
-            (x[0] - y[0]).abs() < 1e-6 && (x[1] - y[1]).abs() < 1e-6 && (x[2] - y[2]).abs() < 1e-6
-        };
+        let close = |x: [f64; 3], y: [f64; 3]| (x[0] - y[0]).abs() < 1e-6 && (x[1] - y[1]).abs() < 1e-6 && (x[2] - y[2]).abs() < 1e-6;
         for p in [self.a, self.b] {
             for q in [other.a, other.b] {
                 if close(p, q) {
@@ -356,11 +350,7 @@ pub fn resolve(query: &Query, pool: &[Candidate], names: &NameTable, face_pool: 
             })
             .map(|c| c.desc)
             .collect(),
-        Query::FromSource { src } => pool
-            .iter()
-            .filter(|c| names.get(c.desc).is_some_and(|n| n.src == *src))
-            .map(|c| c.desc)
-            .collect(),
+        Query::FromSource { src } => pool.iter().filter(|c| names.get(c.desc).is_some_and(|n| n.src == *src)).map(|c| c.desc).collect(),
         Query::Oriented { dir, tol_deg } => {
             let len = (dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]).sqrt().max(1e-12);
             let cos_tol = tol_deg.to_radians().cos();
@@ -407,10 +397,7 @@ pub fn resolve(query: &Query, pool: &[Candidate], names: &NameTable, face_pool: 
         // phrased through faces rather than through a feature of the edge, which does not exist.
         Query::Adjacent(faces) => {
             let want = resolve(faces, face_pool, names, face_pool);
-            pool.iter()
-                .filter(|c| names.edge(c.desc).is_some_and(|e| e.faces.iter().any(|f| want.contains(f))))
-                .map(|c| c.desc)
-                .collect()
+            pool.iter().filter(|c| names.edge(c.desc).is_some_and(|e| e.faces.iter().any(|f| want.contains(f)))).map(|c| c.desc).collect()
         }
         // The chain grows from its seeds while there is anywhere to grow, as a wave across shared vertices.
         // The traversal walks the edge pool itself, so the query works even where no names exist yet.

@@ -139,11 +139,7 @@ fn profile_fits_within_half_a_pitch() {
                 let spec = ThreadSpec { standard: std, nominal_d: 30.0, pitch, fit, ..Default::default() };
                 let g = spec.geometry();
                 let max_x = polyline(&g.groove).iter().fold(0.0_f64, |m, p| m.max(p.x.abs()));
-                assert!(
-                    max_x <= g.pitch * 0.5 + 1e-9,
-                    "{std:?} P{pitch} clearance {fit}: the profile exceeded half a pitch, {max_x:.4} against {:.4}",
-                    g.pitch * 0.5
-                );
+                assert!(max_x <= g.pitch * 0.5 + 1e-9, "{std:?} P{pitch} clearance {fit}: the profile exceeded half a pitch, {max_x:.4} against {:.4}", g.pitch * 0.5);
             }
         }
     }
@@ -164,10 +160,7 @@ fn profile_does_not_self_intersect() {
                         if i == 0 && j == n - 2 {
                             continue; // the closing edge is adjacent to the first one
                         }
-                        assert!(
-                            !segments_cross(pts[i], pts[i + 1], pts[j], pts[j + 1]),
-                            "{std:?} P{pitch} internal={internal}: the profile intersects itself, at segments {i} and {j}"
-                        );
+                        assert!(!segments_cross(pts[i], pts[i + 1], pts[j], pts[j + 1]), "{std:?} P{pitch} internal={internal}: the profile intersects itself, at segments {i} and {j}");
                     }
                 }
             }
@@ -226,11 +219,7 @@ fn adjacent_turns_never_touch() {
                 let g = ThreadSpec { standard: std, nominal_d: 30.0, pitch, fit, ..Default::default() }.geometry();
                 let max_x = polyline(&g.groove).iter().fold(0.0_f64, |m, p| m.max(p.x.abs()));
                 let land = g.pitch - 2.0 * max_x; // the web between turns
-                assert!(
-                    land > 0.005 * g.pitch,
-                    "{std:?} P{pitch} clearance {fit}: the turns meet, with a web of {land:.4} mm at a pitch of {:.2}",
-                    g.pitch
-                );
+                assert!(land > 0.005 * g.pitch, "{std:?} P{pitch} clearance {fit}: the turns meet, with a web of {land:.4} mm at a pitch of {:.2}", g.pitch);
             }
         }
     }

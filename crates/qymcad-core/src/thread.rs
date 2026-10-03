@@ -55,14 +55,7 @@ pub struct GrooveShape {
 
 impl ThreadStandard {
     /// EVERY STANDARD. Walked by the checks; a guard holds it against the declaration.
-    pub const ALL: [ThreadStandard; 6] = [
-        ThreadStandard::MetricIso,
-        ThreadStandard::TrapezoidalTr,
-        ThreadStandard::Acme,
-        ThreadStandard::RoundRd,
-        ThreadStandard::Buttress,
-        ThreadStandard::Custom,
-    ];
+    pub const ALL: [ThreadStandard; 6] = [ThreadStandard::MetricIso, ThreadStandard::TrapezoidalTr, ThreadStandard::Acme, ThreadStandard::RoundRd, ThreadStandard::Buttress, ThreadStandard::Custom];
 
     /// Whether the profile is fixed by a standard, so that its geometry can be checked against one.
     ///
@@ -133,19 +126,7 @@ fn default_custom_angle() -> f64 {
 
 impl Default for ThreadSpec {
     fn default() -> Self {
-        Self {
-            standard: ThreadStandard::MetricIso,
-            nominal_d: 10.0,
-            pitch: 0.0,
-            starts: 1,
-            left: false,
-            internal: false,
-            fit: 0.0,
-            crest_r: None,
-            root_r: None,
-            custom_depth: 0.0,
-            custom_angle: 60.0,
-        }
+        Self { standard: ThreadStandard::MetricIso, nominal_d: 10.0, pitch: 0.0, starts: 1, left: false, internal: false, fit: 0.0, crest_r: None, root_r: None, custom_depth: 0.0, custom_angle: 60.0 }
     }
 }
 
@@ -320,18 +301,7 @@ impl ThreadSpec {
         // radial clearance. The groove deepens by the same amount, so the pair gains clearance on both sides of
         // the thread.
         let groove = self.groove_profile(p, GrooveShape { depth: depth + fit, angle_deg: angle, crest_flat, crest_r, root_r, fit });
-        ThreadGeom {
-            major_d,
-            pitch_d,
-            minor_d,
-            depth,
-            pitch: p,
-            lead: p * self.starts.max(1) as f64,
-            angle_deg: angle,
-            stock_d: if self.internal { minor_d } else { major_d },
-            crest_flat,
-            groove,
-        }
+        ThreadGeom { major_d, pitch_d, minor_d, depth, pitch: p, lead: p * self.starts.max(1) as f64, angle_deg: angle, stock_d: if self.internal { minor_d } else { major_d }, crest_flat, groove }
     }
 
     /// IS THERE ROOM IN THE PITCH FOR THE CLEARANCE ASKED FOR?
@@ -460,8 +430,8 @@ impl ThreadSpec {
         let k = 1.0 / beta.cos(); // = √(1+t²), the length of the normal to the flank
         let h = depth.max(1e-6);
         let over = 0.15 * p; // overshoot past the surface, so the boolean cuts without tangent faces
-        // Half-width of the groove at the surface and at the root. The fit clearance widens the groove: the
-        // thread thins on an external one and the nut thickens on an internal one.
+                             // Half-width of the groove at the surface and at the root. The fit clearance widens the groove: the
+                             // thread thins on an external one and the nut thickens on an internal one.
         let wt = ((p - crest_flat) * 0.5 + fit).clamp(0.02 * p, 0.49 * p);
         let wb = (wt - h * t).max(0.0);
         let y_bot = -h;
@@ -479,12 +449,12 @@ impl ThreadSpec {
         let rc = crest_r.max(0.0).min(((p * 0.49 - wt) / (k - t)).max(0.0)).min(h * 0.45);
         let x_out = wt + rc * (k - t); // where the crest arc would touch the surface
         let crest_foot = Point2::new(x_out - rc / k, -rc + rc * t / k); // where the arc meets the flank
-        // The crest arc is deliberately not carried all the way to tangency with the surface of the stock. A
-        // tangential meeting between the tool and a cylinder is a classic boolean hazard: instead of a clean
-        // intersection it yields a band of slivers. Measured on M30×3.5: a sharp crest gives 5 044 triangles,
-        // while the same thread with the arc carried to tangency gives 436 862. The arc is cut short at a
-        // micro-step, a few per cent of the radius and a handful of microns, and continues vertically: the cut
-        // becomes transverse and the step is smaller than the layer of any printer.
+                                                                        // The crest arc is deliberately not carried all the way to tangency with the surface of the stock. A
+                                                                        // tangential meeting between the tool and a cylinder is a classic boolean hazard: instead of a clean
+                                                                        // intersection it yields a band of slivers. Measured on M30×3.5: a sharp crest gives 5 044 triangles,
+                                                                        // while the same thread with the arc carried to tangency gives 436 862. The arc is cut short at a
+                                                                        // micro-step, a few per cent of the radius and a handful of microns, and continues vertically: the cut
+                                                                        // becomes transverse and the step is smaller than the layer of any printer.
         let eps = if rc > 1e-9 { (0.02 * rc).min(0.02 * h) } else { 0.0 };
         let x_wall = if rc > 1e-9 { x_out - (eps * (2.0 * rc - eps)).max(0.0).sqrt() } else { wt };
         let y_wall = -eps;

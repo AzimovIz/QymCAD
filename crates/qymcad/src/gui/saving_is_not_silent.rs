@@ -278,10 +278,7 @@ mod tests {
         ];
         let _ = frame_with_places(&mut app, &ctx, click);
 
-        assert!(
-            app.asking_for_a_file() && !crate::gui::io_jobs::saving_now(&app.regen),
-            "setup: pressing Save on an unnamed document must leave a chooser open and no write running"
-        );
+        assert!(app.asking_for_a_file() && !crate::gui::io_jobs::saving_now(&app.regen), "setup: pressing Save on an unnamed document must leave a chooser open and no write running");
         let _ = frame_with_places(&mut app, &ctx, Vec::new());
         assert!(
             app.deferred.nav.is_some() || app.disk.pending_nav.is_some(),

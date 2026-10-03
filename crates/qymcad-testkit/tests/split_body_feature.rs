@@ -151,12 +151,7 @@ fn both_pieces_belong_to_the_part_and_are_exportable() {
 fn the_cut_follows_the_face_it_was_taken_from() {
     let (mut p, body) = part_with_cube();
     // a datum plane from the BOTTOM face of the box: its normal points DOWN, so "up" is an offset of -6
-    let f = p
-        .regen_faces
-        .get(&body)
-        .and_then(|fs| fs.iter().find(|f| f.normal[2] < -0.9))
-        .cloned()
-        .expect("there is a bottom face");
+    let f = p.regen_faces.get(&body).and_then(|fs| fs.iter().find(|f| f.normal[2] < -0.9)).cloned().expect("there is a bottom face");
     let key = qymcad_core::feature::FaceKey { index: 0, centroid: [f.centroid.x, f.centroid.y, f.centroid.z], normal: f.normal, id: f.id };
     let datum = p.add_plane_from_face(body, key, -6.0);
     let _ = qymcad_testkit::regenerate(&mut p);
@@ -205,8 +200,5 @@ fn deleting_the_cutting_plane_makes_the_split_fail_loudly() {
     // THE ERROR IS TOLD APART BY ITS CODE, not by a substring. A `msg.contains(...)` check here went
     // silently blind to any rewording, translation included.
     let err = p.regen_errors.get(&parts[0]).cloned();
-    assert!(
-        matches!(err, Some(qymcad_core::errors::CoreError::CutPlaneDeleted)),
-        "the node must say EXACTLY that the cutting plane was deleted, and it said: {err:?}"
-    );
+    assert!(matches!(err, Some(qymcad_core::errors::CoreError::CutPlaneDeleted)), "the node must say EXACTLY that the cutting plane was deleted, and it said: {err:?}");
 }

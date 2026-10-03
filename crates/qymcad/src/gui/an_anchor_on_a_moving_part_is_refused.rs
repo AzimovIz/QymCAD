@@ -54,27 +54,15 @@ mod tests {
         let anchor = AnchorRef::FaceCenter(body, key);
 
         // GUARD AGAINST A VACUOUS CHECK: the kernel really does consider this anchor to sit on a moving part.
-        assert!(
-            app.project.anchor_sits_on_moving_part(sub, &anchor),
-            "GUARD: there is no trap — the kernel does not consider the anchor to sit on a moving part, so there is nothing to check"
-        );
+        assert!(app.project.anchor_sits_on_moving_part(sub, &anchor), "GUARD: there is no trap — the kernel does not consider the anchor to sit on a moving part, so there is nothing to check");
         assert!(app.project.drive_joint_for(moving).is_some(), "GUARD: the part inside must be a moving one");
 
         // THE PERSON POINTS EXACTLY THERE.
         let before = app.project.connectors.len();
         qymcad_assembly::joint_pick_anchor_click_for_test(&mut app.joint_ctx(), sub, anchor);
 
-        assert_eq!(
-            app.project.connectors.len(),
-            before,
-            "an anchor on a moving part was created after all: after such an anchor the assembly will never settle"
-        );
-        assert_eq!(
-            app.status,
-            crate::i18n::tr("j-anchor-on-moving-part-refused"),
-            "the person was not told why the pick was not accepted: {}",
-            app.status
-        );
+        assert_eq!(app.project.connectors.len(), before, "an anchor on a moving part was created after all: after such an anchor the assembly will never settle");
+        assert_eq!(app.status, crate::i18n::tr("j-anchor-on-moving-part-refused"), "the person was not told why the pick was not accepted: {}", app.status);
     }
 
     /// AND AN ORDINARY PICK IS ACCEPTED. Otherwise the refusal would turn into "nothing is allowed".
@@ -89,13 +77,7 @@ mod tests {
         crate::gui::commands::refresh_edges(&mut app.part_ctx());
         let body = app.project.bodies.iter().map(|b| b.id).find(|b| !before.contains(b)).expect("the part appeared");
         let owner = app.project.body_owner(body).expect("the owner of the body");
-        let f = app
-            .project
-            .regen_faces
-            .get(&body)
-            .and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z)))
-            .cloned()
-            .expect("a face");
+        let f = app.project.regen_faces.get(&body).and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z))).cloned().expect("a face");
         let key = qymcad_core::feature::FaceKey { index: 0, centroid: [f.centroid.x, f.centroid.y, f.centroid.z], normal: f.normal, id: f.id };
 
         let n = app.project.connectors.len();

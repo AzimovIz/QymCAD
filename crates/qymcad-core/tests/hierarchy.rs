@@ -342,7 +342,6 @@ fn an_empty_document_works_in_its_root() {
     assert_eq!(p.active_component, Some(root), "the empty document works in its root, and it names {:?}", p.active_component);
 }
 
-
 /// A SKETCH STARTED IN AN ASSEMBLY GOES INTO A NEW PART: the assembly gets a part and the sketch belongs to it, while
 /// in a part the sketch stays in that part and no part is made.
 #[test]

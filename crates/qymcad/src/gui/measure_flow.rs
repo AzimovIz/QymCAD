@@ -105,11 +105,7 @@ mod tests {
     fn one_element_already_reports_its_own_size() {
         let mut app = App::default();
         app.toggle_measure_3d();
-        app.side.m3.picks = vec![super::super::measure3d::MeasurePick {
-            item: MeasureItem::Line { origin: [0.0; 3], dir: [1.0, 0.0, 0.0], len: 42.0 },
-            what: "edge".into(),
-            at: [0.0; 3],
-        }];
+        app.side.m3.picks = vec![super::super::measure3d::MeasurePick { item: MeasureItem::Line { origin: [0.0; 3], dir: [1.0, 0.0, 0.0], len: 42.0 }, what: "edge".into(), at: [0.0; 3] }];
         let t = app.measure_text();
         assert!(t.contains("42.000"), "the length of a single edge must be shown at once: {t}");
     }
@@ -191,12 +187,6 @@ mod tests {
 
         // at this point there IS a nearby edge — but it is on the far side of the part
         let got = app.measure_resolve(rect(), at).expect("there is a hit");
-        assert!(
-            matches!(got.item, MeasureItem::Plane { .. }),
-            "a click on a visible face must give a FACE, and it gave {:?} ({})",
-            got.item,
-            got.what
-        );
+        assert!(matches!(got.item, MeasureItem::Plane { .. }), "a click on a visible face must give a FACE, and it gave {:?} ({})", got.item, got.what);
     }
-
 }

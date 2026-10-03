@@ -14,10 +14,7 @@ mod tests {
     const SCREEN: egui::Vec2 = egui::vec2(1400.0, 900.0);
 
     fn raw() -> egui::RawInput {
-        egui::RawInput {
-            screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), SCREEN)),
-            ..Default::default()
-        }
+        egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), SCREEN)), ..Default::default() }
     }
 
     /// Every text shape of a frame, with where it was painted.
@@ -67,29 +64,14 @@ mod tests {
 
         // The copy button carries the icon glyph as its whole label, so it is found by that glyph.
         let icon = egui_phosphor::regular::COPY;
-        let spot = texts(&out.shapes)
-            .into_iter()
-            .find(|(t, _)| t.trim() == icon)
-            .map(|(_, r)| r.center())
-            .expect("the About window has no copy button");
+        let spot = texts(&out.shapes).into_iter().find(|(t, _)| t.trim() == icon).map(|(_, r)| r.center()).expect("the About window has no copy button");
 
         let press = egui::RawInput {
-            events: vec![
-                egui::Event::PointerMoved(spot),
-                egui::Event::PointerButton { pos: spot, button: egui::PointerButton::Primary, pressed: true, modifiers: Default::default() },
-            ],
+            events: vec![egui::Event::PointerMoved(spot), egui::Event::PointerButton { pos: spot, button: egui::PointerButton::Primary, pressed: true, modifiers: Default::default() }],
             ..raw()
         };
         let _ = ctx.run_ui(press, |c| crate::gui::panels_windows::about_dialog(&mut app.win, &app.scheme, c.ctx()));
-        let release = egui::RawInput {
-            events: vec![egui::Event::PointerButton {
-                pos: spot,
-                button: egui::PointerButton::Primary,
-                pressed: false,
-                modifiers: Default::default(),
-            }],
-            ..raw()
-        };
+        let release = egui::RawInput { events: vec![egui::Event::PointerButton { pos: spot, button: egui::PointerButton::Primary, pressed: false, modifiers: Default::default() }], ..raw() };
         let out = ctx.run_ui(release, |c| crate::gui::panels_windows::about_dialog(&mut app.win, &app.scheme, c.ctx()));
 
         // THE CLIPBOARD IS A COMMAND NOW, not a field: since egui 0.30 the frame reports what it did as a
@@ -105,10 +87,7 @@ mod tests {
             .unwrap_or_default();
         assert!(!copied.is_empty(), "the click copied nothing");
         assert!(copied.starts_with("QymCAD "), "the copied block does not name the program: {copied:?}");
-        assert!(
-            copied.contains(crate::build_info::version()),
-            "the copied block does not carry the version: {copied:?}"
-        );
+        assert!(copied.contains(crate::build_info::version()), "the copied block does not carry the version: {copied:?}");
         assert!(copied.contains("OS: "), "the copied block does not carry the system: {copied:?}");
         // IT GOES INTO A PUBLIC TRACKER. A build path carries the name of whoever built it.
         assert!(!copied.contains("/home/") && !copied.contains("C:\\"), "the copied block carries a personal path: {copied:?}");

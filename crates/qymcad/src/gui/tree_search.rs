@@ -43,7 +43,9 @@ mod tests {
 
     /// The indices of the timeline rows that fall under the search.
     fn matching(app: &App) -> Vec<usize> {
-        (0..app.project.timeline.len()).filter(|&ti| !crate::gui::panels_tree::feature_row_label(&app.project, ti).is_empty() && crate::gui::panels_tree::tree_row_matches(&app.project, &app.tree, ti)).collect()
+        (0..app.project.timeline.len())
+            .filter(|&ti| !crate::gui::panels_tree::feature_row_label(&app.project, ti).is_empty() && crate::gui::panels_tree::tree_row_matches(&app.project, &app.tree, ti))
+            .collect()
     }
 
     /// AN EMPTY QUERY SHOWS EVERYTHING — the search must not hide anything of its own accord.
@@ -130,10 +132,7 @@ mod tests {
         let body = &code[row..end];
         // THE NEEDLE CARRIES NO PATH: inside its own module the function is called by its bare name, from
         // another one by the full path, and which of the two appears here says nothing about the rule.
-        assert!(
-            crate::gui::render_source::dense(body).contains("feature_row_label("),
-            "the tree row must take its label from `feature_row_label` — the search goes by the same one"
-        );
+        assert!(crate::gui::render_source::dense(body).contains("feature_row_label("), "the tree row must take its label from `feature_row_label` — the search goes by the same one");
         assert!(!body.contains("match kind {"), "the label is being assembled in the row by its own code again — the search will diverge from the tree");
     }
 
@@ -175,10 +174,7 @@ mod tests {
             q.push(ch);
             app.tree.search = (&q).to_string();
             let w = width(&mut app);
-            assert!(
-                w <= base + 1.0,
-                "the tree panel has drifted: it was {base}, it became {w} after \"{q}\" — the width of the field must not depend on the width of the panel"
-            );
+            assert!(w <= base + 1.0, "the tree panel has drifted: it was {base}, it became {w} after \"{q}\" — the width of the field must not depend on the width of the panel");
         }
         // and it does not grow from repeated frames alone either
         for _ in 0..10 {

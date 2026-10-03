@@ -145,11 +145,9 @@ impl Op {
     pub fn all() -> &'static [Op] {
         use Op::*;
         &[
-            Extrude, ExtrudeProfile, ExtrudeContour, Revolve, RevolveProfile, RevolveAxis, Sweep, Loft, LoftBoolean, Boolean, BodyBoolean,
-            Fillet, FilletVar, Chamfer, ChamferAsym, Shell, ShellCenter, Draft, PushFace, RemoveFaces, Thicken, SplitBody, SplitFaces, Hole,
-            Holes, Thread, Helix, Auger, Mirror, MirrorPlane, Array, Move, Transform, Cylinder, Sphere, Cone, Torus, Prism, FuseProfiles, Place,
-            MeshSolid,
-    MeshRecognise,
+            Extrude, ExtrudeProfile, ExtrudeContour, Revolve, RevolveProfile, RevolveAxis, Sweep, Loft, LoftBoolean, Boolean, BodyBoolean, Fillet, FilletVar, Chamfer, ChamferAsym, Shell, ShellCenter,
+            Draft, PushFace, RemoveFaces, Thicken, SplitBody, SplitFaces, Hole, Holes, Thread, Helix, Auger, Mirror, MirrorPlane, Array, Move, Transform, Cylinder, Sphere, Cone, Torus, Prism,
+            FuseProfiles, Place, MeshSolid, MeshRecognise,
         ]
     }
 }
@@ -405,7 +403,6 @@ pub enum CoreError {
 }
 
 impl CoreError {
-
     /// A temporary refusal, worth retrying once the data appears.
     ///
     /// "The source body is not built" is not a broken recipe but an ordering of events: there is no live B-rep

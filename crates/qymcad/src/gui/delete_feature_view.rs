@@ -84,13 +84,7 @@ mod tests {
         }
         app.apply_feat_cmd();
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
-        let nid = app
-            .project
-            .timeline
-            .iter()
-            .find(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::SplitBody { .. }))
-            .map(|n| n.id)
-            .expect("the split feature");
+        let nid = app.project.timeline.iter().find(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::SplitBody { .. })).map(|n| n.id).expect("the split feature");
         let pieces: Vec<u64> = app.project.timeline.iter().find(|n| n.id == nid).map(|n| n.kind.bodies()).expect("the pieces");
         assert_eq!(shown(&app), 2, "setup: both pieces are visible");
 
@@ -165,5 +159,4 @@ mod tests {
         assert_eq!(app.disk.edits.undo.len(), undo_before + 1, "EXACTLY one undo step must appear");
         assert_eq!(app.disk.edits.undo.last().map(|s| s.name.clone()), Some(crate::i18n::tr("status-plane-delete")), "the step must be NAMED rather than picked up after the fact");
     }
-
 }

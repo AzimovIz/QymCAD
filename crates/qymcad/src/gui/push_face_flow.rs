@@ -27,13 +27,7 @@ mod tests {
         assert!(app.tools.cmd.params.iter().any(|p| p.key == "dist"), "the command must have an offset field");
 
         // A CLICK ON A FACE (the top one, normal +Z)
-        let top = app.project.bodies[mi]
-            .faces
-            .iter()
-            .filter(|f| f.normal[2] > 0.9)
-            .max_by(|a, b| a.centroid.z.partial_cmp(&b.centroid.z).unwrap())
-            .map(|f| f.id)
-            .expect("the top face is there");
+        let top = app.project.bodies[mi].faces.iter().filter(|f| f.normal[2] > 0.9).max_by(|a, b| a.centroid.z.partial_cmp(&b.centroid.z).unwrap()).map(|f| f.id).expect("the top face is there");
         // A CLICK ON THE FACE THROUGH A REAL PICK rather than by writing it into the selection: the former
         // test wrote the face in directly and so did not notice that a click did not select it at all.
         let rect = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(900.0, 700.0));
@@ -42,19 +36,10 @@ mod tests {
         app.viewing.cam.scale = 8.0;
         app.viewing.cam.target = [10.0, 10.0, 5.0];
         let basis = app.viewing.cam.basis();
-        let c = app.project.bodies[mi]
-            .faces
-            .iter()
-            .find(|f| f.id == top)
-            .map(|f| [f.centroid.x, f.centroid.y, f.centroid.z])
-            .expect("the centre of the top face");
+        let c = app.project.bodies[mi].faces.iter().find(|f| f.id == top).map(|f| [f.centroid.x, f.centroid.y, f.centroid.z]).expect("the centre of the top face");
         let at = qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect: rect, basis: &basis }.at(c).0;
         app.pick_face_3d(rect, at);
-        assert!(
-            app.tools.gsel.faces.contains(&top),
-            "a click on a face must SELECT it: what is selected is {:?}",
-            app.tools.gsel.faces
-        );
+        assert!(app.tools.gsel.faces.contains(&top), "a click on a face must SELECT it: what is selected is {:?}", app.tools.gsel.faces);
 
         // THE OFFSET AND ENTER
         if let Some(p) = app.tools.cmd.params.iter_mut().find(|p| p.key == "dist") {
@@ -64,20 +49,13 @@ mod tests {
         app.apply_feat_cmd();
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
 
-        let pushed = app
-            .project
-            .timeline
-            .iter()
-            .any(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::PushFace { .. }));
+        let pushed = app.project.timeline.iter().any(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::PushFace { .. }));
         assert!(pushed, "a push-face feature must appear in the timeline; the status line: {}", app.status);
 
         let live = app.project.mesh_id(app.project.bodies.len() - 1).expect("the new body");
         let mi2 = app.project.mesh_index(live).expect("the mesh of the new body");
         let v1 = app.project.bodies[mi2].mesh.volume();
-        assert!(
-            v1 > v0 + 1.0,
-            "with a face pulled outwards the volume must grow: it was {v0:.1}, it became {v1:.1}"
-        );
+        assert!(v1 > v0 + 1.0, "with a face pulled outwards the volume must grow: it was {v0:.1}, it became {v1:.1}");
     }
 
     /// The tool highlights the selected face and previews the offset.
@@ -99,10 +77,7 @@ mod tests {
     #[test]
     fn the_tool_has_a_button() {
         let src = crate::gui::panels_source::PANELS;
-        assert!(
-            src.contains("BarAsk::FeatCmd(25)"),
-            "without a button the operation does not exist for a person, however much of it there is in the kernel"
-        );
+        assert!(src.contains("BarAsk::FeatCmd(25)"), "without a button the operation does not exist for a person, however much of it there is in the kernel");
     }
 
     /// The feature IS VISIBLE IN THE BUILD TREE.
@@ -113,10 +88,7 @@ mod tests {
     #[test]
     fn the_feature_is_named_and_shown_in_the_tree() {
         let panels = crate::gui::panels_source::PANELS;
-        assert!(
-            crate::gui::render_source::has(panels, "FeatureKind::PushFace { dist, .. } =>"),
-            "the build tree must know the kind of the feature, otherwise the row is not drawn at all"
-        );
+        assert!(crate::gui::render_source::has(panels, "FeatureKind::PushFace { dist, .. } =>"), "the build tree must know the kind of the feature, otherwise the row is not drawn at all");
         let gui = include_str!("../gui.rs");
         assert!(crate::gui::render_source::has(gui, "FK::PushFace { .. } => ph::"), "the feature must have an icon");
         assert!(!crate::i18n::tr("feat-name-push-face").is_empty() && crate::i18n::tr("feat-name-push-face") != "feat-name-push-face", "the default name of the feature must have a translation");
@@ -154,10 +126,7 @@ mod tests {
         let common = regen.split("fn face_by_ref").nth(1).unwrap_or("");
         let by_name = common.find("self.resolve_face_ref(src, r, what)");
         let by_snap = common.find("self.resolve_face_id(node_id, src, *d)");
-        assert!(
-            by_name.is_some() && by_snap.is_some() && by_name < by_snap,
-            "THE QUERY must come FIRST, and the snapshot of the place only when the name missed"
-        );
+        assert!(by_name.is_some() && by_snap.is_some() && by_name < by_snap, "THE QUERY must come FIRST, and the snapshot of the place only when the name missed");
     }
 
     /// A feature once created CAN BE CORRECTED: a double click opens the command, Enter applies the new
@@ -177,13 +146,7 @@ mod tests {
         }
         let mi = app.project.mesh_index(body).expect("the mesh");
         app.chosen.sel = Sel::Mesh(mi);
-        let top = app.project.bodies[mi]
-            .faces
-            .iter()
-            .filter(|f| f.normal[2] > 0.9)
-            .max_by(|a, b| a.centroid.z.partial_cmp(&b.centroid.z).unwrap())
-            .map(|f| f.id)
-            .expect("the top face");
+        let top = app.project.bodies[mi].faces.iter().filter(|f| f.normal[2] > 0.9).max_by(|a, b| a.centroid.z.partial_cmp(&b.centroid.z).unwrap()).map(|f| f.id).expect("the top face");
 
         app.start_feat_cmd(25);
         app.tools.gsel.faces.insert(top);
@@ -194,13 +157,7 @@ mod tests {
         }
         app.apply_feat_cmd();
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
-        let fid = app
-            .project
-            .timeline
-            .iter()
-            .find(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::PushFace { .. }))
-            .map(|n| n.id)
-            .expect("the feature is created");
+        let fid = app.project.timeline.iter().find(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::PushFace { .. })).map(|n| n.id).expect("the feature is created");
 
         // EDITING: a double click on the feature in the tree
         app.cancel_all_tools();
@@ -222,12 +179,7 @@ mod tests {
             _ => None,
         });
         assert_eq!(d, Some(9.0), "an edit must apply to THE EXISTING feature rather than create a second one");
-        let n = app
-            .project
-            .timeline
-            .iter()
-            .filter(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::PushFace { .. }))
-            .count();
+        let n = app.project.timeline.iter().filter(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::PushFace { .. })).count();
         assert_eq!(n, 1, "there must be one feature left — editing does not breed nodes");
     }
 
@@ -248,13 +200,7 @@ mod tests {
         let mi = app.project.mesh_index(body).expect("the mesh");
         app.chosen.sel = Sel::Mesh(mi);
         app.start_feat_cmd(25);
-        let top = app.project.bodies[mi]
-            .faces
-            .iter()
-            .filter(|f| f.normal[2] > 0.9)
-            .max_by(|a, b| a.centroid.z.partial_cmp(&b.centroid.z).unwrap())
-            .map(|f| f.id)
-            .expect("the top face");
+        let top = app.project.bodies[mi].faces.iter().filter(|f| f.normal[2] > 0.9).max_by(|a, b| a.centroid.z.partial_cmp(&b.centroid.z).unwrap()).map(|f| f.id).expect("the top face");
         app.tools.gsel.faces.insert(top);
         app.tools.gsel.faces_body = Some(body);
 
@@ -284,10 +230,7 @@ mod tests {
         let after = qymcad_ui_state::cmd_val(&app.tools.cmd, "dist");
         assert!((after - before).abs() > 0.5, "the drag must change the offset: it was {before}, it became {after}");
         let txt = app.tools.cmd.params.iter().find(|p| p.key == "dist").map(|p| p.txt.clone()).unwrap_or_default();
-        assert!(
-            (txt.trim().parse::<f64>().unwrap_or(f64::NAN) - after).abs() < 0.01,
-            "the field must show the same as the arrow: the field holds \"{txt}\", the arrow {after}"
-        );
+        assert!((txt.trim().parse::<f64>().unwrap_or(f64::NAN) - after).abs() < 0.01, "the field must show the same as the arrow: the field holds \"{txt}\", the arrow {after}");
     }
 
     /// THE SECOND STRIP OF A PINCHED RIM PUSHES JUST LIKE THE FIRST — by the path of the mouse, not of
@@ -342,11 +285,7 @@ mod tests {
         // the rim falls into two (see `face_is_one_island.rs` in the repro crate)
         qymcad_ui_state::select_body(&mut app.project, &mut app.chosen.sel, &mut app.viewing.view, frame);
         app.start_feat_cmd(4);
-        let front: Vec<u32> = app.project.regen_edges[&frame]
-            .iter()
-            .filter(|e| (e.a[2] - 50.0).abs() < 1e-6 && (e.b[2] - 50.0).abs() < 1e-6 && e.mid[1] < 2.5)
-            .map(|e| e.id)
-            .collect();
+        let front: Vec<u32> = app.project.regen_edges[&frame].iter().filter(|e| (e.a[2] - 50.0).abs() < 1e-6 && (e.b[2] - 50.0).abs() < 1e-6 && e.mid[1] < 2.5).map(|e| e.id).collect();
         assert_eq!(front.len(), 2, "setup: there are two edges at the front top, and {} were found", front.len());
         app.tools.gsel.edges = front.into_iter().collect();
         if let Some(p) = app.tools.cmd.params.iter_mut().find(|p| p.key == "radius") {
@@ -360,11 +299,7 @@ mod tests {
         // A CHAMFER on the back top edge — it eats the back strip and the rim falls into two
         qymcad_ui_state::select_body(&mut app.project, &mut app.chosen.sel, &mut app.viewing.view, filleted);
         app.start_feat_cmd(5);
-        let back: Vec<u32> = app.project.regen_edges[&filleted]
-            .iter()
-            .filter(|e| (e.a[2] - 50.0).abs() < 1e-6 && (e.b[2] - 50.0).abs() < 1e-6 && e.mid[1] > 49.5)
-            .map(|e| e.id)
-            .collect();
+        let back: Vec<u32> = app.project.regen_edges[&filleted].iter().filter(|e| (e.a[2] - 50.0).abs() < 1e-6 && (e.b[2] - 50.0).abs() < 1e-6 && e.mid[1] > 49.5).map(|e| e.id).collect();
         assert_eq!(back.len(), 1, "setup: there is one outer edge at the back top, and {} were found", back.len());
         app.tools.gsel.edges = back.into_iter().collect();
         for key in ["dist", "d2"] {
@@ -379,8 +314,7 @@ mod tests {
 
         // THE RIM LIES AS TWO STRIPS — they are taken THE SAME WAY A CLICK TAKES THEM
         let fmi = app.project.mesh_index(filleted).expect("the mesh");
-        let mut strips: Vec<qymcad_core::geom::MeshFace> =
-            app.project.bodies[fmi].faces.iter().filter(|f| f.normal[2] > 0.9 && f.centroid.z > 49.0).cloned().collect();
+        let mut strips: Vec<qymcad_core::geom::MeshFace> = app.project.bodies[fmi].faces.iter().filter(|f| f.normal[2] > 0.9 && f.centroid.z > 49.0).cloned().collect();
         assert_eq!(strips.len(), 2, "setup: the rim must lie as two strips, and out came {}", strips.len());
         strips.sort_by(|a, b| a.centroid.x.total_cmp(&b.centroid.x));
 
@@ -405,17 +339,7 @@ mod tests {
         app.apply_feat_cmd();
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
 
-        let node = app
-            .project
-            .timeline
-            .iter()
-            .find(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::PushFace { .. }))
-            .map(|n| n.id)
-            .expect("the push must appear in the timeline");
-        assert!(
-            !app.project.regen_errors.contains_key(&node),
-            "pushing the second strip must build just as pushing the first does, and out came: {:?}",
-            app.project.regen_errors.get(&node)
-        );
+        let node = app.project.timeline.iter().find(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::PushFace { .. })).map(|n| n.id).expect("the push must appear in the timeline");
+        assert!(!app.project.regen_errors.contains_key(&node), "pushing the second strip must build just as pushing the first does, and out came: {:?}", app.project.regen_errors.get(&node));
     }
 }

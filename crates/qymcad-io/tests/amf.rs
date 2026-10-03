@@ -102,7 +102,12 @@ fn a_broken_file_is_refused_by_name() {
 #[test]
 fn a_volume_colour_is_the_colour_of_its_object() {
     let v = |x: f64, y: f64| format!("<vertex><coordinates><x>{x}</x><y>{y}</y><z>0</z></coordinates></vertex>");
-    let obj = format!("<object id=\"1\"><mesh><vertices>{}{}{}</vertices><volume><color><r>0.8</r><g>0.1</g><b>0.1</b></color><triangle><v1>0</v1><v2>1</v2><v3>2</v3></triangle></volume></mesh></object>", v(0.0, 0.0), v(1.0, 0.0), v(0.0, 1.0));
+    let obj = format!(
+        "<object id=\"1\"><mesh><vertices>{}{}{}</vertices><volume><color><r>0.8</r><g>0.1</g><b>0.1</b></color><triangle><v1>0</v1><v2>1</v2><v3>2</v3></triangle></volume></mesh></object>",
+        v(0.0, 0.0),
+        v(1.0, 0.0),
+        v(0.0, 1.0)
+    );
     let back = import_amf(&file("coloured.amf", Some(&format!("<?xml version=\"1.0\"?><amf unit=\"millimeter\">{obj}</amf>")))).expect("reads");
     assert_eq!(back[0].color, Some([204, 26, 26]), "the volume's colour was dropped");
 }

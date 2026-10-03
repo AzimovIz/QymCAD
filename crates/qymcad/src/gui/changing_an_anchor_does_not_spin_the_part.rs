@@ -21,11 +21,7 @@ mod tests {
     /// The face of the part facing A GIVEN DIRECTION (the largest of those).
     fn face_towards(app: &App, body: Id, dir: [f64; 3]) -> FaceKey {
         let faces = app.project.regen_faces.get(&body).expect("the body has faces");
-        let f = faces
-            .iter()
-            .filter(|f| f.normal[0] * dir[0] + f.normal[1] * dir[1] + f.normal[2] * dir[2] > 0.9)
-            .max_by(|x, y| x.area.total_cmp(&y.area))
-            .expect("a face looking the right way");
+        let f = faces.iter().filter(|f| f.normal[0] * dir[0] + f.normal[1] * dir[1] + f.normal[2] * dir[2] > 0.9).max_by(|x, y| x.area.total_cmp(&y.area)).expect("a face looking the right way");
         FaceKey { index: 0, centroid: [f.centroid.x, f.centroid.y, f.centroid.z], normal: f.normal, id: f.id }
     }
 
@@ -90,10 +86,7 @@ mod tests {
 
         let now = app.project.world_transform(owner);
         let turn = turn_deg(&was, &now);
-        assert!(
-            turn < 1.0,
-            "anchor B was changed and the part was turned by {turn:.3} deg, while the mating side was supposed to be chosen again by proximity"
-        );
+        assert!(turn < 1.0, "anchor B was changed and the part was turned by {turn:.3} deg, while the mating side was supposed to be chosen again by proximity");
     }
 
     /// THE SAME FOR ANCHOR A: it changes on the fly too, and the freezing refers to the same pair.

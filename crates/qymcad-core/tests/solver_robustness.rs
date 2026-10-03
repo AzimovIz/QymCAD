@@ -2,7 +2,9 @@
 use qymcad_core::model::{Constraint, SketchPoint};
 use qymcad_core::solver;
 
-fn pt(id: u64, x: f64, y: f64) -> SketchPoint { SketchPoint { id, x, y } }
+fn pt(id: u64, x: f64, y: f64) -> SketchPoint {
+    SketchPoint { id, x, y }
+}
 
 /// The sketch solver lets no non-numbers out.
 ///
@@ -25,10 +27,7 @@ fn the_sketch_solver_never_returns_garbage() {
         let res = solver::solve(&mut points, &cons);
         assert!(!res.is_finite(), "unusable input has to give an honest failure to converge rather than a number: {res}");
         for (i, (a, b)) in points.iter().zip(before.iter()).enumerate() {
-            assert!(
-                (a.x.is_nan() && b.x.is_nan()) || a.x == b.x,
-                "point {i}: the solver has to restore the sketch as it was rather than overwrite it with rubbish"
-            );
+            assert!((a.x.is_nan() && b.x.is_nan()) || a.x == b.x, "point {i}: the solver has to restore the sketch as it was rather than overwrite it with rubbish");
         }
     }
 }

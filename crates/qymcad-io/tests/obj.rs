@@ -59,10 +59,7 @@ fn polygons_back_indices_and_slashes_read_as_they_mean() {
 /// is the fourth corner, and an L whose inner corner is the second.
 #[test]
 fn a_concave_polygon_is_cut_inside_itself() {
-    let cases = [
-        ("dart.obj", "v 0 0 0\nv 4 2 0\nv 0 4 0\nv 1 2 0\nf 1 2 3 4\n", 6.0),
-        ("ell.obj", "v 2 1 0\nv 1 1 0\nv 1 2 0\nv 0 2 0\nv 0 0 0\nv 2 0 0\nf 1 2 3 4 5 6\n", 3.0),
-    ];
+    let cases = [("dart.obj", "v 0 0 0\nv 4 2 0\nv 0 4 0\nv 1 2 0\nf 1 2 3 4\n", 6.0), ("ell.obj", "v 2 1 0\nv 1 1 0\nv 1 2 0\nv 0 2 0\nv 0 0 0\nv 2 0 0\nf 1 2 3 4 5 6\n", 3.0)];
     for (name, text, area) in cases {
         let m = &import_obj(&file(name, Some(text))).expect("reads")[0].mesh;
         let mut sum = 0.0;
@@ -79,7 +76,12 @@ fn a_concave_polygon_is_cut_inside_itself() {
 /// A BROKEN FILE IS REFUSED BY NAME, never read as something else.
 #[test]
 fn a_broken_file_is_refused_by_name() {
-    let cases = [("out-of-range.obj", "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 9\n", "io-obj-bad-index#4"), ("not-a-number.obj", "v 0 zero 0\n", "io-obj-bad-line#1"), ("empty.obj", "# nothing\n", "io-obj-no-faces"), ("index-zero.obj", "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 0 1 2\n", "io-obj-bad-index#4")];
+    let cases = [
+        ("out-of-range.obj", "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 9\n", "io-obj-bad-index#4"),
+        ("not-a-number.obj", "v 0 zero 0\n", "io-obj-bad-line#1"),
+        ("empty.obj", "# nothing\n", "io-obj-no-faces"),
+        ("index-zero.obj", "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 0 1 2\n", "io-obj-bad-index#4"),
+    ];
     for (name, text, code) in cases {
         let got = import_obj(&file(name, Some(text)));
         let bodies = got.as_ref().map(|m| m.len()).ok();

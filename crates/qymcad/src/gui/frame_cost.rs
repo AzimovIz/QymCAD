@@ -18,7 +18,6 @@ mod tests {
 
     use super::super::joint_flow::tests::add_part_at;
 
-
     fn per_frame_ms(app: &App, rect: egui::Rect, pos: egui::Pos2) -> f64 {
         let _ = crate::gui::pick::pick_edge_any(&app.painting(), rect, pos); // the first pick fills the cache; every frame runs the ones after it
         let t = std::time::Instant::now();
@@ -61,10 +60,7 @@ mod tests {
         assert!(crate::gui::pick::pick_edge_any(&app.painting(), rect, pos).is_some(), "the edge under the cursor has not gone anywhere");
         let per_frame2 = per_frame_ms(&app, rect, pos);
         eprintln!("[edge pick] {} parts, {per_frame2:.2} ms per frame", app.project.bodies.len());
-        assert!(
-            per_frame2 < per_frame * 2.0 + 2.0,
-            "three times as many parts AWAY from the cursor must not treble the cost of a pick: it was {per_frame:.2} ms, it became {per_frame2:.2} ms"
-        );
+        assert!(per_frame2 < per_frame * 2.0 + 2.0, "three times as many parts AWAY from the cursor must not treble the cost of a pick: it was {per_frame:.2} ms, it became {per_frame2:.2} ms");
     }
 
     /// THE HISTORY OF A PART MUST COST NOTHING WHEN PICKING.
@@ -103,10 +99,7 @@ mod tests {
     #[test]
     fn drawing_code_takes_edges_only_from_the_cache() {
         for (name, src) in [("render.rs", crate::gui::render_source::RENDER), ("sketching.rs", crate::gui::sketch_source::SKETCH)] {
-            assert!(
-                !src.contains("edges_with_ids()"),
-                "{name} draws every frame and must take the edges through body_edges_cached rather than pulling the kernel directly"
-            );
+            assert!(!src.contains("edges_with_ids()"), "{name} draws every frame and must take the edges through body_edges_cached rather than pulling the kernel directly");
         }
     }
 
@@ -121,12 +114,7 @@ mod tests {
         let body = app.project.mesh_id(0).expect("the body is built");
         let mi = app.project.mesh_index(body).expect("the mesh index");
         let (fi, face) = app.project.bodies[mi].faces.iter().enumerate().next().map(|(i, f)| (i, f.clone())).expect("the body has faces");
-        let key = qymcad_core::feature::FaceKey {
-            index: fi as u32,
-            centroid: [face.centroid.x, face.centroid.y, face.centroid.z],
-            normal: face.normal,
-            id: face.id,
-        };
+        let key = qymcad_core::feature::FaceKey { index: fi as u32, centroid: [face.centroid.x, face.centroid.y, face.centroid.z], normal: face.normal, id: face.id };
         let si = app.create_sketch_on(qymcad_core::feature::SketchPlane::Face(body, key));
         app.finish_sketch_edit();
         let warm = crate::gui::sketching::sketch_ref_edges_2d(&app.cache, &app.tools.cmd, &app.live, &app.project, &app.regen, si); // warm up the cache

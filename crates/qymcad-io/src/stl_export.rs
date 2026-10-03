@@ -43,7 +43,5 @@ pub fn export_stl(meshes: &[Mesh], path: &str) -> Result<(), String> {
             buf.extend_from_slice(&[0u8; 2]); // attribute byte count
         }
     }
-    std::fs::File::create(path)
-        .and_then(|mut f| f.write_all(&buf))
-        .map_err(|e| format!("io-stl-write-failed#{e}"))
+    std::fs::File::create(path).and_then(|mut f| f.write_all(&buf)).map_err(|e| format!("io-stl-write-failed#{e}"))
 }

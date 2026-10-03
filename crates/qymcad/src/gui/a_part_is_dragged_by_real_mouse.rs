@@ -57,12 +57,7 @@ mod tests {
     /// The point on the body the click will land on: the centre of the topmost face.
     fn aim(app: &App, body: Id) -> [f64; 3] {
         let wt = app.project.body_display_transform(body, qymcad_ui_state::current_ctx_id(&app.active_path, &app.project));
-        let f = app
-            .project
-            .regen_faces
-            .get(&body)
-            .and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z)))
-            .expect("the body has faces");
+        let f = app.project.regen_faces.get(&body).and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z))).expect("the body has faces");
         qymcad_core::feature::apply12(&wt, [f.centroid.x, f.centroid.y, f.centroid.z])
     }
 
@@ -262,7 +257,13 @@ mod tests {
         let mut problems = Vec::new();
         for nav in qymcad_ui_state::MouseNav::ALL {
             for (what, g) in [("turn", nav.rotate()), ("move", nav.pan())] {
-                let button = if g.any_button { egui::PointerButton::Middle } else if g.buttons.len() == 1 { g.buttons[0] } else { continue };
+                let button = if g.any_button {
+                    egui::PointerButton::Middle
+                } else if g.buttons.len() == 1 {
+                    g.buttons[0]
+                } else {
+                    continue;
+                };
                 if g.shift && button == egui::PointerButton::Primary {
                     continue; // the part's own gesture, begun on a part (ours: Shift and any button moves the view)
                 }

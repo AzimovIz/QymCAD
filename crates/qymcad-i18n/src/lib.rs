@@ -348,7 +348,6 @@ fn has_key(key: &str) -> bool {
     LANGS.with(|m| m.get(&language()).is_some_and(|l| l.has(key)) || m.get(FALLBACK).is_some_and(|l| l.has(key)))
 }
 
-
 /// The keys of the reference language — what the completeness of the rest is measured against.
 #[cfg_attr(not(test), allow(dead_code))]
 pub fn reference_keys() -> Vec<String> {

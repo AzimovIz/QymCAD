@@ -15,11 +15,7 @@ use qymcad_core::refs::{Fingerprint, Ref};
 fn plate_with_sheet() -> (Project, u64, u64) {
     let mut p = Project::default();
     p.new_document();
-    let sid = p.add_line_sketch(
-        "Sketch 1",
-        vec![Point2::new(0.0, 0.0), Point2::new(60.0, 0.0), Point2::new(60.0, 40.0), Point2::new(0.0, 40.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("Sketch 1", vec![Point2::new(0.0, 0.0), Point2::new(60.0, 0.0), Point2::new(60.0, 40.0), Point2::new(0.0, 40.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {
@@ -42,11 +38,7 @@ fn plate_with_sheet() -> (Project, u64, u64) {
 /// to be the same one. That is correct behaviour, but associativity cannot be checked with it: what
 /// would be measured is the length of the tool, not whether the trim follows the base.
 fn cutter(p: &mut Project) -> u64 {
-    let sid = p.add_line_sketch(
-        "tool",
-        vec![Point2::new(30.0, -50.0), Point2::new(90.0, -50.0), Point2::new(90.0, 150.0), Point2::new(30.0, 150.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("tool", vec![Point2::new(30.0, -50.0), Point2::new(90.0, -50.0), Point2::new(90.0, 150.0), Point2::new(30.0, 150.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     p.add_sketch_node(sid, "tool");
@@ -97,11 +89,7 @@ fn clicking_the_other_side_keeps_the_other_piece() {
 #[test]
 fn a_tool_that_misses_is_a_named_refusal() {
     let (mut p, _body, sheet) = plate_with_sheet();
-    let sid = p.add_line_sketch(
-        "off target",
-        vec![Point2::new(200.0, 200.0), Point2::new(240.0, 200.0), Point2::new(240.0, 240.0), Point2::new(200.0, 240.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("off target", vec![Point2::new(200.0, 200.0), Point2::new(240.0, 200.0), Point2::new(240.0, 240.0), Point2::new(200.0, 240.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     p.add_sketch_node(sid, "off target");

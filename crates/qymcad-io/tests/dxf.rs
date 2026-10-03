@@ -119,7 +119,14 @@ fn splines_ellipses_and_blocks_are_read() {
     use dxf::{Block, Drawing, Point, Vector};
     let mut d = Drawing::new();
     d.header.version = dxf::enums::AcadVersion::R2013; // ellipses and splines came with R13; the default writes R12
-    d.add_entity(Entity::new(EntityType::Ellipse(Ellipse { center: Point::new(50.0, 0.0, 0.0), major_axis: Vector::new(20.0, 0.0, 0.0), minor_axis_ratio: 0.5, start_parameter: 0.0, end_parameter: std::f64::consts::TAU, ..Default::default() })));
+    d.add_entity(Entity::new(EntityType::Ellipse(Ellipse {
+        center: Point::new(50.0, 0.0, 0.0),
+        major_axis: Vector::new(20.0, 0.0, 0.0),
+        minor_axis_ratio: 0.5,
+        start_parameter: 0.0,
+        end_parameter: std::f64::consts::TAU,
+        ..Default::default()
+    })));
     let mut spline = Spline { degree_of_curve: 3, knot_values: vec![0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0], ..Default::default() };
     spline.control_points = vec![Point::new(0.0, 0.0, 0.0), Point::new(10.0, 20.0, 0.0), Point::new(30.0, -20.0, 0.0), Point::new(40.0, 0.0, 0.0)];
     d.add_entity(Entity::new(EntityType::Spline(spline)));
@@ -132,15 +139,22 @@ fn splines_ellipses_and_blocks_are_read() {
     d.save_file(&p).expect("written");
 
     let got = import_dxf(&p).expect("read");
-    let corners: Vec<(f64, f64)> = got.curves.iter().flat_map(|c| match c {
-        qymcad_core::geom::ProfEdge::Line { a, b } => vec![(a.x, a.y), (b.x, b.y)],
-        _ => Vec::new(),
-    }).collect();
+    let corners: Vec<(f64, f64)> = got
+        .curves
+        .iter()
+        .flat_map(|c| match c {
+            qymcad_core::geom::ProfEdge::Line { a, b } => vec![(a.x, a.y), (b.x, b.y)],
+            _ => Vec::new(),
+        })
+        .collect();
     let on_ellipse: Vec<&(f64, f64)> = corners.iter().filter(|(x, y)| (((x - 50.0) / 20.0).powi(2) + (y / 10.0).powi(2) - 1.0).abs() < 1e-9).collect();
     assert!(on_ellipse.len() >= 32, "the ellipse did not come in as a run of corners on it: {} of {}", on_ellipse.len(), corners.len());
     assert!(corners.iter().any(|c| (c.0 - 20.0).abs() < 1e-9 && c.1.abs() < 1e-9), "the spline does not run through its middle at (20, 0)");
     assert!(corners.iter().any(|c| c.0.abs() < 1e-12 && c.1.abs() < 1e-12) && corners.iter().any(|c| (c.0 - 40.0).abs() < 1e-12 && c.1.abs() < 1e-12), "the spline does not end at its end points");
-    let inserted = got.curves.iter().any(|c| matches!(c, qymcad_core::geom::ProfEdge::Line { a, b } if (a.x - 100.0).abs() < 1e-9 && (a.y - 100.0).abs() < 1e-9 && (b.x - 100.0).abs() < 1e-9 && (b.y - 120.0).abs() < 1e-9));
+    let inserted = got
+        .curves
+        .iter()
+        .any(|c| matches!(c, qymcad_core::geom::ProfEdge::Line { a, b } if (a.x - 100.0).abs() < 1e-9 && (a.y - 100.0).abs() < 1e-9 && (b.x - 100.0).abs() < 1e-9 && (b.y - 120.0).abs() < 1e-9));
     assert!(inserted, "the block's line is not where its insert puts it");
     assert_eq!(got.skipped, vec![("TEXT".to_string(), 1)], "what was not read is not named");
 }

@@ -32,12 +32,8 @@ fn no_source_guard_is_rooted_at_its_own_crate() {
     let mut rooted: Vec<String> = Vec::new();
     let mut looked = 0usize;
     // `src` AND `tests`: a rule moved into `tests/` is the same rule, and the mistake travels with it.
-    let mut stack: Vec<std::path::PathBuf> = std::fs::read_dir(&crates)
-        .expect("the crates read")
-        .flatten()
-        .flat_map(|e| [e.path().join("src"), e.path().join("tests")])
-        .filter(|p| p.is_dir())
-        .collect();
+    let mut stack: Vec<std::path::PathBuf> =
+        std::fs::read_dir(&crates).expect("the crates read").flatten().flat_map(|e| [e.path().join("src"), e.path().join("tests")]).filter(|p| p.is_dir()).collect();
     assert!(stack.len() > 2, "this guard would be the first to catch itself: it found {} directories", stack.len());
     while let Some(dir) = stack.pop() {
         for e in std::fs::read_dir(&dir).expect("the sources read").flatten() {

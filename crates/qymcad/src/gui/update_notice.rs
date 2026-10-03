@@ -81,18 +81,12 @@ mod tests {
             .find(|(t, _)| t.contains(&said))
             .map(|(_, r)| r.center())
             .unwrap_or_else(|| panic!("the status line does not say a new version exists; it painted: {:?}", painted.iter().map(|(t, _)| t).collect::<Vec<_>>()));
-        assert!(
-            painted.iter().any(|(t, _)| t.contains("v9.9.9-dev.20991231")),
-            "the status line says there is a new version without naming it"
-        );
+        assert!(painted.iter().any(|(t, _)| t.contains("v9.9.9-dev.20991231")), "the status line says there is a new version without naming it");
 
         assert!(!app.win.is(qymcad_ui_state::WinKind::Updates), "the window was open before anything was pressed");
         for pressed in [true, false] {
             let ev = egui::RawInput {
-                events: vec![
-                    egui::Event::PointerMoved(spot),
-                    egui::Event::PointerButton { pos: spot, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() },
-                ],
+                events: vec![egui::Event::PointerMoved(spot), egui::Event::PointerButton { pos: spot, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() }],
                 ..raw()
             };
             status_frame(&mut app, &ctx, ev);
@@ -165,10 +159,7 @@ mod tests {
             crate::gui::panels_windows::settings_window(&mut a.win_ctx(&mut asks), c);
             a.do_win_asks(asks, c);
         });
-        assert!(
-            !without.iter().any(|t| t.contains(&label)),
-            "a build with no release tag offers a check it has nothing to compare against"
-        );
+        assert!(!without.iter().any(|t| t.contains(&label)), "a build with no release tag offers a check it has nothing to compare against");
 
         crate::gui::update_ui::pretend("v0.1.0-dev.20260828", Outcome::Idle);
         let mut app = crate::gui::App::default();

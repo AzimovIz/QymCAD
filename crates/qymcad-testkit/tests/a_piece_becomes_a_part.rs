@@ -87,5 +87,9 @@ fn a_piece_whose_cut_is_deleted_stands_red() {
     p.delete_feature_op(cut);
     let (report, _) = qymcad_testkit::regenerate(&mut p);
     let node = p.timeline.iter().find(|n| n.kind.body() == Some(piece)).map(|n| n.id).expect("the node of the piece stays");
-    assert!(report.errors.iter().any(|(id, _)| *id == node) || p.regen_errors.contains_key(&node), "the piece whose cut was deleted is not red: it reads {:?}", p.timeline.iter().find(|n| n.id == node).map(|n| n.kind.inputs()));
+    assert!(
+        report.errors.iter().any(|(id, _)| *id == node) || p.regen_errors.contains_key(&node),
+        "the piece whose cut was deleted is not red: it reads {:?}",
+        p.timeline.iter().find(|n| n.id == node).map(|n| n.kind.inputs())
+    );
 }

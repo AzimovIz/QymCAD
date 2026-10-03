@@ -71,15 +71,9 @@ mod tests {
         crate::gui::set_component_visible(&mut app.project, &mut app.regen, ca, false);
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
 
-        assert!(
-            crate::gui::pick::pick_edge_any(&app.painting(), viewport(), at).is_none(),
-            "an edge of a HIDDEN part can still be picked — a person attaches to what they cannot see"
-        );
+        assert!(crate::gui::pick::pick_edge_any(&app.painting(), viewport(), at).is_none(), "an edge of a HIDDEN part can still be picked — a person attaches to what they cannot see");
         assert!(app.pick_vertex_any(viewport(), at).is_none(), "a vertex of a hidden part can be picked");
-        assert!(
-            !crate::gui::pick::shown_bodies(&app.painting()).iter().any(|(_, x)| *x == a),
-            "a hidden body stayed in the list of visible ones — both the highlight and the picking will follow it"
-        );
+        assert!(!crate::gui::pick::shown_bodies(&app.painting()).iter().any(|(_, x)| *x == a), "a hidden body stayed in the list of visible ones — both the highlight and the picking will follow it");
     }
 
     /// SHOW IT BACK AND IT IS PICKABLE AGAIN. Otherwise "hide" would have turned into "delete".

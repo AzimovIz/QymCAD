@@ -39,10 +39,7 @@ fn a_part_grounded_inside_a_moving_subassembly_is_listed() {
     assert!(p.drive_joint_for(moving).is_some(), "guard: the subassembly has to be driven by a joint, or there is nothing to check");
 
     let named = p.grounded_inside_moving();
-    assert!(
-        named.contains(&inside),
-        "a part is grounded inside a moving unit, so its grounding means nothing, and the program stays silent: named {named:?}"
-    );
+    assert!(named.contains(&inside), "a part is grounded inside a moving unit, so its grounding means nothing, and the program stays silent: named {named:?}");
 }
 
 #[test]
@@ -52,10 +49,7 @@ fn a_part_grounded_in_a_still_assembly_is_not_bothered() {
     let mut p = Project::default();
     let (_moving, _inside, still) = a_moving_subassembly(&mut p);
     let named = p.grounded_inside_moving();
-    assert!(
-        !named.contains(&still),
-        "a grounded part in the root was declared doubtful although nothing moves it: {named:?}"
-    );
+    assert!(!named.contains(&still), "a grounded part in the root was declared doubtful although nothing moves it: {named:?}");
 }
 
 #[test]

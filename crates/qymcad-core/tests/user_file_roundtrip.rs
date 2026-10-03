@@ -1,4 +1,3 @@
-
 /// The name table survives a save.
 ///
 /// A descriptor inside a reference is an index into the table of the document. Failing to save it means losing

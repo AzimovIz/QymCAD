@@ -220,11 +220,7 @@ fn the_run_out_does_not_leave_a_solid_cylinder() {
     // groove left worth speaking of.
     let share = kept / solid;
     eprintln!("M{d}x{pitch}: the last {lead} mm keep {kept:.1} mm^3 of {solid:.1} - {:.0}% of a solid cylinder", share * 100.0);
-    assert!(
-        share < 0.9,
-        "the run-out left a solid cylinder at the MAJOR diameter ({:.0}% of it): the thread ends in a plug no nut can pass",
-        share * 100.0
-    );
+    assert!(share < 0.9, "the run-out left a solid cylinder at the MAJOR diameter ({:.0}% of it): the thread ends in a plug no nut can pass", share * 100.0);
 }
 
 /// HOW THE METAL GROWS TOWARDS THE END — a diagnostic, not a verdict.
@@ -323,14 +319,7 @@ fn both_ends_of_the_bolt() {
 #[ignore]
 fn a_sweep_over_sizes_and_run_outs() {
     // (nominal, pitch, thread length, run-out at each end)
-    let cases: &[(f64, f64, f64, f64)] = &[
-        (10.0, 1.5, 20.0, 0.0),
-        (10.0, 1.5, 20.0, 1.5),
-        (10.0, 1.5, 6.0, 1.5),
-        (10.0, 1.5, 6.0, 2.5),
-        (6.0, 1.0, 12.0, 2.0),
-        (20.0, 2.5, 30.0, 2.5),
-    ];
+    let cases: &[(f64, f64, f64, f64)] = &[(10.0, 1.5, 20.0, 0.0), (10.0, 1.5, 20.0, 1.5), (10.0, 1.5, 6.0, 1.5), (10.0, 1.5, 6.0, 2.5), (6.0, 1.0, 12.0, 2.0), (20.0, 2.5, 30.0, 2.5)];
     let fit = 0.2;
     for (d, pitch, len, lead) in cases.iter().copied() {
         let b = bolt(d, pitch, len, lead, fit);
@@ -338,10 +327,7 @@ fn a_sweep_over_sizes_and_run_outs() {
         let (bind, at) = worst_bind(&b, &n, pitch, len);
         let g = m(d, pitch, false, fit).geometry();
         let one_turn = std::f64::consts::PI * ((d * 0.5).powi(2) - (d * 0.5 - g.depth).powi(2)) * pitch;
-        eprintln!(
-            "M{d}x{pitch}, length {len}, run-out {lead}: worst {bind:>7.1} mm^3 at {at:>3.0} deg = {:>5.2} turns of metal",
-            bind / one_turn
-        );
+        eprintln!("M{d}x{pitch}, length {len}, run-out {lead}: worst {bind:>7.1} mm^3 at {at:>3.0} deg = {:>5.2} turns of metal", bind / one_turn);
     }
 }
 
@@ -398,10 +384,7 @@ fn why_the_coarse_pair_binds() {
             // AT REST: the two put on one axis with no turning at all. A pair that fits shares nothing here.
             let at_rest = b.shared_metal(&screwed(&n, 0.0, pitch, -len * 0.5));
             let (worst, at) = worst_bind(&b, &n, pitch, len);
-            eprintln!(
-                "M{d}x{pitch} run-out {lead}, fit {fit}: at rest {at_rest:>7.1}, worst {worst:>7.1} mm^3 at {at:>3.0} deg = {:>5.2} turns",
-                worst / one_turn
-            );
+            eprintln!("M{d}x{pitch} run-out {lead}, fit {fit}: at rest {at_rest:>7.1}, worst {worst:>7.1} mm^3 at {at:>3.0} deg = {:>5.2} turns", worst / one_turn);
         }
     }
 }
@@ -434,16 +417,7 @@ fn a_blind_end_is_relieved_not_walled() {
 /// The share of a full ring (from the root radius out to the boss) that stands just above the shoulder.
 fn metal_above_the_shoulder(lead: f64) -> f64 {
     let (r_boss, h_flange, h_boss, len) = (20.0, 6.0, 26.0, 20.0);
-    let spec = ThreadSpec {
-        standard: ThreadStandard::Custom,
-        nominal_d: r_boss * 2.0,
-        pitch: 5.0,
-        custom_angle: 60.0,
-        custom_depth: 2.5,
-        crest_r: Some(0.0),
-        root_r: Some(0.0),
-        ..Default::default()
-    };
+    let spec = ThreadSpec { standard: ThreadStandard::Custom, nominal_d: r_boss * 2.0, pitch: 5.0, custom_angle: 60.0, custom_depth: 2.5, crest_r: Some(0.0), root_r: Some(0.0), ..Default::default() };
     let mut p = Project::default();
     p.new_document();
     let flange = p.add_cylinder(35.0, h_flange);
@@ -452,12 +426,7 @@ fn metal_above_the_shoulder(lead: f64) -> f64 {
     // THE RIM A PERSON CLICKS is the one they can see — the top of the boss. There are two of that radius.
     let (_r0, _s0) = qymcad_testkit::regenerate(&mut p);
     let e = p.regen_edges.get(&blank).cloned().unwrap_or_default();
-    let rim = e
-        .iter()
-        .filter(|x| (x.radius - r_boss).abs() < 0.05)
-        .max_by(|x, y| x.mid[2].total_cmp(&y.mid[2]))
-        .map(|x| x.id)
-        .expect("the top rim of the boss");
+    let rim = e.iter().filter(|x| (x.radius - r_boss).abs() < 0.05).max_by(|x, y| x.mid[2].total_cmp(&y.mid[2])).map(|x| x.id).expect("the top rim of the boss");
     let t = p.add_thread(blank, rim, spec, len, lead, lead);
     let last = p.finish_base_body(t, 1);
     let (report, mut shapes) = qymcad_testkit::regenerate(&mut p);
@@ -468,8 +437,7 @@ fn metal_above_the_shoulder(lead: f64) -> f64 {
     // A THIN SLAB JUST ABOVE THE SHOULDER, inside the run-out zone.
     let slab_h = 0.3;
     let base = h_flange + 0.05;
-    let outside = body.shared_metal(&screwed(&probe(r_boss, slab_h), 0.0, 0.0, base))
-        - body.shared_metal(&screwed(&probe(root_r, slab_h), 0.0, 0.0, base));
+    let outside = body.shared_metal(&screwed(&probe(r_boss, slab_h), 0.0, 0.0, base)) - body.shared_metal(&screwed(&probe(root_r, slab_h), 0.0, 0.0, base));
     let ring = std::f64::consts::PI * (r_boss.powi(2) - root_r.powi(2)) * slab_h;
     outside / ring
 }
@@ -569,23 +537,14 @@ fn a_nut_starts_on_the_first_turn() {
     let one_turn = std::f64::consts::PI * ((d * 0.5).powi(2) - (d * 0.5 - g.depth).powi(2)) * pitch;
     let worst_along = along.iter().cloned().fold(0.0, f64::max);
     let most_off = off_phase.iter().cloned().fold(0.0, f64::max);
-    eprintln!(
-        "starting the nut at the mouth: {worst_along:.1} mm^3 screwing in, {most_off:.1} mm^3 half a pitch out of step (one turn is about {one_turn:.1})"
-    );
+    eprintln!("starting the nut at the mouth: {worst_along:.1} mm^3 screwing in, {most_off:.1} mm^3 half a pitch out of step (one turn is about {one_turn:.1})");
 
-    assert!(
-        worst_along < 0.25 * one_turn,
-        "the nut cannot be started: screwing it on at the mouth shares {worst_along:.1} mm^3, and a quarter of a turn is {:.1}",
-        0.25 * one_turn
-    );
+    assert!(worst_along < 0.25 * one_turn, "the nut cannot be started: screwing it on at the mouth shares {worst_along:.1} mm^3, and a quarter of a turn is {:.1}", 0.25 * one_turn);
     // THE FIRST TURN IS THERE AT ALL. A thread that catches must refuse a nut half a pitch out of step; one
     // whose first turn was erased lets it through, and that is the entry the complaint was about.
     // THE BAR SITS BETWEEN NOTHING AND WHAT WAS MEASURED. Correctly phased the pair shares 0.0; half a pitch
     // out of step it shares 2.7 mm^3 over the two turns that engage, and with the first turn erased it shared
     // 0.0 there as well. Two per cent of a turn's metal is well clear of nothing and well under the reading,
     // so the check answers "does it catch" rather than "how much".
-    assert!(
-        most_off > 0.02 * one_turn,
-        "the first turn is missing: half a pitch out of step the nut still passes, sharing only {most_off:.1} mm^3 — a thread that catches refuses a wrong phase"
-    );
+    assert!(most_off > 0.02 * one_turn, "the first turn is missing: half a pitch out of step the nut still passes, sharing only {most_off:.1} mm^3 — a thread that catches refuses a wrong phase");
 }

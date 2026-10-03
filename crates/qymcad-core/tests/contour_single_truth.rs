@@ -49,7 +49,7 @@ fn points_follow_edges_on_arcs_too() {
     let (a, b) = (Point2::new(r, 0.0), Point2::new(-r, 0.0));
     let mut c = Contour::closed(vec![a, b]);
     c.edges = vec![
-        ProfEdge::Arc { a, b, center: c0, ccw: true },  // the upper half
+        ProfEdge::Arc { a, b, center: c0, ccw: true },       // the upper half
         ProfEdge::Arc { a: b, b: a, center: c0, ccw: true }, // the lower half
     ];
     c.canonicalize();

@@ -95,7 +95,6 @@ pub fn set_msaa(n: u32) {
     MSAA_SAMPLES.store(take, std::sync::atomic::Ordering::Relaxed);
 }
 
-
 /// The camera uniform (orthographic). `right`/`up`/`fwd` are an orthonormal basis; the projection
 /// repeats `Screen::at`.
 #[repr(C)]
@@ -367,8 +366,8 @@ pub struct GpuRenderer {
     /// THE SAMPLES A PIXEL IS DRAWN WITH, fixed when the renderer is made: the pipelines are built for it, and the
     /// targets must agree with them. The setting takes effect on a restart, so it is read once, here.
     samples: u32,
-    msaa_view: Option<wgpu::TextureView>, // the multisample render target, resolved into color_view
-    color_tex: Option<wgpu::Texture>, // the same texture, kept so a check can copy the drawn picture out
+    msaa_view: Option<wgpu::TextureView>,  // the multisample render target, resolved into color_view
+    color_tex: Option<wgpu::Texture>,      // the same texture, kept so a check can copy the drawn picture out
     color_view: Option<wgpu::TextureView>, // the single-sample resolve target, sampled by the blit
     depth_view: Option<wgpu::TextureView>, // the multisample depth
     blit_bind: Option<wgpu::BindGroup>,
@@ -405,10 +404,7 @@ struct Span {
 
 impl GpuRenderer {
     fn new(device: &wgpu::Device, target_format: wgpu::TextureFormat, samples: u32) -> Self {
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("qym_viewport_shader"),
-            source: wgpu::ShaderSource::Wgsl(SHADER.into()),
-        });
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("qym_viewport_shader"), source: wgpu::ShaderSource::Wgsl(SHADER.into()) });
 
         // --- the camera uniform ---
         let cam_buf = device.create_buffer(&wgpu::BufferDescriptor {
@@ -445,11 +441,7 @@ impl GpuRenderer {
             }],
         });
         // --- the mesh pipeline ---
-        let mesh_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("qym_mesh_pl"),
-            bind_group_layouts: &[Some(&cam_layout), Some(&look_layout)],
-            immediate_size: 0,
-        });
+        let mesh_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("qym_mesh_pl"), bind_group_layouts: &[Some(&cam_layout), Some(&look_layout)], immediate_size: 0 });
         let vbl = wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<GpuVert>() as u64,
             step_mode: wgpu::VertexStepMode::Vertex,
@@ -546,19 +538,10 @@ impl GpuRenderer {
                     ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
                     count: None,
                 },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
+                wgpu::BindGroupLayoutEntry { binding: 1, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering), count: None },
             ],
         });
-        let blit_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("qym_blit_pl"),
-            bind_group_layouts: &[Some(&blit_layout)],
-            immediate_size: 0,
-        });
+        let blit_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("qym_blit_pl"), bind_group_layouts: &[Some(&blit_layout)], immediate_size: 0 });
         let blit_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("qym_blit_pipeline"),
             layout: Some(&blit_pl),
@@ -578,12 +561,8 @@ impl GpuRenderer {
             cache: None,
         });
 
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("qym_blit_sampler"),
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            ..Default::default()
-        });
+        let sampler =
+            device.create_sampler(&wgpu::SamplerDescriptor { label: Some("qym_blit_sampler"), mag_filter: wgpu::FilterMode::Linear, min_filter: wgpu::FilterMode::Linear, ..Default::default() });
 
         Self {
             mesh_pipeline,
@@ -755,12 +734,7 @@ impl egui_wgpu::CallbackTrait for MeshPaint {
                     let Some((vbuf, ibuf)) = gpu.bufs.get(at.chunk as usize) else { continue };
                     queue.write_buffer(vbuf, at.first_vertex as u64 * vsize, bytemuck::cast_slice(&part.verts));
                     queue.write_buffer(ibuf, at.first_index as u64 * isize_, bytemuck::cast_slice(&part.idx));
-                    gpu.spans.push(Span {
-                        chunk: at.chunk as usize,
-                        idx: at.first_index..at.first_index + part.idx.len() as u32,
-                        base_vertex: at.first_vertex as i32,
-                        body: part.body,
-                    });
+                    gpu.spans.push(Span { chunk: at.chunk as usize, idx: at.first_index..at.first_index + part.idx.len() as u32, base_vertex: at.first_vertex as i32, body: part.body });
                 }
                 gpu.vcount = verts.iter().map(|p| p.idx.len() as u32).sum();
                 gpu.scene_key = self.scene_key;

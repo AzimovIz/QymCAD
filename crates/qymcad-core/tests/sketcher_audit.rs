@@ -13,14 +13,21 @@ fn new_sketch() -> (Project, usize) {
 }
 
 fn centers(p: &Project, si: usize) -> Vec<u64> {
-    p.sketches[si].entities.iter().filter_map(|e| match e.kind {
-        EntityKind::Circle { center, .. } | EntityKind::Arc { center, .. } => Some(center),
-        _ => None,
-    }).collect()
+    p.sketches[si]
+        .entities
+        .iter()
+        .filter_map(|e| match e.kind {
+            EntityKind::Circle { center, .. } | EntityKind::Arc { center, .. } => Some(center),
+            _ => None,
+        })
+        .collect()
 }
 
 fn circle_r(p: &Project, si: usize) -> Option<f64> {
-    p.sketches[si].entities.iter().find_map(|e| match e.kind { EntityKind::Circle { r, .. } => Some(r), _ => None })
+    p.sketches[si].entities.iter().find_map(|e| match e.kind {
+        EntityKind::Circle { r, .. } => Some(r),
+        _ => None,
+    })
 }
 
 // An arc placed concentric with a circle from a single point shares the centre node, and the two radii then
@@ -30,7 +37,14 @@ fn circle_r(p: &Project, si: usize) -> Option<f64> {
 fn arc_concentric_with_circle_keeps_distinct_centers() {
     let (mut p, si) = new_sketch();
     p.add_circle_entity(si, 0.0, 0.0, 10.0, qymcad_core::feature::Purpose::Real);
-    p.add_arc_entity(si, qymcad_core::geom::Point2::new(0.0, 0.0), qymcad_core::geom::Point2::new(5.0, 0.0), qymcad_core::geom::Point2::new(0.0, 5.0), qymcad_core::feature::Winding::Ccw, qymcad_core::feature::Purpose::Real); // centre at the same point (0,0)
+    p.add_arc_entity(
+        si,
+        qymcad_core::geom::Point2::new(0.0, 0.0),
+        qymcad_core::geom::Point2::new(5.0, 0.0),
+        qymcad_core::geom::Point2::new(0.0, 5.0),
+        qymcad_core::feature::Winding::Ccw,
+        qymcad_core::feature::Purpose::Real,
+    ); // centre at the same point (0,0)
     let c = centers(&p, si);
     eprintln!("centres of circle and arc: {c:?}");
     p.solve_sketch(si);
@@ -144,16 +158,23 @@ fn clipboard_paste_carries_internal_constraints_only() {
 fn trim_circle_to_arc_keeps_center_point() {
     let (mut p, si) = new_sketch();
     let ec = p.add_circle_entity(si, 0.0, 0.0, 10.0, qymcad_core::feature::Purpose::Real);
-    let center_before = p.sketches[si].entities.iter().find_map(|e| match e.kind {
-        EntityKind::Circle { center, .. } if e.id == ec => Some(center),
-        _ => None,
-    }).unwrap();
+    let center_before = p.sketches[si]
+        .entities
+        .iter()
+        .find_map(|e| match e.kind {
+            EntityKind::Circle { center, .. } if e.id == ec => Some(center),
+            _ => None,
+        })
+        .unwrap();
     // a cutting line crossing the circle at two points, then the lower arc is trimmed away
     p.add_line_entity(si, -20.0, 5.0, 20.0, 5.0, qymcad_core::feature::Purpose::Real);
     let ok = p.trim_curve(si, ec, 0.0, -10.0);
     eprintln!("trim ok={ok}");
     let has_center = p.sketches[si].points.iter().any(|q| q.id == center_before);
-    let arc_center = p.sketches[si].entities.iter().find_map(|e| match e.kind { EntityKind::Arc { center, .. } => Some(center), _ => None });
+    let arc_center = p.sketches[si].entities.iter().find_map(|e| match e.kind {
+        EntityKind::Arc { center, .. } => Some(center),
+        _ => None,
+    });
     eprintln!("centre present={has_center}, arc centre={arc_center:?}, original={center_before}");
     assert!(has_center, "the circle centre has to survive being trimmed into an arc");
     assert_eq!(arc_center, Some(center_before), "the arc references the original centre");
@@ -181,11 +202,22 @@ fn merge_close_points_preserves_axis_points() {
 #[test]
 fn redundant_arclength_auto_drives() {
     let (mut p, si) = new_sketch();
-    p.add_arc_entity(si, qymcad_core::geom::Point2::new(0.0, 0.0), qymcad_core::geom::Point2::new(10.0, 0.0), qymcad_core::geom::Point2::new(0.0, 10.0), qymcad_core::feature::Winding::Ccw, qymcad_core::feature::Purpose::Real);
-    let (arc_eid, center, a, b) = p.sketches[si].entities.iter().find_map(|e| match e.kind {
-        EntityKind::Arc { center, a, b, .. } => Some((e.id, center, a, b)),
-        _ => None,
-    }).unwrap();
+    p.add_arc_entity(
+        si,
+        qymcad_core::geom::Point2::new(0.0, 0.0),
+        qymcad_core::geom::Point2::new(10.0, 0.0),
+        qymcad_core::geom::Point2::new(0.0, 10.0),
+        qymcad_core::feature::Winding::Ccw,
+        qymcad_core::feature::Purpose::Real,
+    );
+    let (arc_eid, center, a, b) = p.sketches[si]
+        .entities
+        .iter()
+        .find_map(|e| match e.kind {
+            EntityKind::Arc { center, a, b, .. } => Some((e.id, center, a, b)),
+            _ => None,
+        })
+        .unwrap();
     for pid in [center, a, b] {
         p.sketches[si].constraints.push(Constraint::Fixed { p: pid });
     }
@@ -282,7 +314,11 @@ fn two_squares_sharing_corner_are_two_closed_loops() {
         .iter()
         .filter_map(|&cid| {
             let ci = p.contour_index(cid)?;
-            if p.contours[ci].closed { contour_area(&p, cid) } else { None }
+            if p.contours[ci].closed {
+                contour_area(&p, cid)
+            } else {
+                None
+            }
         })
         .collect();
     eprintln!("closed areas: {closed:?}, expecting two of about 100");
@@ -345,10 +381,16 @@ fn trim_anchors_cut_points_to_crossing_lines() {
         *d = 14.0;
     }
     p.solve_sketch(si);
-    let ends: Vec<(f64, f64)> = p.sketches[si].entities.iter().filter_map(|e| match e.kind {
-        EntityKind::Arc { a, b, .. } => Some((a, b)),
-        _ => None,
-    }).flat_map(|(a, b)| [a, b]).filter_map(|id| p.sketches[si].points.iter().find(|q| q.id == id).map(|q| (q.x, q.y))).collect();
+    let ends: Vec<(f64, f64)> = p.sketches[si]
+        .entities
+        .iter()
+        .filter_map(|e| match e.kind {
+            EntityKind::Arc { a, b, .. } => Some((a, b)),
+            _ => None,
+        })
+        .flat_map(|(a, b)| [a, b])
+        .filter_map(|id| p.sketches[si].points.iter().find(|q| q.id == id).map(|q| (q.x, q.y)))
+        .collect();
     eprintln!("arc ends after the radius change to 14: {ends:?}, expecting |x| ≈ 4");
     for (x, _) in &ends {
         assert!((x.abs() - 4.0).abs() < 0.2, "an arc end drifted off the vertical: x={x:.2}, expecting ±4, so the cut point is not attached");
@@ -386,17 +428,21 @@ fn trim_keeps_dims_and_geometry_associative() {
     p.add_line_entity(si, 4.0, -20.0, 4.0, 20.0, qymcad_core::feature::Purpose::Real);
     p.solve_sketch(si);
     let arc_or_circle_r = |p: &Project| -> f64 {
-        p.sketches[si].entities.iter().find_map(|e| match e.kind {
-            EntityKind::Circle { r, .. } => Some(r),
-            EntityKind::Arc { center: c, a, .. } => {
-                let g = |id| p.sketches[si].points.iter().find(|q| q.id == id).map(|q| (q.x, q.y));
-                match (g(c), g(a)) {
-                    (Some((cx, cy)), Some((ax, ay))) => Some(((ax - cx).powi(2) + (ay - cy).powi(2)).sqrt()),
-                    _ => None,
+        p.sketches[si]
+            .entities
+            .iter()
+            .find_map(|e| match e.kind {
+                EntityKind::Circle { r, .. } => Some(r),
+                EntityKind::Arc { center: c, a, .. } => {
+                    let g = |id| p.sketches[si].points.iter().find(|q| q.id == id).map(|q| (q.x, q.y));
+                    match (g(c), g(a)) {
+                        (Some((cx, cy)), Some((ax, ay))) => Some(((ax - cx).powi(2) + (ay - cy).powi(2)).sqrt()),
+                        _ => None,
+                    }
                 }
-            }
-            _ => None,
-        }).unwrap_or(0.0)
+                _ => None,
+            })
+            .unwrap_or(0.0)
     };
     assert!(p.trim_curve(si, ec, 0.0, 10.0), "trim away the upper sector");
     p.solve_sketch(si);
@@ -435,7 +481,7 @@ fn point_on_circle_with_noncenter_is_noop() {
     p.add_line_entity(si, 0.0, 0.0, 20.0, 0.0, qymcad_core::feature::Purpose::Real);
     let pts: Vec<u64> = p.sketches[si].points.iter().map(|q| q.id).collect();
     let c = pts[0]; // an endpoint of the line, not a circle centre
-    // a free point p
+                    // a free point p
     let pid = p.sketch_point_at(si, 5.0, 5.0, 1e-9);
     let (dof_before, _) = p.sketch_dof(si);
     p.sketches[si].constraints.push(Constraint::PointOnCircle { p: pid, c });

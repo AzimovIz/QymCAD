@@ -149,8 +149,8 @@ mod tests {
             let id = egui::Id::new("field_under_test");
             let mut rect = egui::Rect::NOTHING;
             let out = self.ctx.run_ui(input, |ui| {
-            // The frame hands in the root `Ui` now; the context comes from it.
-            let ctx = &ui.ctx().clone();
+                // The frame hands in the root `Ui` now; the context comes from it.
+                let ctx = &ui.ctx().clone();
                 egui::CentralPanel::default().show(ui, |ui| {
                     ui.label("SCENE");
                 });

@@ -31,10 +31,7 @@ mod random_session {
 
     /// INVARIANTS independent of any scenario: what must hold ALWAYS.
     fn invariants(app: &App, step: usize, what: &str) {
-        assert!(
-            app.project.contours.len() == app.project.contours.ids().len(),
-            "step {step} ({what}): the contour list and its Ids have drifted apart"
-        );
+        assert!(app.project.contours.len() == app.project.contours.ids().len(), "step {step} ({what}): the contour list and its Ids have drifted apart");
         for (b, fs) in app.project.regen_faces.iter() {
             let mut ids: Vec<u32> = fs.iter().map(|f| f.id).collect();
             let n = ids.len();
@@ -42,10 +39,7 @@ mod random_session {
             ids.dedup();
             assert_eq!(ids.len(), n, "step {step} ({what}): body {b} — the faces share names ({n} faces, {} names)", ids.len());
         }
-        assert!(
-            app.project.timeline.iter().all(|n| n.id != 0),
-            "step {step} ({what}): the timeline holds a node without an Id"
-        );
+        assert!(app.project.timeline.iter().all(|n| n.id != 0), "step {step} ({what}): the timeline holds a node without an Id");
         // A LEFTOVER MODE: after cancelling everything, NOT ONE mode may stay active.
         // This is the very class that was reported three times, and never by an invented scenario.
         if what == "cancel everything" {
@@ -108,7 +102,15 @@ mod random_session {
                         "sketch tool"
                     }
                     5 => {
-                        qymcad_ui_state::set_dim_tool(&mut qymcad_ui_state::tools_of!(app), &mut app.viewing.mode_3d, &app.project, app.chosen.sel, app.sketch_ses, &mut app.status, (r.pick(3) + 1) as u8);
+                        qymcad_ui_state::set_dim_tool(
+                            &mut qymcad_ui_state::tools_of!(app),
+                            &mut app.viewing.mode_3d,
+                            &app.project,
+                            app.chosen.sel,
+                            app.sketch_ses,
+                            &mut app.status,
+                            (r.pick(3) + 1) as u8,
+                        );
                         "dimension tool"
                     }
                     6 => {

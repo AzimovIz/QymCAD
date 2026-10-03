@@ -186,12 +186,7 @@ mod tests {
     #[test]
     fn independent_groups_are_solved_independently() {
         // Two pairs, with no constraint between the pairs.
-        let mut p = Problem::new(vec![
-            Body::grounded(at(0.0, 0.0, 0.0)),
-            Body::new(at(50.0, 0.0, 0.0)),
-            Body::grounded(at(0.0, 100.0, 0.0)),
-            Body::new(at(50.0, 100.0, 0.0)),
-        ]);
+        let mut p = Problem::new(vec![Body::grounded(at(0.0, 0.0, 0.0)), Body::new(at(50.0, 0.0, 0.0)), Body::grounded(at(0.0, 100.0, 0.0)), Body::new(at(50.0, 100.0, 0.0))]);
         p.add(Constraint::PointCoincident { a: Anchor::origin(0), b: Anchor::origin(1) });
         p.add(Constraint::PointCoincident { a: Anchor::origin(2), b: Anchor::origin(3) });
         let (poses, rep) = solve_assembly(&p);
@@ -206,12 +201,7 @@ mod tests {
     /// the whole assembly.
     #[test]
     fn a_conflict_in_one_group_does_not_disturb_another() {
-        let mut p = Problem::new(vec![
-            Body::grounded(at(0.0, 0.0, 0.0)),
-            Body::new(at(50.0, 0.0, 0.0)),
-            Body::grounded(at(0.0, 100.0, 0.0)),
-            Body::new(at(50.0, 100.0, 0.0)),
-        ]);
+        let mut p = Problem::new(vec![Body::grounded(at(0.0, 0.0, 0.0)), Body::new(at(50.0, 0.0, 0.0)), Body::grounded(at(0.0, 100.0, 0.0)), Body::new(at(50.0, 100.0, 0.0))]);
         // Group 1: two incompatible constraints pull one body towards two different points.
         p.add(Constraint::PointCoincident { a: Anchor::new(0, at(0.0, 0.0, 0.0)), b: Anchor::origin(1) });
         p.add(Constraint::PointCoincident { a: Anchor::new(0, at(200.0, 0.0, 0.0)), b: Anchor::origin(1) });
@@ -229,12 +219,7 @@ mod tests {
     /// Report indices are the original ones, not those local to a part.
     #[test]
     fn report_indices_refer_to_the_original_constraint_list() {
-        let mut p = Problem::new(vec![
-            Body::grounded(at(0.0, 0.0, 0.0)),
-            Body::new(at(50.0, 0.0, 0.0)),
-            Body::grounded(at(0.0, 100.0, 0.0)),
-            Body::new(at(50.0, 100.0, 0.0)),
-        ]);
+        let mut p = Problem::new(vec![Body::grounded(at(0.0, 0.0, 0.0)), Body::new(at(50.0, 0.0, 0.0)), Body::grounded(at(0.0, 100.0, 0.0)), Body::new(at(50.0, 100.0, 0.0))]);
         p.add(Constraint::PointCoincident { a: Anchor::origin(0), b: Anchor::origin(1) }); // 0
         p.add(Constraint::PointCoincident { a: Anchor::origin(2), b: Anchor::origin(3) }); // 1
         p.add(Constraint::PointCoincident { a: Anchor::origin(2), b: Anchor::origin(3) }); // 2 - a duplicate

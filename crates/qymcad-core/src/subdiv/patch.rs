@@ -206,12 +206,7 @@ impl Cage {
         let p30 = corner(d, [fi, f_cd, f_da])?;
 
         let g = |v: u32| self.verts[v as usize];
-        let net = [
-            [g(p00), g(a_le), g(d_le), g(p30)],
-            [g(a_up), g(a), g(d), g(d_dn)],
-            [g(b_up), g(b), g(cc), g(c_dn)],
-            [g(p03), g(b_ri), g(c_ri), g(p33)],
-        ];
+        let net = [[g(p00), g(a_le), g(d_le), g(p30)], [g(a_up), g(a), g(d), g(d_dn)], [g(b_up), g(b), g(cc), g(c_dn)], [g(p03), g(b_ri), g(c_ri), g(p33)]];
         Some(BezierPatch::from_bspline(net))
     }
 }

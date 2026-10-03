@@ -50,15 +50,48 @@ impl SettingsSection {
         }
     }
 
-
     /// THE ROW LABELS OF A SECTION — what search looks through. A guard cross-checks them against the window source.
     pub fn row_keys(self) -> &'static [&'static str] {
         use SettingsSection::*;
         match self {
-            General => &["settings-language", "settings-help-lang", "settings-help-open", "settings-open-last", "settings-show-start", "settings-import-ask", "settings-autosave", "settings-undo-cap", "settings-kernel-threads", "settings-updates", "settings-recent-limit", "settings-profile"],
+            General => &[
+                "settings-language",
+                "settings-help-lang",
+                "settings-help-open",
+                "settings-open-last",
+                "settings-show-start",
+                "settings-import-ask",
+                "settings-autosave",
+                "settings-undo-cap",
+                "settings-kernel-threads",
+                "settings-updates",
+                "settings-recent-limit",
+                "settings-profile",
+            ],
             Appearance => &["settings-scheme", "settings-ui-scale"],
-            Viewport => &["settings-engine", "settings-projection", "settings-shading", "settings-viewcube", "settings-mouse-nav", "settings-zoom-at", "settings-orbit-about", "settings-pick-precision", "settings-ghost-alpha", "settings-fov", "settings-msaa"],
-            Sketch => &["settings-snap-on", "settings-grid-step", "settings-rot-step", "settings-auto-constrain", "settings-dim-name", "settings-dim-formula", "settings-dim-font", "settings-dim-text"],
+            Viewport => &[
+                "settings-engine",
+                "settings-projection",
+                "settings-shading",
+                "settings-viewcube",
+                "settings-mouse-nav",
+                "settings-zoom-at",
+                "settings-orbit-about",
+                "settings-pick-precision",
+                "settings-ghost-alpha",
+                "settings-fov",
+                "settings-msaa",
+            ],
+            Sketch => &[
+                "settings-snap-on",
+                "settings-grid-step",
+                "settings-rot-step",
+                "settings-auto-constrain",
+                "settings-dim-name",
+                "settings-dim-formula",
+                "settings-dim-font",
+                "settings-dim-text",
+            ],
             Part => &["settings-default-extrude", "settings-default-offset"],
             Assembly => &["settings-show-contours", "settings-show-joints", "settings-show-interference"],
             Layout => &["settings-layout-place", "settings-layout-reset"],

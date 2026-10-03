@@ -23,11 +23,7 @@ mod tests {
     /// A face of a part looking IN THE GIVEN DIRECTION (the largest such face).
     fn face_towards(app: &App, body: Id, dir: [f64; 3]) -> FaceKey {
         let faces = app.project.regen_faces.get(&body).expect("the body has faces");
-        let f = faces
-            .iter()
-            .filter(|f| f.normal[0] * dir[0] + f.normal[1] * dir[1] + f.normal[2] * dir[2] > 0.9)
-            .max_by(|x, y| x.area.total_cmp(&y.area))
-            .expect("a face looking the required way");
+        let f = faces.iter().filter(|f| f.normal[0] * dir[0] + f.normal[1] * dir[1] + f.normal[2] * dir[2] > 0.9).max_by(|x, y| x.area.total_cmp(&y.area)).expect("a face looking the required way");
         FaceKey { index: 0, centroid: [f.centroid.x, f.centroid.y, f.centroid.z], normal: f.normal, id: f.id }
     }
 
@@ -60,11 +56,7 @@ mod tests {
         let jid = app.project.joints.last().map(|j| j.id).expect("two face picks must create a joint");
         let faults = app.project.joint_faults();
         assert!(!faults.iter().any(|(id, _)| *id == jid), "the joint was born faulty: {faults:?}");
-        assert!(
-            !app.project.mates_violated.contains(&jid),
-            "the slider between FACING faces did not assemble: the joint is violated while the arrangement is legitimate; status: {}",
-            app.status
-        );
+        assert!(!app.project.mates_violated.contains(&jid), "the slider between FACING faces did not assemble: the joint is violated while the arrangement is legitimate; status: {}", app.status);
 
         // AND IT MUST MOVE.
         let owner = app.project.body_owner(mine[1]).expect("the owner of the driven part");

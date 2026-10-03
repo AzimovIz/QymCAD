@@ -213,9 +213,7 @@ mod tests {
         }
         // THE MATE: the extruder grounded by its tool, then the topmost face of a part of the carriage onto the topmost
         // face of a part of the extruder
-        let topmost = |app: &App, sub: Id| {
-            parts(app, sub).into_iter().map(|p| (p, top_face(app, app.project.component_bodies(p)[0]))).max_by(|a, b| a.1 .0[2].total_cmp(&b.1 .0[2])).expect("a part")
-        };
+        let topmost = |app: &App, sub: Id| parts(app, sub).into_iter().map(|p| (p, top_face(app, app.project.component_bodies(p)[0]))).max_by(|a, b| a.1 .0[2].total_cmp(&b.1 .0[2])).expect("a part");
         let (carriage_part, (carriage_top, _)) = topmost(&app, carriage);
         let (extruder_part, (extruder_top, _)) = topmost(&app, extruder);
         let middle = [0, 1, 2].map(|k| (carriage_top[k] + extruder_top[k]) / 2.0);

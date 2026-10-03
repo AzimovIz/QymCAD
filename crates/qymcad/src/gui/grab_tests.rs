@@ -99,8 +99,16 @@ mod tests {
         let miss = egui::pos2(at.x + 12.0, at.y);
 
         app.set.pick_precision = 0;
-        assert!(crate::gui::pick::nearest_sketch_point(&app.pick_ctx(), rect, miss, si).is_none(), "with precise aiming a click 12 px away must not catch the point (radius {})", qymcad_ui_state::grab::grab(&app.set, Grab::Point));
+        assert!(
+            crate::gui::pick::nearest_sketch_point(&app.pick_ctx(), rect, miss, si).is_none(),
+            "with precise aiming a click 12 px away must not catch the point (radius {})",
+            qymcad_ui_state::grab::grab(&app.set, Grab::Point)
+        );
         app.set.pick_precision = 2;
-        assert!(crate::gui::pick::nearest_sketch_point(&app.pick_ctx(), rect, miss, si).is_some(), "with coarse aiming a click 12 px away must catch the point (radius {})", qymcad_ui_state::grab::grab(&app.set, Grab::Point));
+        assert!(
+            crate::gui::pick::nearest_sketch_point(&app.pick_ctx(), rect, miss, si).is_some(),
+            "with coarse aiming a click 12 px away must catch the point (radius {})",
+            qymcad_ui_state::grab::grab(&app.set, Grab::Point)
+        );
     }
 }

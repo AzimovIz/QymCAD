@@ -10,7 +10,14 @@ mod tests {
     use qymcad_core::model::{DocMeta, Project};
 
     fn filled() -> DocMeta {
-        DocMeta { title: "Filter housing".into(), author: "Denis".into(), version: "rev. B".into(), comment: "print with a 0.4 nozzle".into(), created: "2026-08-02T10:00:00Z".into(), saved_by: String::new() }
+        DocMeta {
+            title: "Filter housing".into(),
+            author: "Denis".into(),
+            version: "rev. B".into(),
+            comment: "print with a 0.4 nozzle".into(),
+            created: "2026-08-02T10:00:00Z".into(),
+            saved_by: String::new(),
+        }
     }
 
     /// THE PROPERTIES SURVIVE WRITING AND READING THE DOCUMENT.

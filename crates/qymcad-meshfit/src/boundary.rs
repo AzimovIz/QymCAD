@@ -53,7 +53,11 @@ pub fn boundaries(p: &Prepared, found: &[Region]) -> Boundaries {
     }
     let across = |(t, k): (usize, usize)| -> u32 {
         let u = p.neighbours[t][k];
-        if u == NO_NEIGHBOUR { OPEN } else { owner[u as usize] }
+        if u == NO_NEIGHBOUR {
+            OPEN
+        } else {
+            owner[u as usize]
+        }
     };
     let border = |s: (usize, usize)| across(s) != owner[s.0];
     let from = |(t, k): (usize, usize)| tris[t][k];

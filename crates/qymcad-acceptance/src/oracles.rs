@@ -166,11 +166,7 @@ pub fn green_and_idle(doc: &Document) -> Vec<String> {
     let mut kinds: Vec<&String> = green.iter().collect();
     kinds.sort();
     kinds.dedup();
-    kinds
-        .into_iter()
-        .filter(|k| count(&green, k) > count(&before, k))
-        .map(|k| format!("a {k} node came in green and left every body as it was"))
-        .collect()
+    kinds.into_iter().filter(|k| count(&green, k) > count(&before, k)).map(|k| format!("a {k} node came in green and left every body as it was")).collect()
 }
 
 /// THE DOCUMENT IS WHOLE: every node stands in a part, a part holds one body, no sketch is lost, no two parts share a
@@ -297,10 +293,80 @@ mod tests {
             editing: None,
             context: String::new(),
             datums: vec![],
-            parts: parts.iter().enumerate().map(|(i, n)| Part { name: n.to_string(), key: i as u64 + 1, assembly: false, parent: None, visible: true, grounded: false, clone_of: None, at: [0.0; 3], axes: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]] }).collect(),
-            sketches: sketches.iter().map(|(n, p)| SketchInfo { name: n.to_string(), part: p.map(str::to_string), points: 0, lines: 0, construction: 0, arcs: 0, circles: 0, ellipses: 0, splines: 0, texts: 0, notes: 0, text_fonts: vec![], constraint_kinds: vec![], places: vec![], picked: 0, seat: "XY".into(), min: [0.0; 2], max: [0.0; 2], constraints: 0, dof: 0, redundant: 0 }).collect(),
-            features: features.iter().map(|(n, p, e)| Feature { name: n.to_string(), kind: "Extrude".into(), part: p.map(str::to_string), suppressed: false, error: e.map(str::to_string), warning: None, key: 0, bodies: 1 }).collect(),
-            bodies: bodies.iter().map(|(n, p)| Solid { name: n.to_string(), part: Some(p.to_string()), part_key: parts.iter().position(|q| q == p).map(|i| i as u64 + 1), colour: [200, 200, 200], volume: 1.0, area: 1.0, faces: 6, face_names: vec![], face_centres: vec![], edges: Some(12), min: [0.0; 3], max: [1.0; 3], visible: true, consumed: false, sheet: false }).collect(),
+            parts: parts
+                .iter()
+                .enumerate()
+                .map(|(i, n)| Part {
+                    name: n.to_string(),
+                    key: i as u64 + 1,
+                    assembly: false,
+                    parent: None,
+                    visible: true,
+                    grounded: false,
+                    clone_of: None,
+                    at: [0.0; 3],
+                    axes: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+                })
+                .collect(),
+            sketches: sketches
+                .iter()
+                .map(|(n, p)| SketchInfo {
+                    name: n.to_string(),
+                    part: p.map(str::to_string),
+                    points: 0,
+                    lines: 0,
+                    construction: 0,
+                    arcs: 0,
+                    circles: 0,
+                    ellipses: 0,
+                    splines: 0,
+                    texts: 0,
+                    notes: 0,
+                    text_fonts: vec![],
+                    constraint_kinds: vec![],
+                    places: vec![],
+                    picked: 0,
+                    seat: "XY".into(),
+                    min: [0.0; 2],
+                    max: [0.0; 2],
+                    constraints: 0,
+                    dof: 0,
+                    redundant: 0,
+                })
+                .collect(),
+            features: features
+                .iter()
+                .map(|(n, p, e)| Feature {
+                    name: n.to_string(),
+                    kind: "Extrude".into(),
+                    part: p.map(str::to_string),
+                    suppressed: false,
+                    error: e.map(str::to_string),
+                    warning: None,
+                    key: 0,
+                    bodies: 1,
+                })
+                .collect(),
+            bodies: bodies
+                .iter()
+                .map(|(n, p)| Solid {
+                    name: n.to_string(),
+                    part: Some(p.to_string()),
+                    part_key: parts.iter().position(|q| q == p).map(|i| i as u64 + 1),
+                    colour: [200, 200, 200],
+                    volume: 1.0,
+                    area: 1.0,
+                    faces: 6,
+                    face_names: vec![],
+                    face_centres: vec![],
+                    edges: Some(12),
+                    min: [0.0; 3],
+                    max: [1.0; 3],
+                    visible: true,
+                    consumed: false,
+                    sheet: false,
+                })
+                .collect(),
             parameters: vec![],
             joints: vec![],
             mates: vec![],
@@ -327,7 +393,6 @@ mod tests {
             assert!(said.iter().any(|p| p.contains(words)), "{words:?} was not said of a document that deserves it: {said:?}");
         }
     }
-
 }
 
 #[cfg(test)]

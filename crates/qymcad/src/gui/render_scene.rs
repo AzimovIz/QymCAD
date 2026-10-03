@@ -8,15 +8,7 @@ use super::*;
 
 // THE SCENE AND THE DRAWING CACHES: assembling the scene for the GPU, the component preview, the section caps
 // for a frame, refreshing the cache of the selected body's edges.
-impl App {
-
-
-
-
-
-
-
-}
+impl App {}
 
 /// A preview of component `cid`'s body: a self-contained 256x256 orthographic raster (the isometric view of
 /// the default camera), WITHOUT mutating the camera or visibility state. It renders only the subtree's bodies
@@ -76,7 +68,11 @@ pub(crate) fn render_component_thumbnail(dc: &qymcad_ui_state::DrawCtx, cid: qym
         let pw = |vi: u32| {
             let p = mesh.verts[vi as usize];
             let a = [p.x, p.y, p.z];
-            if ident { a } else { apply12(&wt, a) }
+            if ident {
+                a
+            } else {
+                apply12(&wt, a)
+            }
         };
         for tri in &mesh.tris {
             let (a, b, cc) = (pw(tri[0]), pw(tri[1]), pw(tri[2]));
@@ -250,7 +246,10 @@ pub(crate) fn gpu_scene(pn: &qymcad_ui_state::Painting) -> qymcad_ui_state::GpuS
         let (palette, per_tri) = qymcad_ui_state::face_palette(pn.project, mi, mesh.tris.len());
         for c in &palette {
             let b = qymcad_scheme::brighten(*c, pn.scheme.pal.body_lighten, pn.scheme.pal.body_saturate);
-            looks.push(qymcad_ui_state::BodyLook { tint: u32::from_le_bytes([b[0], b[1], b[2], 0]), state: if hot { qymcad_ui_state::LOOK_HOT } else { 0 } | if ghost { qymcad_ui_state::LOOK_GHOST } else { 0 } });
+            looks.push(qymcad_ui_state::BodyLook {
+                tint: u32::from_le_bytes([b[0], b[1], b[2], 0]),
+                state: if hot { qymcad_ui_state::LOOK_HOT } else { 0 } | if ghost { qymcad_ui_state::LOOK_GHOST } else { 0 },
+            });
         }
         rows_of.insert(mi, 1 + palette.len() as u32);
         // THE KEY IS ABOUT SHAPE ALONE. The position lives separately (`SceneBlock::at`) and a move does not
@@ -318,7 +317,11 @@ pub(crate) fn gpu_scene(pn: &qymcad_ui_state::Painting) -> qymcad_ui_state::GpuS
             let pos_w = |vi: u32| {
                 let p = mesh.verts[vi as usize];
                 let a = [p.x, p.y, p.z];
-                if ident { a } else { qymcad_core::feature::apply12(&wt, a) }
+                if ident {
+                    a
+                } else {
+                    qymcad_core::feature::apply12(&wt, a)
+                }
             };
             let (a, b, c) = (pos_w(tri[0]), pos_w(tri[1]), pos_w(tri[2]));
             // THE SECTION: an HONEST clip of the triangle by the plane (a cut exactly along it, with no needles)
@@ -365,7 +368,13 @@ pub(crate) fn gpu_scene(pn: &qymcad_ui_state::Painting) -> qymcad_ui_state::GpuS
                         // at a clipped vertex the normal of the nearest corner is taken: the weights are
                         // barycentric, so the largest of them names the corner the point came from
                         let w = cv.w;
-                        let nk = if w[0] >= w[1] && w[0] >= w[2] { 0 } else if w[1] >= w[2] { 1 } else { 2 };
+                        let nk = if w[0] >= w[1] && w[0] >= w[2] {
+                            0
+                        } else if w[1] >= w[2] {
+                            1
+                        } else {
+                            2
+                        };
                         idx.push(own.len() as u32);
                         own.push(qymcad_ui_state::GpuVert { pos: [cv.pos[0] as f32, cv.pos[1] as f32, cv.pos[2] as f32], body: row, nrm: nrms[nk] });
                     }
@@ -380,14 +389,14 @@ pub(crate) fn gpu_scene(pn: &qymcad_ui_state::Painting) -> qymcad_ui_state::GpuS
     }
     pn.cache.scene_stats.set(stats);
     blocks.retain(|mi, _| live.contains(mi)); // bodies that are no longer visible hold no memory
-    // THE ASSEMBLY ORDER IS THE ONE IT ALWAYS WAS: the display order of the bodies, not the order in the
-    // hash map. For translucent bodies the order is visible to the eye (they blend), so it must not change.
-    // THE SIZE IS KNOWN IN ADVANCE and should be asked for at once. The concatenation runs over 138 pieces
-    // into an empty vector, that is, with a dozen and a half reallocations and copies of an ever-growing
-    // buffer; at 463,878 vertices that is a noticeable share of the frame's cost, taken for nothing.
-    // THE PIECES ARE COLLECTED, NOT GLUED, and in a STABLE order: the display order of the bodies, whatever
-    // each of them looks like right now. Gluing meant a second full copy of the scene in memory; tying the
-    // order to the look meant re-uploading it whenever a body turned into a ghost.
+                                              // THE ASSEMBLY ORDER IS THE ONE IT ALWAYS WAS: the display order of the bodies, not the order in the
+                                              // hash map. For translucent bodies the order is visible to the eye (they blend), so it must not change.
+                                              // THE SIZE IS KNOWN IN ADVANCE and should be asked for at once. The concatenation runs over 138 pieces
+                                              // into an empty vector, that is, with a dozen and a half reallocations and copies of an ever-growing
+                                              // buffer; at 463,878 vertices that is a noticeable share of the frame's cost, taken for nothing.
+                                              // THE PIECES ARE COLLECTED, NOT GLUED, and in a STABLE order: the display order of the bodies, whatever
+                                              // each of them looks like right now. Gluing meant a second full copy of the scene in memory; tying the
+                                              // order to the look meant re-uploading it whenever a body turned into a ghost.
     let mut pieces: Vec<qymcad_ui_state::ScenePiece> = Vec::new();
     for mi in &order {
         if let (Some(b), Some(&no)) = (blocks.get(mi), look_of.get(mi)) {
@@ -408,13 +417,7 @@ pub(crate) fn gpu_scene(pn: &qymcad_ui_state::Painting) -> qymcad_ui_state::GpuS
             // precisely in the threaded zone (reported: the bottom of the part filled, the thread empty,
             // while the cap itself covers 99.8% of the outline). The nudge is thousandths of the extent and
             // does not affect the geometry.
-            let eps = caps
-                .iter()
-                .filter_map(|m| m.bounds())
-                .map(|b| (b.max.x - b.min.x).max(b.max.y - b.min.y).max(b.max.z - b.min.z))
-                .fold(0.0_f64, f64::max)
-                .max(1.0)
-                * 1.0e-3;
+            let eps = caps.iter().filter_map(|m| m.bounds()).map(|b| (b.max.x - b.min.x).max(b.max.y - b.min.y).max(b.max.z - b.min.z)).fold(0.0_f64, f64::max).max(1.0) * 1.0e-3;
             let off = [n[0] * eps, n[1] * eps, n[2] * eps];
             let cap_no = looks.len() as u32;
             // AMBER, AND NOT SHADED BY THE LIGHT: a cut is a section, not a surface of the part, and it reads

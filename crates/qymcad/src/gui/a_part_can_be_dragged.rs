@@ -21,12 +21,7 @@ mod tests {
     /// A point ON THE BODY that can be clicked: the centre of the topmost face.
     fn aim(app: &App, body: Id) -> [f64; 3] {
         let wt = app.project.body_display_transform(body, qymcad_ui_state::current_ctx_id(&app.active_path, &app.project));
-        let f = app
-            .project
-            .regen_faces
-            .get(&body)
-            .and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z)))
-            .expect("the body has faces");
+        let f = app.project.regen_faces.get(&body).and_then(|fs| fs.iter().max_by(|a, b| a.centroid.z.total_cmp(&b.centroid.z))).expect("the body has faces");
         qymcad_core::feature::apply12(&wt, [f.centroid.x, f.centroid.y, f.centroid.z])
     }
 
@@ -117,10 +112,7 @@ mod tests {
         // ALONG THE AXIS AND NOWHERE ELSE: the transverse share must be zero.
         let along = went[0] * axis[0] + went[1] * axis[1] + went[2] * axis[2];
         let across = (len * len - along * along).max(0.0).sqrt();
-        assert!(
-            across < 1e-3,
-            "a part on a slider went ACROSS its own axis by {across:.4} (of {len:.4} in all, {along:.4} along) — so it was led anywhere rather than along the degree"
-        );
+        assert!(across < 1e-3, "a part on a slider went ACROSS its own axis by {across:.4} (of {len:.4} in all, {along:.4} along) — so it was led anywhere rather than along the degree");
     }
 
     /// A GROUNDED PART IS NOT LED: it is the point of reference itself.

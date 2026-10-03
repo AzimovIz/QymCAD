@@ -184,10 +184,7 @@ pub(super) mod tests {
             format!("ph::{name}")
         };
         assert!(sub_assembly_icon.starts_with("ph::"), "setup: the subassembly icon was not found, out came \"{sub_assembly_icon}\"");
-        for (what, src, at) in [
-            ("the tree row", panels, panels.find("FeatureKind::PartInstance { src_comp, .. } =>")),
-            ("the icon of the feature", gui, gui.find("FK::PartInstance { .. } =>")),
-        ] {
+        for (what, src, at) in [("the tree row", panels, panels.find("FeatureKind::PartInstance { src_comp, .. } =>")), ("the icon of the feature", gui, gui.find("FK::PartInstance { .. } =>"))] {
             let at = at.unwrap_or_else(|| panic!("{what}: the display of a part copy was not found"));
             let tail = &src[at..src[at..].find('\n').map(|e| at + e).unwrap_or(src.len())];
             assert!(

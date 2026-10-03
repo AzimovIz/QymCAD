@@ -301,7 +301,11 @@ pub fn run(tool: &PartTool, case: &Case, round_trips: bool) -> Vec<String> {
                 None => s.status() != status || !beside.is_empty() || said_at_the_click,
             };
             if !said {
-                problems.push(format!("refused without a word: {}; the status line says {:?}", node.map_or("nothing was made".to_string(), |n| format!("the node {:?} came in green", n.name)), s.status()));
+                problems.push(format!(
+                    "refused without a word: {}; the status line says {:?}",
+                    node.map_or("nothing was made".to_string(), |n| format!("the node {:?} came in green", n.name)),
+                    s.status()
+                ));
             }
             if (now.volume - base.volume).abs() > 1e-6 || now.faces != base.faces {
                 problems.push(format!("the body changed: {} mm^3 over {} faces, it was {} over {}", now.volume, now.faces, base.volume, base.faces));

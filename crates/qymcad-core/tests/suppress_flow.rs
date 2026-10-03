@@ -15,11 +15,7 @@ use qymcad_core::model::Project;
 fn chain() -> (Project, usize, usize) {
     let mut p = Project::default();
     p.new_document();
-    let sid = p.add_line_sketch(
-        "sq",
-        vec![Point2::new(0.0, 0.0), Point2::new(30.0, 0.0), Point2::new(30.0, 30.0), Point2::new(0.0, 30.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("sq", vec![Point2::new(0.0, 0.0), Point2::new(30.0, 0.0), Point2::new(30.0, 30.0), Point2::new(0.0, 30.0)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {

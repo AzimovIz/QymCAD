@@ -76,11 +76,7 @@ fn tri_count(s: &Shape, defl: Option<f64>) -> usize {
 /// which reads as smooth. The measure is dimensionless and therefore comparable between a 2 mm part and a 4 m
 /// frame.
 fn max_angle_step(s: &Shape) -> f64 {
-    let mut angs: Vec<f64> = s
-        .tessellate_auto(qymcad_core::model::GeomQuality::Normal.deflection_k())
-        .iter()
-        .flat_map(|(m, _)| m.verts.iter().map(|v| v.y.atan2(v.x)))
-        .collect();
+    let mut angs: Vec<f64> = s.tessellate_auto(qymcad_core::model::GeomQuality::Normal.deflection_k()).iter().flat_map(|(m, _)| m.verts.iter().map(|v| v.y.atan2(v.x))).collect();
     angs.sort_by(|a, b| a.partial_cmp(b).unwrap());
     angs.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
     assert!(angs.len() > 3, "the tessellation gave {} angles; is the body round at all?", angs.len());
@@ -128,10 +124,7 @@ fn quality_is_scale_invariant() {
 fn huge_body_is_lighter_than_fixed_deflection() {
     let s = Shape::cylinder(2000.0, 4000.0).expect("the huge cylinder");
     let (auto, fixed) = (tri_count(&s, None), tri_count(&s, Some(0.5)));
-    assert!(
-        (auto as f64) < fixed as f64 * 0.85,
-        "adaptive gives {auto} triangles against {fixed} at a fixed 0.5, expecting noticeably lighter"
-    );
+    assert!((auto as f64) < fixed as f64 * 0.85, "adaptive gives {auto} triangles against {fixed} at a fixed 0.5, expecting noticeably lighter");
     assert!(max_angle_step(&s) <= 0.32, "and the huge body still reads as smooth");
 }
 

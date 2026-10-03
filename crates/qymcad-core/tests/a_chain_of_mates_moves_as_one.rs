@@ -70,10 +70,7 @@ fn dragging_the_first_mate_carries_the_whole_chain_every_step() {
         // C is joined to B by a vertical slider, so it has no horizontal freedom and its x and y match B
         let lag = ((pc[0] - pb[0]).powi(2) + (pc[1] - pb[1]).powi(2)).sqrt();
         worst = worst.max(lag);
-        assert!(
-            lag < 1e-3,
-            "step {k}: the third part trails the second by {lag:.3} mm (B at {pb:?}, C at {pc:?}), which is the lag"
-        );
+        assert!(lag < 1e-3, "step {k}: the third part trails the second by {lag:.3} mm (B at {pb:?}, C at {pc:?}), which is the lag");
     }
     assert!(worst < 1e-3, "worst lag over the drag: {worst:.3} mm");
 }

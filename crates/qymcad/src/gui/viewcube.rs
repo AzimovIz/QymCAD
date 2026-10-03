@@ -125,14 +125,7 @@ pub(crate) fn zones() -> Vec<Zone> {
         for sy in [1.0_f64, -1.0] {
             for sz in [1.0_f64, -1.0] {
                 let dir = norm([sx, sy, sz]);
-                let mut poly = vec![
-                    [sx * H, sy * T, sz * S],
-                    [sx * H, sy * S, sz * T],
-                    [sx * T, sy * H, sz * S],
-                    [sx * S, sy * H, sz * T],
-                    [sx * T, sy * S, sz * H],
-                    [sx * S, sy * T, sz * H],
-                ];
+                let mut poly = vec![[sx * H, sy * T, sz * S], [sx * H, sy * S, sz * T], [sx * T, sy * H, sz * S], [sx * S, sy * H, sz * T], [sx * T, sy * S, sz * H], [sx * S, sy * T, sz * H]];
                 sort_around(&mut poly, dir);
                 out.push(Zone { dir, kind: ZoneKind::Corner, poly, label: None });
             }
@@ -202,9 +195,6 @@ impl App {
         }
         true
     }
-
-
-
 }
 
 /// A point inside a convex polygon (wound either way).
@@ -279,21 +269,19 @@ fn label_frame(d: [f64; 3]) -> ([f64; 3], [f64; 3]) {
     }
 }
 
-
-
 /// WHAT DRAWING THE VIEW CUBE NEEDS, and nothing besides.
 ///
 /// MEASURED rather than guessed: the cube reads the camera's basis, one size out of the settings, the
 /// palette, and a cache of rendered labels. It writes nothing - a click does not turn the view here, it
 /// ASKS (see [`Turn`]).
 pub(crate) struct CubeCtx<'a> {
-/// Right, up and forward of the camera - the whole of what the cube needs to know about it.
-pub basis: ([f64; 3], [f64; 3], [f64; 3]),
-/// The size setting as stored: 0 small, 1 middle, 2 large.
-pub size_step: u8,
-pub pal: &'a crate::palette::Palette,
-/// Rendered face labels, kept between frames. Interior mutability, so a shared borrow is enough.
-pub labels: &'a std::cell::RefCell<std::collections::HashMap<String, egui::TextureHandle>>,
+    /// Right, up and forward of the camera - the whole of what the cube needs to know about it.
+    pub basis: ([f64; 3], [f64; 3], [f64; 3]),
+    /// The size setting as stored: 0 small, 1 middle, 2 large.
+    pub size_step: u8,
+    pub pal: &'a crate::palette::Palette,
+    /// Rendered face labels, kept between frames. Interior mutability, so a shared borrow is enough.
+    pub labels: &'a std::cell::RefCell<std::collections::HashMap<String, egui::TextureHandle>>,
 }
 
 /// WHAT A CLICK ON THE CUBE ASKS FOR.
@@ -303,10 +291,10 @@ pub labels: &'a std::cell::RefCell<std::collections::HashMap<String, egui::Textu
 /// which way was pointed at. A panel that returns a request can be read, tested and moved; one that
 /// reaches for the camera cannot.
 pub(crate) struct Turn {
-pub yaw: f64,
-pub pitch: f64,
-/// What to say in the status line, as a catalogue key.
-pub say: Option<&'static str>,
+    pub yaw: f64,
+    pub pitch: f64,
+    /// What to say in the status line, as a catalogue key.
+    pub say: Option<&'static str>,
 }
 
 /// THE SIZE OF THE CUBE in pixels — from the settings. On a 4K screen the former 36 px were
@@ -505,11 +493,7 @@ pub(crate) fn axis_triad(cube: &CubeCtx, painter: &egui::Painter, rect: Rect) {
         let hl = (s * 0.22).max(6.0);
         let hw = hl * 0.42;
         let base = Pos2::new(tip.x - ux * hl, tip.y - uy * hl);
-        painter.add(egui::Shape::convex_polygon(
-            vec![tip, Pos2::new(base.x + px * hw, base.y + py * hw), Pos2::new(base.x - px * hw, base.y - py * hw)],
-            col,
-            Stroke::NONE,
-        ));
+        painter.add(egui::Shape::convex_polygon(vec![tip, Pos2::new(base.x + px * hw, base.y + py * hw), Pos2::new(base.x - px * hw, base.y - py * hw)], col, Stroke::NONE));
         // THE CAPTION GOES BEYOND THE HEAD and is bold — a thin letter beside a bright arrow gets
         // lost
         let lp = Pos2::new(tip.x + ux * (hl * 0.75), tip.y + uy * (hl * 0.75));

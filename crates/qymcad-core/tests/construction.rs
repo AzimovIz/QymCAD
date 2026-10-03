@@ -5,11 +5,7 @@ use qymcad_core::model::Project;
 #[test]
 fn construction_line_excluded_from_profile() {
     let mut p = Project::default();
-    let sid = p.add_line_sketch(
-        "sq",
-        vec![Point2::new(0.0, 0.0), Point2::new(10.0, 0.0), Point2::new(10.0, 10.0), Point2::new(0.0, 10.0)],
-        true,
-    );
+    let sid = p.add_line_sketch("sq", vec![Point2::new(0.0, 0.0), Point2::new(10.0, 0.0), Point2::new(10.0, 10.0), Point2::new(0.0, 10.0)], true);
     let si = p.sketch_index(sid).unwrap();
     let cid = p.sketches[si].contour_ids[0];
     let before = p.contours[p.contour_index(cid).unwrap()].points.len();

@@ -10,7 +10,14 @@ fn eskiz15_no_backside_step() {
     let errs: Vec<_> = report
         .errors
         .iter()
-        .filter(|(_, e)| !matches!(e, qymcad_core::errors::CoreError::OpFailed(qymcad_core::errors::Op::Chamfer | qymcad_core::errors::Op::ChamferAsym) | qymcad_core::errors::CoreError::ChamferTooBig { .. } | qymcad_core::errors::CoreError::SketchFaceGone))
+        .filter(|(_, e)| {
+            !matches!(
+                e,
+                qymcad_core::errors::CoreError::OpFailed(qymcad_core::errors::Op::Chamfer | qymcad_core::errors::Op::ChamferAsym)
+                    | qymcad_core::errors::CoreError::ChamferTooBig { .. }
+                    | qymcad_core::errors::CoreError::SketchFaceGone
+            )
+        })
         .collect();
     assert!(errs.is_empty(), "no new rebuild errors besides the chamfer: {errs:?}");
     // after the entry overshoot was fixed the volume is higher: the false step of about 0.1 mm against the

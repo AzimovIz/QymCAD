@@ -71,10 +71,7 @@ pub(in crate::gui) mod tests {
         // The state of that document: the connector is gone, the joint has stayed.
         app.project.connectors.retain(|c| c.id != cb);
         let texts = panel_text(&mut app);
-        assert!(
-            texts.iter().any(|t| t.contains(&lost)),
-            "a joint with no connector looks healthy in the list: \"{lost}\" was expected, and the frame holds {texts:?}"
-        );
+        assert!(texts.iter().any(|t| t.contains(&lost)), "a joint with no connector looks healthy in the list: \"{lost}\" was expected, and the frame holds {texts:?}");
     }
 
     /// A JOINT WITH AN UNRESOLVABLE ANCHOR IS MARKED WITH ITS OWN REASON, NOT SOMEBODY ELSE'S.
@@ -134,10 +131,7 @@ pub(in crate::gui) mod tests {
         assert!(!app.project.joints.iter().any(|j| j.id == near), "the click on the cross did not delete the joint — the check aims past it");
 
         assert!(app.project.joints.iter().any(|j| j.id == far), "deleting a joint in the root wiped out the joint of the subassembly");
-        assert!(
-            app.project.connector(cd).is_some() && app.project.connector(ce).is_some(),
-            "the connectors of a joint in ANOTHER assembly were wiped out — it stayed in the document dead and silent"
-        );
+        assert!(app.project.connector(cd).is_some() && app.project.connector(ce).is_some(), "the connectors of a joint in ANOTHER assembly were wiped out — it stayed in the document dead and silent");
         assert!(app.project.joint_faults().is_empty(), "a faulty joint appeared after the deletion: {:?}", app.project.joint_faults());
     }
 

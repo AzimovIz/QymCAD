@@ -15,11 +15,7 @@ use qymcad_core::model::{Id, Project};
 use qymcad_core::model::ArrayAxis;
 
 fn box_body(p: &mut Project, w: f64, h: f64, up: f64) -> Id {
-    let sid = p.add_line_sketch(
-        "Sketch",
-        vec![Point2::new(0.0, 0.0), Point2::new(w, 0.0), Point2::new(w, h), Point2::new(0.0, h)],
-        true,
-    );
+    let sid = p.add_line_sketch("Sketch", vec![Point2::new(0.0, 0.0), Point2::new(w, 0.0), Point2::new(w, h), Point2::new(0.0, h)], true);
     let si = p.sketch_index(sid).unwrap();
     p.regen_sketch(si);
     if let Some(o) = p.sketch_owner(sid) {
@@ -72,13 +68,9 @@ fn demand_after_param_edit(title: &str, p: &mut Project, body: Id, key: &str, va
     p.set_feat_dim(node, key, value.to_string());
     let (after, _) = qymcad_testkit::regenerate(p);
     let area_now = area_of(p);
-    assert!(
-        (area_now - area_was).abs() > 1e-6,
-        "{title}: the edit \"{key} = {value}\" changed NOTHING (the area stayed {area_was:.3}) — the dimension key is wrong and the case checks nothing"
-    );
+    assert!((area_now - area_was).abs() > 1e-6, "{title}: the edit \"{key} = {value}\" changed NOTHING (the area stayed {area_was:.3}) — the dimension key is wrong and the case checks nothing");
 
-    let reds: Vec<String> =
-        after.errors.iter().filter(|(n, _)| !was_red.contains(n)).map(|(n, e)| format!("node {n}: {e:?}")).collect();
+    let reds: Vec<String> = after.errors.iter().filter(|(n, _)| !was_red.contains(n)).map(|(n, e)| format!("node {n}: {e:?}")).collect();
     assert!(reds.is_empty(), "{title}: the edit \"{key} = {value}\" broke nodes that stood before it:\n  {}", reds.join("\n  "));
 
     let now = live_names(p);
@@ -197,9 +189,5 @@ fn a_topology_changing_param_returns_the_same_names() {
     p.set_feat_dim(node, "depth", "6".into());
     let (r2, _) = qymcad_testkit::regenerate(&mut p);
     assert!(r2.errors.is_empty(), "restoring the depth broke nodes: {:?}", r2.errors);
-    assert_eq!(
-        live_names(&p),
-        blind,
-        "the depth was restored, so THE SAME names must come back; a divergence means a name depends on something other than the recipe"
-    );
+    assert_eq!(live_names(&p), blind, "the depth was restored, so THE SAME names must come back; a divergence means a name depends on something other than the recipe");
 }

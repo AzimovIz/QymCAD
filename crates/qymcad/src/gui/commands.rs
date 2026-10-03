@@ -29,13 +29,6 @@ impl App {
         begin_contour_pick(&mut self.part_ctx(), slot, sid);
     }
 
-
-
-
-
-
-
-
     /// An array as A COMMAND: pick a body, then the top bar (the count, the direction, the axis), then the
     /// STEP or ANGLE as an expression field AT THE GEOMETRY, then ghost previews of the copies, then Enter.
     /// 17 is linear (a grid), 18 is circular.
@@ -43,9 +36,6 @@ impl App {
         self.cancel_all_tools(); // exclusivity: the array drops the previous tool and its picks
         start_array_cmd(&mut self.part_ctx(), cmd)
     }
-
-
-
 
     /// A primitive as A COMMAND: 10 box, 11 cylinder, 12 sphere, 13 cone, 14 torus, 15 prism. The sizes are
     /// expression fields at the geometry (the popup) plus a wireframe PREVIEW; Enter creates, Esc cancels.
@@ -55,41 +45,6 @@ impl App {
         self.cancel_all_tools(); // exclusivity: a new tool drops ANY previous one, picks and modes alike
         start_prim_cmd(&mut self.part_ctx(), code)
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     /// Start RE-PLACING a sketch: turn on picking a new plane by click in the viewport.
     pub(super) fn start_replace_sketch_plane(&mut self, si: usize) {
@@ -102,7 +57,6 @@ impl App {
         self.chosen.sel = Sel::Sketch(si);
         self.status = crate::i18n::tr("msg-move-sketch");
     }
-
 
     /// Derive the workbench from the active context (rather than from a tab chosen by hand) and
     /// synchronise the model.
@@ -122,30 +76,21 @@ impl App {
             self.cancel_all_tools();
         }
         self.project.set_active_component(Some(qymcad_ui_state::current_ctx_id(&self.active_path, &self.project))); // new nodes go into the active context
-        qymcad_ui_state::doc_touched_without_undo(&mut self.disk.edits, &self.project); // navigation changes the document but is not an undo step
+        qymcad_ui_state::doc_touched_without_undo(&mut self.disk.edits, &self.project);
+        // navigation changes the document but is not an undo step
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     /// Apply the result of a background operation, on the UI thread.
     pub(super) fn apply_job_result(&mut self, res: JobResult) {
         match res {
             JobResult::Regenerated { stamp, project, shapes, built, errors, cancelled } => self.finish_regen_checked(stamp, *project, shapes, built, errors, cancelled),
             JobResult::ExactImported { path, format, bodies, shapes, nodes } => crate::gui::import_scale::land_exact(&mut self.win_ctx(&mut Vec::new()), path, format, bodies, shapes, nodes),
-            JobResult::DrawingRead { path, curves, note } => { self.arm_sketch_import(curves, &path); if !note.is_empty() { self.status = format!("{} {note}", self.status); } }
+            JobResult::DrawingRead { path, curves, note } => {
+                self.arm_sketch_import(curves, &path);
+                if !note.is_empty() {
+                    self.status = format!("{} {note}", self.status);
+                }
+            }
             JobResult::MeshImported { path, format, pieces } => crate::gui::import_scale::land_mesh(&mut self.win_ctx(&mut Vec::new()), path, format, pieces),
             JobResult::ProjectLoaded { path, project, shapes } => self.finish_project_load(path, *project, shapes),
             JobResult::Saved { path, autosave, error } => {
@@ -202,11 +147,13 @@ impl App {
                     qymcad_ui_state::mark_dirty_for_rebuild(&mut self.rebuild_ctx()); // the document is marked; the planner does the counting - a file with no geometry now has something to rebuild from
                     self.status = crate::i18n::tr1("io-loaded-brep-rebuilt", "n", &n.to_string());
                 } else if n > 0 {
-                    self.status = crate::i18n::tr1("io-brep-restored-n", "n", &n.to_string()); // none raised: nothing to tell
+                    self.status = crate::i18n::tr1("io-brep-restored-n", "n", &n.to_string());
+                    // none raised: nothing to tell
                 }
                 qymcad_ui_state::invalidate(&mut self.regen);
                 if was_clean {
-                    self.disk.edits.saved_key = qymcad_ui_state::edit_key(&self.draw_ctx()); // the project was clean and stays that way
+                    self.disk.edits.saved_key = qymcad_ui_state::edit_key(&self.draw_ctx());
+                    // the project was clean and stays that way
                 }
             }
             JobResult::Exported { status, shapes_back } => {
@@ -219,29 +166,19 @@ impl App {
         }
     }
 
-
-
-
-
-
-
-
-
-
-
     /// THE SINGLE entry point of a part command. 1 extrude, 3 revolve (from a sketch); 4 fillet, 5 chamfer
     /// (on edges); 6 shell, 7 hole (on a face).
     pub(super) fn start_feat_cmd(&mut self, cmd: u8) {
         self.cancel_all_tools(); // a new part or datum command CANCELS the previous tool or pick - never two at once
-        // A CLEAN SLATE BEFORE THE CHECKS: the state of the previous command must not seep into the new one.
-        // The command itself opens BELOW, and only if the checks passed (no contour means no command starts).
+                                 // A CLEAN SLATE BEFORE THE CHECKS: the state of the previous command must not seep into the new one.
+                                 // The command itself opens BELOW, and only if the checks passed (no contour means no command starts).
         let prev_3d = self.viewing.mode_3d;
         self.tools.cmd.close(&mut self.tools.armed);
         qymcad_ui_state::clear_feat_picks(qymcad_ui_state::feat_picks_of!(self)); // a clean slate: the picks of the previous command do not travel into the new one
-        // AND NEITHER DOES THE GEOMETRY SELECTION. The tools that take neither edges nor faces (extrude, the
-        // cuts, the arrays, the datums) never cleared them: the selection from the previous command stayed
-        // there and - what matters - stayed HIGHLIGHTED. What looks selected is something the new command
-        // will not take.
+                                                                                  // AND NEITHER DOES THE GEOMETRY SELECTION. The tools that take neither edges nor faces (extrude, the
+                                                                                  // cuts, the arrays, the datums) never cleared them: the selection from the previous command stayed
+                                                                                  // there and - what matters - stayed HIGHLIGHTED. What looks selected is something the new command
+                                                                                  // will not take.
         self.tools.gsel.edges.clear();
         self.tools.gsel.faces.clear();
         self.tools.gsel.faces_body = None;
@@ -273,37 +210,14 @@ impl App {
         }
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     /// A DATUM as A COMMAND: 20 plane, 21 point, 22 axis. The same frame as an extrude - the top bar plus
     /// fields at the geometry (the offset or the coordinates, as expressions) plus picking references by
     /// click plus a preview plus Enter/Esc.
     pub(super) fn start_datum_cmd(&mut self, code: u8) {
         self.cancel_all_tools(); // clears a stuck `pick_sketch_plane` and the like - otherwise, while placing
-        // a datum axis, the picker of base planes is on screen and a click starts a sketch instead
+                                 // a datum axis, the picker of base planes is on screen and a click starts a sketch instead
         self.tools.cmd.open(&mut self.tools.armed, code, self.viewing.mode_3d); // a clean slate, then open
-        
+
         self.viewing.mode_3d = true;
         self.side.datum.plane_pick = None;
         self.side.datum.axis_ref = None;
@@ -330,19 +244,6 @@ impl App {
         }
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
     /// A COMPONENT ARRAY (in an assembly): pick a part, set the count and the direction on top, the step or
     /// the angle in a field at the geometry, then Enter. `mode`: 1 linear, 2 circular.
     ///
@@ -367,11 +268,7 @@ impl App {
         (self.params.arr.full, self.params.arr.two, self.params.arr.three, self.params.arr.axis) = (true, false, false, 0); // a full turn, one direction, the assembly's axis
         self.viewing.mode_3d = true;
         self.tools.cmd.params = if mode == 2 { vec![] } else { vec![CmdParam::new("f-pitch", "cstep", 30.0, 0.01, 100000.0)] };
-        self.status = if mode == 2 {
-            crate::i18n::tr("msg-comp-circ-array")
-        } else {
-            crate::i18n::tr("msg-comp-lin-array")
-        };
+        self.status = if mode == 2 { crate::i18n::tr("msg-comp-circ-array") } else { crate::i18n::tr("msg-comp-lin-array") };
     }
 
     /// Reopen an EXISTING component array for editing (a double click in the tree).
@@ -379,37 +276,15 @@ impl App {
         self.cancel_all_tools();
         crate::gui::commands::open_comp_array_edit(&mut self.part_ctx(), pid);
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 }
 
 // THE FEATURE COMMAND: the frame-by-frame drag (`update_feat`), the length field at the arrow, the sweep
 // preview. This is where they belong - next to opening, applying and cancelling a command.
-impl App {
-
-
-
-}
+impl App {}
 
 // COMMANDS: editing a datum, the boolean bar, numeric input at the body gizmo, modifying a sketch,
 // deleting the selection. Their place is next to the rest of the command life cycle.
 impl App {
-
-
-
     /// Carry out a confirmed deletion of a tree node. One set of cascading core methods, plus a resync.
     pub(super) fn execute_delete(&mut self, sel: Sel, dependents: bool) {
         match sel {
@@ -426,11 +301,16 @@ impl App {
             // through the same boundary. Without it the edit went past `App::edit`: the guard reported the
             // document changed outside `App::edit`, and the undo step came out as a nameless "edit" picked up
             // after the fact by a snapshot. It was hit on a cut - the cutting plane and the feature deleted.
-            Sel::Plane(i) => delete_one(&mut self.part_ctx(), "status-plane-delete", |p| p.planes.get(i).map(|x| x.id).is_some_and(|id| if dependents { p.delete_plane_with_dependents(id) } else { p.delete_plane(id) })),
+            Sel::Plane(i) => delete_one(&mut self.part_ctx(), "status-plane-delete", |p| {
+                p.planes.get(i).map(|x| x.id).is_some_and(|id| if dependents { p.delete_plane_with_dependents(id) } else { p.delete_plane(id) })
+            }),
             Sel::DatumPoint(i) => delete_one(&mut self.part_ctx(), "status-delete-point", |p| p.datum_points.get(i).map(|x| x.id).is_some_and(|id| p.delete_datum_point(id))),
             Sel::DatumAxis(i) => delete_one(&mut self.part_ctx(), "status-axis-delete", |p| p.datum_axes.get(i).map(|x| x.id).is_some_and(|id| p.delete_datum_axis(id))),
             // the joint and any orphaned connectors, through the same core method the cross in the list uses
-            Sel::Joint(jid) => delete_one(&mut self.part_ctx(), "status-delete-joint", |p| { p.delete_joint(jid); true }),
+            Sel::Joint(jid) => delete_one(&mut self.part_ctx(), "status-delete-joint", |p| {
+                p.delete_joint(jid);
+                true
+            }),
             Sel::Component(ci) => {
                 // a part or a subassembly WHOLE: one core method clears the bodies, sketches, datums,
                 // connectors and joints of the subtree. Deleting the active context returns to the root.
@@ -483,23 +363,23 @@ fn delete_one(pc: &mut qymcad_ui_state::PartCtx, name: &str, del: impl FnOnce(&m
 pub(crate) fn do_props_asks(app: &mut crate::gui::App, asks: Vec<qymcad_ui_state::PropsAsk>) {
     use qymcad_ui_state::PropsAsk;
     for a in asks {
-            match a {
-                PropsAsk::EditFeature(id) => crate::gui::commands::start_feat_cmd_edit(&mut app.part_ctx(), id),
-                PropsAsk::EditJoint(jid) => crate::gui::enter_joint_edit(&mut app.side.joint, &mut app.chosen.sel, &mut app.status, jid),
-                PropsAsk::RescaleImport(id) => crate::gui::import_scale::rescale(&mut app.win_ctx(&mut Vec::new()), id),
-                PropsAsk::SketchOnDatum(id) => {
-                    app.create_sketch_on(qymcad_core::feature::SketchPlane::Datum(id));
-                }
-                PropsAsk::JointPick => app.start_joint_pick(),
-                PropsAsk::ConnPick => app.start_conn_pick(),
-                PropsAsk::DeleteConnector(cid) => qymcad_assembly::delete_connector_asked(&mut app.joint_ctx(), cid),
-                PropsAsk::RelationPick(j) => qymcad_assembly::relation_pick_click(&mut app.joint_ctx(), j),
-                PropsAsk::SketchOnBasePlane(b) => {
-                    app.create_sketch_on(qymcad_core::feature::SketchPlane::World(b));
-                }
-                PropsAsk::EnterSketch(si) => app.enter_sketch_edit(si),
-                PropsAsk::ExitContext => app.exit_context(),
-                PropsAsk::SetContext(cid) => app.set_context_to(cid),
+        match a {
+            PropsAsk::EditFeature(id) => crate::gui::commands::start_feat_cmd_edit(&mut app.part_ctx(), id),
+            PropsAsk::EditJoint(jid) => crate::gui::enter_joint_edit(&mut app.side.joint, &mut app.chosen.sel, &mut app.status, jid),
+            PropsAsk::RescaleImport(id) => crate::gui::import_scale::rescale(&mut app.win_ctx(&mut Vec::new()), id),
+            PropsAsk::SketchOnDatum(id) => {
+                app.create_sketch_on(qymcad_core::feature::SketchPlane::Datum(id));
             }
+            PropsAsk::JointPick => app.start_joint_pick(),
+            PropsAsk::ConnPick => app.start_conn_pick(),
+            PropsAsk::DeleteConnector(cid) => qymcad_assembly::delete_connector_asked(&mut app.joint_ctx(), cid),
+            PropsAsk::RelationPick(j) => qymcad_assembly::relation_pick_click(&mut app.joint_ctx(), j),
+            PropsAsk::SketchOnBasePlane(b) => {
+                app.create_sketch_on(qymcad_core::feature::SketchPlane::World(b));
+            }
+            PropsAsk::EnterSketch(si) => app.enter_sketch_edit(si),
+            PropsAsk::ExitContext => app.exit_context(),
+            PropsAsk::SetContext(cid) => app.set_context_to(cid),
         }
+    }
 }

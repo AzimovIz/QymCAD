@@ -18,14 +18,18 @@ fn gui_like_sequential_fillet_with_solve() {
                 let s = &p.sketches[si];
                 let mut cnt: std::collections::HashMap<u64, usize> = Default::default();
                 for e in &s.entities {
-                    if let qymcad_core::model::EntityKind::Line { a, b } = e.kind { *cnt.entry(a).or_default() += 1; *cnt.entry(b).or_default() += 1; }
+                    if let qymcad_core::model::EntityKind::Line { a, b } = e.kind {
+                        *cnt.entry(a).or_default() += 1;
+                        *cnt.entry(b).or_default() += 1;
+                    }
                 }
                 cnt.into_iter().filter(|&(_, c)| c == 2).map(|(id, _)| id).next()
             };
             let Some(pid) = corner else { break };
-            if p.fillet_at_vertex(si, pid, r) { done += 1; }
+            if p.fillet_at_vertex(si, pid, r) {
+                done += 1;
+            }
             p.solve_sketch(si);
-
         }
         p.regen_sketch(si);
         let area: f64 = p.sketches[si].contour_ids.iter().filter_map(|&c| p.contour_index(c)).map(|ci| p.contours[ci].area()).fold(0.0, f64::max);

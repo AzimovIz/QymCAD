@@ -47,10 +47,7 @@ mod tests {
     fn a_build_switch_is_never_separated_from_its_item_by_a_doc_comment() {
         let source = include_str!("../gui.rs");
         let lines: Vec<&str> = source.lines().map(str::trim).collect();
-        let stray: Vec<usize> = (0..lines.len().saturating_sub(1))
-            .filter(|&i| lines[i].starts_with("#[cfg(debug_assertions)]") && lines[i + 1].starts_with("///"))
-            .map(|i| i + 1)
-            .collect();
+        let stray: Vec<usize> = (0..lines.len().saturating_sub(1)).filter(|&i| lines[i].starts_with("#[cfg(debug_assertions)]") && lines[i + 1].starts_with("///")).map(|i| i + 1).collect();
         assert!(
             stray.is_empty(),
             "gui.rs line(s) {stray:?}: `#[cfg(debug_assertions)]` stands above a doc comment, so it reads as the \
