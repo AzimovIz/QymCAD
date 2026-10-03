@@ -58,7 +58,7 @@ fn external_metric_thread_removes_sane_volume() {
 /// helical surfaces, as `thread_profile_fidelity.rs` shows, and against it this test measured the wrong thing.
 #[test]
 fn trapezoidal_thread_builds_and_differs_from_metric() {
-    let mesh_v = |s: &Shape| -> f64 { s.tessellate(0.02).iter().map(|b| b.0.volume()).sum() };
+    let mesh_v = |s: &Shape| -> f64 { s.tessellate(0.02).iter().map(|b| b.mesh.volume()).sum() };
     let blank_v = mesh_v(&rod(20.0, 30.0));
     let cut_of = |std: ThreadStandard| {
         let g = ThreadSpec { standard: std, nominal_d: 20.0, pitch: 4.0, ..Default::default() }.geometry();
@@ -226,7 +226,7 @@ fn auger_flight_adds_material_to_shaft() {
 #[test]
 fn lead_in_chamfers_the_first_turns() {
     let g = ThreadSpec { standard: ThreadStandard::MetricIso, nominal_d: 12.0, pitch: 1.75, ..Default::default() }.geometry();
-    let mesh_v = |s: &Shape| -> f64 { s.tessellate(0.01).iter().map(|b| b.0.volume()).sum() };
+    let mesh_v = |s: &Shape| -> f64 { s.tessellate(0.01).iter().map(|b| b.mesh.volume()).sum() };
     let blank = mesh_v(&rod(12.0, 30.0));
     // The thread runs from the end face of the shaft, the only place an entry means anything, being a
     // countersink of the mouth. The far end, at z = 24 on a shaft of height 30, runs into the body, so the
@@ -405,7 +405,7 @@ fn thread_mesh_stays_within_a_sane_budget() {
             })
             .unwrap_or_else(|| panic!("{std:?} did not build"));
         assert!(cut.is_valid(), "{std:?}: the body is valid");
-        let tris: usize = cut.tessellate_auto(qymcad_core::model::GeomQuality::Normal.deflection_k()).iter().map(|b| b.0.tris.len()).sum();
+        let tris: usize = cut.tessellate_auto(qymcad_core::model::GeomQuality::Normal.deflection_k()).iter().map(|b| b.mesh.tris.len()).sum();
         eprintln!("{std:?} Ø30×3.5 over 30 mm: {tris} triangles, V={:.1}", cut.volume());
         assert!(tris > 500, "{std:?}: the mesh is suspiciously empty, {tris} triangles");
         assert!(tris < 60_000, "{std:?}: the mesh is inflated — {tris} triangles for one thread, budget 60 thousand");

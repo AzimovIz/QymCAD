@@ -100,7 +100,7 @@ mod tests {
         }
 
         /// Step into the name field of row `row`: bring the cursor, click, select what was there.
-        fn into_name(&mut self, app: &mut App, row: usize) -> &mut Self {
+        fn enter_name(&mut self, app: &mut App, row: usize) -> &mut Self {
             self.settle(app);
             let at = self.name_rects.get(row).copied().unwrap_or_else(|| panic!("the frame holds no name field for row {row}")).center();
             self.hover(at).frame(app);
@@ -167,7 +167,7 @@ mod tests {
         let undo_before = app.disk.edits.undo.len();
 
         let mut t = Table::new();
-        t.into_name(&mut app, 0);
+        t.enter_name(&mut app, 0);
         for c in "shirina".chars() {
             t.type_text(&c.to_string()).frame(&mut app);
             assert_eq!(qymcad_ui_state::doc_key(&app.project), key_before, "the document changed on the letter \"{c}\" — the edit goes into the model under the fingers");
@@ -184,7 +184,7 @@ mod tests {
         let undo_before = app.disk.edits.undo.len();
 
         let mut t = Table::new();
-        t.into_name(&mut app, 0);
+        t.enter_name(&mut app, 0);
         t.type_text("shirina").frame(&mut app);
         t.key(egui::Key::Enter).frame(&mut app);
         t.frame(&mut app);
@@ -203,7 +203,7 @@ mod tests {
     fn a_taken_name_is_refused_without_eating_letters() {
         let mut app = app_with_params();
         let mut t = Table::new();
-        t.into_name(&mut app, 0);
+        t.enter_name(&mut app, 0);
         t.type_text("h").frame(&mut app); // the name of the second parameter
         t.key(egui::Key::Enter).frame(&mut app);
         t.frame(&mut app);
@@ -221,7 +221,7 @@ mod tests {
     fn a_name_that_cannot_be_a_formula_is_refused() {
         let mut app = app_with_params();
         let mut t = Table::new();
-        t.into_name(&mut app, 0);
+        t.enter_name(&mut app, 0);
         t.type_text("2w").frame(&mut app);
         t.key(egui::Key::Enter).frame(&mut app);
         t.frame(&mut app);

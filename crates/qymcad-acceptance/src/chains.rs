@@ -28,7 +28,7 @@ impl Rng {
     }
 
     /// The next number of the stream.
-    pub fn next(&mut self) -> u64 {
+    pub fn next_u64(&mut self) -> u64 {
         self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
         let mut z = self.0;
         z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
@@ -38,12 +38,12 @@ impl Rng {
 
     /// A number below `n`; `n` must not be zero.
     pub fn below(&mut self, n: usize) -> usize {
-        (self.next() % n as u64) as usize
+        (self.next_u64() % n as u64) as usize
     }
 
     /// True `percent` times out of a hundred.
     pub fn chance(&mut self, percent: u64) -> bool {
-        self.next() % 100 < percent
+        self.next_u64() % 100 < percent
     }
 }
 
@@ -234,7 +234,7 @@ pub fn grow(seed: u64, len: usize, scene: Scene) -> Vec<Step> {
             }
         }
         let total: u64 = menu.iter().map(|(w, _)| w).sum();
-        let mut roll = rng.next() % total;
+        let mut roll = rng.next_u64() % total;
         let step = menu
             .into_iter()
             .find_map(|(w, step)| {

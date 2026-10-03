@@ -56,8 +56,7 @@ fn rows(mut drawn: Vec<(String, egui::Rect, egui::Color32, f32)>) -> Vec<Vec<(St
 
 /// The thread command as a person meets it: opened, with the defaults of its own fields.
 fn the_thread_bar() -> (Bench, egui::epaint::text::TextWrapping, Vec<Vec<(String, egui::Rect, egui::Color32, f32)>>) {
-    let mut b = Bench::default();
-    b.mode_3d = true;
+    let mut b = Bench { mode_3d: true, ..Default::default() };
     b.cmd.open(&mut b.armed, 24, true);
     qymcad_ui_state::set_thread_params(&mut b.cmd, b.thread);
 

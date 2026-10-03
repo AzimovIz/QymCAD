@@ -927,8 +927,6 @@ impl App {
         crate::gui::commands::do_props_asks(self, asks)
     }
 
-    /// The label of a candidate axis line for the command bar — construction lines are marked as such.
-
     /// Is the cursor on the face arrow? The threshold matches the body gizmo's, in pixels along the segment.
     pub(super) fn face_arrow_hit(&self, rect: Rect, pos: Pos2, basis: &([f64; 3], [f64; 3], [f64; 3])) -> bool {
         face_arrow_hit(&self.painting(), rect, pos, basis)
@@ -948,10 +946,6 @@ impl App {
     fn section_gizmo_geom(&self) -> Option<qymcad_ui_state::SectionGizmo> {
         section_gizmo_geom(&self.painting())
     }
-
-    /// The display transform of a datum (a point, an axis or a plane, by its Id) in the active context's
-    /// frame — so that a part's datums travel with it in an assembly, just as its bodies do. None means
-    /// another component's datum (isolation: we do not draw it).
 
     /// The one doorway into drawing. Shared throughout, so it costs nothing to build and can be taken from
     /// a `&self` method - which every drawing method is.
@@ -1141,11 +1135,6 @@ impl App {
         }
     }
 }
-
-/// tan(half of the field of view) for perspective mode. ~0.32 is a vertical FOV of about 35 deg — a
-/// moderate amount of depth, the usual default. Not used in orthographic mode.
-
-/// The opacity of a ghosted body: straight alpha 0..255. Your own body or sketch is seen through it.
 
 impl Default for App {
     fn default() -> Self {
@@ -1498,10 +1487,6 @@ impl App {
         self.project.mark_datum_consumers_dirty();
         qymcad_ui_state::mark_dirty_for_rebuild(&mut self.rebuild_ctx()); // the document is marked; the scheduler does the computing
     }
-
-    /// A rigid move of a body (mesh index `mi`) by the matrix `mat` (3x4): a B-rep gets a PARAMETRIC
-    /// `Move` feature (which moves the shape), a raw imported mesh is transformed directly. This keeps the
-    /// mesh panel from putting a B-rep body out of step with its shape.
 
     /// Apply or update the pattern on Enter.
     fn confirm_pattern(&mut self) {
@@ -3348,7 +3333,6 @@ pub(crate) fn step_joint_anim(joint_anim: &mut Option<JointAnim>, project: &mut 
 }
 
 /// Advance the turning animation. Called every frame; while it runs it asks for a repaint.
-
 pub(crate) fn tick_view_anim(cam: &mut Cam3, view_anim: &mut Option<ViewTurn>, ctx: &egui::Context) {
     let Some(ViewTurn { from, to, since: t0, roll, target }) = view_anim else { return };
     const DUR: f32 = 0.22;
@@ -3871,9 +3855,6 @@ pub(crate) fn refresh_interference(bv: qymcad_ui_state::BodyView, drag: qymcad_u
     }
     interference.pairs = pairs;
 }
-
-/// A kernel error turned into words. It came back from the dictionary crate: the kernel gives a CODE and
-/// whoever has a window picks the words, so the mapping is the application's.
 
 #[cfg(test)]
 /// The checks that the INTERFACE goes through the dictionary. They stayed with the application when the

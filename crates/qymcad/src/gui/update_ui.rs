@@ -131,8 +131,7 @@ mod tests {
     /// release, "checked a moment ago" would hold the first real check back for a whole day.
     #[test]
     fn asking_on_a_build_that_cannot_ask_leaves_no_trace() {
-        let mut set = qymcad_ui_state::Settings::default();
-        set.update_last_checked = 0;
+        let mut set = qymcad_ui_state::Settings { update_last_checked: 0, ..Default::default() };
         super::ask(&mut set);
         assert_eq!(set.update_last_checked, 0, "a build with nothing to compare wrote down that it had checked");
         super::ask_if_due(&mut set);

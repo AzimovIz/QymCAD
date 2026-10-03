@@ -852,8 +852,8 @@ fn coiled(g: &Grower, out: &mut [Region], owner: &mut [u32]) {
         }
     }
     let mut groups: HashMap<usize, Vec<usize>> = HashMap::new();
-    for r in 0..n {
-        if tile(&out[r]) {
+    for (r, o) in out.iter().enumerate() {
+        if tile(o) {
             let k = root(&mut up, r);
             groups.entry(k).or_default().push(r);
         }
@@ -1000,8 +1000,8 @@ fn free_form(g: &Grower, out: &mut [Region], owner: &mut [u32]) {
         }
     }
     let mut groups: HashMap<usize, Vec<usize>> = HashMap::new();
-    for r in 0..n {
-        if tile(&out[r]) {
+    for (r, o) in out.iter().enumerate() {
+        if tile(o) {
             let k = root(&mut up, r);
             groups.entry(k).or_default().push(r);
         }
@@ -1588,7 +1588,7 @@ fn round_about(g: &Grower, tris: &[u32], pts: &[Vector3<f64>], rzt: &[(f64, f64,
     let k = m.lu().solve(&v)?;
     let (middle, height) = (-k.x / 2.0, -k.y / 2.0);
     let squared = middle * middle + height * height - k.z;
-    if !(squared > 0.0) {
+    if squared.is_nan() || squared <= 0.0 {
         return None;
     }
 
@@ -2047,7 +2047,7 @@ fn fit_cylinder(pts: &[Vector3<f64>], normals: &[Vector3<f64>], accept: f64) -> 
     let turn = Turn { base, u, w };
     let miss = |q: &[f64; 5], v: &Vector3<f64>| cylinder_miss(&turn, &c0, q, v);
     let mut q = [0.0, 0.0, 0.0, 0.0, radius];
-    if rms(&q, pts, &miss) <= accept || !refined(&mut q, pts, &miss, accept) || !(q[4] > 0.0) {
+    if rms(&q, pts, &miss) <= accept || !refined(&mut q, pts, &miss, accept) || q[4].is_nan() || q[4] <= 0.0 {
         return Some(first);
     }
     let a = (base + u * q[0] + w * q[1]).normalize();
@@ -2099,7 +2099,7 @@ fn circle_about(pts: &[Vector3<f64>], axis: &Vector3<f64>) -> Option<Surface> {
     let sol = ata.lu().solve(&atb)?;
     let (cx, cy) = (-sol[0] / 2.0, -sol[1] / 2.0);
     let r2 = cx * cx + cy * cy - sol[2];
-    if !(r2 > 0.0) || !r2.is_finite() {
+    if r2 <= 0.0 || !r2.is_finite() {
         return None;
     }
     let point = c + u * cx + w * cy;
@@ -2123,7 +2123,7 @@ fn fit_sphere(pts: &[Vector3<f64>]) -> Option<Surface> {
     let sol = ata.lu().solve(&atb)?;
     let o = Vector3::new(-sol[0] / 2.0, -sol[1] / 2.0, -sol[2] / 2.0);
     let r2 = o.norm_squared() - sol[3];
-    if !(r2 > 0.0) || !r2.is_finite() {
+    if r2 <= 0.0 || !r2.is_finite() {
         return None;
     }
     Some(Surface::Sphere { center: (c + o).into(), radius: r2.sqrt() })
@@ -2239,7 +2239,7 @@ fn fit_torus(pts: &[Vector3<f64>], feet: &[Vector3<f64>], normals: &[Vector3<f64
     let (cx, cy) = (-sol[0] / 2.0, -sol[1] / 2.0);
     let r2 = cx * cx + cy * cy - sol[2];
     let (major, z0) = (mr + cx, mz + cy);
-    if !(r2 > 0.0) || !(major > 0.0) {
+    if r2.is_nan() || r2 <= 0.0 || major.is_nan() || major <= 0.0 {
         return None;
     }
     let centre = on + a * z0;

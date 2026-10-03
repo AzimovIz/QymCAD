@@ -85,7 +85,7 @@ mod tests {
         /// the first few frames the view is still being fitted to the sketch — the field moves from
         /// [350,340] to [588,404]. A click on the stale rectangle landed in empty space, and that was
         /// an error of aim in the check, not a broken popup.
-        fn into_driver_field(&mut self, app: &mut App, si: usize, ci: usize) -> &mut Self {
+        fn enter_driver_field(&mut self, app: &mut App, si: usize, ci: usize) -> &mut Self {
             let mut still = 0;
             for _ in 0..20 {
                 let was = self.name_rect;
@@ -113,7 +113,7 @@ mod tests {
         /// THE SAME WAY IN, BUT INTO THE VALUE FIELD — the one holding the expression, where the list of
         /// drivers lives. Waiting for the popup to settle matters just as much: it is anchored to the
         /// dimension on screen and moves while the view is being fitted.
-        fn into_value_field(&mut self, app: &mut App, si: usize, ci: usize) -> &mut Self {
+        fn enter_value_field(&mut self, app: &mut App, si: usize, ci: usize) -> &mut Self {
             let id = egui::Id::new(("dimval", si, ci));
             let mut rect = egui::Rect::NOTHING;
             let mut still = 0;
@@ -152,7 +152,7 @@ mod tests {
         app.project.parameters.push(qymcad_core::model::Param { name: "width".into(), expr: "50".into(), value: 50.0 });
         let (si, ci) = sketch_with_dim(&mut app);
         let mut p = Popup::new();
-        p.into_value_field(&mut app, si, ci);
+        p.enter_value_field(&mut app, si, ci);
         p.type_text("wid").frame(&mut app, si, ci);
         p.frame(&mut app, si, ci);
         assert!(p.shows("width"), "setup: the list must be open before Escape, drawn: {:?}", p.drawn);
@@ -171,7 +171,7 @@ mod tests {
         app.project.parameters.push(qymcad_core::model::Param { name: "width".into(), expr: "50".into(), value: 50.0 });
         let (si, ci) = sketch_with_dim(&mut app);
         let mut p = Popup::new();
-        p.into_value_field(&mut app, si, ci);
+        p.enter_value_field(&mut app, si, ci);
         p.type_text("wid").frame(&mut app, si, ci);
         p.frame(&mut app, si, ci);
 
@@ -192,7 +192,7 @@ mod tests {
         let (si, ci) = sketch_with_dim(&mut app);
 
         let mut p = Popup::new();
-        p.into_driver_field(&mut app, si, ci);
+        p.enter_driver_field(&mut app, si, ci);
         let key_before = qymcad_ui_state::doc_key(&app.project);
         let undo_before = app.disk.edits.undo.len();
 
@@ -212,7 +212,7 @@ mod tests {
         let (si, ci) = sketch_with_dim(&mut app);
 
         let mut p = Popup::new();
-        p.into_driver_field(&mut app, si, ci);
+        p.enter_driver_field(&mut app, si, ci);
         let undo_before = app.disk.edits.undo.len();
         p.type_text("dlina").frame(&mut app, si, ci);
         p.key(egui::Key::Enter).frame(&mut app, si, ci);
@@ -242,7 +242,7 @@ mod tests {
         // The second sketch — that is where the typing happens.
         let (si, ci) = sketch_with_dim(&mut app);
         let mut p = Popup::new();
-        p.into_driver_field(&mut app, si, ci);
+        p.enter_driver_field(&mut app, si, ci);
         p.type_text("len").frame(&mut app, si, ci);
 
         // THE LETTERS ARE INTACT while the name is being typed.

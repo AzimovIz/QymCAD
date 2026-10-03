@@ -79,7 +79,7 @@ fn part_area_centroid(pts: &[Point2], below: bool) -> (f64, f64) {
 }
 
 fn mesh_volume(s: &Shape) -> f64 {
-    s.tessellate(0.01).iter().map(|b| b.0.volume()).sum()
+    s.tessellate(0.01).iter().map(|b| b.mesh.volume()).sum()
 }
 
 /// Build a thread on a shaft and return what was removed by the mesh and what the profile predicts.
@@ -442,7 +442,7 @@ fn blind_end_gets_a_relief_groove() {
         .expect("the thread built");
     // the smallest radius of material over slices: in the run-out zone the root has to rise towards the
     // surface
-    let verts: Vec<_> = s.tessellate(0.02).into_iter().flat_map(|b| b.0.verts).collect();
+    let verts: Vec<_> = s.tessellate(0.02).into_iter().flat_map(|b| b.mesh.verts).collect();
     let depth_at = |z: f64| -> f64 {
         let inner = verts.iter().filter(|v| (v.z - z).abs() < 0.35).fold(r0, |m, v| m.min(v.x.hypot(v.y)));
         r0 - inner
@@ -541,7 +541,7 @@ fn through_nut_is_countersunk_on_both_ends() {
     // millimetre, so a band of 0.4 already under-reads by half a millimetre — and what a person cares about
     // is whether a nut can be STARTED, which happens at the face.
     let bore_at = |s: &Shape, z: f64| -> f64 {
-        let verts: Vec<_> = s.tessellate(0.02).into_iter().flat_map(|b| b.0.verts).collect();
+        let verts: Vec<_> = s.tessellate(0.02).into_iter().flat_map(|b| b.mesh.verts).collect();
         verts.iter().filter(|v| (v.z - z).abs() < 0.06).fold(f64::MAX, |m, v| m.min(v.x.hypot(v.y))) * 2.0
     };
     let mk = |li: f64, lo: f64| {
@@ -614,7 +614,7 @@ fn auger_flight_is_flush_with_the_face_and_fades_out() {
     }
     // the fade: the height of the flight melts away at the ends and stays full in the middle
     let s = mk(10.0, 10.0);
-    let verts: Vec<_> = s.tessellate(0.1).into_iter().flat_map(|b| b.0.verts).collect();
+    let verts: Vec<_> = s.tessellate(0.1).into_iter().flat_map(|b| b.mesh.verts).collect();
     let h_at = |z: f64| verts.iter().filter(|v| (v.z - z).abs() < 1.0).fold(r0, |m, v| m.max(v.x.hypot(v.y))) - r0;
     let (start, mid, end) = (h_at(h - 1.0), h_at(h * 0.5), h_at(h - len + 1.0));
     eprintln!("flight height: {start:.2} at the start, {mid:.2} in the middle, {end:.2} at the end, the full one being {:.2}", a.flight_height());

@@ -68,14 +68,6 @@ impl App {
     }
 }
 
-/// THE PADDING INSIDE THE REBUILD CARD, and the room its parts take. Named once, because the size of the
-/// card and the places of its pieces have to agree - when they did not, the text stood outside the card.
-
-/// THE ONE PLACE THE BORROWS ARE SPLIT for drawing in three dimensions.
-///
-/// Five shared borrows handed out together instead of the application entire. Every `draw_*` below
-/// reads exactly these and nothing else, so once it takes the context it stops being a method.
-
 /// The GPU pass over the bodies: it pushes a paint callback into the viewport rect. The vertices are
 /// re-uploaded only when `gpu_scene_key` changes; while orbiting, only the camera uniform is updated.
 pub(crate) fn draw_3d_gpu(pn: &qymcad_ui_state::Painting, painter: &egui::Painter, rect: Rect, basis: &([f64; 3], [f64; 3], [f64; 3])) {

@@ -106,8 +106,7 @@ mod tests {
     /// would check somebody's idea of the format rather than the format.
     #[test]
     fn a_file_without_the_field_still_opens() {
-        let mut p = qymcad_core::model::Project::default();
-        p.geom_quality = GeomQuality::Fine;
+        let p = qymcad_core::model::Project { geom_quality: GeomQuality::Fine, ..Default::default() };
         let text = qymcad_core::model::to_ron(&p).expect("the document writes");
         assert!(text.contains("geom_quality"), "setup: the tolerance field must be in the file");
         let older: String = text.lines().filter(|l| !l.contains("geom_quality")).collect::<Vec<_>>().join("\n");

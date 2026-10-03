@@ -73,11 +73,10 @@ mod tests {
                         a += pa;
                     }
                 }
-                out.pixels[y * w + x] = if a == 0 {
-                    Color32::TRANSPARENT
-                } else {
-                    let n = (k * k) as u32;
-                    Color32::from_rgba_unmultiplied((r / a) as u8, (g / a) as u8, (b / a) as u8, (a / n) as u8)
+                // a block with no cover at all has no colour to average: it stays transparent
+                out.pixels[y * w + x] = match (r.checked_div(a), g.checked_div(a), b.checked_div(a)) {
+                    (Some(r), Some(g), Some(b)) => Color32::from_rgba_unmultiplied(r as u8, g as u8, b as u8, (a / (k * k) as u32) as u8),
+                    _ => Color32::TRANSPARENT,
                 };
             }
         }

@@ -217,7 +217,6 @@ mod tests {
 /// usable behind the system window. Somebody can put up an export chooser, click back into the model,
 /// change a dimension, and answer the chooser while the rebuild that edit started is still running. The
 /// export and the rebuild both want the one modal slot, and the loser used to be dropped without a word.
-
 #[cfg(test)]
 mod exporting_over_a_rebuild {
     use crate::gui::App;

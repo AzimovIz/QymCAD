@@ -1383,10 +1383,8 @@ fn cancel(tool: &Tool) {
         }
         // WHAT WAS CANCELLED CANNOT BE FINISHED: the click that would have made the shape makes none of it now - it
         // begins a new one at most
-        if let (true, Flow::Drawing(places, Finish::LastClick | Finish::Placed)) = (how == "Esc", tool.flow) {
-            if let [_, .., (x, y)] = places {
-                s.click_on_sketch(*x, *y);
-            }
+        if let (true, Flow::Drawing([_, .., (x, y)], Finish::LastClick | Finish::Placed)) = (how == "Esc", tool.flow) {
+            s.click_on_sketch(*x, *y);
         }
         if shape_of(&s.document()) != doc {
             problems.push(format!("{how}: the document changed"));

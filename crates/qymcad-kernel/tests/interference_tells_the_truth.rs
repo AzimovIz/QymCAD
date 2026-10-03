@@ -131,7 +131,7 @@ fn how_far_the_integrator_drifts_on_a_thread() {
             let z = 8.0 + 0.37 * i as f64;
             let cut = rod.boolean(&slab(t, z), 2).expect("the shared solid");
             let by_gprop = cut.volume();
-            let by_mesh: f64 = cut.tessellate(0.005).iter().map(|b| b.0.volume()).sum();
+            let by_mesh: f64 = cut.tessellate(0.005).iter().map(|b| b.mesh.volume()).sum();
             let off = if by_mesh > 0.0 { (by_gprop - by_mesh) / by_mesh * 100.0 } else { f64::NAN };
             eprintln!("slab {t:>5} mm at z={z:.2}: GProp {by_gprop:>9.3}, mesh {by_mesh:>9.3}, off by {off:>7.1}%");
         }

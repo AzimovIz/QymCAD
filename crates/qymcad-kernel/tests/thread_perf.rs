@@ -28,7 +28,7 @@ fn runout_fast_and_crest_stays_at_radius() {
     let dt = t.elapsed().as_secs_f64();
     let b = thr.tessellate(0.05);
     let mut tip_max = 0.0f64;
-    for v in &b[0].0.verts {
+    for v in &b[0].mesh.verts {
         if v.z < 39.7 {
             continue;
         }

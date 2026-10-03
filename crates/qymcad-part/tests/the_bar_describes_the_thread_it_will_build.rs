@@ -44,8 +44,7 @@ fn typed(cmd: &mut qymcad_ui_state::FeatCommand, key: &str, v: f64) {
 /// The angle is a shallow one deliberately: at 90 degrees a groove 2.5 deep does not fit a pitch of 5, and
 /// the program says so before building - that case belongs to the message, not to this measurement.
 fn a_thread_of_ones_own() -> (Bench, qymcad_core::thread::ThreadSpec) {
-    let mut b = Bench::default();
-    b.mode_3d = true;
+    let mut b = Bench { mode_3d: true, ..Default::default() };
     b.thread.radius = 10.0; // the cylinder the thread sits on: Ø20
     b.thread.form = 5; // a profile of one's own
     b.cmd.open(&mut b.armed, 24, true);

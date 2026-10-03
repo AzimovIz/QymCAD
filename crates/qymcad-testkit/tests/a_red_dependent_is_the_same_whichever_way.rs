@@ -17,7 +17,7 @@ fn a_patch_over_a_deleted_hole_is_the_same_rebuilt() {
     let block = p.add_box(40.0, 30.0, 10.0);
     let _ = qymcad_testkit::regenerate(&mut p);
     let top = p.regen_faces.get(&block).and_then(|fs| fs.iter().find(|f| f.normal[2] > 0.9).cloned()).expect("the top of the block");
-    let key = qymcad_core::feature::FaceKey { index: 0, centroid: [top.centroid.x, top.centroid.y, top.centroid.z], normal: top.normal, id: top.id, ..Default::default() };
+    let key = qymcad_core::feature::FaceKey { index: 0, centroid: [top.centroid.x, top.centroid.y, top.centroid.z], normal: top.normal, id: top.id };
     let hole = p.add_hole(block, key, 10.0, 30.0);
     let (_, shapes) = qymcad_testkit::regenerate(&mut p);
     let holed = p.timeline.iter().find(|n| n.id == hole).and_then(|n| n.kind.body()).expect("the body of the hole");

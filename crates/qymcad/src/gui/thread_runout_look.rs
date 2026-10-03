@@ -43,8 +43,7 @@ mod tests {
 
     /// A threaded shaft in a fresh document.
     fn threaded_shaft(d: f64, pitch: f64, len: f64, lead: f64) -> App {
-        let mut app = App::default();
-        app.project = Project::default();
+        let mut app = App { project: Project::default(), ..Default::default() };
         app.project.new_document();
         let blank = app.project.add_cylinder(d * 0.5, len);
         let e = rim(&mut app, blank, d * 0.5);
@@ -122,8 +121,7 @@ mod tests {
         let width = 2.0 * g.depth * (g.angle_deg * 0.5).to_radians().tan();
         eprintln!("the groove is about {width:.2} mm wide at the crest, the pitch is {:.2}", g.pitch);
 
-        let mut app = App::default();
-        app.project = qymcad_core::model::Project::default();
+        let mut app = App { project: qymcad_core::model::Project::default(), ..Default::default() };
         app.project.new_document();
         let blank = app.project.add_cylinder(20.0, 20.0);
         let e = rim(&mut app, blank, 20.0);
@@ -168,8 +166,7 @@ mod tests {
             root_r: Some(0.0),
             ..Default::default()
         };
-        let mut app = App::default();
-        app.project = Project::default();
+        let mut app = App { project: Project::default(), ..Default::default() };
         app.project.new_document();
         // THE FLANGE AND THE BOSS: a wide low disc with a narrower cylinder standing on it, as on the picture.
         let flange = app.project.add_cylinder(35.0, 6.0);

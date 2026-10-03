@@ -4198,8 +4198,7 @@ fn hold_offset_loop(ids: &[Id], kinds: &[(EntityKind, OffsetSource)], dist: f64)
     // the rank read from it took two freedoms from the source.
     let mut sized = vec![false; n];
     let dim = |a: Id, b: Id| Constraint::Distance { a, b, d: dist.abs(), off: 0.0, expr: String::new(), driven: false, axis: 0, at: None };
-    for k in 0..n {
-        let v = ids[k];
+    for (k, &v) in ids.iter().enumerate().take(n) {
         let (pk, nk) = ((k + n - 1) % n, k);
         let (prev, next) = (kinds[pk].1, kinds[nk].1);
         match (prev, next) {

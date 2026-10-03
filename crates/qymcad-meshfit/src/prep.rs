@@ -213,7 +213,8 @@ fn flat(v: &[Point3], t: [u32; 3], weld: f64) -> bool {
     let [a, b, c] = t.map(|i| v[i as usize]);
     let twice_area = len(cross(sub(b, a), sub(c, a)));
     let longest = len(sub(b, a)).max(len(sub(c, b))).max(len(sub(a, c)));
-    !(twice_area >= weld * longest)
+    // a NaN from a degenerate corner counts as a sliver too
+    matches!(twice_area.partial_cmp(&(weld * longest)), None | Some(std::cmp::Ordering::Less))
 }
 
 /// The undirected sides of all triangles, each with the triangles on it and which of their sides it is.

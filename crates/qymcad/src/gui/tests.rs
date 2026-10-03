@@ -294,7 +294,7 @@ mod command_flow_tests {
     /// measured with it.
     fn live_volume(app: &App) -> f64 {
         let consumed = qymcad_ui_state::consumed_bodies(&app.project);
-        app.live.shapes.iter().filter(|(b, _)| !consumed.contains(b)).map(|(_, s)| s.tessellate(0.02).iter().map(|b| b.0.volume()).sum::<f64>()).sum()
+        app.live.shapes.iter().filter(|(b, _)| !consumed.contains(b)).map(|(_, s)| s.tessellate(0.02).iter().map(|b| b.mesh.volume()).sum::<f64>()).sum()
     }
 
     /// Run the thread command on a shaft through the FULL GUI flow and return the volume removed.
@@ -2258,8 +2258,7 @@ mod gizmo_math_tests {
     fn camera_basis_top_view_stays_orthonormal() {
         use super::Cam3;
         // THE TOP VIEW (a pitch of a quarter turn): the basis used to degenerate here (the cross product with the world Z is zero, giving NaN and a collapsed picture).
-        let mut cam = Cam3::default();
-        cam.pitch = std::f64::consts::FRAC_PI_2;
+        let cam = Cam3 { pitch: std::f64::consts::FRAC_PI_2, ..Default::default() };
         let (r, u, f) = cam.basis();
         let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
         let len = |a: [f64; 3]| dot(a, a).sqrt();

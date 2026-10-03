@@ -322,7 +322,6 @@ fn refusals_a_person_meets() -> Vec<(&'static str, bool, Option<String>)> {
     let far = Shape::cylinder(5.0, 20.0).and_then(|c| c.transformed(&[1.0, 0.0, 0.0, 500.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0])).expect("a rod far away");
     say("the common part of two bodies that do not touch (expected NOT to refuse)", rod().boolean(&far, 2).is_none());
 
-    drop(say);
     out
 }
 

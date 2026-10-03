@@ -410,14 +410,14 @@ impl Session {
     ///
     /// A program with unsaved work refuses to close and asks what to do with it; then the session is given back,
     /// still running, with the question on screen.
-    pub fn quit(mut self) -> Result<Kept, Session> {
+    pub fn quit(mut self) -> Result<Kept, Box<Session>> {
         if !self.win.closed {
             self.settle();
             self.speak();
             self.win.run(&mut self.app, egui::Modifiers::default(), Vec::new(), true);
             if self.win.close_refused && !self.win.closed {
                 self.settle();
-                return Err(self);
+                return Err(Box::new(self));
             }
         }
         eframe::App::save(&mut *self.app, &mut self.kept);

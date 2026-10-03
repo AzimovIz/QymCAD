@@ -546,9 +546,6 @@ pub(crate) fn label_quad_width(cube: &CubeCtx, rect: Rect, i: usize) -> f32 {
     mx - mn
 }
 
-/// The screen directions of "right" and "up" for the caption on a face — a test uses them to prove
-/// that the text has not stood up vertically or turned upside down.
-
 /// The screen width of one face of the cube.
 #[cfg(test)]
 pub(crate) fn zone_screen_width(cube: &CubeCtx, rect: Rect, i: usize) -> f32 {

@@ -22,8 +22,10 @@ use qymcad_ui_state::{Armed, Bench};
 /// fails this.
 #[test]
 fn going_back_to_selection_empties_the_hand() {
-    let mut b = Bench::default();
-    b.armed = Armed::Draw(1); // a line tool in hand
+    let mut b = Bench {
+        armed: Armed::Draw(1), // a line tool in hand
+        ..Default::default()
+    };
     b.tool.pts.push(Point2::new(10.0, 20.0)); // and one point of it already clicked
     b.dim.pick.push(7); // a dimension half-pointed at
     b.measure.pts.push(Point2::new(0.0, 0.0)); // and the ruler holding a point of its own
@@ -44,8 +46,7 @@ fn going_back_to_selection_empties_the_hand() {
 /// as a swap rather than as a reset would show it here.
 #[test]
 fn a_second_return_to_selection_changes_nothing() {
-    let mut b = Bench::default();
-    b.armed = Armed::Draw(1);
+    let mut b = Bench { armed: Armed::Draw(1), ..Default::default() };
     qymcad_sketch::sketch_select_mode(&mut b.sketch_ctx());
     let once = b.status.clone();
 

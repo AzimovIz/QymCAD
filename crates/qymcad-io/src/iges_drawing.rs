@@ -429,8 +429,9 @@ impl Pen {
                     let i = span - deg + j;
                     let den = knots[i + deg + 1 - r] - knots[i];
                     let a = if den.abs() < 1e-15 { 0.0 } else { (t - knots[i]) / den };
-                    for c in 0..4 {
-                        dp[j][c] = (1.0 - a) * dp[j - 1][c] + a * dp[j][c];
+                    let prev = dp[j - 1];
+                    for (v, p) in dp[j].iter_mut().zip(prev) {
+                        *v = (1.0 - a) * p + a * *v;
                     }
                 }
             }

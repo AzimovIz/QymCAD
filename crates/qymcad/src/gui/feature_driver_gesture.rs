@@ -80,7 +80,7 @@ mod tests {
         }
 
         /// Get into the driver name field of parameter `key`: bring the cursor over, click.
-        fn into_driver_field(&mut self, app: &mut App, ti: usize, node: Id, key: &str) -> &mut Self {
+        fn enter_driver_field(&mut self, app: &mut App, ti: usize, node: Id, key: &str) -> &mut Self {
             self.settle(app, ti);
             let at = self.field(node, key).unwrap_or_else(|| panic!("the feature properties have no driver name field for \"{key}\"")).center();
             self.events.push(egui::Event::PointerMoved(at));
@@ -122,7 +122,7 @@ mod tests {
         let (ti, node) = part_with_extrude(&mut app);
 
         let mut p = Props::new();
-        p.into_driver_field(&mut app, ti, node, "height");
+        p.enter_driver_field(&mut app, ti, node, "height");
         let key_before = qymcad_ui_state::doc_key(&app.project);
         let undo_before = app.disk.edits.undo.len();
 
@@ -151,7 +151,7 @@ mod tests {
         let (ti, node) = part_with_extrude(&mut app);
 
         let mut p = Props::new();
-        p.into_driver_field(&mut app, ti, node, "height");
+        p.enter_driver_field(&mut app, ti, node, "height");
         p.type_text("w").frame(&mut app, ti);
         p.key(egui::Key::Enter).frame(&mut app, ti);
         p.settle(&mut app, ti);

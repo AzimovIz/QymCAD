@@ -42,8 +42,7 @@ mod tests {
         let index = crate::help_map::workbench_article("assembly");
         let mut sins: Vec<String> = Vec::new();
         for t in AssemblyTool::ALL {
-            let mut app = App::default();
-            app.workbench = super::super::Workbench::Assembly;
+            let mut app = App { workbench: super::super::Workbench::Assembly, ..Default::default() };
             arm(&mut app, t);
             // GUARD AGAINST A VACUOUS CHECK: the tool really was taken, otherwise a table-of-contents answer would be legitimate.
             if !app.armed_assembly_tools().contains(&t) {

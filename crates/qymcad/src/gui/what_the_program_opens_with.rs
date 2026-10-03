@@ -62,10 +62,7 @@ mod tests {
         let file = a_real_file();
         let path = file.to_string_lossy().into_owned();
 
-        let mut set = Settings::default();
-
-        set.open_last = true;
-        set.show_start_screen = true;
+        let mut set = Settings { open_last: true, show_start_screen: true, ..Default::default() };
         assert_eq!(opening(&set, Some(&path)), Opening::LastProject(path.clone()), "asked to reopen and there is something to reopen");
 
         set.show_start_screen = false;
@@ -86,9 +83,7 @@ mod tests {
     /// staring at nothing with no clue why.
     #[test]
     fn a_project_that_has_gone_falls_back_to_the_start_screen() {
-        let mut set = Settings::default();
-        set.open_last = true;
-        set.show_start_screen = true;
+        let set = Settings { open_last: true, show_start_screen: true, ..Default::default() };
         let gone = std::env::temp_dir().join("qymcad-no-such-project-9c1f.qcad");
         let _ = std::fs::remove_file(&gone);
 

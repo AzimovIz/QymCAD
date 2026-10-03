@@ -139,8 +139,7 @@ mod tests {
         app.set.scheme = "light".into();
         let saved = ron::ser::to_string(&app.set).expect("saved");
 
-        let mut fresh = App::default();
-        fresh.set = ron::from_str(&saved).expect("loaded");
+        let mut fresh = App { set: ron::from_str(&saved).expect("loaded"), ..Default::default() };
         assert_eq!(fresh.set.scheme, "light", "the light scheme must survive a restart");
 
         // and it must BE APPLIED rather than merely lie there: egui does not remember its palette between

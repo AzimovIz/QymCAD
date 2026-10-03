@@ -24,8 +24,7 @@ mod tests {
         assert!(!all.is_empty(), "the built-in library holds no part");
         for path in all {
             let loaded = qymcad_io::load_part(&path).unwrap_or_else(|e| panic!("{path}: {e}"));
-            let mut app = App::default();
-            app.project = loaded.project.clone();
+            let mut app = App { project: loaded.project.clone(), ..Default::default() };
             app.project.mark_all_dirty();
             qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
             let part = app.project.components.iter().find(|c| c.kind == qymcad_core::feature::ComponentKind::Part && !app.project.component_bodies(c.id).is_empty()).map(|c| c.id);

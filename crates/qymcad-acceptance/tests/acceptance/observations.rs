@@ -79,7 +79,7 @@ probe! {
     fn open_windows_are_read_by_their_titles() {
         let mut s = Session::start();
         let start = s.word("start-title");
-        assert_eq!(s.windows(), [start.clone()], "a first start shows the start screen alone");
+        assert_eq!(s.windows(), std::slice::from_ref(&start), "a first start shows the start screen alone");
         s.key(Key::Escape);
         assert!(s.windows().is_empty(), "Esc left a window open: {:?}", s.windows());
         let (windows, settings) = (s.word("menu-windows"), s.word("menu-settings"));

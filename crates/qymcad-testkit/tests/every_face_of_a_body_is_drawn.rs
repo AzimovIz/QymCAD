@@ -21,7 +21,7 @@ fn the_rounded_boss_of_the_frame_sample_is_drawn_whole() {
     let faces: u32 = shape.face_kinds().expect("the kinds of its faces").iter().sum();
     let mut problems = Vec::new();
     for step in [0.2, 0.05, 0.01] {
-        let drawn: usize = shape.tessellate(step).iter().map(|b| b.1.len()).sum();
+        let drawn: usize = shape.tessellate(step).iter().map(|b| b.faces.len()).sum();
         if drawn != faces as usize {
             problems.push(format!("at {step} mm {drawn} of {faces} faces are drawn"));
         }

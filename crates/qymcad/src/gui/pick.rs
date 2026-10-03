@@ -31,9 +31,6 @@ impl App {
         PickCtx { project: &self.project, set: &self.set, view: &self.viewing.view }
     }
 
-    /// The DATUM POINT under the cursor -> (its Id, its world position). For a two-point axis (kept
-    /// parametric through `TwoPoints`).
-
     /// A CLICK ON A VERTEX IN THE FILLET: create or remove its radius field. `true` means a hit.
     pub(super) fn pick_fillet_vertex(&mut self, rect: Rect, screen: Pos2) -> bool {
         let Some((desc, p)) = fillet_vertex_at(

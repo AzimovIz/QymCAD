@@ -332,8 +332,7 @@ mod tests {
         let mut app = App::default();
         app.set.scheme = "light".into();
         let saved = ron::ser::to_string(&app.set).expect("saved");
-        let mut fresh = App::default();
-        fresh.set = ron::from_str(&saved).expect("loaded");
+        let fresh = App { set: ron::from_str(&saved).expect("loaded"), ..Default::default() };
         assert_eq!(fresh.set.scheme, "light", "the chosen scheme must survive a restart");
     }
 }

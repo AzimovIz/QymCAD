@@ -83,7 +83,7 @@ fn every_occurrence_is_a_body_in_its_own_coordinates_placed_by_the_tree() {
     let seen: [f64; 3] = std::array::from_fn(|r| (0..3).map(|c| w[r * 4 + c] * middle[c]).sum::<f64>() + w[r * 4 + 3]);
     assert!(seen.iter().zip([5.0, 10.0, 11.0]).all(|(g, w)| (g - w).abs() < 1e-6), "in the world the pin's middle is {seen:?}, not (5, 10, 11)");
     // the mesh shown is the same body, in the same coordinates
-    let m = bodies[k].0.bounds().expect("a mesh has bounds");
+    let m = bodies[k].mesh.bounds().expect("a mesh has bounds");
     assert!(m.min.x >= b[0] - 1e-3 && m.max.x <= b[3] + 1e-3 && m.min.z >= b[2] - 1e-3 && m.max.z <= b[5] + 1e-3, "the pin's mesh is not where its solid is");
 }
 
@@ -193,7 +193,7 @@ fn a_face_brings_a_colour_of_its_own() {
     assert!(faces[0].1.iter().zip([0.1, 0.8, 0.1]).all(|(g, w)| (g - w).abs() < 0.01), "the top face is not green: {:?}", faces[0].1);
     // the number is the live body's: the one a rebuild from the source gives it, and what the document shows
     let live = shapes[nodes[plate].solid.expect("the plate's body")].tessellate_merged(0.5).expect("the plate tessellates");
-    let top = live.1.iter().find(|f| f.id == 6).map(|f| f.centroid.z);
+    let top = live.faces.iter().find(|f| f.id == 6).map(|f| f.centroid.z);
     assert_eq!(top, Some(5.0), "face 6 of the plate is not its top face");
     assert!(nodes[named(&nodes, name(3))[0]].faces.is_empty(), "the pin has no face of a colour of its own");
 }

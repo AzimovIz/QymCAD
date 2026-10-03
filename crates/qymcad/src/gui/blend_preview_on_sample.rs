@@ -58,8 +58,7 @@ mod tests {
             eprintln!("PASSED OVER: the private sample vacuumCleaner.qcad is not in this tree");
             return;
         }
-        let mut app = App::default();
-        app.project = qymcad_io::load_project(path).expect("the sample opens");
+        let mut app = App { project: qymcad_io::load_project(path).expect("the sample opens"), ..Default::default() };
         app.project.mark_all_dirty();
         qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
         let Some((src, radius, picked)) = app.project.timeline.iter().find(|n| n.id == 177).and_then(|n| match &n.kind {

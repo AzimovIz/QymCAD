@@ -37,8 +37,7 @@ mod tests {
         app.set.hotkeys.insert("sketch.circle".into(), "Z".into());
         let ron = ron::ser::to_string(&app.set).expect("the settings serialise");
         let back: super::super::Settings = ron::from_str(&ron).expect("and read back");
-        let mut restarted = App::default();
-        restarted.set = back;
+        let restarted = App { set: back, ..Default::default() };
         assert_eq!(qymcad_ui_state::hotkey_action(&restarted.set, "sketch", egui::Key::Z), Some("sketch.circle"), "after a restart the key went back to the factory one — the edit is lost");
     }
 

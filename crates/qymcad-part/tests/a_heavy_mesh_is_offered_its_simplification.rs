@@ -22,9 +22,7 @@ fn strip(tris: usize, length: f64) -> Mesh {
 }
 
 fn command() -> FeatCommand {
-    let mut cmd = FeatCommand::default();
-    cmd.params = vec![CmdParam::new("f-recognise-tol", "tol", 1.0, 0.1, 1000.0), CmdParam::new("f-recognise-simplify", "simplify", 0.0, 0.0, 10.0)];
-    cmd
+    FeatCommand { params: vec![CmdParam::new("f-recognise-tol", "tol", 1.0, 0.1, 1000.0), CmdParam::new("f-recognise-simplify", "simplify", 0.0, 0.0, 10.0)], ..Default::default() }
 }
 
 #[test]

@@ -162,7 +162,6 @@ pub mod tests {
 
     /// The files that are counted: the working code of the application. Tests are not counted — they
     /// describe behaviour and are read by whoever works on the code.
-
     fn count_all() -> (usize, Vec<(String, usize)>) {
         // the root of the workspace: .../crates/qymcad -> .../crates
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().expect("the directory of the crates").to_path_buf();
