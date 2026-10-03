@@ -703,6 +703,32 @@ impl Session {
         }
     }
 
+    /// WHERE THE SIDE PANEL `id` STANDS, as the last frame laid it out: its outer rectangle, the divider at its edge.
+    /// `None` when no such panel was drawn.
+    pub fn panel(&mut self, id: &str) -> Option<Rect> {
+        self.settle();
+        egui::PanelState::load(&self.win.ctx, egui::Id::new(id)).map(|p| p.outer_rect)
+    }
+
+    /// WHAT THE LAST FRAME PAINTED that a person reads as content: every run of words, and every filled background of
+    /// one row's height - a highlight, a button - named "a filled background". The ground of a whole area is left out.
+    pub fn painted(&mut self) -> Vec<(Rect, String)> {
+        fn collect(s: &egui::Shape, out: &mut Vec<(Rect, String)>) {
+            match s {
+                egui::Shape::Text(t) => out.push((Rect::from_min_size(t.pos, t.galley.size()), t.galley.text().to_string())),
+                egui::Shape::Rect(r) if r.fill.a() > 0 && r.rect.height() <= 40.0 => out.push((r.rect, "a filled background".to_string())),
+                egui::Shape::Vec(v) => v.iter().for_each(|x| collect(x, out)),
+                _ => {}
+            }
+        }
+        self.settle();
+        let mut out = Vec::new();
+        for cs in &self.win.shapes {
+            collect(&cs.shape, &mut out);
+        }
+        out
+    }
+
     /// GO DOWN A MENU: press each of `path` in turn, each nearest to the one pressed before it.
     ///
     /// # Panics

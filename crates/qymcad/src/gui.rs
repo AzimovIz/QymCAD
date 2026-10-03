@@ -4363,7 +4363,6 @@ mod tuned_constants;
 mod ui_sweep;
 mod unsaved_prompt;
 mod clipped_text_sweep;
-mod content_clears_the_divider;
 mod param_error_readable;
 mod ghost_highlight;
 mod look_at_a_document;

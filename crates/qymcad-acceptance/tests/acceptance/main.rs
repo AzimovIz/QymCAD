@@ -52,6 +52,7 @@ mod part_section_measure;
 mod picking_in_space;
 mod pictures;
 mod settings;
+mod side_panels;
 mod size_and_time;
 mod sketch_constraints;
 mod sketch_dimensions;
