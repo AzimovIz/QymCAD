@@ -71,6 +71,8 @@ By making a contribution to this project, I certify that:
 - **All checks green** — the existing ones and the new ones. A pull request with a red check is not merged.
 - **Comments and assertion messages are in English.** Interface strings go through the `i18n/`
   catalogue only, never inline in the code.
+- **Formatted by rustfmt.** Run `cargo fmt` before sending; the layout is set by `rustfmt.toml` and the
+  checks refuse a tree `cargo fmt --check` would change.
 - **Zero warnings.** `dead_code` and `unused_must_use` are denied in the manifest: something written
   and never wired up reddens the build at once.
 - **Every pull request is checked on Linux** by the same gate a developer runs: `python3 tools/gate.py

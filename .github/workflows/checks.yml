@@ -50,6 +50,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      # The layout is rustfmt's (rustfmt.toml); cheap, so it runs before anything is built.
+      - name: The layout is rustfmt's
+        run: cargo fmt --all --check
       - name: The search for anything personal catches what it is for
         run: python3 tools/frisk.py --self-test
       - name: Nothing personal in the files and in the messages of the commits

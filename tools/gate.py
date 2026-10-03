@@ -82,6 +82,9 @@ LEVELS = {
         ("the probes of time, one at a time", ACCEPTANCE[:-1] + ["--test-threads=1", TIME], {"QYMCAD_TIER": "fast"}),
     ],
     "fast": [
+        # THE LAYOUT IS RUSTFMT'S: the tree was formatted once, and a hand layout coming back would be the next
+        # thousand-line diff nobody can review
+        ("the layout is rustfmt's", ["cargo", "fmt", "--all", "--check"], {}),
         BUILDS,
         ("the rules of the code", ["cargo", "test", "-p", "qymcad", "--lib", "--", "ratchet"], {}),
         ("the words of the interface", ["cargo", "test", "-p", "qymcad-i18n"], {}),
