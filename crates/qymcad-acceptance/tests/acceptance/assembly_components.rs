@@ -278,6 +278,23 @@ probe! {
 }
 
 probe! {
+    /// THE WHOLE LINE OF THE HEADING FOLDS THE BRANCH, not the word alone: a click between the word "Components" and
+    /// the count folds it, as a click anywhere on any other heading of the tree does.
+    fn a_click_between_the_word_and_the_count_folds_the_components() {
+        let mut s = a_first_start();
+        a_second_part_with_a_block(&mut s);
+        let part = parts(&mut s).into_iter().filter(|p| !p.assembly).map(|p| p.name).nth(1).expect("the second part");
+        let heading = s.word("tree-components");
+        let at = s.find(&heading, qymcad::pos2(0.0, 300.0)).unwrap_or_else(|| panic!("the heading {heading:?} is not in the tree; on screen: {:?}", s.words()));
+        let in_tree = |s: &mut Session| s.words_at().into_iter().any(|(w, r)| w.contains(part.as_str()) && r.min.y > at.max.y - 1.0 && r.max.x < 500.0);
+        assert!(in_tree(&mut s), "setup: {part:?} is not under the heading; on screen: {:?}", s.words());
+        // a little past the word, short of the count at the right edge of the column
+        s.click(qymcad::pos2(at.max.x + 12.0, at.center().y));
+        assert!(!in_tree(&mut s), "a click on the heading's line past the word did not fold the branch: {part:?} is still in the tree");
+    }
+}
+
+probe! {
     /// A HIDDEN PART HIDES ITS SKETCHES: in the assembly, with "Sketch contours" on, the part's tick cleared takes its
     /// sketch off the canvas with its body - the canvas is then the one "Sketch contours" off would give.
     ///

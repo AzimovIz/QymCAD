@@ -1211,7 +1211,7 @@ pub(crate) fn build_tree(tc: &mut qymcad_ui_state::TreeCtx, ui: &mut egui::Ui) {
     }
     if !children.is_empty() {
         let mut fold = false;
-        let listed: Vec<(Id, bool)> = rows.iter().filter_map(|row| match row { TreeCompRow::Comp(ci, cid, _, _) => Some((*cid, tc.project.components[*ci].visible)), _ => None }).collect();
+        let listed: Vec<(Id, bool)> = rows.iter().filter_map(|row| match row { TreeCompRow::Comp(ci, cid, _, _) => tc.project.components.get(*ci).map(|c| (*cid, c.visible)), _ => None }).collect();
 
         let listed_count = listed.len();
         let shown_count = listed.iter().filter(|(_, vis)| *vis).count();
@@ -1222,6 +1222,8 @@ pub(crate) fn build_tree(tc: &mut qymcad_ui_state::TreeCtx, ui: &mut egui::Ui) {
         let state = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), ui.make_persistent_id(("comps", ctx)), true);
 
         let mut header = state.show_header(ui, |ui| {
+            // the hover fill goes under the words, so its place in the paint order is kept before they are drawn
+            let fill = ui.painter().add(egui::Shape::Noop);
             let toggle_all_checkbox = egui::Checkbox::without_text(&mut all_checked).indeterminate(mixed);
             let toggle_all = ui.add(toggle_all_checkbox).on_hover_text(crate::i18n::tr("tree-components-all-hint"));
 
@@ -1231,12 +1233,22 @@ pub(crate) fn build_tree(tc: &mut qymcad_ui_state::TreeCtx, ui: &mut egui::Ui) {
                 }
             }
 
+            let after_tick = toggle_all.rect.max.x + ui.spacing().item_spacing.x * 0.5;
             let heading_text = egui::RichText::new(format!("{} {}", ph::STACK, crate::i18n::tr("tree-components"))).text_style(egui::TextStyle::Button);
-            fold = ui.add(egui::Label::new(heading_text).selectable(false).sense(egui::Sense::click())).clicked();
+            ui.add(egui::Label::new(heading_text).selectable(false));
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.weak(crate::i18n::tr2("tree-components-count", "shown", &shown_count.to_string(), "n", &listed_count.to_string()));
             });
+            // THE WHOLE LINE PAST THE TICK FOLDS THE BRANCH, lit under the pointer, as every other heading of the tree:
+            // the word alone answered a click, and one between the word and the count did nothing
+            let line = egui::Rect::from_min_max(egui::pos2(after_tick, ui.min_rect().min.y), egui::pos2(ui.max_rect().max.x, ui.min_rect().max.y));
+            let row = ui.interact(line, ui.id().with("comps-fold"), egui::Sense::click());
+            if row.hovered() {
+                let look = ui.visuals().widgets.hovered;
+                ui.painter().set(fill, egui::Shape::rect_filled(line, look.corner_radius, look.weak_bg_fill));
+            }
+            fold = row.clicked();
         });
 
         if fold {

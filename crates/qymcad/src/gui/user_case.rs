@@ -1024,6 +1024,33 @@ mod tests {
             }
         }
 
+        // --- EVERY COMPONENT HIDDEN BY ONE TICK, AND SHOWN AGAIN ---
+        //
+        // In the assembly with a dozen parts, the tick of the heading "Components" clears them all at once and the
+        // next click brings them all back; the document must stand whole after both.
+        app.exit_context();
+        {
+            let heading = qymcad_i18n::tr("tree-components");
+            let listed: Vec<u64> = app.project.components.iter().filter(|c| c.parent == app.project.components.first().map(|r| r.id)).map(|c| c.id).collect();
+            let shown = |app: &App| listed.iter().filter(|id| app.project.components.iter().any(|c| c.id == **id && c.visible)).count();
+            if !Hand::new(&mut app).press_tick_before(&heading, egui::pos2(0.0, 300.0)) {
+                problems.push("the heading of the components has no tick that hides them all".to_string());
+            } else {
+                if shown(&app) != 0 {
+                    problems.push(format!("the tick of the heading was cleared and {} of {} components are still shown", shown(&app), listed.len()));
+                }
+                check_all(&mut app, "every component was hidden by the heading's tick", &mut problems);
+                Hand::new(&mut app).press_tick_before(&heading, egui::pos2(0.0, 300.0));
+                if shown(&app) != listed.len() {
+                    problems.push(format!("the tick of the heading was set again and only {} of {} components are shown", shown(&app), listed.len()));
+                }
+                check_all(&mut app, "every component was shown again by the heading's tick", &mut problems);
+            }
+            // the frames of the hand marked the program as a live window, where a rebuild goes into a thread; the
+            // steps below build without frames, so the hand waits for its rebuild and takes the mark away
+            Hand::new(&mut app).close_window();
+        }
+
         // --- EDITS AT ARBITRARY POINTS OF THE HISTORY ---
         //
         // What breaks is not a single action but AN EDIT TO WHAT WAS DONE: suppress a node in the middle and

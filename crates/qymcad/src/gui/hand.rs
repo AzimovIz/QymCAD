@@ -125,6 +125,29 @@ impl<'a> Hand<'a> {
         self.frame(vec![button(false)]);
     }
 
+    /// PRESS THE TICK BEFORE `word` - the checkbox standing on the line of the words holding `word` nearest to
+    /// `near`, the last one to the left of them, as the tick of a heading or a row of the tree stands. Answers whether
+    /// such a tick was on screen.
+    pub fn press_tick_before(&mut self, word: &str, near: egui::Pos2) -> bool {
+        self.frame(Vec::new());
+        let Some(line) = self.win.drawn.iter().filter(|(t, _)| t.contains(word)).map(|(_, r)| *r).min_by(|a, b| a.center().distance(near).total_cmp(&b.center().distance(near))) else {
+            return false;
+        };
+        let Some(at) = self
+            .win
+            .widgets
+            .iter()
+            .filter(|w| w.kind == super::window::Kind::CheckBox && w.rect.center().y > line.min.y && w.rect.center().y < line.max.y && w.rect.max.x <= line.min.x + 1.0)
+            .max_by(|a, b| a.rect.max.x.total_cmp(&b.rect.max.x))
+            .map(|w| w.rect.center())
+        else {
+            return false;
+        };
+        self.win.clock += 1.0;
+        self.press_screen(at);
+        true
+    }
+
     /// PRESS WHERE `word` IS WRITTEN - the one nearest to `near` when the frame wrote it in several places.
     /// Answers whether the word was on screen.
     pub fn press_word(&mut self, word: &str, near: egui::Pos2) -> bool {
