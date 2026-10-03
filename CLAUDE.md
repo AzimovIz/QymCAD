@@ -68,7 +68,7 @@ not "one line". New code is a free function in the crate whose task it is, takin
 (`PartCtx`, `SketchCtx`, `TreeCtx`, `WinCtx`, `BarCtx`); at most ONE line of call stays in `impl App`.
 Derived data is computed on demand, not stored in a field.
 
-The `god_object_ratchet` guard holds the number of lines in `impl App` by EQUALITY. Growth is a regression,
+The `god_object_ratchet` guard holds the size of `impl App` - its word characters, which a formatter does not move - by EQUALITY. Growth is a regression,
 and it is not paid for by raising the mark: it is paid by moving out what does not belong there, and the
 mark goes down in the same commit.
 

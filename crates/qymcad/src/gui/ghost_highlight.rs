@@ -45,7 +45,7 @@ mod tests {
     #[test]
     fn the_pass_of_a_selected_ghost_is_still_the_blended_one() {
         let src = crate::gui::render_source::RENDER;
-        assert!(src.contains("if ghost { ghost_tris.push(tri) } else { tris.push(tri) }"), "on the CPU path the bucket is chosen by `ghost` alone, with no regard to the selection");
+        assert!(crate::gui::render_source::has(src, "if ghost { ghost_tris.push(tri) } else { tris.push(tri) }"), "on the CPU path the bucket is chosen by `ghost` alone, with no regard to the selection");
 
         // THE CARD, checked by the look table rather than by the text of the source: a body of a neighbouring
         // part, selected, must carry BOTH bits.

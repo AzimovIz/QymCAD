@@ -14,7 +14,7 @@
 //!
 //! * `IMPL_APP_CEILING` - how many `impl App` blocks exist. Each one is a file reaching into the god object.
 //! * `APP_METHODS_CEILING` - how many methods hang on `App`.
-//! * `APP_LINES_CEILING` - how many LINES live inside those blocks.
+//! * `APP_SIZE_CEILING` - how big those blocks are, in word characters - a formatter does not move it.
 //! * `APP_FIELDS_CEILING` - how many fields `App` carries.
 //!
 //! WHY EQUALITY AND NOT "NO MORE THAN". A pair of `<=` and `>=` was tried in the other ratchets and half of
@@ -35,7 +35,10 @@ mod tests {
     /// context. A panel's drawing is not the application's business and should not be reachable from it.
     const APP_METHODS_CEILING: usize = 167;
 
-    /// Lines living inside `impl App` blocks - the whole of them, comments and blank lines included.
+    /// The size of what lives inside `impl App` blocks, comments included, counted in WORD CHARACTERS (`word_chars`)
+    /// rather than in lines. Lines were the measure until the tree was first formatted: rustfmt took the same code
+    /// from 6056 lines to 5298 without a word of it changing, and a mark that a formatter moves says nothing about
+    /// the god object.
     ///
     /// WHY A SECOND COUNTER NEXT TO THE ONE ABOVE. The method count cannot see the commonest move there is:
     /// a 218-line panel split into four free functions with a four-line wrapper left behind. That is exactly
@@ -46,7 +49,7 @@ mod tests {
     /// It also cannot be gamed the other way. Splitting a method in two adds a line and no more; the only
     /// way this number falls is code leaving `impl App`. That is the thing that has to reach zero before the
     /// interface can live in a crate of its own, since a method belongs to the crate declaring the type.
-    const APP_LINES_CEILING: usize = 6056;
+    const APP_SIZE_CEILING: usize = 185_762;
 
     /// Methods that exist ONLY so a check can reach inside - `*_for_test` and `*_pub`.
     ///
@@ -89,8 +92,15 @@ mod tests {
         out
     }
 
-    /// Blocks of `impl App`, the methods inside them (working ones and test facades apart), their lines,
-    /// and the worst files.
+    /// THE WORD CHARACTERS OF A LINE: letters, digits and `_` - the names, the numbers, the words of a string or a
+    /// comment. What a formatter moves - spaces, line breaks, trailing commas, a pair of braces round a match arm -
+    /// is not among them, so the size of the god object reads the same before and after the tree is formatted.
+    fn word_chars(l: &str) -> usize {
+        l.chars().filter(|c| c.is_alphanumeric() || *c == '_').count()
+    }
+
+    /// Blocks of `impl App`, the methods inside them (working ones and test facades apart), their size in word
+    /// characters, and the worst files.
     fn impl_app() -> (usize, usize, usize, usize, Vec<(String, usize)>) {
         let (mut blocks, mut methods, mut facades, mut lines_in, mut per) = (0usize, 0usize, 0usize, 0usize, Vec::new());
         for (name, text) in sources() {
@@ -126,7 +136,8 @@ mod tests {
                     }
                     j += 1;
                 }
-                here_lines += j - i + 1; // the block from its `impl` line to its closing brace
+                // the block from its `impl` line to its closing brace, by its word characters
+                here_lines += lines[i..=j.min(lines.len() - 1)].iter().map(|l| word_chars(l)).sum::<usize>();
             }
             lines_in += here_lines;
             if here_lines > 0 {
@@ -159,7 +170,7 @@ mod tests {
     #[test]
     fn fewer_and_fewer_places_hang_methods_on_the_application() {
         let (blocks, methods, facades, lines_in, per) = impl_app();
-        let worst: Vec<String> = per.iter().map(|(f, n)| format!("  {n:5} lines  {f}")).collect();
+        let worst: Vec<String> = per.iter().map(|(f, n)| format!("  {n:7} word characters  {f}")).collect();
         assert_eq!(
             blocks, IMPL_APP_CEILING,
             "the count of `impl App` blocks has moved off its mark of {IMPL_APP_CEILING}: now {blocks}.\n\
@@ -172,8 +183,8 @@ mod tests {
              A method on `App` sees everything at once and cannot move to a crate of its own."
         );
         assert_eq!(
-            lines_in, APP_LINES_CEILING,
-            "the lines inside `impl App` have moved off the mark of {APP_LINES_CEILING}: now {lines_in}.\n\
+            lines_in, APP_SIZE_CEILING,
+            "the size of `impl App` in word characters has moved off the mark of {APP_SIZE_CEILING}: now {lines_in}.\n\
              MORE means drawing or logic was written into the god object rather than beside it.\n\
              FEWER means progress: lower the mark in the same commit.\n\
              Where most of them are:\n{}",

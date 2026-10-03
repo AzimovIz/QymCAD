@@ -164,6 +164,12 @@ mod tests {
                 continue;
             }
             let name = &body[j..i];
+            // A METHOD OF SOMETHING ELSE IS NOT A HANDLER: `.add_filter(` on the builder of a file dialog is the
+            // dialog's, not a function of ours that a request calls. Formatted, an arm laid its builder on the arm
+            // line, and the check took its methods for handlers it could not read. `self.` is ours.
+            if j > 0 && b[j - 1] == b'.' && !body[..j].ends_with("self.") {
+                continue;
+            }
             if name.chars().next().is_some_and(|c| c.is_ascii_lowercase()) {
                 out.push(name.to_string());
             }
