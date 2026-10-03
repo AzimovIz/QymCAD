@@ -16,6 +16,7 @@ mod gizmo_in_space;
 mod help_and_start;
 mod import_export;
 mod inputs;
+mod menu_bar;
 mod observations;
 mod parallel;
 mod parts_library;
