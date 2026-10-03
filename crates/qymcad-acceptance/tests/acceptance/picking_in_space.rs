@@ -143,6 +143,54 @@ probe! {
     }
 }
 
+/// A binary STL of a 40 x 30 x 10 box standing on the origin: twelve triangles, two to a side, wound outwards.
+fn box_stl(path: &str) {
+    let (x, y, z) = (40.0f32, 30.0f32, 10.0f32);
+    let p = |i: usize| [if i & 1 != 0 { x } else { 0.0 }, if i & 2 != 0 { y } else { 0.0 }, if i & 4 != 0 { z } else { 0.0 }];
+    // each side as four corners going round counter-clockwise seen from outside
+    let sides = [[0, 2, 3, 1], [4, 5, 7, 6], [0, 1, 5, 4], [2, 6, 7, 3], [0, 4, 6, 2], [1, 3, 7, 5]];
+    let mut out = vec![0u8; 80];
+    out.extend(12u32.to_le_bytes());
+    for s in sides {
+        for t in [[s[0], s[1], s[2]], [s[0], s[2], s[3]]] {
+            out.extend([0u8; 12]);
+            for c in t {
+                for v in p(c) {
+                    out.extend(v.to_le_bytes());
+                }
+            }
+            out.extend([0u8; 2]);
+        }
+    }
+    std::fs::write(path, out).expect("the mesh of a box is written");
+}
+
+probe! {
+    /// THE FACE UNDER THE CURSOR IS LIT ON A BODY OF A MESH, not the first face of that body. Such a body has no
+    /// B-rep, so every face it is recognised into carries the persistent id 0; the hover once looked the face up by
+    /// that id and lit the first face of the body wherever the cursor stood, while a click took the face pointed at.
+    /// Reported behaviour: on a project of meshes the highlight stayed on one face, "especially on the two islands".
+    fn the_face_under_the_cursor_is_lit_on_a_body_of_a_mesh() {
+        let path = format!("{}/qymcad-box-{}.stl", std::env::temp_dir().display(), std::process::id());
+        box_stl(&path);
+        let mut s = Session::start();
+        build::into_the_first_part(&mut s);
+        build::import(&mut s, &path);
+        let _ = std::fs::remove_file(&path);
+        s.key(Key::Escape);
+        let away = qymcad::pos2(s.canvas().min.x + 4.0, s.canvas().max.y - 4.0);
+        s.move_to(away);
+        let plain = s.snapshot();
+        let (top, side) = (s.face_at([20.0, 15.0, 10.0]), s.face_at([20.0, 0.0, 5.0]));
+        s.move_to(top);
+        let on_top = s.snapshot();
+        s.move_to(side);
+        let on_side = s.snapshot();
+        assert!(!golden::same(&plain, &on_top), "the cursor stands on the top of the box and nothing on the picture says so");
+        assert!(!golden::same(&on_top, &on_side), "the cursor moved from the top of the box to its side and the same face stayed lit");
+    }
+}
+
 probe! {
     /// WHAT IS TAKEN IS LIT: the picture of a chosen body is not the picture of the same body untouched.
     fn what_is_taken_is_lit() {
