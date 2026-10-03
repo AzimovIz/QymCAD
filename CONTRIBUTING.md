@@ -73,11 +73,28 @@ By making a contribution to this project, I certify that:
   catalogue only, never inline in the code.
 - **Formatted by rustfmt.** Run `cargo fmt` before sending; the layout is set by `rustfmt.toml` and the
   checks refuse a tree `cargo fmt --check` would change.
+- **clippy has nothing to say.** Every clippy remark is an error in the manifest; run `cargo clippy
+  --workspace --all-targets` before sending. A remark is mended, not silenced: no `#[allow(clippy::...)]`.
+- **Values say what they are.** A group of values that travels together is a struct with named fields — not
+  a tuple, not a list of tuples, not a type alias of a tuple. A switch is an enum, not a `bool`. No function
+  takes more than seven arguments, and none takes a run of one type (`bool, bool`, `f64, f64, f64`): two
+  neighbours of one type swap and still compile.
+
+  ```rust
+  // refused
+  fn field(ui: &mut Ui, id: Id, text: &str, hint: &str, valid: &dyn Fn(&str) -> bool, with_list: bool, autofocus: bool)
+  let rows: Vec<(&str, fn(&mut App))> = vec![("move", |a| ...)];
+
+  // accepted
+  pub struct FieldRules<'a> { pub valid: &'a dyn Fn(&str) -> bool, pub list: NameList, pub focus: Focus }
+  fn field(ui: &mut Ui, id: Id, text: &str, hint: &str, rules: FieldRules)
+  struct Edit { what: &'static str, make: fn(&mut App) }
+  ```
 - **Zero warnings.** `dead_code` and `unused_must_use` are denied in the manifest: something written
   and never wired up reddens the build at once.
 - **Every pull request is checked on Linux** by the same gate a developer runs: `python3 tools/gate.py
-  fast` (the build, the rules of the code, the interface words, the help, the light acceptance probes) and
-  every crate's own tests. Running the fast level before sending saves a round trip. When a check goes
-  red, the job lists its name; what it said is in the `gate-logs-…` artifacts of the run.
+  fast` (the layout, the build, clippy, the rules of the code, the interface words, the help, the light
+  acceptance probes) and every crate's own tests. Running the fast level before sending saves a round trip.
+  When a check goes red, the job lists its name; what it said is in the `gate-logs-…` artifacts of the run.
 
 Building from source and packaging are described in [`packaging/README.md`](packaging/README.md).

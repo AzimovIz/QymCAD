@@ -72,6 +72,28 @@ The `god_object_ratchet` guard holds the size of `impl App` - its word character
 and it is not paid for by raising the mark: it is paid by moving out what does not belong there, and the
 mark goes down in the same commit.
 
+## Code that says what it holds
+
+Mandatory, for every line written, test code included.
+
+* A group of values that travels together is a struct with named fields. Not a tuple, not an array or a `Vec`
+  of tuples, not an alias of a tuple (`type Row = (&str, fn(&mut App))`): an alias names the group and leaves
+  its places nameless, and the reader is back to counting commas. A point `(x, y)` is the one tuple that says
+  what it holds.
+* No runs of arguments or fields of one type: `bool, bool`, `f64, f64, f64`, `usize, usize, usize, usize`.
+  Two neighbours of one type swap and still compile. A switch is an enum with named variants
+  (`Focus::Takes`), not a `bool`; numbers that travel together are a struct.
+* No more than seven arguments; past that the group is a record.
+* An alias may name a function type (`type KernelWork = dyn FnOnce(&dyn Kernel) -> ...`), never a tuple.
+* The layout is rustfmt's (`rustfmt.toml`): `cargo fmt --all` before a commit.
+* clippy has nothing to say. Every remark is an error in the manifest (`[workspace.lints.clippy] all =
+  "deny"`), and the gate runs `cargo clippy --workspace --all-targets`. A remark is mended, never silenced: no
+  `#[allow(clippy::...)]`, and no tuple or alias to get a type under a threshold - that is the same remark
+  hidden.
+
+Guards: `wide_signature_ratchet.rs` (the width of signatures and the aliases of tuples), the gate steps "the
+layout is rustfmt's" and "clippy has nothing to say".
+
 ## Workbenches, modules, resources
 
 Three different words; the sign is who sees it.
@@ -148,5 +170,5 @@ The right panel adds to a created feature; it is not the way to set up a tool.
 * Run the GUI only as `HOME=<sandbox> cargo run -p qymcad` — never on a real user's data.
 * Dependency versions are not raised silently. The dependency guard only SHOWS the gap; raising is a separate,
   deliberate decision.
-* Formatting: the tree has not been run through rustfmt yet and is laid out by hand. Do not run `cargo fmt`
-  on files you are not changing; the whole tree is reformatted once, in a dedicated commit.
+* Formatting: rustfmt with `rustfmt.toml`; the gate and CI refuse a tree `cargo fmt --check` would change. The
+  commit that formatted the tree is listed in `.git-blame-ignore-revs`.

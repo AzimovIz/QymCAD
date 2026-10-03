@@ -45,14 +45,11 @@ dead_code = "deny"
 unused_must_use = "deny"
 
 [workspace.lints.clippy]
-# THE ONLY THING SILENCED HERE, AND ONLY BECAUSE CLIPPY CANNOT MEND IT ITSELF. Everything the tool can
-# repair on its own has been repaired; what is left below needs a change of design, not of signature.
-#
-# A BAG OF PARAMETERS WHERE A STRUCT BELONGS. 31 functions, every one of them in `qymcad-core`:
-# `model/regen.rs` holds twelve and the worst takes SIXTEEN arguments. That is not a matter of style -
-# it is the regeneration code carrying its state by hand, and the signatures go when that state does, not
-# one by one. Until then the count is kept VISIBLE in one place rather than silenced function by function.
-too_many_arguments = "allow"
+# EVERY REMARK OF CLIPPY IS AN ERROR. The tree was brought from 359 remarks (measured cold over the workspace) to
+# none, and it is kept there: the gate and CI run `cargo clippy --workspace --all-targets`, and a remark stops
+# them. Nothing is silenced here, and an `allow` is not the way past a remark: a group of values clippy calls
+# complex is given a struct with named fields, a list of arguments too long is given the record it travels as.
+all = { level = "deny", priority = -1 }
 
 [workspace.package]
 edition = "2021"

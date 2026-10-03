@@ -86,6 +86,9 @@ LEVELS = {
         # thousand-line diff nobody can review
         ("the layout is rustfmt's", ["cargo", "fmt", "--all", "--check"], {}),
         BUILDS,
+        # CLIPPY HAS NOTHING TO SAY: every remark is an error in the manifest, and the tree was brought to none. A crate
+        # that fails is not kept as built, so a run from the cache sees again whatever was not mended.
+        ("clippy has nothing to say", ["cargo", "clippy", "--workspace", "--all-targets"], {}),
         ("the rules of the code", ["cargo", "test", "-p", "qymcad", "--lib", "--", "ratchet"], {}),
         ("the words of the interface", ["cargo", "test", "-p", "qymcad-i18n"], {}),
         ("the help", ["cargo", "test", "-p", "qymcad-help"], {}),
