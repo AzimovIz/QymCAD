@@ -22,6 +22,12 @@
 Two lines with no point in common are not a corner: the selection is dropped and the tool waits for the next pair.
 The same goes for more than two lines — a corner is always two lines.
 
+**At a point where four lines meet** (two squares sharing one point) there are four corners there. The one taken is
+the one the cursor stands between, or the one you named with two lines. Both lines stay lit while you type the size.
+
+**A joint of two pieces of one straight line** (an angle of 180 degrees) is not a corner: the second line becomes the
+first, and the search carries on with the next neighbour of it.
+
 One step of undo per operation: **Ctrl+Z** brings the sharp corner back.
 
 ## What you get
@@ -41,5 +47,5 @@ Fillets usually go **last**, once the contour is defined: before that they get i
 - The angle of a chamfer is not taken — with that angle the cut does not meet the other line. Make the angle smaller.
 - The legs of a chamfer went the other way round — click the corner nearer to the line the first value should run
   along.
-- The click did not take the corner — not exactly two lines meet at that point. Click right on the vertex of the
-  corner, or on the two lines that meet there.
+- The click did not take the corner — not exactly two lines meet at that point, or two of them lie along one straight
+  line (180 degrees). Click right on the vertex of the corner, or on the two lines that meet there at an angle.

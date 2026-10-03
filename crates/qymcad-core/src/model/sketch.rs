@@ -2748,31 +2748,115 @@ impl Project {
             None
         }
     }
-    /// Chamfer the corner at vertex `pid`, where exactly two lines meet. Returns whether it succeeded.
+    /// THE CORNER A NAMED PAIR OF EDGES MAKES: the point they meet at, where they make one.
     ///
+    /// A shared point is not enough: two lines lying along ONE straight line through it share a vertex and no angle
+    /// at all - there is nothing to round between them and nothing to cut. That pair names no corner, and a pair that
+    /// names none is not an error: the search for a corner goes on with the second line as the first of the next pair.
+    pub fn corner_of_pair(&self, si: usize, e1: Id, e2: Id) -> Option<Id> {
+        let pid = self.shared_vertex(si, e1, e2)?;
+        let (pcx, pcy) = self.point_xy(si, pid)?;
+        let dir = |me: &Self, eid: Id| -> Option<(f64, f64)> {
+            let (a, b) = me.edge_end_ids(si, eid)?;
+            let other = if a == pid { b } else { a };
+            let (ox, oy) = me.point_xy(si, other)?;
+            let (dx, dy) = (ox - pcx, oy - pcy);
+            let l = (dx * dx + dy * dy).sqrt();
+            (l > 1e-9).then_some((dx / l, dy / l))
+        };
+        let (Some((x1, y1)), Some((x2, y2))) = (dir(self, e1), dir(self, e2)) else { return None };
+        // parallel means one straight line: the angle between them is 180 degrees, and there is no corner in it
+        ((x1 * y2 - y1 * x2).abs() > 1e-9).then_some(pid)
+    }
+    /// THE TWO EDGES OF THE CORNER AT `pid`, out of every edge that meets there.
+    ///
+    /// Where exactly two edges meet, they are the corner and nothing is asked. Where more of them meet - two squares
+    /// sharing a single point, four lines through it - there is a corner for every PAIR, and the pair is the two
+    /// edges that bracket the point `near` (the cursor, in the drawing's own coordinates): the angle the cursor is
+    /// standing in is the corner being pointed at. Without such a point (`None`) a vertex of more than two edges
+    /// names no corner: which of them is meant is not knowable from the geometry alone, and the caller that only
+    /// wants a bound asks `corner_limit`, which takes the tightest of them all.
+    pub fn vertex_pair(&self, si: usize, pid: Id, near: Option<(f64, f64)>) -> Option<(Id, Id)> {
+        let (pcx, pcy) = self.point_xy(si, pid)?;
+        // each edge that meets at the vertex, with its direction AWAY from it
+        let dirs: Vec<(Id, f64, f64)> = self
+            .vertex_edges(si, pid)
+            .into_iter()
+            .filter_map(|eid| {
+                let (a, b) = self.edge_end_ids(si, eid)?;
+                let other = if a == pid { b } else { a };
+                let (ox, oy) = self.point_xy(si, other)?;
+                let (dx, dy) = (ox - pcx, oy - pcy);
+                let l = (dx * dx + dy * dy).sqrt();
+                (l > 1e-9).then_some((eid, dx / l, dy / l))
+            })
+            .collect();
+        if dirs.len() < 2 {
+            return None;
+        }
+        if dirs.len() == 2 {
+            return self.corner_of_pair(si, dirs[0].0, dirs[1].0).map(|_| (dirs[0].0, dirs[1].0));
+        }
+        let (nx, ny) = near?;
+        let (tx, ty) = (nx - pcx, ny - pcy);
+        if (tx * tx + ty * ty).sqrt() < 1e-9 {
+            return None; // the cursor stands ON the vertex: no side of it to read
+        }
+        // sorted by the angle of the direction; the pair that brackets the cursor is the one before it and the
+        // one after it, round the circle
+        let mut v: Vec<(Id, f64)> = dirs.iter().map(|(id, ux, uy)| (*id, uy.atan2(*ux))).collect();
+        v.sort_by(|a, b| a.1.total_cmp(&b.1));
+        let at = v.partition_point(|(_, a)| *a <= ty.atan2(tx)) % v.len();
+        let pair = (v[(at + v.len() - 1) % v.len()].0, v[at].0);
+        // the two sides bracketing the cursor are a corner unless they lie along one straight line
+        self.corner_of_pair(si, pair.0, pair.1).map(|_| pair)
+    }
+    /// EVERY PAIR OF EDGES THAT COULD BE THE CORNER at `pid`, for the bounds that do not name a pair.
+    pub fn vertex_pairs(&self, si: usize, pid: Id) -> Vec<(Id, Id)> {
+        let edges = self.vertex_edges(si, pid);
+        let mut out = Vec::new();
+        for i in 0..edges.len() {
+            for j in (i + 1)..edges.len() {
+                out.push((edges[i], edges[j]));
+            }
+        }
+        out
+    }
+    /// Chamfer the corner at vertex `pid`, where exactly two lines meet. Returns whether it succeeded.
+///
     /// THE FIRST LINE is the one `toward` stands nearer to - the side of the corner that was clicked: the first leg is
     /// laid along it, and for a leg and an angle the angle is measured from it. With no point given, the line drawn
     /// first.
     pub fn chamfer_at_vertex(&mut self, si: usize, pid: Id, legs: ChamferLegs, toward: Option<Point2>) -> bool {
-        let edges = self.vertex_edges(si, pid);
-        if edges.len() != 2 {
-            return false;
+        let Some(pair) = self.vertex_pair(si, pid, None) else { return false };
+        self.chamfer_lines_of_pair(si, pair, legs, toward)
+    }
+    /// Chamfer the corner at `pid` that the point `(x, y)` stands in, where more than two edges meet there.
+    pub fn chamfer_at_vertex_near(&mut self, si: usize, pid: Id, legs: ChamferLegs, x: f64, y: f64, toward: Option<Point2>) -> bool {
+        let Some(pair) = self.vertex_pair(si, pid, Some((x, y))) else { return false };
+        self.chamfer_lines_of_pair(si, pair, legs, toward)
+    }
+    /// The cut of `legs` off the corner the two named edges make, both of them straight: the chamfer of a sketch is a
+    /// straight cut, and an arc in the pair is refused rather than cut as if it were a line.
+    pub fn chamfer_lines_of_pair(&mut self, si: usize, (e1, e2): (Id, Id), legs: ChamferLegs, toward: Option<Point2>) -> bool {
+        if self.corner_of_pair(si, e1, e2).is_none() {
+            return false; // two lines in one straight line: nothing is cut, and the cut would be along them
         }
-        // A chamfer is a straight cut between two lines.
-        let both_lines = edges.iter().all(|&eid| matches!(self.sketches.get(si).and_then(|s| s.entities.iter().find(|e| e.id == eid)).map(|e| e.kind), Some(EntityKind::Line { .. })));
+        let both_lines = [e1, e2].iter().all(|&eid| matches!(self.sketches.get(si).and_then(|s| s.entities.iter().find(|e| e.id == eid)).map(|e| e.kind), Some(EntityKind::Line { .. })));
         if !both_lines {
             return false;
         }
         // the line whose direction from the corner leans nearer to the click is the first
-        let lean = |eid: Id| -> f64 {
+        let lean = |me: &Self, eid: Id| -> f64 {
             let Some(toward) = toward else { return 0.0 };
-            let (Some((a, b)), Some((px, py))) = (self.line_ends(si, eid), self.point_xy(si, pid)) else { return f64::MAX };
-            let far = if a == pid { b } else { a };
-            let Some((fx, fy)) = self.point_xy(si, far) else { return f64::MAX };
+            let Some(shared) = me.corner_of_pair(si, e1, e2) else { return f64::MAX };
+            let (Some((a, b)), Some((px, py))) = (me.line_ends(si, eid), me.point_xy(si, shared)) else { return f64::MAX };
+            let far = if a == shared { b } else { a };
+            let Some((fx, fy)) = me.point_xy(si, far) else { return f64::MAX };
             let (ux, uy, vx, vy) = (fx - px, fy - py, toward.x - px, toward.y - py);
             -(ux * vx + uy * vy) / (ux.hypot(uy) * vx.hypot(vy)).max(1e-12)
         };
-        let (first, second) = if lean(edges[1]) < lean(edges[0]) { (edges[1], edges[0]) } else { (edges[0], edges[1]) };
+        let (first, second) = if lean(self, e2) < lean(self, e1) { (e2, e1) } else { (e1, e2) };
         self.chamfer_lines(si, first, second, legs)
     }
     /// Connected shape: every entity reachable from `eid` through shared endpoints — a rectangle from one of

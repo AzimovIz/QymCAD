@@ -2031,13 +2031,19 @@ impl Project {
     /// end of the shorter line. `None` for a corner not made of two lines. The field of the tool refuses a value past it
     /// in words, where the corner used to take it and do nothing, or cut it down without a word.
     pub fn corner_limit(&self, si: usize, pid: Id, chamfer: bool) -> Option<f64> {
-        let edges = self.vertex_edges(si, pid);
-        if edges.len() != 2 {
-            return None;
-        }
+        // Where more than two edges meet, there is a corner for every pair, and the field must refuse a value that
+        // is too big for AT LEAST ONE of them: the tightest corner is the one that bounds it.
+        self.vertex_pairs(si, pid).iter().filter_map(|pair| self.corner_limit_of_pair(si, pid, *pair, chamfer)).fold(None, |m: Option<f64>, v| Some(m.map_or(v, |m| m.min(v))))
+    }
+    /// The bound of the one corner the point `(x, y)` stands in, where more than two edges meet at `pid`.
+    pub fn corner_limit_near(&self, si: usize, pid: Id, chamfer: bool, x: f64, y: f64) -> Option<f64> {
+        self.vertex_pair(si, pid, Some((x, y))).and_then(|pair| self.corner_limit_of_pair(si, pid, pair, chamfer))
+    }
+    /// The bound of one named pair of edges at `pid`.
+    pub fn corner_limit_of_pair(&self, si: usize, pid: Id, (e1, e2): (Id, Id), chamfer: bool) -> Option<f64> {
         let (pcx, pcy) = self.point_xy(si, pid)?;
         let mut dirs = Vec::new();
-        for e in edges {
+        for e in [e1, e2] {
             let (a, b) = self.line_ends(si, e)?;
             let other = if a == pid { b } else { a };
             let (ox, oy) = self.point_xy(si, other)?;
@@ -2046,6 +2052,9 @@ impl Project {
                 return None;
             }
             dirs.push(((ox - pcx) / l, (oy - pcy) / l, l));
+        }
+        if dirs.len() != 2 {
+            return None;
         }
         let shorter = dirs[0].2.min(dirs[1].2);
         if chamfer {
@@ -2168,15 +2177,24 @@ impl Project {
     }
 
     fn fillet_round(&mut self, si: usize, pid: Id, r: f64) -> bool {
-        let edges = self.vertex_edges(si, pid);
-        if edges.len() != 2 {
-            return false;
-        }
-        let (e1, e2) = (edges[0], edges[1]);
-        let Some((pcx, pcy)) = self.point_xy(si, pid) else { return false };
+        let Some(pair) = self.vertex_pair(si, pid, None) else { return false };
+        self.fillet_at_pair(si, pair, r)
+    }
+
+    /// Fillet the corner at `pid` that the point `(x, y)` stands in, where more than two edges meet there.
+    pub fn fillet_at_vertex_near(&mut self, si: usize, pid: Id, r: f64, x: f64, y: f64) -> bool {
+        let Some(pair) = self.vertex_pair(si, pid, Some((x, y))) else { return false };
+        self.fillet_at_pair(si, pair, r)
+    }
+
+    /// Fillet the corner the two named edges make at a shared vertex. The arc goes on the side of their bisector,
+    /// which is what the fillet at a vertex has always done.
+    pub fn fillet_at_pair(&mut self, si: usize, (e1, e2): (Id, Id), r: f64) -> bool {
+        let Some(shared) = self.corner_of_pair(si, e1, e2) else { return false };
+        let Some((pcx, pcy)) = self.point_xy(si, shared) else { return false };
         let dir = |me: &Self, eid: Id| -> Option<(f64, f64)> {
             let (a, b) = me.edge_end_ids(si, eid)?;
-            let other = if a == pid { b } else { a };
+            let other = if a == shared { b } else { a };
             let (ox, oy) = me.point_xy(si, other)?;
             let (dx, dy) = (ox - pcx, oy - pcy);
             let l = (dx * dx + dy * dy).sqrt();

@@ -243,6 +243,47 @@ probe! {
 }
 
 probe! {
+    /// TWO SQUARES SHARING A SINGLE POINT: the corner there is taken between the two lines that meet at it, and the
+    /// other square keeps its sharp corner. Reported: nothing could be done at such a point at all, and nothing said.
+    fn a_point_of_four_lines_is_a_corner_of_the_two_chosen() {
+        let mut s = empty_sketch();
+        draw(&mut s, "tb-rect-hint", &[(0.0, 0.0), (20.0, 20.0)]);
+        draw(&mut s, "tb-rect-hint", &[(20.0, 20.0), (40.0, 40.0)]); // sharing the point (20, 20) and nothing else
+        take(&mut s, "tb-chamfer-sketch-hint");
+        s.click_on_sketch(20.0, 10.0); // the right side of the near square
+        let second = s.on_sketch(10.0, 20.0); // and its top side: the corner they meet at
+        s.click(second);
+        let field = field_near(&mut s, second);
+        fill_widget(&mut s, &field, "5");
+        s.key(Key::Enter);
+        assert!(counts(&mut s).0 == 9, "the corner of the shared point was not cut: {:?}", counts(&mut s));
+        assert!(stands_at(&mut s, (20.0, 15.0)) && stands_at(&mut s, (15.0, 20.0)), "the cut of 5 does not meet the sides of the near square at (20, 15) and (15, 20): the ends stand at {:?}", s.document().sketches[0].places);
+        assert!(!stands_at(&mut s, (25.0, 20.0)) && !stands_at(&mut s, (20.0, 25.0)), "the far square lost its corner as well: four lines through one point made two cuts of one corner");
+    }
+}
+
+probe! {
+    /// TWO HALVES OF ONE STRAIGHT LINE: they share a point and make an angle of 180 degrees, which is no corner. The
+    /// search goes on, and the neighbour of the second half is the corner that is offered.
+    fn a_straight_joint_is_not_a_corner_and_the_search_carries_on() {
+        let mut s = empty_sketch();
+        line(&mut s, (0.0, 0.0), (20.0, 0.0));
+        line(&mut s, (20.0, 0.0), (40.0, 0.0)); // the same straight line in two pieces
+        line(&mut s, (40.0, 0.0), (40.0, 30.0));
+        take(&mut s, "tb-fillet-sketch-hint");
+        s.click_on_sketch(10.0, 0.0); // the first half
+        s.click_on_sketch(30.0, 0.0); // the second: 180 degrees is no corner, so it stands as the first of the next pair
+        let third = s.on_sketch(40.0, 15.0);
+        s.click(third); // its neighbour: here there IS a corner
+        let field = field_near(&mut s, third);
+        fill_widget(&mut s, &field, "5");
+        s.key(Key::Enter);
+        assert!(counts(&mut s).1 == 1, "the joint of two halves of one straight line was rounded: {:?}", counts(&mut s));
+        assert!(stands_at(&mut s, (35.0, 0.0)) && stands_at(&mut s, (40.0, 5.0)), "the arc of radius 5 does not meet the two lines at (35, 0) and (40, 5): the ends stand at {:?}", s.document().sketches[0].places);
+    }
+}
+
+probe! {
     /// FILLET EVERY CORNER: all four corners of a rectangle become arcs at once.
     fn fillet_all_corners_rounds_the_whole_rectangle() {
         let mut s = empty_sketch();
