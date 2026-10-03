@@ -12,13 +12,15 @@ inputs:
 runs:
   using: composite
   steps:
-    # The drawing in the checks is the software rasteriser, so no graphics driver is needed - only the headers.
+    # The drawing in the checks is the software rasteriser, so no graphics driver is needed - only the headers. One
+    # system font family is installed besides, so the check of changing a label's font has a face to change to.
     - name: System packages
       shell: bash
       run: |
         sudo apt-get update -q
         sudo apt-get install -y -q --no-install-recommends \
-          libgl1-mesa-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev libxkbcommon-dev libwayland-dev pkg-config
+          libgl1-mesa-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev libxkbcommon-dev libwayland-dev pkg-config \
+          fonts-dejavu-core
 
     - name: Restore the kernel build
       id: occt
