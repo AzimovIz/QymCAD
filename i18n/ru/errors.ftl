@@ -212,6 +212,7 @@ error-kernel-message = Ядро: { $message }
 cad-no-faces-picked = не выбрано ни одной грани
 cad-faces-not-in-body = выбранных граней нет в теле (ссылка устарела)
 cad-neighbours-not-extendable = соседние поверхности не продлеваются — снимается цельный элемент (отверстие, бобышка)
+cad-file-not-found = Файл не найден: { $v }
 cad-step-no-shapes = STEP: не удалось прочитать тела
 cad-step-nothing-to-export = STEP: нет тел для экспорта
 cad-step-write-failed = STEP: запись не удалась (код { $v })

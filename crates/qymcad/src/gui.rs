@@ -3371,6 +3371,9 @@ pub(super) fn open_exact(regen: &mut Rebuilding, path: String, format: qymcad_ke
         // ONE READING for both the bodies shown and the live solids: reading the file twice cost the whole wait twice
         let res = match qymcad_kernel::read_exact_tree(format, &p, 0.5) {
             Ok((bodies, shapes, nodes)) if !bodies.is_empty() => JobResult::ExactImported { path: p, format, bodies, shapes, nodes },
+            // A FILE THAT IS NOT THERE IS SAID SO, before an IGES is tried as a drawing: the drawing reader would speak
+            // of the same absence in words of its own
+            Err(e) if e.starts_with("cad-file-not-found#") => JobResult::Failed(crate::i18n::trn("io-exact-load-error", &[("format", name), ("error", &crate::i18n::name(&e))])),
             // AN IGES WITH NO SURFACES IS A DRAWING, and it goes into a sketch the way DXF does. Reported behaviour:
             // a chip library cell (curves and subfigures, not a single face) did not open at all.
             _ if format == qymcad_kernel::ExactFormat::Iges => match qymcad_io::read_iges_drawing(&p) {

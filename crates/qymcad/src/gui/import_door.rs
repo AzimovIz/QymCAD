@@ -273,6 +273,23 @@ pub(crate) mod tests {
         assert!(waiting > 0, "the drawing did not come in; the status says: {}", app.status);
     }
 
+    /// A STEP OR AN IGES THAT IS NOT THERE IS SAID TO BE NOT THERE, by the import a person makes.
+    ///
+    /// Reported behaviour: importing a STEP path with no file behind it said "STEP: the geometry could not be read or
+    /// handed over", the words of a broken file, while a missing DXF said "No such file or directory".
+    #[test]
+    fn a_missing_step_or_iges_is_said_to_be_not_found() {
+        for ext in ["step", "igs"] {
+            let path = format!("{}/../../target/import-door/no-such-file.{ext}", env!("CARGO_MANIFEST_DIR"));
+            let _ = std::fs::remove_file(&path);
+            let (mut app, ctx) = running();
+            answer(&mut app, &ctx, Want::Anything, &path);
+            settle(&mut app, &ctx);
+            let said = crate::i18n::name(&format!("cad-file-not-found#{path}"));
+            assert!(app.status.contains(&said), "{ext}: a missing file is reported as {:?}, not as {said:?}", app.status);
+        }
+    }
+
     /// SOLIDS AND A MESH ARE READ IN THE BACKGROUND, each by its own reader.
     #[test]
     fn a_solid_and_a_mesh_are_read_in_the_background() {

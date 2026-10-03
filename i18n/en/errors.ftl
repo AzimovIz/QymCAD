@@ -212,6 +212,7 @@ error-kernel-message = Kernel: { $message }
 cad-no-faces-picked = no face is picked
 cad-faces-not-in-body = the picked faces are not in this body (the reference is stale)
 cad-neighbours-not-extendable = the neighbouring surfaces do not extend — a whole element is being removed (hole, boss)
+cad-file-not-found = File not found: { $v }
 cad-step-no-shapes = STEP: the bodies could not be read
 cad-step-nothing-to-export = STEP: there are no bodies to export
 cad-step-write-failed = STEP: writing failed (code { $v })

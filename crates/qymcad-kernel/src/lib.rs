@@ -1704,6 +1704,9 @@ pub fn write_step(bodies: &[(&Shape, [f64; 12])], path: &str) -> Result<(), Stri
 /// Read an exact file ONCE into both what is shown and what is built on: the bodies (mesh plus B-rep faces, one per
 /// solid) and the live shapes, in the same order. See `qym_exact_read`: reading twice cost the whole wait twice.
 pub fn read_exact(format: ExactFormat, path: &str, deflection: f64) -> Result<(Vec<Body>, Vec<Shape>), String> {
+    if let Some(said) = missing_file(path) {
+        return Err(said);
+    }
     let c = CString::new(path).map_err(|e| e.to_string())?;
     let defl = if deflection > 0.0 { deflection } else { 0.5 };
     let code = match format {
@@ -1739,6 +1742,13 @@ pub fn read_exact(format: ExactFormat, path: &str, deflection: f64) -> Result<(V
         return Err(empty.to_string());
     }
     Ok((bodies, shapes))
+}
+
+/// A PATH WITH NO FILE BEHIND IT, said as such: `cad-file-not-found#<path>`. Asked before the kernel is, because the
+/// kernel's reader answers a missing file exactly as a broken one, and "the geometry could not be read" sends a person
+/// looking for a fault in a file that is not there.
+fn missing_file(path: &str) -> Option<String> {
+    (!std::path::Path::new(path).is_file()).then(|| format!("cad-file-not-found#{path}"))
 }
 
 /// THE EXACT FORMATS: files that carry faces and edges rather than triangles, read into live solids.
@@ -1836,6 +1846,9 @@ pub fn document_tree(nodes: &[ImportNode], bodies: &[u64], stem: &str) -> Vec<qy
 /// An IGES file with neither subfigures nor solids standing on their own - surfaces, sewn - comes as a node per solid,
 /// unnamed, where the file puts it.
 pub fn read_exact_tree(format: ExactFormat, path: &str, deflection: f64) -> Result<(Vec<Body>, Vec<Shape>, Vec<ImportNode>), String> {
+    if let Some(said) = missing_file(path) {
+        return Err(said);
+    }
     let c = CString::new(path).map_err(|e| e.to_string())?;
     let defl = if deflection > 0.0 { deflection } else { 0.5 };
     let code = match format {
