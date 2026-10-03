@@ -66,7 +66,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: /home/runner/occt
-          key: occt-7.9.3-ubuntu-24.04-v1
+          key: occt-7.9.3-ubuntu-24.04-v2
           lookup-only: true
       - name: Build the kernel when the cache missed
         if: steps.occt.outputs.cache-hit != 'true'

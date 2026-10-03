@@ -27,7 +27,7 @@ runs:
       uses: actions/cache/restore@v6
       with:
         path: /home/runner/occt
-        key: occt-7.9.3-ubuntu-24.04-v1
+        key: occt-7.9.3-ubuntu-24.04-v2
 
     # The same configuration as the macOS job of the release; see the comments there.
     - name: Build OCCT 7.9.3 (only when the cache missed)
@@ -44,6 +44,7 @@ runs:
           -DBUILD_LIBRARY_TYPE=Shared \
           -DINSTALL_DIR=/home/runner/occt \
           -DINSTALL_DIR_LAYOUT=Unix \
+          -DBUILD_RELEASE_DISABLE_EXCEPTIONS=OFF \
           -DBUILD_MODULE_Draw=OFF \
           -DBUILD_MODULE_Visualization=OFF \
           -DBUILD_DOC_Overview=OFF \
@@ -58,7 +59,7 @@ runs:
       uses: actions/cache/save@v6
       with:
         path: /home/runner/occt
-        key: occt-7.9.3-ubuntu-24.04-v1
+        key: occt-7.9.3-ubuntu-24.04-v2
 
     # ONE CARGO CACHE FOR ALL THE JOBS, SAVED BY ONE OF THEM FROM `main`. The jobs compile the same workspace, and
     # the cache of a repository is limited with the oldest entries evicted first: a cache a job, or a cache a pull
