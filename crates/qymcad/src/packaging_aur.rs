@@ -96,6 +96,22 @@ mod tests {
         assert!(modes > copy, "the modes are set before the copy that brings the unpacked 0700 directories in");
     }
 
+    /// AN UPGRADE MENDS THE MODES THE FIRST RELEASE LEFT.
+    ///
+    /// Reported behaviour: upgrading from the release that installed /opt/qymcad as 0700 to the one that packs it as
+    /// 755 still answered "permission denied" - pacman does not change the modes of a directory already on disk, it
+    /// only warns "directory permissions differ". Only removing the package and installing it again helped. The
+    /// package carries an install script whose `post_upgrade` sets the modes itself.
+    #[test]
+    fn an_upgrade_mends_the_modes_the_first_release_left() {
+        let src = pkgbuild();
+        assert_eq!(field(&src, "install"), "qymcad-bin.install", "the package carries no install script, so an upgrade keeps the 0700 directories already on disk");
+        let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../packaging/aur/qymcad-bin.install");
+        let script = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("the install script the PKGBUILD names must be beside it: {e}"));
+        let upgrade = script.split("post_upgrade()").nth(1).unwrap_or_else(|| panic!("the install script has no post_upgrade"));
+        assert!(upgrade.contains("chmod -R u=rwX,go=rX /opt/qymcad"), "post_upgrade does not set the modes of /opt/qymcad");
+    }
+
     /// AND .SRCINFO SAYS THE SAME AS THE PKGBUILD BESIDE IT.
     ///
     /// The AUR reads `.SRCINFO`, not the PKGBUILD: it is what the site shows and what dependency resolvers

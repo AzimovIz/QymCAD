@@ -3,6 +3,7 @@ pkgbase = qymcad-bin
 	pkgver = 0.1.0.dev.20261001
 	pkgrel = 2
 	url = https://github.com/QymIs-Tech/QymCAD
+	install = qymcad-bin.install
 	arch = x86_64
 	license = AGPL-3.0-or-later
 	depends = libglvnd

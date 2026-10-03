@@ -31,6 +31,8 @@ optdepends=('vulkan-icd-loader: hardware acceleration through Vulkan')
 provides=('qymcad')
 conflicts=('qymcad')
 options=('!strip' '!debug')
+# THE UPGRADE MENDS WHAT THE FIRST RELEASE LEFT: see the file itself.
+install=qymcad-bin.install
 source=("qymcad-${_relver}-${CARCH}.AppImage::${url}/releases/download/v${_relver}/qymcad-${_relver}-${CARCH}.AppImage")
 noextract=("qymcad-${_relver}-${CARCH}.AppImage")
 sha256sums=('63709f7ab9d38ea3bc082babf6c93de53c714a9ee2c6894e9349132e0a62c2d3')
