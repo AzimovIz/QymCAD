@@ -30,6 +30,15 @@ first, and the search carries on with the next neighbour of it.
 
 One step of undo per operation: **Ctrl+Z** brings the sharp corner back.
 
+## What is shown before Enter
+
+While the field stands open the sheet shows where the corner will go: the segment or the arc, and two marks on the
+lines — where they will be cut. The lines themselves are not changed; this is only the preview, and **Enter** applies it.
+
+- A value too big for that corner draws no preview, and the field says so.
+- Where four lines meet, the corner follows the cursor: point it at the sector to be taken.
+- Where there is no corner at all (the lines do not meet at an angle), the field says that too.
+
 ## What you get
 
 A fillet inserts an arc and adds **two tangencies** and a **radius dimension** - or, given by its chord or arc length,

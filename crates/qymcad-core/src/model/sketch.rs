@@ -171,6 +171,15 @@ pub(crate) fn rect_own_constraints(c0: Id, c1: Id, c2: Id, c3: Id, centre: Id, d
     ]
 }
 
+/// WHAT A FILLET OR A CHAMFER WOULD LEAVE AT A CORNER: the point of the corner, the two ends the edges will be cut
+/// at, and the arc that will stand between them (`None` for a chamfer, which is a straight cut).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CornerBlend {
+    pub vertex: [f64; 2],
+    pub ends: [[f64; 2]; 2],
+    pub arc: Option<([f64; 2], f64)>,
+}
+
 impl Project {
     /// Add a contour and return its stable id.
     pub fn add_contour(&mut self, c: Contour) -> Id {
@@ -2272,11 +2281,9 @@ impl Project {
             let off = fillet_label_angle(&s.points, cen, t1, t2);
             s.constraints.push(Constraint::Diameter { c: cen, d: r, off, expr: String::new(), driven: false, diam: false, at: None });
         }
-        // Virtual corner (described in detail in `fillet_curves`): vertex `pc` is kept and the dimensions on it
-        // are left alone. It becomes the sharp corner on the extensions of both shortened lines, held by
-        // `PointOnLine`. An edge dimension is measured to the virtual corner and holds at any radius, while the
-        // contour stays closed and selectable.
-        self.keep_virtual_corner_lines(si, pc, o1, t1, o2, t2);
+        // The point of the corner (described in `settle_the_corner_point`): it goes with the corner, and what was
+        // stated about it goes with it. What is left on each shortened line is a real point of it.
+        self.settle_the_corner_point(si, pc, o1, t1, o2, t2);
         self.regen_sketch(si);
         true
     }
@@ -2315,16 +2322,19 @@ impl Project {
             }
         }
     }
-    /// Virtual corner for a fillet or a chamfer between two lines: the vanished vertex `pc` is held on the
-    /// extensions of both shortened edges (o1 to t1, o2 to t2) by `PointOnLine`, provided `pc` no longer belongs
-    /// to any entity.
+    /// THE POINT OF A CORNER THAT HAS BEEN TAKEN OFF: it goes with the corner, unless a line still stands on it.
     ///
-    /// This keeps the dimensions and constraints on the corner valid while `pc` never reaches the contour. A
-    /// real vertex, still needed by a third edge, is left alone.
-    pub(super) fn keep_virtual_corner_lines(&mut self, si: usize, pc: Id, o1: Id, t1: Id, o2: Id, t2: Id) {
-        // a construction line ending at the corner - the diagonal of a rectangle - does not keep the corner a vertex of the
+    /// Where four lines met at the point and two of them have just been cut, the other two still stand on it and the
+    /// point is their corner: it stays. While a dimension or a constraint is stated about it, a diagonal ends at it or it
+    /// is a corner of a rectangle, it stays as the VIRTUAL SHARP on the extensions of both shortened lines. Where nothing
+    /// holds it, it goes. A point of the sketch that draws nothing is a point the picking offers and the solver counts,
+    /// and it answers "here is the corner" where there is none any more.
+    ///
+    /// Returns how many constraints were lost with it, so that the caller can say so out loud.
+    pub(super) fn settle_the_corner_point(&mut self, si: usize, pc: Id, o1: Id, t1: Id, o2: Id, t2: Id) -> usize {
+        // a construction line ending at the corner - the diagonal of a rectangle - does not keep it a vertex of the
         // contour; it holds on to the virtual sharp, below
-        let pc_still_used = self.sketches.get(si).is_some_and(|s| {
+        let used_by_contour = self.sketches.get(si).is_some_and(|s| {
             s.entities.iter().filter(|e| !e.construction).any(|e| match e.kind {
                 EntityKind::Line { a, b } => a == pc || b == pc,
                 EntityKind::Arc { center, a, b, .. } => center == pc || a == pc || b == pc,
@@ -2332,23 +2342,53 @@ impl Project {
                 EntityKind::Ellipse { c, ma, mi } => c == pc || ma == pc || mi == pc,
             })
         });
-        if pc_still_used {
-            return;
+        if used_by_contour {
+            return 0;
         }
         self.carry_edge_constraints(si, pc, Some((o1, t1)), Some((o2, t2)));
-        // the vertex stays, as the virtual sharp on both extensions, only while a dimension or another constraint still
-        // stands on it
-        // a corner of a rectangle kept as one shape stays as its virtual sharp: its centre stands on the middle of the
-        // corners, and a move or a turn of the rectangle is told by them
-        let referenced = self.corner_still_held(si, pc);
-        if let Some(s) = self.sketches.get_mut(si) {
-            if referenced {
+        // A DIMENSION OR A CONSTRAINT ON THE CORNER, a diagonal ending at it, or a rectangle it is a corner of keeps it,
+        // as the virtual sharp on the extensions of both shortened lines: a dimension measured to a corner holds at any
+        // radius, as it does in the professional systems, rather than going with the corner.
+        if self.corner_still_held(si, pc) {
+            if let Some(s) = self.sketches.get_mut(si) {
                 s.constraints.push(Constraint::PointOnLine { p: pc, a: o1, b: t1 });
                 s.constraints.push(Constraint::PointOnLine { p: pc, a: o2, b: t2 });
-            } else {
-                s.points.retain(|p| p.id != pc); // nothing stands on the vanished vertex any more
             }
+            return 0;
         }
+        self.drop_point_if_unused(si, pc)
+    }
+    /// Whether any entity of the sketch stands on the point `pid` - an end of a line or an arc, a centre of one.
+    pub fn point_used_by_geometry(&self, si: usize, pid: Id) -> bool {
+        self.sketches.get(si).is_some_and(|s| {
+            s.entities.iter().any(|e| match e.kind {
+                EntityKind::Line { a, b } => a == pid || b == pid,
+                EntityKind::Arc { center, a, b, .. } => center == pid || a == pid || b == pid,
+                EntityKind::Circle { center, .. } => center == pid,
+                EntityKind::Ellipse { c, ma, mi } => c == pid || ma == pid || mi == pid,
+            }) || s.splines.iter().any(|sp| sp.points.contains(&pid))
+        })
+    }
+    /// HOW MANY CONSTRAINTS STATE SOMETHING ABOUT THE POINT `pid` - a dimension measured to a corner above all.
+    pub fn constraints_on_point(&self, si: usize, pid: Id) -> usize {
+        self.sketches.get(si).map(|s| s.constraints.iter().filter(|c| constraint_point_ids(c).contains(&pid)).count()).unwrap_or(0)
+    }
+    /// DELETE A POINT NOTHING STANDS ON ANY MORE, together with whatever was stated about it.
+    ///
+    /// A point no entity and no spline uses draws nothing: it cannot be part of a contour or a profile, yet the
+    /// picking finds it and the solver counts it. The constraints that named it go with it - a dimension cannot be
+    /// stated without its subject, and leaving it would send the solver after an id that is not there.
+    ///
+    /// Returns how many constraints were lost, so that the caller can name the loss rather than make it silently.
+    pub fn drop_point_if_unused(&mut self, si: usize, pid: Id) -> usize {
+        if self.point_used_by_geometry(si, pid) || self.sketches.get(si).is_some_and(|s| s.system_ids().contains(&pid)) {
+            return 0;
+        }
+        let before = self.sketches.get(si).map(|s| s.constraints.len()).unwrap_or(0);
+        let Some(s) = self.sketches.get_mut(si) else { return 0 };
+        s.constraints.retain(|c| !constraint_point_ids(c).contains(&pid));
+        s.points.retain(|p| p.id != pid);
+        before - s.constraints.len()
     }
     /// IS THE VANISHED CORNER `pc` STILL HELD - by a constraint or a dimension on it, by a construction line ending at
     /// it (the diagonal of a rectangle), or as a corner of a rectangle kept as one shape? Then it stays, as the virtual
@@ -2414,8 +2454,8 @@ impl Project {
         }
         // Virtual corner: the vertex is held on the extensions of both lines, so dimensions to the corner stay
         // valid and the contour stays whole.
-        self.keep_virtual_corner_lines(si, pc, o1, t1, o2, t2);
-        self.solve_sketch(si);
+self.settle_the_corner_point(si, pc, o1, t1, o2, t2);
+        self.regen_sketch(si);
         true
     }
     /// Endpoints of an edge entity (a line or an arc), used to find the shared vertex when filleting.
@@ -2767,6 +2807,53 @@ impl Project {
         let (Some((x1, y1)), Some((x2, y2))) = (dir(self, e1), dir(self, e2)) else { return None };
         // parallel means one straight line: the angle between them is 180 degrees, and there is no corner in it
         ((x1 * y2 - y1 * x2).abs() > 1e-9).then_some(pid)
+    }
+    /// WHAT A CORNER WOULD LOOK LIKE IF THE VALUE WERE APPLIED: the point of the corner, where the two named
+    /// edges will be cut, and the arc that will stand between them — a chamfer is a straight cut and has none.
+    ///
+    /// Nothing is changed here. The edges keep their ends and the point of the corner stays where it is: this is
+    /// only what a person is shown before answering for it, drawn exactly as the operation will leave it — or not
+    /// drawn at all when the value does not fit the corner.
+    ///
+    /// `None` when the pair is not a corner, when the value is not one, or when it is too big for the corner.
+    pub fn corner_blend(&self, si: usize, pid: Id, (e1, e2): (Id, Id), chamfer: bool, value: f64) -> Option<CornerBlend> {
+        // THE PAIR MUST BE THE CORNER: two lines that meet nowhere, or that lie along one straight line, are not a
+        // corner and there is nothing to show where they are not.
+        if self.corner_of_pair(si, e1, e2) != Some(pid) {
+            return None;
+        }
+        let (pcx, pcy) = self.point_xy(si, pid)?;
+        // the direction away from the corner along each edge, and how long that edge is
+        let dir = |me: &Self, eid: Id| -> Option<(f64, f64, f64)> {
+            let (a, b) = me.edge_end_ids(si, eid)?;
+            let other = if a == pid { b } else { a };
+            let (ox, oy) = me.point_xy(si, other)?;
+            let (dx, dy) = (ox - pcx, oy - pcy);
+            let l = (dx * dx + dy * dy).sqrt();
+            (l > 1e-9).then_some((dx / l, dy / l, l))
+        };
+        let (Some((d1x, d1y, l1)), Some((d2x, d2y, l2))) = (dir(self, e1), dir(self, e2)) else { return None };
+        let shorter = l1.min(l2);
+        let theta = (d1x * d2x + d1y * d2y).clamp(-1.0, 1.0).acos();
+        // THE MOST THE CORNER TAKES: a leg along the line for a chamfer, a radius whose touching points stand at
+        // r / tan(theta / 2) from the corner for a fillet. Past this there is nothing to show.
+        let limit = if chamfer { shorter } else { shorter * (theta / 2.0).tan() };
+        if value <= 1e-6 || !limit.is_finite() || value >= limit * (1.0 - 1e-9) {
+            return None;
+        }
+        let at = |dx: f64, dy: f64, d: f64| [pcx + dx * d, pcy + dy * d];
+        if chamfer {
+            return Some(CornerBlend { vertex: [pcx, pcy], ends: [at(d1x, d1y, value), at(d2x, d2y, value)], arc: None });
+        }
+        let half = (theta / 2.0).max(1e-6);
+        let along = value / half.tan(); // where the arc touches each line
+        let (bx, by) = (d1x + d2x, d1y + d2y);
+        let bl = (bx * bx + by * by).sqrt();
+        if bl < 1e-9 {
+            return None;
+        }
+        let out = value / half.sin(); // the centre stands this far from the corner, along the bisector
+        Some(CornerBlend { vertex: [pcx, pcy], ends: [at(d1x, d1y, along), at(d2x, d2y, along)], arc: Some(([pcx + bx / bl * out, pcy + by / bl * out], value)) })
     }
     /// THE TWO EDGES OF THE CORNER AT `pid`, out of every edge that meets there.
     ///

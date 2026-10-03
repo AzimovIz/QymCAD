@@ -143,6 +143,33 @@ fn a_second_line_without_a_corner_becomes_the_first() {
     assert_eq!(qymcad_ui_state::corner_line_clicked(&p, si, d, &mut s).map(|c| c.pid), p.shared_vertex(si, c, d), "the search did not carry on from the line that was clicked last");
 }
 
+/// FOUR LINES THROUGH ONE POINT: while the corner stands open, the cursor says which of the four corners is meant,
+/// frame by frame — otherwise what the sheet shows and what Enter cuts would be two different corners.
+#[test]
+fn a_point_of_four_lines_follows_the_cursor() {
+    let mut p = Project::default();
+    p.new_document();
+    let si = p.new_sketch("S");
+    let line = |p: &mut Project, a: (i32, i32), b: (i32, i32)| p.add_line_entity(si, a.0 as f64, a.1 as f64, b.0 as f64, b.1 as f64, Purpose::Real);
+    let right = line(&mut p, (20, 0), (20, 20));
+    let top = line(&mut p, (20, 20), (0, 20));
+    for (a, b) in [((20, 20), (40, 20)), ((40, 20), (40, 40)), ((40, 40), (20, 40)), ((20, 40), (20, 20))] {
+        line(&mut p, a, b);
+    }
+    p.regen_sketch(si);
+    let shared = p.sketches[si].points.iter().find(|q| (q.x - 20.0).abs() < 1e-6 && (q.y - 20.0).abs() < 1e-6).map(|q| q.id).expect("the shared point");
+
+    // the cursor inside the far square names that corner, not the near one
+    let far = qymcad_ui_state::corner_pair_now(&p, si, shared, Some((right, top)), Some((21.0, 21.0)));
+    assert!(far.is_some_and(|pair| pair != (right, top)), "the cursor inside the far square did not change the corner: {far:?}");
+    // and back again: it follows the cursor, not the way the cursor went
+    let near = qymcad_ui_state::corner_pair_now(&p, si, shared, Some((right, top)), Some((19.0, 19.0)));
+    let same = |a: Option<(u64, u64)>, b: (u64, u64)| a.is_some_and(|p| (p.0 == b.0 && p.1 == b.1) || (p.0 == b.1 && p.1 == b.0));
+    assert!(same(near, (right, top)), "the cursor inside the near square did not name the corner the two chosen lines make: {near:?}");
+    // with the pointer away from the sheet - a person typing in the field - the corner does not move under the value
+    assert!(same(qymcad_ui_state::corner_pair_now(&p, si, shared, Some((right, top)), None), (right, top)), "the corner changed with no cursor over the sheet");
+}
+
 #[test]
 fn the_same_line_clicked_twice_lets_itself_go() {
     let (p, si, (a, _b, _c)) = an_angle_with_a_stranger();

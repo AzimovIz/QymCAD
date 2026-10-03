@@ -13228,6 +13228,21 @@ pub fn corner_where(cc: &CornerCtx, rect: Rect) -> Option<(f64, f64)> {
     let w = to_world(cc.view, rect, at);
     Some((w.x, w.y))
 }
+/// THE TWO EDGES THE CORNER IN THE FIELD IS, right now.
+///
+/// Where more than two edges meet at the point there are several corners there and the cursor says which one is
+/// meant — so it follows the cursor, frame by frame, and what is shown and what Enter cuts are one corner. Where only
+/// two meet, the pair the corner was named by stands: there is no other choice to make. The cursor is asked for only
+/// while it is over the sheet; a person typing in the field has the pointer elsewhere, and the corner must not change
+/// under the value being written.
+pub fn corner_pair_now(project: &Project, si: usize, pid: Id, named: Option<(Id, Id)>, cursor: Option<(f64, f64)>) -> Option<(Id, Id)> {
+    if project.vertex_edges(si, pid).len() > 2 {
+        if let Some(pair) = cursor.and_then(|c| project.vertex_pair(si, pid, Some(c))) {
+            return Some(pair);
+        }
+    }
+    named.filter(|p| project.corner_of_pair(si, p.0, p.1) == Some(pid)).or_else(|| project.vertex_pair(si, pid, None))
+}
 
 /// THE CORNER A SELECTION ALREADY NAMES: what the fillet or the chamfer is offered the moment it is pressed.
 ///
