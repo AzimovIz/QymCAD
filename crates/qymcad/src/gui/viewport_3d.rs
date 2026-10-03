@@ -340,7 +340,7 @@ impl App {
                         self.viewing.cam.target[a] += d.y as f64 * up[a] * k;
                     }
                 } else {
-                    qymcad_ui_state::turn_view(&mut self.viewing.cam, self.set.mouse_nav, ctx, resp); // the layout's turns and tilts
+                    qymcad_ui_state::turn_view(crate::gui::orbit_about::pivot(&self.painting(), rect, ctx, resp), &mut self.viewing.cam, self.set.mouse_nav, ctx, resp); // the layout's turns and tilts, about the centre the setting names
                 }
     }
 

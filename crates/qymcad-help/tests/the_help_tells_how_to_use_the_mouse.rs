@@ -91,7 +91,7 @@ fn the_help_says_which_button_navigates_is_a_setting() {
     );
     let src = std::fs::read_to_string(qymcad_i18n::ratchet::crates_root().join("qymcad/src/gui/viewport_3d.rs")).expect("the 3D viewport reads");
     assert!(
-        src.contains("qymcad_ui_state::turn_view(&mut self.viewing.cam, self.set.mouse_nav, ctx, resp)") && src.contains("qymcad_ui_state::pan_now(self.set.mouse_nav, ctx, resp)"),
+        src.contains("qymcad_ui_state::turn_view(crate::gui::orbit_about::pivot(&self.painting(), rect, ctx, resp), &mut self.viewing.cam, self.set.mouse_nav, ctx, resp)") && src.contains("qymcad_ui_state::pan_now(self.set.mouse_nav, ctx, resp)"),
         "the help promises a choice of navigation and the viewport no longer asks for it"
     );
     // AND THE NAMES IN THE ARTICLE ARE LAYOUTS THAT EXIST. A list of habits that names one the program does

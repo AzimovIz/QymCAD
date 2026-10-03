@@ -1314,6 +1314,21 @@ pub(crate) fn settings_section_body(wc: &mut qymcad_ui_state::WinCtx, ui: &mut e
                 });
                 ui.label(egui::RichText::new(crate::i18n::tr("settings-zoom-editing-hint")).weak());
             }
+            // WHAT THE VIEW TURNS ABOUT. A dropping list walked over `OrbitAbout::ALL`, so a centre added to the type
+            // appears here by itself; what each one does is its hint - a line under the list pushed the rows below it
+            // off the visible part of the section.
+            if show("settings-orbit-about") {
+                ui.horizontal(|ui| {
+                    ui.label(crate::i18n::tr("settings-orbit-about"));
+                    egui::ComboBox::from_id_salt("orbit-about").selected_text(crate::i18n::tr(wc.set.orbit_about.key())).show_ui(ui, |ui| {
+                        for o in qymcad_ui_state::OrbitAbout::ALL {
+                            ui.selectable_value(&mut wc.set.orbit_about, o, crate::i18n::tr(o.key())).on_hover_text(crate::i18n::tr(o.hint_key()));
+                        }
+                    })
+                    .response
+                    .on_hover_text(crate::i18n::tr(wc.set.orbit_about.hint_key()));
+                });
+            }
             if show("settings-pick-precision") {
                 ui.label(crate::i18n::tr("settings-pick-precision"));
                 ui.horizontal(|ui| {

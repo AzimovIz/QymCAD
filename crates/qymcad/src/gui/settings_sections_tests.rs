@@ -79,6 +79,7 @@ mod tests {
             update_check: qymcad_ui_state::UpdateCheck::Weekly,
             update_last_checked: 1_788_900_000,
             zoom_editing: qymcad_ui_state::ZoomWhileEditing::AsUsual,
+            orbit_about: qymcad_ui_state::OrbitAbout::Pointer,
             msaa: 8,
             autosave_secs: 600,
             undo_cap: 7,

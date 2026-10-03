@@ -238,7 +238,7 @@ mod tests {
     fn the_viewport_asks_the_layout() {
         let src = std::fs::read_to_string(qymcad_i18n::ratchet::crates_root().join("qymcad/src/gui/viewport_3d.rs")).expect("the 3D viewport reads");
         assert!(
-            src.contains("qymcad_ui_state::pan_now(self.set.mouse_nav, ctx, resp)") && src.contains("qymcad_ui_state::turn_view(&mut self.viewing.cam, self.set.mouse_nav, ctx, resp)"),
+            src.contains("qymcad_ui_state::pan_now(self.set.mouse_nav, ctx, resp)") && src.contains("qymcad_ui_state::turn_view(crate::gui::orbit_about::pivot(&self.painting(), rect, ctx, resp), &mut self.viewing.cam, self.set.mouse_nav, ctx, resp)"),
             "the 3D viewport decides for itself which button moves the view, so the setting is a dead control"
         );
     }
@@ -392,6 +392,77 @@ mod tests {
             }
         }
         assert!(wrong.is_empty(), "a click does not take as the layout's program does ({}):\n{}", wrong.len(), wrong.join("\n"));
+    }
+
+    /// A turn by a drag of the left button under the QymCad layout, from `from` along `path` (steps of the pointer),
+    /// frame by frame; `each` looks at the program after every step.
+    fn turn_along(app: &mut App, ctx: &egui::Context, from: egui::Pos2, path: &[egui::Vec2], mut each: impl FnMut(&App)) {
+        let _ = ctx.run_ui(frame(vec![egui::Event::PointerMoved(from)]), |c| app.viewport(c));
+        let _ = ctx.run_ui(frame(vec![press(from, egui::PointerButton::Primary, true)]), |c| app.viewport(c));
+        let mut at = from;
+        for step in path {
+            at += *step;
+            let _ = ctx.run_ui(frame(vec![egui::Event::PointerMoved(at)]), |c| app.viewport(c));
+            each(app);
+        }
+        let _ = ctx.run_ui(frame(vec![press(at, egui::PointerButton::Primary, false)]), |c| app.viewport(c));
+    }
+
+    /// THE VIEW TURNS ABOUT THE POINT UNDER THE POINTER when the setting says so: the point stays on its spot of the
+    /// screen through the whole turn, and a turn there and back, five times over, leaves the view where it was.
+    /// Reported in a pull request with a video: the first way of doing it slid the centre in the plane of the screen,
+    /// and after a few turns at a corner of a long block the model swung round a point far out in space.
+    #[test]
+    fn the_view_turns_about_the_point_under_the_pointer_and_comes_back() {
+        let mut wrong = Vec::new();
+        for projection in [qymcad_ui_state::Projection::Ortho, qymcad_ui_state::Projection::Perspective] {
+            let (mut app, ctx) = a_part_in_view(MouseNav::QymCad);
+            app.set.projection = projection;
+            app.set.orbit_about = qymcad_ui_state::OrbitAbout::Pointer;
+            let from = on_the_body(&app) + egui::vec2(-45.0, 6.0); // far from the middle of the view
+            let rect = app.viewing.view_rect;
+            let pivot = crate::gui::look_at_point::point_under(&app.painting(), rect, from);
+            let spot = |app: &App| {
+                let basis = app.viewing.cam.basis();
+                qymcad_ui_state::Screen { cam: &app.viewing.cam, set: &app.set, rect, basis: &basis }.at(pivot).0
+            };
+            let (spot0, target0, yaw0, pitch0) = (spot(&app), app.viewing.cam.target, app.viewing.cam.yaw, app.viewing.cam.pitch);
+            let mut path = Vec::new();
+            for _ in 0..5 {
+                path.extend(std::iter::repeat_n(egui::vec2(10.0, 4.0), 8));
+                path.extend(std::iter::repeat_n(egui::vec2(-10.0, -4.0), 8));
+            }
+            let mut worst = 0.0f32;
+            turn_along(&mut app, &ctx, from, &path, |app| worst = worst.max(spot(app).distance(spot0)));
+            if worst > 0.5 {
+                wrong.push(format!("{projection:?}: the point turned about left its spot by {worst:.2} points"));
+            }
+            let drift = (0..3).map(|k| (app.viewing.cam.target[k] - target0[k]).abs()).fold(0.0, f64::max);
+            if drift > 1e-6 || (app.viewing.cam.yaw - yaw0).abs() > 1e-9 || (app.viewing.cam.pitch - pitch0).abs() > 1e-9 {
+                wrong.push(format!("{projection:?}: five turns there and back moved the centre by {drift:.3e} and left yaw {} / pitch {} (were {yaw0} / {pitch0})", app.viewing.cam.yaw, app.viewing.cam.pitch));
+            }
+            // UP TO THE STOP OF THE TILT AND ON: the tilt stands still there, and the point must not go anywhere
+            let mut worst = 0.0f32;
+            turn_along(&mut app, &ctx, from, &[egui::vec2(0.0, -40.0); 10], |app| worst = worst.max(spot(app).distance(spot0)));
+            if worst > 0.5 {
+                wrong.push(format!("{projection:?}: at the stop of the tilt the point left its spot by {worst:.2} points"));
+            }
+        }
+        assert!(wrong.is_empty(), "the view does not turn about the point under the pointer:\n{}", wrong.join("\n"));
+    }
+
+    /// THE MIDDLE OF THE VIEW STAYS THE CENTRE OF A TURN BY DEFAULT: the program's own way, whatever is under the pointer.
+    #[test]
+    fn by_default_the_view_turns_about_its_middle() {
+        let (mut app, ctx) = a_part_in_view(MouseNav::QymCad);
+        assert_eq!(app.set.orbit_about, qymcad_ui_state::OrbitAbout::ViewCentre, "the factory setting turns about the middle of the view");
+        let target0 = app.viewing.cam.target;
+        let yaw0 = app.viewing.cam.yaw;
+        let from = on_the_body(&app) + egui::vec2(-45.0, 6.0);
+        let mut moved = 0.0f64;
+        turn_along(&mut app, &ctx, from, &[egui::vec2(10.0, 4.0); 8], |app| moved = moved.max((0..3).map(|k| (app.viewing.cam.target[k] - target0[k]).abs()).fold(0.0, f64::max)));
+        assert!((app.viewing.cam.yaw - yaw0).abs() > 0.1, "setup: the drag did not turn the view");
+        assert!(moved == 0.0, "turning about the middle of the view moved the centre by {moved}");
     }
 
     /// THE POINT OF THE MODEL UNDER THE POINTER IS WHERE THE POINTER IS: put back on the screen, it lands on the spot

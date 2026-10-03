@@ -57,7 +57,7 @@ impl SettingsSection {
         match self {
             General => &["settings-language", "settings-help-lang", "settings-help-open", "settings-open-last", "settings-show-start", "settings-import-ask", "settings-autosave", "settings-undo-cap", "settings-kernel-threads", "settings-updates", "settings-recent-limit", "settings-profile"],
             Appearance => &["settings-scheme", "settings-ui-scale"],
-            Viewport => &["settings-engine", "settings-projection", "settings-shading", "settings-viewcube", "settings-mouse-nav", "settings-zoom-at", "settings-pick-precision", "settings-ghost-alpha", "settings-fov", "settings-msaa"],
+            Viewport => &["settings-engine", "settings-projection", "settings-shading", "settings-viewcube", "settings-mouse-nav", "settings-zoom-at", "settings-orbit-about", "settings-pick-precision", "settings-ghost-alpha", "settings-fov", "settings-msaa"],
             Sketch => &["settings-snap-on", "settings-grid-step", "settings-rot-step", "settings-auto-constrain", "settings-dim-name", "settings-dim-formula", "settings-dim-font", "settings-dim-text"],
             Part => &["settings-default-extrude", "settings-default-offset"],
             Assembly => &["settings-show-contours", "settings-show-joints", "settings-show-interference"],
@@ -116,6 +116,7 @@ impl SettingsSection {
                 s.pick_precision = d.pick_precision;
                 s.mouse_nav = d.mouse_nav;
                 s.zoom_at = d.zoom_at;
+                s.orbit_about = d.orbit_about;
                 s.zoom_editing = d.zoom_editing;
                 s.ghost_alpha = d.ghost_alpha;
                 s.persp_fov_deg = d.persp_fov_deg;

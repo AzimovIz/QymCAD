@@ -1486,6 +1486,9 @@ pub struct Settings {
     /// The exception to that while a command is open.
     #[serde(default = "default_zoom_editing")]
     pub zoom_editing: ZoomWhileEditing,
+    /// What the view turns about: the middle of the view, or the point under the pointer (see `OrbitAbout`).
+    #[serde(default = "default_orbit_about")]
+    pub orbit_about: OrbitAbout,
     /// How often to ask whether a newer version exists (see `UpdateCheck`).
     #[serde(default = "default_update_check")]
     pub update_check: UpdateCheck,
@@ -1502,6 +1505,10 @@ pub struct Settings {
     /// THE UNIT LAST CHOSEN FOR A FORMAT WITHOUT UNITS, by the format's name: the next file of it comes in the same.
     #[serde(default)]
     pub import_units: std::collections::BTreeMap<String, String>,
+}
+
+fn default_orbit_about() -> OrbitAbout {
+    OrbitAbout::ViewCentre // the program's own way: the view turns as it always has
 }
 
 /// The factory layout: ours.
@@ -1590,6 +1597,7 @@ impl Default for Settings {
             update_check: default_update_check(),
             update_last_checked: 0,
             zoom_editing: default_zoom_editing(),
+            orbit_about: default_orbit_about(),
             import_ask_always: false,
             import_units: Default::default(),
         }
@@ -5924,6 +5932,40 @@ impl ZoomAt {
     }
 }
 
+/// WHAT THE VIEW TURNS ABOUT.
+///
+/// The middle of the view is the program's own way and stays the default. Turning about the point of the model under
+/// the pointer is the other habit, asked for in a pull request: the place one is looking at stays where it is while
+/// the rest turns around it. A list rather than a pair of buttons, so another centre - the model's, a chosen element -
+/// is one more variant.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
+pub enum OrbitAbout {
+    /// The middle of the view, whatever the pointer is over.
+    ViewCentre,
+    /// The point under the pointer where the turn begins: the face hit there, else the plane through the middle of the
+    /// view square to it. Held for as long as the turn lasts.
+    Pointer,
+}
+
+impl OrbitAbout {
+    pub const ALL: [OrbitAbout; 2] = [OrbitAbout::ViewCentre, OrbitAbout::Pointer];
+
+    pub fn key(self) -> &'static str {
+        match self {
+            OrbitAbout::ViewCentre => "settings-orbit-about-centre",
+            OrbitAbout::Pointer => "settings-orbit-about-pointer",
+        }
+    }
+
+    /// What the variant does, said under the list.
+    pub fn hint_key(self) -> &'static str {
+        match self {
+            OrbitAbout::ViewCentre => "settings-orbit-about-centre-hint",
+            OrbitAbout::Pointer => "settings-orbit-about-pointer-hint",
+        }
+    }
+}
+
 /// HOW OFTEN THE PROGRAM ASKS WHETHER A NEWER VERSION EXISTS.
 ///
 /// A program that never says so leaves people on the version they installed. Measured in September 2026:
@@ -6092,8 +6134,16 @@ pub fn pan_now(nav: MouseNav, ctx: &egui::Context, resp: &egui::Response) -> Opt
 }
 
 /// TURN THE VIEW by the layout's gestures this frame: a tilt about the line of sight first, where the layout has one,
-/// then a turn about the centre.
-pub fn turn_view(cam: &mut Cam3, nav: MouseNav, ctx: &egui::Context, resp: &egui::Response) {
+/// then a turn - about the middle of the view, or about the world point `about` when one is given.
+///
+/// ABOUT A POINT THE CENTRE OF THE VIEW TURNS WITH THE CAMERA. The camera turns about its centre as ever, and then the
+/// centre is carried by the same turn about the point: the point keeps its place in the camera's own frame, so it
+/// stays on its spot of the screen at its depth, in perspective as well, and turning back returns the view to where it
+/// was. Sliding the centre in the plane of the screen until the point came back to its spot - the first way this was
+/// tried - kept the spot but not the depth, and the centre wandered off a little with every frame: after a few turns
+/// at a corner of a long block the model swung round a point hundreds of millimetres away.
+pub fn turn_view(about: Option<[f64; 3]>, cam: &mut Cam3, nav: MouseNav, ctx: &egui::Context, resp: &egui::Response) {
+    let (before, target) = (cam.basis(), cam.target);
     if let Some(tilt) = nav.tilts().iter().find(|g| g.active(ctx, resp)) {
         cam.roll += nav_delta(ctx, resp, tilt).x as f64 * 0.01;
     } else if let Some(turn) = nav.rotates().iter().find(|g| g.active(ctx, resp)) {
@@ -6101,6 +6151,17 @@ pub fn turn_view(cam: &mut Cam3, nav: MouseNav, ctx: &egui::Context, resp: &egui
         cam.yaw -= d.x as f64 * 0.01;
         cam.pitch = (cam.pitch + d.y as f64 * 0.01).clamp(-1.5, 1.5);
     }
+    if let Some(p) = about {
+        cam.target = carried_about(p, target, before, cam.basis());
+    }
+}
+
+/// THE CENTRE `target` CARRIED BY A TURN OF THE CAMERA ABOUT `p`: the point keeps its coordinates in the camera's frame
+/// as the frame goes from `before` to `after`.
+pub fn carried_about(p: [f64; 3], target: [f64; 3], before: ([f64; 3], [f64; 3], [f64; 3]), after: ([f64; 3], [f64; 3], [f64; 3])) -> [f64; 3] {
+    let rel = v_sub(p, target);
+    let (c0, c1, c2) = (v_dot(rel, before.0), v_dot(rel, before.1), v_dot(rel, before.2));
+    std::array::from_fn(|a| p[a] - (c0 * after.0[a] + c1 * after.1[a] + c2 * after.2[a]))
 }
 
 /// Where the long press of the Gesture layout is kept in the frame's memory: when and where the left button went down,

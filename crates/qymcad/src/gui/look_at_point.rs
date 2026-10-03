@@ -9,16 +9,21 @@ pub(crate) fn look_at(pn: &qymcad_ui_state::Painting, nav: qymcad_ui_state::Mous
     if !nav.middle_click_looks() || !resp.middle_clicked() {
         return None;
     }
-    let at = resp.interact_pointer_pos()?;
+    Some(point_under(pn, rect, resp.interact_pointer_pos()?))
+}
+
+/// THE POINT UNDER SCREEN `at` that the view looks at or turns about: the point of the model hit there, or, over empty
+/// space, the point of the plane through the present centre square to the view.
+pub(crate) fn point_under(pn: &qymcad_ui_state::Painting, rect: Rect, at: egui::Pos2) -> [f64; 3] {
     if let Some((_, _, w)) = qymcad_pick::pick_face_ray(pn, rect, at) {
-        return Some(w);
+        return w;
     }
     let basis = pn.cam.basis();
     let centre = qymcad_ui_state::Screen { cam: &pn.cam, set: pn.set, rect, basis: &basis }.at(pn.cam.target).0;
     let (right, up, _) = basis;
     let (dx, dy, k) = ((at.x - centre.x) as f64, (at.y - centre.y) as f64, 1.0 / pn.cam.scale as f64);
     let t = pn.cam.target;
-    Some([t[0] + (right[0] * dx - up[0] * dy) * k, t[1] + (right[1] * dx - up[1] * dy) * k, t[2] + (right[2] * dx - up[2] * dy) * k])
+    [t[0] + (right[0] * dx - up[0] * dy) * k, t[1] + (right[1] * dx - up[1] * dy) * k, t[2] + (right[2] * dx - up[2] * dy) * k]
 }
 
 /// The status line of a context stepped into: its name, as the window names it.

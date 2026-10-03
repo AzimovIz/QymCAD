@@ -33,6 +33,7 @@ mod tests {
             update_check: qymcad_ui_state::UpdateCheck::Weekly, // the factory value is Daily
             update_last_checked: 1_788_900_000, // the factory value is 0 - never asked
             zoom_editing: qymcad_ui_state::ZoomWhileEditing::AsUsual, // the factory value is PartCentre
+            orbit_about: qymcad_ui_state::OrbitAbout::Pointer, // the factory value is ViewCentre
             msaa: 8,
             autosave_secs: 600,
             undo_cap: 7,
@@ -87,6 +88,7 @@ mod tests {
         assert_eq!(a.mouse_nav, b.mouse_nav, "which button moves the view");
         assert_eq!(a.zoom_at, b.zoom_at, "where the view zooms from");
         assert_eq!(a.zoom_editing, b.zoom_editing, "where the view zooms from while a command is open");
+        assert_eq!(a.orbit_about, b.orbit_about, "what the view turns about");
     }
 
     /// THE MAIN THING: EVERY setting survives the save-and-load round trip.

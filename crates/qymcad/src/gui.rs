@@ -4421,6 +4421,7 @@ mod props_pick;
 mod frame_select;
 mod piece_part;
 mod look_at_point;
+mod orbit_about;
 pub(crate) use qymcad_ui_state::{props_header, NameSlot};
 
 /// The sketcher (geometry, dimensions, constraints) lives in `gui/sketching.rs`.

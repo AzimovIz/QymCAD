@@ -302,3 +302,41 @@ probe! {
         assert!((with_depth - 1.0).abs() > 0.02, "the perspective was turned on and the near edge of 40 is {with_depth} of the far one - the picture has no depth in it");
     }
 }
+
+/// THE VIEW TURNS ABOUT WHAT THE SETTING SAYS: with "the point under the cursor" chosen in the list of the settings, a
+/// drag that turns the view keeps the point of the block it began on in its place; with the middle of the view, the
+/// factory choice, that point goes round with the rest.
+fn a_turn_from_a_corner(choose_the_pointer: bool) -> f32 {
+    let mut s = a_block_in_view();
+    if choose_the_pointer {
+        open_the_viewport_settings(&mut s);
+        let (now, pointer) = (s.word("settings-orbit-about-centre"), s.word("settings-orbit-about-pointer"));
+        let caption = s.word("settings-orbit-about");
+        let near = s.find(&caption, pos2(640.0, 300.0)).unwrap_or_else(|| panic!("the settings do not say what the view turns about")).center();
+        s.press_word_near(&now, near);
+        s.press_word_near(&pointer, near);
+        assert!(s.shows(&pointer) && !s.shows(&now), "\"{pointer}\" was chosen and the list does not show it");
+        close_the_settings(&mut s);
+    }
+    // a point of the top of the block near its corner, away from the middle of the view
+    let corner = [4.0, 4.0, 10.0];
+    let at = s.face_at(corner);
+    s.drag(at, at + qymcad::vec2(80.0, 30.0), qymcad::PointerButton::Primary, Modifiers::NONE);
+    (s.seen_at(corner).expect("the corner after the turn") - at).length()
+}
+
+probe! {
+    /// THE VIEW TURNS ABOUT THE POINT UNDER THE CURSOR when that is chosen: the point the turn began on stays put.
+    fn the_view_turns_about_the_point_under_the_cursor() {
+        let moved = a_turn_from_a_corner(true);
+        assert!(moved < 1.0, "the view turns about the point under the cursor, and that point moved {moved} away");
+    }
+}
+
+probe! {
+    /// THE VIEW TURNS ABOUT ITS MIDDLE by the factory setting: the point the turn began on goes round with the rest.
+    fn by_default_the_view_turns_about_its_middle() {
+        let moved = a_turn_from_a_corner(false);
+        assert!(moved > 5.0, "the view turns about its middle, and the point the turn began on stayed put ({moved})");
+    }
+}
