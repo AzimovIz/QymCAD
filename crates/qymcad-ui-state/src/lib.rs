@@ -13199,6 +13199,90 @@ pub fn release_armed_sketch_tool(t: &mut Tools) -> Option<&'static str> {
     Some(msg.unwrap_or("in-tool-released"))
 }
 
+/// OPEN THE LITTLE BOX OF THE CORNER: at a vertex, with the tool's value already in it.
+///
+/// The value at the corner is the one the bar carries, and it is carried on afterwards: the next corner offers the
+/// same number. One place writes the box down, so the corner found by clicking the point and the corner found by
+/// clicking the two lines that meet at it open the same way.
+pub fn open_corner_popup(corner: &mut CornerInput, prefs: &SketchToolPrefs, si: usize, pid: Id, chamfer: bool, pos: Option<Pos2>) {
+    corner.at = Some((si, pid, chamfer));
+    corner.pos = pos;
+    corner.buf = qymcad_core::expr::fmt_num(prefs.fillet);
+    corner.buf2 = qymcad_core::expr::fmt_num(prefs.chamfer_second);
+    corner.focus = true;
+}
+
+/// THE CORNER A SELECTION ALREADY NAMES: what the fillet or the chamfer is offered the moment it is pressed.
+///
+/// Two lines that share a corner ARE that corner, and the box opens at once - the lines were chosen before the tool
+/// was taken, so asking for the corner again would be asking what has already been said. Anything else is not a
+/// corner: two lines crossing without a point in common, a third entity beside them, a point where a line should
+/// be. Such a selection is DROPPED rather than kept - a pair of lines that meet nowhere cannot be rounded at any
+/// radius, and leaving them lit would leave the tool waiting on something that will never come. One line alone is
+/// not dropped: it is the first half of a corner, and the click on the second line completes it.
+pub fn corner_of_selection(project: &Project, si: usize, sel_sk: &mut SketchSelection) -> Option<Id> {
+    if sel_sk.items.len() < 2 {
+        return None;
+    }
+    if sel_sk.items.len() > 2 {
+        sel_sk.clear();
+        return None;
+    }
+    let lines: Vec<Id> = sel_sk.items.iter().filter(|(k, _)| *k == 1).map(|(_, id)| *id).collect();
+    if lines.len() != 2 {
+        sel_sk.clear();
+        return None;
+    }
+    // the pair that shares a corner is kept lit until the value is applied or refused - the corner belongs to those
+    // two lines, and a person must see which ones while the number in the box is being decided
+    match project.shared_vertex(si, lines[0], lines[1]) {
+        Some(pid) => Some(pid),
+        None => {
+            sel_sk.clear();
+            None
+        }
+    }
+}
+
+/// THE SECOND HALF OF A CORNER, taken by clicking a LINE rather than the point where two meet: with one line
+/// chosen, a click on a second offers the corner they share; with no corner in common the first is let go and the
+/// line clicked becomes the first of the next pair, so the search goes on where the hand went on.
+pub fn corner_line_clicked(project: &Project, si: usize, eid: Id, sel_sk: &mut SketchSelection) -> Option<Id> {
+    match sel_sk.items.as_slice() {
+        [(1, only)] if *only == eid => {
+            sel_sk.clear(); // the same line again: the choice is taken back
+            None
+        }
+        [(1, only)] => match project.shared_vertex(si, *only, eid) {
+            Some(pid) => Some(pid),
+            None => {
+                sel_sk.items = vec![(1, eid)];
+                None
+            }
+        },
+        _ => {
+            sel_sk.items = vec![(1, eid)]; // the first line of a corner
+            None
+        }
+    }
+}
+
+/// TAKE THE FILLET OR THE CHAMFER INTO HAND (4 = fillet, 5 = chamfer) and hold it to what is already chosen.
+pub fn start_corner_tool(bc: &mut BarCtx, op: u8) {
+    set_click_op(&mut tools_in!(bc), &mut *bc.mode_3d, op);
+    if bc.armed.click_op() != op {
+        return; // pressed again: the tool goes back down, and what was chosen stays chosen
+    }
+    *bc.status = qymcad_i18n::tr(if op == 5 { "tb-chamfer-sketch-hint" } else { "tb-fillet-sketch-hint" });
+    let si = match *bc.sel {
+        Sel::Sketch(si) => si,
+        _ => return,
+    };
+    if let Some(pid) = corner_of_selection(&*bc.project, si, bc.sel_sk) {
+        open_corner_popup(bc.corner, bc.tool_prefs, si, pid, op == 5, None);
+    }
+}
+
 /// Turn a click-driven editing operation on or off (1 = trim, 2 = extend, 3 = break).
 pub fn set_click_op(t: &mut Tools, mode_3d: &mut bool, op: u8) {
     let cur = t.armed.click_op();

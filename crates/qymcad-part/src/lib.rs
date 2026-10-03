@@ -5972,10 +5972,10 @@ pub fn wb_toolbar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
                         *bc.status = qymcad_i18n::tr("tb-project-hint");
                     }
                     if qymcad_render::sym_button(ui, qymcad_ui_state::Gly::Fillet, &qymcad_i18n::tr("tb-fillet-sketch-hint"), bc.armed.click_op() == 4) {
-                        qymcad_ui_state::set_click_op(&mut qymcad_ui_state::tools_in!(bc), &mut *bc.mode_3d, 4);
+                        qymcad_ui_state::start_corner_tool(bc, 4);
                     }
                     if qymcad_render::sym_button(ui, qymcad_ui_state::Gly::Chamfer, &qymcad_i18n::tr("tb-chamfer-sketch-hint"), bc.armed.click_op() == 5) {
-                        qymcad_ui_state::set_click_op(&mut qymcad_ui_state::tools_in!(bc), &mut *bc.mode_3d, 5);
+                        qymcad_ui_state::start_corner_tool(bc, 5);
                     }
                     // "FILLET ALL" IS A TOOL IN HAND like its neighbours: pressed, it puts down what is held and takes what is
                     // selected or waits for a shape; pressed again, it is put down

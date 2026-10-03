@@ -172,6 +172,77 @@ probe! {
 }
 
 probe! {
+    /// A CHAMFER POINTED AT BY ITS TWO LINES: the cursor finds the corner without finding the point. Reported: the
+    /// corner of a long edge could only be taken by hitting the vertex itself within a few pixels.
+    fn chamfer_of_two_lines_that_meet_is_taken_by_them_alone() {
+        let mut s = empty_sketch();
+        draw(&mut s, "tb-line-hint", &[(60.0, 0.0), (0.0, 0.0), (0.0, 60.0)]);
+        take(&mut s, "tb-chamfer-sketch-hint");
+        s.click_on_sketch(30.0, 0.0); // the middle of the first line: not a point of the drawing at all
+        let second = s.on_sketch(0.0, 30.0);
+        s.click(second); // and the middle of the second: the corner is where the two meet
+        let field = field_near(&mut s, second);
+        fill_widget(&mut s, &field, "5");
+        s.key(Key::Enter);
+        assert!(counts(&mut s).0 == 3, "the two lines did not cut the corner between them: {:?}", counts(&mut s));
+        assert!(stands_at(&mut s, (5.0, 0.0)) && stands_at(&mut s, (0.0, 5.0)), "the cut of 5 does not meet the lines at (5, 0) and (0, 5): the ends stand at {:?}", s.document().sketches[0].places);
+    }
+}
+
+probe! {
+    /// THE CHAMFER TAKEN WITH THE TWO LINES ALREADY CHOSEN: the corner is where they meet, and the tool is pressed
+    /// afterwards. Reported: the selection stood lit and the tool ignored it, asking for the corner again.
+    fn a_chamfer_of_two_lines_already_chosen_is_offered_the_corner_they_share() {
+        let mut s = empty_sketch();
+        draw(&mut s, "tb-line-hint", &[(60.0, 0.0), (0.0, 0.0), (0.0, 60.0)]);
+        pick(&mut s, 30.0, 0.0, false);
+        pick(&mut s, 0.0, 30.0, true); // the two lines of the corner, chosen before the tool
+        take(&mut s, "tb-chamfer-sketch-hint");
+        let middle = s.canvas().center();
+        let field = field_near(&mut s, middle);
+        fill_widget(&mut s, &field, "5");
+        s.key(Key::Enter);
+        assert!(counts(&mut s).0 == 3, "the corner of the two chosen lines did not become a line across: {:?}", counts(&mut s));
+        assert!(stands_at(&mut s, (5.0, 0.0)) && stands_at(&mut s, (0.0, 5.0)), "the cut of 5 does not meet the lines at (5, 0) and (0, 5): the ends stand at {:?}", s.document().sketches[0].places);
+    }
+}
+
+probe! {
+    /// TWO LINES THAT SHARE NO CORNER: nothing is offered, and the tool waits for a corner of its own.
+    fn two_lines_that_meet_nowhere_leave_the_selection_alone_to_wait() {
+        let mut s = empty_sketch();
+        line(&mut s, (0.0, 0.0), (60.0, 0.0));
+        line(&mut s, (30.0, -30.0), (30.0, 30.0)); // it crosses the first, but shares no point with it
+        pick(&mut s, 10.0, 0.0, false);
+        pick(&mut s, 30.0, 15.0, true);
+        take(&mut s, "tb-chamfer-sketch-hint");
+        let boxes: Vec<_> = s.widgets().into_iter().filter(|w| w.kind == Kind::TextField && w.rect.top() > 120.0).collect();
+        assert!(boxes.is_empty(), "two lines with no corner in common opened the box anyway: {boxes:?}");
+        assert!(counts(&mut s).0 == 2, "nothing was cut: {:?}", counts(&mut s));
+    }
+}
+
+probe! {
+    /// TWO LINES THAT SHARE NO CORNER: the first is let go, the second stands as the first of the next pair, and
+    /// the search goes on with its neighbour.
+    fn a_line_without_a_corner_becomes_the_first_of_the_next_one() {
+        let mut s = empty_sketch();
+        draw(&mut s, "tb-line-hint", &[(60.0, 0.0), (0.0, 0.0), (0.0, 60.0)]);
+        draw(&mut s, "tb-line-hint", &[(150.0, 0.0), (120.0, 0.0), (120.0, 30.0)]); // a second angle, far away
+        take(&mut s, "tb-fillet-sketch-hint");
+        s.click_on_sketch(30.0, 0.0); // the first arm of the near angle
+        s.click_on_sketch(135.0, 0.0); // an arm of the far angle: no corner in common with the first
+        let third = s.on_sketch(120.0, 15.0);
+        s.click(third); // the other arm of the far angle, the neighbour of the one now chosen
+        let field = field_near(&mut s, third);
+        fill_widget(&mut s, &field, "5");
+        s.key(Key::Enter);
+        assert!(counts(&mut s).1 == 1, "the search did not carry on from the line clicked last: {:?}", counts(&mut s));
+        assert!(stands_at(&mut s, (125.0, 0.0)) && stands_at(&mut s, (120.0, 5.0)), "the arc of radius 5 does not meet the far lines at (125, 0) and (120, 5): the ends stand at {:?}", s.document().sketches[0].places);
+    }
+}
+
+probe! {
     /// FILLET EVERY CORNER: all four corners of a rectangle become arcs at once.
     fn fillet_all_corners_rounds_the_whole_rectangle() {
         let mut s = empty_sketch();

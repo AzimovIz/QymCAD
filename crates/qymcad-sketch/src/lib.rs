@@ -3789,12 +3789,18 @@ pub fn sketch_click_at(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context,
                 // failed)
                 if let qymcad_ui_state::Sel::Sketch(si) = *sk.sel {
                     if let Some(pid) = qymcad_pick::nearest_vertex(&sk.pick(), rect, pos, si) {
-                        sk.corner.at = Some((si, pid, sk.armed.click_op() == 5));
-                        sk.corner.pos = Some(pos);
+                        qymcad_ui_state::open_corner_popup(sk.corner, sk.tool_prefs, si, pid, sk.armed.click_op() == 5, Some(pos));
                         sk.corner.near = Some(qymcad_ui_state::to_world(&*sk.view, rect, pos));
-                        sk.corner.buf = qymcad_core::expr::fmt_num(sk.tool_prefs.fillet);
-                        sk.corner.buf2 = qymcad_core::expr::fmt_num(sk.tool_prefs.chamfer_second);
-                        sk.corner.focus = true;
+                    } else if let Some(eid) = qymcad_pick::nearest_line_eid(&sk.pick(), rect, pos, si) {
+                        // A CORNER TAKEN BY ITS TWO LINES: the first line is taken, the second one answers
+                        // whether they share a corner. Where they share none, the first is let go and this one
+                        // stands as the first of the next pair - so a corner can be pointed at with the cursor
+                        // anywhere along the lines, and not only on the point itself.
+                        if let Some(pid) = qymcad_ui_state::corner_line_clicked(&*sk.project, si, eid, sk.sel_sk) {
+                            qymcad_ui_state::open_corner_popup(sk.corner, sk.tool_prefs, si, pid, sk.armed.click_op() == 5, Some(pos));
+                        } else {
+                            *sk.status = qymcad_i18n::tr("sk-click-corner-next");
+                        }
                     } else {
                         *sk.status = qymcad_i18n::tr("sk-click-corner");
                     }

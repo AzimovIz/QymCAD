@@ -2734,6 +2734,20 @@ impl Project {
             .map(|e| e.id)
             .collect()
     }
+    /// THE CORNER TWO EDGES SHARE: the point that is an end of both of them, when there is one.
+    ///
+    /// Two lines crossing without a point in common share no corner. That is the whole question the fillet and the
+    /// chamfer ask of a chosen pair, and it is asked here once rather than at each place a pair is chosen.
+    pub fn shared_vertex(&self, si: usize, e1: Id, e2: Id) -> Option<Id> {
+        let (Some((a1, b1)), Some((a2, b2))) = (self.edge_end_ids(si, e1), self.edge_end_ids(si, e2)) else { return None };
+        if a1 == a2 || a1 == b2 {
+            Some(a1)
+        } else if b1 == a2 || b1 == b2 {
+            Some(b1)
+        } else {
+            None
+        }
+    }
     /// Chamfer the corner at vertex `pid`, where exactly two lines meet. Returns whether it succeeded.
     ///
     /// THE FIRST LINE is the one `toward` stands nearer to - the side of the corner that was clicked: the first leg is

@@ -13,8 +13,14 @@
   (**Length** and the **Angle** between that line and the cut); **Symmetric** gives one size along both lines. The
   first value runs along the line you click nearer to: click the corner a little to the side of that line. Type the first
   value, **Tab** to the second, **Enter**.
+- **The corner by its two lines**: with two lines that share a corner chosen, the button offers to take that corner
+  off straight away. It works with nothing chosen as well — click the first line, then the one beside it, and the
+  corner between them is offered at once.
 - **Fillet every corner of the contour**: select the contour, press the button, type the **R of every corner**,
   **Enter**.
+
+Two lines with no point in common are not a corner: the selection is dropped and the tool waits for the next pair.
+The same goes for more than two lines — a corner is always two lines.
 
 One step of undo per operation: **Ctrl+Z** brings the sharp corner back.
 
@@ -36,4 +42,4 @@ Fillets usually go **last**, once the contour is defined: before that they get i
 - The legs of a chamfer went the other way round — click the corner nearer to the line the first value should run
   along.
 - The click did not take the corner — not exactly two lines meet at that point. Click right on the vertex of the
-  corner.
+  corner, or on the two lines that meet there.
