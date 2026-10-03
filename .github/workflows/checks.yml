@@ -114,7 +114,15 @@ jobs:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
       - name: The acceptance probes without heavy geometry, share ${{ matrix.share }} of 4
-        run: python3 tools/gate.py fast --step "the acceptance" --shard ${{ matrix.share }}/4
+        run: python3 tools/gate.py fast --step "the acceptance" --skip-probe size_and_time --shard ${{ matrix.share }}/4
+      # THE PROBES OF TIME, ALONE AND AT TWICE THE BUDGET. Among five other probes on four cores the robot sample
+      # rebuilt in 39.4 s against 30; alone, with the budget doubled, a program twice as slow as it should be still
+      # goes red. In the first share, which finished first.
+      - name: The probes of time, one at a time
+        if: matrix.share == 1 && (success() || failure())
+        env:
+          QYMCAD_TIME_SCALE: 2
+        run: python3 tools/gate.py time
       - name: The words of the gate
         if: failure()
         uses: actions/upload-artifact@v7

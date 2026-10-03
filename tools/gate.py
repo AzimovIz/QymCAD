@@ -12,6 +12,8 @@
     tools/gate.py L --step NAME     only the step of the level whose name begins with NAME (and no mark)
     tools/gate.py L --except NAME   every step of the level but that one (and no mark)
     tools/gate.py L --shard K/N     the acceptance probes of the level split in N shares, only the K-th run (and no mark)
+    tools/gate.py L --skip-probe P  the acceptance probes matching P left out (and no mark)
+    tools/gate.py time              the probes of time alone, one at a time; CI sets QYMCAD_TIME_SCALE=2
 
 EVERY RED STOPS THE GATE: a red probe is a trouble to mend before the commit, not a row to keep beside it.
 
@@ -50,6 +52,11 @@ BUILDS = ("the code builds with no warning", ["cargo", "check", "--workspace", "
 ORACLES = ("the oracles and the runner", ["cargo", "test", "-p", "qymcad-acceptance", "--lib"], {})
 ACCEPTANCE = ["cargo", "test", "-p", "qymcad-acceptance", "--test", "acceptance", "--no-fail-fast", "--", "--test-threads=6"]
 
+# THE PROBES OF TIME: they measure the machine as much as the program. Run apart and one at a time by the `time` level,
+# which CI uses with QYMCAD_TIME_SCALE=2 - on a runner of four cores, among five other probes, the robot sample rebuilt in
+# 39.4 s against a budget of 30.
+TIME = "size_and_time"
+
 RELEASE_MARK = os.path.join(ROOT, "target", "gate-release.json")
 
 LEVELS = {
@@ -70,6 +77,9 @@ LEVELS = {
         ("every crate's own checks", ["cargo", "test", "--workspace", "--exclude", "qymcad-acceptance", "--no-fail-fast"], {}),
         ORACLES,
         ("every acceptance probe", ACCEPTANCE, {"QYMCAD_TIER": "full"}),
+    ],
+    "time": [
+        ("the probes of time, one at a time", ACCEPTANCE[:-1] + ["--test-threads=1", TIME], {"QYMCAD_TIER": "fast"}),
     ],
     "fast": [
         BUILDS,
@@ -149,6 +159,7 @@ def main():
     ap.add_argument("level", choices=sorted(LEVELS))
     ap.add_argument("--step", help="run only the step whose name begins with this")
     ap.add_argument("--except", dest="skip", help="run every step but the one whose name begins with this")
+    ap.add_argument("--skip-probe", action="append", default=[], help="leave the acceptance probes matching this out (repeatable)")
     ap.add_argument("--shard", help="K/N: of the acceptance probes, run only the K-th of N shares (1-based)")
     args = ap.parse_args()
     steps = [
@@ -158,6 +169,9 @@ def main():
     if not steps:
         print(f"the {args.level} level has no such step: " + "; ".join(s[0] for s in LEVELS[args.level]))
         return 2
+    if args.skip_probe:
+        extra = [a for p in args.skip_probe for a in ("--skip", p)]
+        steps = [(name, cmd + extra, env) if cmd[:len(ACCEPTANCE)] == ACCEPTANCE else (name, cmd, env) for name, cmd, env in steps]
     if args.shard:
         try:
             k, n = (int(x) for x in args.shard.split("/"))
@@ -166,7 +180,7 @@ def main():
             print(f"--shard takes K/N with 1 <= K <= N, not {args.shard!r}")
             return 2
         steps = [(name, shard_of(cmd, env, k, n), env) if cmd[:len(ACCEPTANCE)] == ACCEPTANCE else (name, cmd, env) for name, cmd, env in steps]
-    whole = args.step is None and args.skip is None and args.shard is None
+    whole = args.step is None and args.skip is None and args.shard is None and not args.skip_probe
     total_began = time.time()
     all_red, broken_steps = [], []
     for name, cmd, env in steps:
