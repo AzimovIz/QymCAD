@@ -82,6 +82,20 @@ mod tests {
         }
     }
 
+    /// THE INSTALLED FILES CAN BE READ BY EVERYBODY, not by root alone.
+    ///
+    /// Reported behaviour: after installing the package, `qymcad` said "permission denied", and so did `cd
+    /// /opt/qymcad/usr`. The AppImage holds its directories as 755, but `--appimage-extract` writes every
+    /// directory it makes as 0700, and `cp -a` carried that into /opt, where pacman installs as root - a
+    /// program only root could reach. The package sets the modes of what it copies itself, after the copy.
+    #[test]
+    fn the_installed_files_can_be_read_by_everybody() {
+        let src = pkgbuild();
+        let copy = src.find("cp -a usr \"$pkgdir/opt/qymcad/\"").expect("the package copies the AppImage's usr into /opt/qymcad");
+        let modes = src.find("chmod -R u=rwX,go=rX \"$pkgdir/opt/qymcad\"").unwrap_or_else(|| panic!("the package keeps the modes the unpacking left - its directories are 0700, so only root could open them"));
+        assert!(modes > copy, "the modes are set before the copy that brings the unpacked 0700 directories in");
+    }
+
     /// AND .SRCINFO SAYS THE SAME AS THE PKGBUILD BESIDE IT.
     ///
     /// The AUR reads `.SRCINFO`, not the PKGBUILD: it is what the site shows and what dependency resolvers
