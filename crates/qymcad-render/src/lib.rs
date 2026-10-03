@@ -2173,16 +2173,16 @@ pub fn draw_pattern_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) 
         painter.line_segment([c + egui::vec2(0.0, -7.0), c + egui::vec2(0.0, 7.0)], Stroke::new(1.5, m));
         painter.circle_stroke(c, 4.0, Stroke::new(1.2, m));
     }
-    let transforms: Vec<Box<dyn Fn(f64, f64) -> (f64, f64)>> = match kind {
+    let transforms: Vec<PatternCopy> = match kind {
         PatternKind::Linear { dx, dy, count, dx2, dy2, count2 } => {
-            let mut v: Vec<Box<dyn Fn(f64, f64) -> (f64, f64)>> = Vec::new();
+            let mut v: Vec<PatternCopy> = Vec::new();
             for i in 0..count.max(1) {
                 for j in 0..count2.max(1) {
                     if i == 0 && j == 0 {
                         continue;
                     }
                     let (ox, oy) = (dx * i as f64 + dx2 * j as f64, dy * i as f64 + dy2 * j as f64);
-                    v.push(Box::new(move |x, y| (x + ox, y + oy)));
+                    v.push(PatternCopy { cos: 1.0, sin: 0.0, about: (0.0, 0.0), shift: (ox, oy) });
                 }
             }
             v
@@ -2192,19 +2192,30 @@ pub fn draw_pattern_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) 
             (1..c.max(1))
                 .map(|k| {
                     let ang = (step * k as f64).to_radians();
-                    let (s_, c_) = (ang.sin(), ang.cos());
-                    Box::new(move |x: f64, y: f64| {
-                        let (vx, vy) = (x - cx, y - cy);
-                        (cx + vx * c_ - vy * s_, cy + vx * s_ + vy * c_)
-                    }) as Box<dyn Fn(f64, f64) -> (f64, f64)>
+                    PatternCopy { cos: ang.cos(), sin: ang.sin(), about: (cx, cy), shift: (0.0, 0.0) }
                 })
                 .collect()
         }
     };
     for xf in &transforms {
         for &eid in &eids {
-            draw_entity_xform(&PickCtx { project: pn.project, set: pn.set, view: &pn.view }, painter, rect, si, eid, xf.as_ref(), stroke);
+            draw_entity_xform(&PickCtx { project: pn.project, set: pn.set, view: &pn.view }, painter, rect, si, eid, &|x, y| xf.at(x, y), stroke);
         }
+    }
+}
+
+/// ONE COPY OF A SKETCH PATTERN: turned by the angle whose cosine and sine are given about `about`, then shifted.
+struct PatternCopy {
+    cos: f64,
+    sin: f64,
+    about: (f64, f64),
+    shift: (f64, f64),
+}
+
+impl PatternCopy {
+    fn at(&self, x: f64, y: f64) -> (f64, f64) {
+        let (vx, vy) = (x - self.about.0, y - self.about.1);
+        (self.about.0 + vx * self.cos - vy * self.sin + self.shift.0, self.about.1 + vx * self.sin + vy * self.cos + self.shift.1)
     }
 }
 

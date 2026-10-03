@@ -6,7 +6,7 @@
 use std::io::{Read, Write};
 
 use qymcad_core::geom::{Mesh, Point3};
-use qymcad_core::model::{ExportNode, Id};
+use qymcad_core::model::{ExportMesh, ExportNode, Id};
 
 use crate::NamedMesh;
 
@@ -298,9 +298,9 @@ pub fn export_3mf(meshes: &[Mesh], path: &str) -> Result<(), String> {
 /// or a subassembly where it stands in it (3MF Core, 4.1 - a component may refer to an object of components). A repeat
 /// (`same_as`) places the object of what it repeats, which the file holds once. Every object is written before the one
 /// that refers to it.
-pub fn export_3mf_tree(nodes: &[ExportNode], meshes: &[(Id, Mesh, Vec<Option<[u8; 3]>>)], path: &str) -> Result<(), String> {
+pub fn export_3mf_tree(nodes: &[ExportNode], meshes: &[ExportMesh], path: &str) -> Result<(), String> {
     let mut palette: Vec<[u8; 3]> = Vec::new();
-    for c in nodes.iter().filter_map(|n| n.color).chain(meshes.iter().flat_map(|(_, _, t)| t.iter().flatten().copied())) {
+    for c in nodes.iter().filter_map(|n| n.color).chain(meshes.iter().flat_map(|m| m.tri_colors.iter().flatten().copied())) {
         if !palette.contains(&c) {
             palette.push(c);
         }
@@ -320,7 +320,7 @@ pub fn export_3mf_tree(nodes: &[ExportNode], meshes: &[(Id, Mesh, Vec<Option<[u8
             children[p].push(i);
         }
     }
-    let mut w = TreeWriter { nodes, children, by_body: meshes.iter().map(|(b, m, t)| (*b, (m, t.as_slice()))).collect(), palette, model, next: 2, object: vec![None; nodes.len()] };
+    let mut w = TreeWriter { nodes, children, by_body: meshes.iter().map(|m| (m.body, m)).collect(), palette, model, next: 2, object: vec![None; nodes.len()] };
     let mut build = String::new();
     for root in (0..nodes.len()).filter(|&i| nodes[i].parent.is_none_or(|p| p >= i)) {
         if let Some(id) = w.emit(root) {
@@ -339,7 +339,7 @@ pub fn export_3mf_tree(nodes: &[ExportNode], meshes: &[(Id, Mesh, Vec<Option<[u8
 struct TreeWriter<'a> {
     nodes: &'a [ExportNode],
     children: Vec<Vec<usize>>,
-    by_body: std::collections::HashMap<Id, (&'a Mesh, &'a [Option<[u8; 3]>])>,
+    by_body: std::collections::HashMap<Id, &'a ExportMesh>,
     palette: Vec<[u8; 3]>,
     model: String,
     next: usize,
@@ -357,7 +357,7 @@ impl TreeWriter<'_> {
         let n = &self.nodes[i];
         let made = match (n.same_as.filter(|&k| k < i), n.body) {
             (Some(k), _) => self.emit(k),
-            (None, Some(b)) => self.by_body.get(&b).copied().filter(|(m, _)| !m.tris.is_empty()).map(|(m, t)| {
+            (None, Some(b)) => self.by_body.get(&b).copied().filter(|e| !e.mesh.tris.is_empty()).map(|ExportMesh { mesh: m, tri_colors: t, .. }| {
                 let id = self.next;
                 self.next += 1;
                 let own = n.color.and_then(|c| self.palette.iter().position(|p| *p == c));

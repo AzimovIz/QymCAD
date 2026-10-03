@@ -202,7 +202,7 @@ fn a_placeholder_name_is_no_name() {
 /// linear in the file - and it reads back with the names, the colours and the places.
 #[test]
 fn a_tree_goes_out_as_nodes_with_names_and_colours() {
-    use qymcad_core::model::ExportNode;
+    use qymcad_core::model::{ExportMesh, ExportNode};
     let p = file("tree.glb", None);
     let at = |x: f64, z: f64| [1.0, 0.0, 0.0, x, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, z];
     let node = |name: &str, parent: Option<usize>, place: [f64; 12], body: Option<u64>, same_as: Option<usize>, color: Option<[u8; 3]>| ExportNode {
@@ -222,7 +222,16 @@ fn a_tree_goes_out_as_nodes_with_names_and_colours() {
         node("unit", Some(0), at(0.0, 50.0), None, None, None),
         node("pin", Some(3), at(5.0, 0.0), Some(3), None, blue),
     ];
-    export_glb_tree(&nodes, &[(1, tetra(0.0, 0.0), Vec::new()), (2, tetra(0.0, 0.0), Vec::new()), (3, tetra(0.0, 0.0), Vec::new())], &p).expect("the tree is written");
+    export_glb_tree(
+        &nodes,
+        &[
+            ExportMesh { body: 1, mesh: tetra(0.0, 0.0), tri_colors: Vec::new() },
+            ExportMesh { body: 2, mesh: tetra(0.0, 0.0), tri_colors: Vec::new() },
+            ExportMesh { body: 3, mesh: tetra(0.0, 0.0), tri_colors: Vec::new() },
+        ],
+        &p,
+    )
+    .expect("the tree is written");
     let j = json_of(&p);
     let names: Vec<&str> = j["nodes"].as_array().expect("nodes").iter().map(|n| n["name"].as_str().expect("a name")).collect();
     assert_eq!(names, ["head", "plate", "plate", "unit", "pin"]);
@@ -248,7 +257,7 @@ fn a_tree_goes_out_as_nodes_with_names_and_colours() {
 /// two primitives, each with its material, the body's colour first - and it reads back a colour per triangle.
 #[test]
 fn a_face_of_its_own_colour_goes_out_as_a_primitive_of_its_own() {
-    use qymcad_core::model::ExportNode;
+    use qymcad_core::model::{ExportMesh, ExportNode};
     let p = file("faces.glb", None);
     let (red, green) = ([204, 26, 26], [26, 204, 26]);
     let place = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0];
@@ -256,7 +265,7 @@ fn a_face_of_its_own_colour_goes_out_as_a_primitive_of_its_own() {
         ExportNode { name: "head".into(), parent: None, place, body: None, same_as: None, color: None, face_colors: Vec::new() },
         ExportNode { name: "plate".into(), parent: Some(0), place, body: Some(1), same_as: None, color: Some(red), face_colors: Vec::new() },
     ];
-    export_glb_tree(&nodes, &[(1, tetra(0.0, 0.0), vec![Some(red), Some(red), Some(red), Some(green)])], &p).expect("the tree is written");
+    export_glb_tree(&nodes, &[ExportMesh { body: 1, mesh: tetra(0.0, 0.0), tri_colors: vec![Some(red), Some(red), Some(red), Some(green)] }], &p).expect("the tree is written");
     let j = json_of(&p);
     let prims = j["meshes"][0]["primitives"].as_array().expect("primitives");
     assert_eq!(prims.len(), 2, "the green triangle does not go out as a primitive of its own");
@@ -271,7 +280,7 @@ fn a_face_of_its_own_colour_goes_out_as_a_primitive_of_its_own() {
 /// it - not baked where it stands.
 #[test]
 fn a_tree_comes_back_as_its_groups() {
-    use qymcad_core::model::ExportNode;
+    use qymcad_core::model::{ExportMesh, ExportNode};
     let p = file("groups.glb", None);
     let at = |x: f64, z: f64| [1.0, 0.0, 0.0, x, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, z];
     let node = |name: &str, parent: Option<usize>, place: [f64; 12], body: Option<u64>| ExportNode { name: name.into(), parent, place, body, same_as: None, color: None, face_colors: Vec::new() };
@@ -281,7 +290,8 @@ fn a_tree_comes_back_as_its_groups() {
         node("unit", Some(0), at(0.0, 50.0), None),
         node("pin", Some(2), at(5.0, 0.0), Some(2)),
     ];
-    export_glb_tree(&nodes, &[(1, tetra(0.0, 0.0), Vec::new()), (2, tetra(0.0, 0.0), Vec::new())], &p).expect("the tree is written");
+    export_glb_tree(&nodes, &[ExportMesh { body: 1, mesh: tetra(0.0, 0.0), tri_colors: Vec::new() }, ExportMesh { body: 2, mesh: tetra(0.0, 0.0), tri_colors: Vec::new() }], &p)
+        .expect("the tree is written");
     let back = import_gltf(&p).expect("the tree reads back");
     let chain = |k: usize| back[k].within.iter().map(|(_, n, _)| n.as_str()).collect::<Vec<_>>();
     assert_eq!((chain(0), chain(1)), (vec!["head"], vec!["head", "unit"]), "the pieces do not come back in their groups");

@@ -7,7 +7,7 @@
 //! TWO CONVENTIONS OF glTF ARE NOT OURS, and both are turned at the border. The unit is the metre (ours is the
 //! millimetre), and up is +Y (ours is +Z): a part written without turning lies on its back in every viewer.
 use qymcad_core::geom::{Mesh, Point3};
-use qymcad_core::model::{ExportNode, Id};
+use qymcad_core::model::{ExportMesh, ExportNode, Id};
 use serde_json::Value;
 
 use crate::NamedMesh;
@@ -334,19 +334,25 @@ pub fn export_glb(meshes: &[Mesh], path: &str) -> Result<(), String> {
     out.write(nodes, roots, path)
 }
 
+/// The triangles of a mesh that share one colour: one primitive of the file. `None` is the part's colour.
+struct ColourGroup {
+    colour: Option<[u8; 3]>,
+    tris: Vec<[u32; 3]>,
+}
+
 /// WRITE A TREE AS THE SCENE: a node per subassembly and per part under its name, each where it stands in its parent,
 /// a part carrying the mesh of its body - in the part's own coordinates - in the material of its colour. A repeat
 /// (`same_as`) carries the mesh of the part it repeats, which the file holds once. `meshes` gives the mesh of every
 /// body that goes out.
-pub fn export_glb_tree(nodes: &[ExportNode], meshes: &[(Id, Mesh, Vec<Option<[u8; 3]>>)], path: &str) -> Result<(), String> {
-    let by_body: std::collections::HashMap<Id, (&Mesh, &[Option<[u8; 3]>])> = meshes.iter().map(|(b, m, t)| (*b, (m, t.as_slice()))).collect();
+pub fn export_glb_tree(nodes: &[ExportNode], meshes: &[ExportMesh], path: &str) -> Result<(), String> {
+    let by_body: std::collections::HashMap<Id, &ExportMesh> = meshes.iter().map(|m| (m.body, m)).collect();
     let mut out = Out::default();
     let mut carried: Vec<Option<usize>> = vec![None; nodes.len()];
     let mut written = Vec::with_capacity(nodes.len());
     for (i, n) in nodes.iter().enumerate() {
         carried[i] = match n.same_as {
             Some(k) if k < i => carried[k],
-            _ => n.body.and_then(|b| by_body.get(&b)).filter(|(m, _)| !m.tris.is_empty()).map(|(m, t)| out.mesh(m, n.color, t)),
+            _ => n.body.and_then(|b| by_body.get(&b)).filter(|m| !m.mesh.tris.is_empty()).map(|m| out.mesh(&m.mesh, n.color, &m.tri_colors)),
         };
         let mut node = serde_json::json!({"name": n.name});
         if n.place != qymcad_core::feature::PLACE_IDENTITY {
@@ -413,17 +419,17 @@ impl Out {
         self.accessors.push(serde_json::json!({"bufferView": self.views.len() - 1, "componentType": 5126, "count": pts.len(), "type": "VEC3", "min": lo, "max": hi}));
         let position = self.accessors.len() - 1;
         // the triangles by colour, the body's own first
-        let mut groups: Vec<(Option<[u8; 3]>, Vec<[u32; 3]>)> = vec![(colour, Vec::new())];
+        let mut groups: Vec<ColourGroup> = vec![ColourGroup { colour, tris: Vec::new() }];
         let coloured = tri_colors.len() == m.tris.len();
         for (k, t) in m.tris.iter().enumerate() {
             let c = if coloured { tri_colors[k] } else { colour };
-            match groups.iter_mut().find(|(g, _)| *g == c) {
-                Some((_, ts)) => ts.push(*t),
-                None => groups.push((c, vec![*t])),
+            match groups.iter_mut().find(|g| g.colour == c) {
+                Some(g) => g.tris.push(*t),
+                None => groups.push(ColourGroup { colour: c, tris: vec![*t] }),
             }
         }
         let mut prims = Vec::new();
-        for (c, ts) in groups.into_iter().filter(|(_, ts)| !ts.is_empty()) {
+        for ColourGroup { colour: c, tris: ts } in groups.into_iter().filter(|g| !g.tris.is_empty()) {
             let at = self.bin.len();
             for t in &ts {
                 for i in t {

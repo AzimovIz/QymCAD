@@ -333,6 +333,16 @@ mod live_session {
         assert!(rebuilds <= 2, "one action means no more than one rebuild (plus the invalidation of the view): {rebuilds} were counted");
     }
 
+    /// A way into a mode, by what it is called in a report.
+    struct Entry {
+        what: &'static str,
+        enter: fn(&mut App),
+    }
+
+    fn entry(what: &'static str, enter: fn(&mut App)) -> Entry {
+        Entry { what, enter }
+    }
+
     /// The sketch modes are mutually exclusive: entering ANY tool extinguishes ALL the others.
     ///
     /// This catches not the fact that a field was left unset but the cause: leaving the modes rewritten by
@@ -419,14 +429,16 @@ mod live_session {
 
         let mut bad: Vec<String> = Vec::new();
         // every entry point into a mode — each must give a clean transition
-        let entries: Vec<(&str, fn(&mut App))> = vec![
-            ("a drawing tool", |a: &mut App| a.set_sk_tool(2)),
-            ("a dimension tool", |a: &mut App| qymcad_ui_state::set_dim_tool(&mut qymcad_ui_state::tools_of!(a), &mut a.viewing.mode_3d, &a.project, a.chosen.sel, a.sketch_ses, &mut a.status, 1)),
-            ("the selection mode", |a: &mut App| crate::gui::sketching::sketch_select_mode(&mut a.sketch_ctx())),
-            ("leaving the sketch", |a: &mut App| a.finish_sketch_edit()),
-            ("cancelling everything", |a: &mut App| a.cancel_all_tools()),
+        let entries: Vec<Entry> = vec![
+            entry("a drawing tool", |a: &mut App| a.set_sk_tool(2)),
+            entry("a dimension tool", |a: &mut App| {
+                qymcad_ui_state::set_dim_tool(&mut qymcad_ui_state::tools_of!(a), &mut a.viewing.mode_3d, &a.project, a.chosen.sel, a.sketch_ses, &mut a.status, 1)
+            }),
+            entry("the selection mode", |a: &mut App| crate::gui::sketching::sketch_select_mode(&mut a.sketch_ctx())),
+            entry("leaving the sketch", |a: &mut App| a.finish_sketch_edit()),
+            entry("cancelling everything", |a: &mut App| a.cancel_all_tools()),
         ];
-        for (what, enter) in entries {
+        for Entry { what, enter } in entries {
             let mut app = App::default();
             let si = rect(&mut app, 0.0, 0.0, 20.0, 20.0);
             app.chosen.sel = Sel::Sketch(si);

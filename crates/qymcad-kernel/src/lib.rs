@@ -2011,12 +2011,20 @@ pub fn document_tree(nodes: &[ImportNode], bodies: &[u64], stem: &str) -> Vec<qy
     tops.into_iter().map(|i| nest(i, nodes, &kids, bodies, stem, None)).collect()
 }
 
+/// AN EXACT FILE READ WITH ITS STRUCTURE: the bodies as meshes, the live solids they come from, and the tree they
+/// stand in.
+pub struct ExactTree {
+    pub bodies: Vec<Built>,
+    pub shapes: Vec<Shape>,
+    pub nodes: Vec<ImportNode>,
+}
+
 /// Read an exact file with its structure: the bodies and solids as `read_exact` gives them, and the tree they stand
 /// in.
 ///
 /// An IGES file with neither subfigures nor solids standing on their own - surfaces, sewn - comes as a node per solid,
 /// unnamed, where the file puts it.
-pub fn read_exact_tree(format: ExactFormat, path: &str, deflection: f64) -> Result<(Vec<Built>, Vec<Shape>, Vec<ImportNode>), String> {
+pub fn read_exact_tree(format: ExactFormat, path: &str, deflection: f64) -> Result<ExactTree, String> {
     if let Some(said) = missing_file(path) {
         return Err(said);
     }
@@ -2081,7 +2089,7 @@ pub fn read_exact_tree(format: ExactFormat, path: &str, deflection: f64) -> Resu
             out
         }
     };
-    Ok((bodies, shapes, nodes))
+    Ok(ExactTree { bodies, shapes, nodes })
 }
 
 /// Write a tree into a STEP file as its assembly: products, their occurrences, names and colours (see

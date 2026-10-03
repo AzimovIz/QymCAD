@@ -13,7 +13,7 @@ use crate::NamedMesh;
 /// names none.
 pub fn import_obj(path: &str) -> Result<Vec<NamedMesh>, String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("io-obj-read-failed#{e}"))?;
-    let (mut meshes, used, libs) = parse(&text)?;
+    let Parsed { mut meshes, used, libs } = parse(&text)?;
     // THE MATERIALS BESIDE THE FILE give the colours: `Kd` as a program writes it, taken as sRGB - the owner's print
     // head writes the same numbers into its MTL as its STEP holds for the same parts. A missing library is no colour.
     let dir = std::path::Path::new(path).parent().map(|p| p.to_path_buf()).unwrap_or_default();
@@ -44,13 +44,20 @@ fn diffuse(mtl: &str) -> Vec<(String, [u8; 3])> {
     out
 }
 
+/// What an OBJ file holds once read.
+struct Parsed {
+    meshes: Vec<NamedMesh>,
+    /// the material each mesh is drawn in: the first it names
+    used: Vec<Option<String>>,
+    /// the material libraries the file asks for
+    libs: Vec<String>,
+}
+
 /// A polygon of n corners becomes n - 2 triangles cut inside it (`triangulate`). An index may count back from
 /// the end (`-1` is the last vertex so far), and of `a/b/c` only the vertex is kept. The vertices belong to
 /// the whole file, so each object keeps only those its faces use - in the file's order, renumbered from zero, so
 /// a file this program wrote reads back with the same numbers.
-/// Returns the meshes, the material each one is drawn in (the first it names), and the material libraries the file
-/// asks for.
-fn parse(text: &str) -> Result<(Vec<NamedMesh>, Vec<Option<String>>, Vec<String>), String> {
+fn parse(text: &str) -> Result<Parsed, String> {
     let joined = text.replace("\\\r\n", " ").replace("\\\n", " "); // a trailing backslash continues the line
     let mut all: Vec<Point3> = Vec::new();
     let mut objects: Vec<(String, Vec<[usize; 3]>, Option<String>)> = vec![(String::new(), Vec::new(), None)];
@@ -118,7 +125,7 @@ fn parse(text: &str) -> Result<(Vec<NamedMesh>, Vec<Option<String>>, Vec<String>
     if meshes.is_empty() {
         return Err("io-obj-no-faces".into());
     }
-    Ok((meshes, used, libs))
+    Ok(Parsed { meshes, used, libs })
 }
 
 /// Cuts a polygon into triangles inside itself. A fan from the first corner is right only for a convex polygon: a

@@ -119,7 +119,8 @@ mod tests {
         let out = saved(app, ctx, file, move |app, path| crate::gui::io_jobs::write_exact_to(&mut app.live, &mut app.project, &mut app.regen, &mut app.status, &path, &job));
         let text = std::fs::read(&out).unwrap_or_else(|e| panic!("nothing written: {e}; the status: {}", app.status));
         assert!(text.iter().all(|b| b.is_ascii()), "the names go out as raw UTF-8");
-        let (bodies, _, back) = qymcad_kernel::read_exact_tree(format, &out.to_string_lossy(), 0.5).unwrap_or_else(|e| panic!("the file written does not read back: {e}"));
+        let qymcad_kernel::ExactTree { bodies, nodes: back, .. } =
+            qymcad_kernel::read_exact_tree(format, &out.to_string_lossy(), 0.5).unwrap_or_else(|e| panic!("the file written does not read back: {e}"));
         (bodies, back)
     }
 

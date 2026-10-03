@@ -398,12 +398,12 @@ fn hold(scene: Scene, steps: &[Step]) -> Result<Played, String> {
     // THE ROUND TRIPS, each named: they look at a program that may still not come to rest, and which of them it did
     // not come to rest in is the first thing to know about such a chain
     let path = format!("{}/qymcad-chain-{}-round.qcad", std::env::temp_dir().display(), std::process::id());
-    let rounds: [(&str, &dyn Fn(&mut Session) -> Result<(), String>); 3] = [
-        ("undo and redo", &|s| crate::oracles::undo_redo(s)),
-        ("save and open", &|s| crate::oracles::save_open(s, &path)),
-        ("rebuilding everything", &|s| crate::oracles::rebuild_everything(s)),
+    let rounds: [Round; 3] = [
+        Round { name: "undo and redo", run: &|s| crate::oracles::undo_redo(s) },
+        Round { name: "save and open", run: &|s| crate::oracles::save_open(s, &path) },
+        Round { name: "rebuilding everything", run: &|s| crate::oracles::rebuild_everything(s) },
     ];
-    for (name, round) in rounds {
+    for Round { name, run: round } in rounds {
         let mut went = Ok(());
         if let Some((said, _)) = failure(|| went = round(&mut s)) {
             went = Err(said);
@@ -411,6 +411,12 @@ fn hold(scene: Scene, steps: &[Step]) -> Result<Played, String> {
         went.map_err(|e| format!("was played through, and then, in {name}: {e}"))?;
     }
     Ok(played)
+}
+
+/// A round trip a played chain is put through, by its name.
+struct Round<'a> {
+    name: &'static str,
+    run: &'a dyn Fn(&mut Session) -> Result<(), String>,
 }
 
 /// How long a step may take to come to rest in a chain, in seconds.

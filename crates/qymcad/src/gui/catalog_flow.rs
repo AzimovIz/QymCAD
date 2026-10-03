@@ -34,11 +34,18 @@ mod tests {
         tail[..end?].rsplit(',').next()?.trim().parse::<u8>().ok()
     }
 
+    /// The tools wired to a button, each as the kind of launch and its number: the part and primitive commands, and
+    /// the sketch tools, dimensions, clicks and modifications.
+    struct Wired {
+        feats: Vec<(&'static str, u8)>,
+        sketch: Vec<(String, u8)>,
+    }
+
     /// The tool numbers that really exist in the interface.
     ///
     /// TWO FILES: the workbench panel lives in `panels.rs`, the common creation panel (datums, sketch)
     /// in `gui.rs`. The help guard was already caught out by this once, missing the datums entirely.
-    fn tools_in_ui() -> (Vec<(&'static str, u8)>, Vec<(String, u8)>) {
+    fn tools_in_ui() -> Wired {
         let joined = format!("{}\n{}", crate::gui::panels_source::PANELS, include_str!("../gui.rs"));
         let src: &str = &joined;
         let mut feats: Vec<(&'static str, u8)> = Vec::new();
@@ -77,14 +84,14 @@ mod tests {
                 }
             }
         }
-        (feats, sk)
+        Wired { feats, sketch: sk }
     }
 
     /// EVERY BUTTON HAS A CATALOGUE ROW. Otherwise the search will not find it, and a person will be
     /// certain the command does not exist.
     #[test]
     fn every_tool_in_the_ui_is_in_the_catalog() {
-        let (feats, sk) = tools_in_ui();
+        let Wired { feats, sketch: sk } = tools_in_ui();
         assert!(feats.len() > 20 && sk.len() > 15, "suspiciously few tools were found: {} and {}", feats.len(), sk.len());
         for (tag, n) in &feats {
             let found = COMMANDS.iter().any(|c| match (tag, c.launch) {
@@ -109,7 +116,7 @@ mod tests {
     /// AND THE OTHER WAY ROUND: the catalogue promises nothing the program does not have.
     #[test]
     fn the_catalog_promises_nothing_that_does_not_exist() {
-        let (feats, sk) = tools_in_ui();
+        let Wired { feats, sketch: sk } = tools_in_ui();
         for c in COMMANDS {
             let ok = match c.launch {
                 Launch::Feat(n) => feats.contains(&("feat", n)),

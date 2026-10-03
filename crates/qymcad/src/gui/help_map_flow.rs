@@ -233,6 +233,16 @@ mod tests {
         assert!(bad.is_empty(), "toolbar buttons with no help ({}):\n{}", bad.len(), bad.join("\n"));
     }
 
+    /// A toolbar tool by the key of its hint, and how it is taken in hand.
+    struct Armed {
+        hint: &'static str,
+        arm: fn(&mut crate::gui::App),
+    }
+
+    const fn armed(hint: &'static str, arm: fn(&mut crate::gui::App)) -> Armed {
+        Armed { hint, arm }
+    }
+
     /// AND F1 REALLY REACHES THE ARTICLE rather than the table merely promising it.
     ///
     /// THE CHECK ABOVE TURNED OUT TO BE INSUFFICIENT, and that is worth writing down. It asked the
@@ -245,16 +255,16 @@ mod tests {
     /// shows as pressed, and F1 is pressed.
     #[test]
     fn f1_reaches_the_article_of_an_armed_toolbar_tool() {
-        let cases: &[(&str, fn(&mut crate::gui::App))] = &[
-            ("tb-bool-bodies-hint", |a| a.params.boolean.pick = Some((1, 0))),
-            ("tb-move-hint", |a| crate::gui::commands::start_move_tool(&mut qymcad_ui_state::tools_of!(a), &mut a.status, 1)),
-            ("tb-copy-hint", |a| crate::gui::commands::start_move_tool(&mut qymcad_ui_state::tools_of!(a), &mut a.status, 2)),
-            ("tb-rotate-hint", |a| crate::gui::commands::start_move_tool(&mut qymcad_ui_state::tools_of!(a), &mut a.status, 3)),
-            ("tb-lin-array-hint", |a| crate::gui::commands::start_pattern(&mut qymcad_ui_state::tools_of!(a), &mut a.status, 1)),
-            ("tb-circ-array-hint", |a| crate::gui::commands::start_pattern(&mut qymcad_ui_state::tools_of!(a), &mut a.status, 2)),
-            ("tb-measure3d-hint", |a| a.side.m3.on = true),
+        let cases: &[Armed] = &[
+            armed("tb-bool-bodies-hint", |a| a.params.boolean.pick = Some((1, 0))),
+            armed("tb-move-hint", |a| crate::gui::commands::start_move_tool(&mut qymcad_ui_state::tools_of!(a), &mut a.status, 1)),
+            armed("tb-copy-hint", |a| crate::gui::commands::start_move_tool(&mut qymcad_ui_state::tools_of!(a), &mut a.status, 2)),
+            armed("tb-rotate-hint", |a| crate::gui::commands::start_move_tool(&mut qymcad_ui_state::tools_of!(a), &mut a.status, 3)),
+            armed("tb-lin-array-hint", |a| crate::gui::commands::start_pattern(&mut qymcad_ui_state::tools_of!(a), &mut a.status, 1)),
+            armed("tb-circ-array-hint", |a| crate::gui::commands::start_pattern(&mut qymcad_ui_state::tools_of!(a), &mut a.status, 2)),
+            armed("tb-measure3d-hint", |a| a.side.m3.on = true),
         ];
-        for (hint, arm) in cases {
+        for Armed { hint, arm } in cases {
             let mut app = crate::gui::App::default();
             arm(&mut app);
             assert_eq!(app.armed_toolbar_hint(), Some(*hint), "the hand is occupied and F1 does not recognise it: {hint}");

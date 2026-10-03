@@ -2384,21 +2384,21 @@ impl Project {
         // Lines and arcs are collected into bulge loops, offset with the arcs preserved, and reassembled into
         // lines and arcs - HELD TO THEIR SOURCE, as the circle is. Laid free, a rectangle's copy had eight freedoms of
         // its own, and resizing the rectangle left the copy where it was. See `hold_offset_loop` for how.
-        let src_lines: Vec<(Id, Id, (f64, f64), (f64, f64))> = ents
+        let src_lines: Vec<SourceLine> = ents
             .iter()
             .filter(|e| !e.construction)
             .filter_map(|e| match e.kind {
-                EntityKind::Line { a, b } => Some((a, b, at_of(&pts, a)?, at_of(&pts, b)?)),
+                EntityKind::Line { a, b } => Some(SourceLine { a, b, pa: at_of(&pts, a)?, pb: at_of(&pts, b)? }),
                 _ => None,
             })
             .collect();
-        let src_arcs: Vec<(Id, Id, Id, (f64, f64), f64)> = ents
+        let src_arcs: Vec<SourceArc> = ents
             .iter()
             .filter(|e| !e.construction)
             .filter_map(|e| match e.kind {
                 EntityKind::Arc { center, a, b, .. } => {
                     let (c, p) = (at_of(&pts, center)?, at_of(&pts, a)?);
-                    Some((center, a, b, c, (p.0 - c.0).hypot(p.1 - c.1)))
+                    Some(SourceArc { center, a, b, at: c, radius: (p.0 - c.0).hypot(p.1 - c.1) })
                 }
                 _ => None,
             })
@@ -4142,29 +4142,50 @@ enum OffsetSource {
     None,
 }
 
+/// A line of the source of an offset: its end points, and where they stand.
+struct SourceLine {
+    a: Id,
+    b: Id,
+    pa: (f64, f64),
+    pb: (f64, f64),
+}
+
+/// An arc of the source of an offset: its centre and end points, where the centre stands, and its radius.
+struct SourceArc {
+    center: Id,
+    a: Id,
+    b: Id,
+    at: (f64, f64),
+    radius: f64,
+}
+
 /// The source line a copy line from `v` to `w` runs along: parallel to it, and as far from it as the offset.
-fn offset_line_source(lines: &[(Id, Id, (f64, f64), (f64, f64))], v: (f64, f64), w: (f64, f64), dist: f64) -> OffsetSource {
+fn offset_line_source(lines: &[SourceLine], v: (f64, f64), w: (f64, f64), dist: f64) -> OffsetSource {
     let tol = 1e-6 * (1.0 + dist.abs());
     lines
         .iter()
-        .find(|(_, _, p, q)| {
+        .find(|SourceLine { pa: p, pb: q, .. }| {
             let (dx, dy) = (q.0 - p.0, q.1 - p.1);
             let len = dx.hypot(dy).max(1e-12);
             let cross = (dx * (w.1 - v.1) - dy * (w.0 - v.0)).abs() / (len * (w.0 - v.0).hypot(w.1 - v.1)).max(1e-12);
             let off = ((v.0 - p.0) * dy - (v.1 - p.1) * dx).abs() / len;
             cross < 1e-6 && (off - dist.abs()).abs() < tol
         })
-        .map_or(OffsetSource::None, |l| OffsetSource::Line(l.0, l.1))
+        .map_or(OffsetSource::None, |l| OffsetSource::Line(l.a, l.b))
 }
 
 /// The source arc a copy arc centred at `c` of radius `r` was offset from - the same centre, the radius apart by the
 /// offset - or the sharp source corner it rounds: centred on it, of the offset for a radius.
-fn offset_arc_source(arcs: &[(Id, Id, Id, (f64, f64), f64)], lines: &[(Id, Id, (f64, f64), (f64, f64))], c: (f64, f64), r: f64, dist: f64) -> OffsetSource {
+fn offset_arc_source(arcs: &[SourceArc], lines: &[SourceLine], c: (f64, f64), r: f64, dist: f64) -> OffsetSource {
     let tol = 1e-6 * (1.0 + dist.abs());
-    if let Some(a) = arcs.iter().find(|a| (a.3 .0 - c.0).hypot(a.3 .1 - c.1) < tol && ((r - a.4).abs() - dist.abs()).abs() < tol) {
-        return OffsetSource::Arc { center: a.0, a: a.1, b: a.2 };
+    if let Some(a) = arcs.iter().find(|a| (a.at.0 - c.0).hypot(a.at.1 - c.1) < tol && ((r - a.radius).abs() - dist.abs()).abs() < tol) {
+        return OffsetSource::Arc { center: a.center, a: a.a, b: a.b };
     }
-    lines.iter().flat_map(|l| [(l.0, l.2), (l.1, l.3)]).find(|(_, p)| (p.0 - c.0).hypot(p.1 - c.1) < tol && (r - dist.abs()).abs() < tol).map_or(OffsetSource::None, |(id, _)| OffsetSource::Corner(id))
+    lines
+        .iter()
+        .flat_map(|l| [(l.a, l.pa), (l.b, l.pb)])
+        .find(|(_, p)| (p.0 - c.0).hypot(p.1 - c.1) < tol && (r - dist.abs()).abs() < tol)
+        .map_or(OffsetSource::None, |(id, _)| OffsetSource::Corner(id))
 }
 
 /// THE CONSTRAINTS HOLDING AN OFFSET LOOP TO ITS SOURCE, one for each freedom of the copy and no more - a constraint

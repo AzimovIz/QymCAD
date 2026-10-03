@@ -97,6 +97,16 @@ fn a_fitted_wall_makes_a_face_of_its_own_area() {
     assert!(took.is_some_and(|a| (a - want).abs() < 1e-3 * want), "the fitted wall took {took:?} mm^2 of a saddle of {want}");
 }
 
+/// A side of the test body: its net of points by row and column, and the way it looks out.
+struct Side<'a> {
+    at: Box<dyn Fn(usize, usize) -> [f64; 3] + 'a>,
+    out: [f64; 3],
+}
+
+fn side<'a>(at: Box<dyn Fn(usize, usize) -> [f64; 3] + 'a>, out: [f64; 3]) -> Side<'a> {
+    Side { at, out }
+}
+
 /// A box of 40 x 40 standing on z = 0, its top the vault of an ellipse of half-axes 24 across and 20 up, run along y -
 /// a smooth wall on which no plane, cylinder, cone, sphere or torus lies, its bend drifting slowly from its crown to its
 /// eaves, as the walls of a handle do - every face drawn with a `grid` x `grid` net. Returns the mesh and the volume it
@@ -108,16 +118,16 @@ fn vaulted_box(grid: usize) -> (qymcad_core::geom::Mesh, f64) {
     let s = |i: usize| -h + 2.0 * h * i as f64 / grid as f64;
     let f = |j: usize| j as f64 / grid as f64;
     // each face as a net of points, and which way it looks out
-    let faces: Vec<(Box<dyn Fn(usize, usize) -> [f64; 3]>, [f64; 3])> = vec![
-        (Box::new(move |i, j| [s(i), s(j), top(s(i), s(j))]), [0.0, 0.0, 1.0]),
-        (Box::new(move |i, j| [s(i), s(j), 0.0]), [0.0, 0.0, -1.0]),
-        (Box::new(move |i, j| [s(i), -h, top(s(i), -h) * f(j)]), [0.0, -1.0, 0.0]),
-        (Box::new(move |i, j| [s(i), h, top(s(i), h) * f(j)]), [0.0, 1.0, 0.0]),
-        (Box::new(move |i, j| [-h, s(i), top(-h, s(i)) * f(j)]), [-1.0, 0.0, 0.0]),
-        (Box::new(move |i, j| [h, s(i), top(h, s(i)) * f(j)]), [1.0, 0.0, 0.0]),
+    let faces: Vec<Side> = vec![
+        side(Box::new(move |i, j| [s(i), s(j), top(s(i), s(j))]), [0.0, 0.0, 1.0]),
+        side(Box::new(move |i, j| [s(i), s(j), 0.0]), [0.0, 0.0, -1.0]),
+        side(Box::new(move |i, j| [s(i), -h, top(s(i), -h) * f(j)]), [0.0, -1.0, 0.0]),
+        side(Box::new(move |i, j| [s(i), h, top(s(i), h) * f(j)]), [0.0, 1.0, 0.0]),
+        side(Box::new(move |i, j| [-h, s(i), top(-h, s(i)) * f(j)]), [-1.0, 0.0, 0.0]),
+        side(Box::new(move |i, j| [h, s(i), top(h, s(i)) * f(j)]), [1.0, 0.0, 0.0]),
     ];
     let (mut verts, mut tris) = (Vec::new(), Vec::new());
-    for (at, out) in &faces {
+    for Side { at, out } in &faces {
         let base = verts.len() as u32;
         for i in 0..=grid {
             for j in 0..=grid {

@@ -688,6 +688,12 @@ pub(super) fn mesh_added(format: qymcad_ui_state::MeshFormat, pieces: &[qymcad_u
     crate::i18n::trn("io-mesh-added", &[("format", crate::gui::mesh_entry(format).name()), ("bodies", &pieces.len().to_string()), ("n", &tris.to_string())])
 }
 
+/// A body's mesh in its own coordinates and where it stands in the world.
+struct Placed {
+    own: qymcad_core::model::ExportMesh,
+    place: [f64; 12],
+}
+
 pub(crate) fn write_mesh_to(ed: qymcad_ui_state::Editing, live: &mut LiveGeom, path: &std::path::Path, job: &MeshJob) {
     let (bodies, deflection, format) = (&job.bodies, job.deflection, job.format);
     let name = crate::gui::mesh_entry(format).name();
@@ -699,7 +705,7 @@ pub(crate) fn write_mesh_to(ed: qymcad_ui_state::Editing, live: &mut LiveGeom, p
         return;
     }
     let mut moved: Vec<(Id, qymcad_kernel::Shape, [f64; 12])> = Vec::new();
-    let mut raw: Vec<(Id, qymcad_core::geom::Mesh, [f64; 12], Vec<Option<[u8; 3]>>)> = Vec::new();
+    let mut raw: Vec<Placed> = Vec::new();
     for &b in bodies.iter() {
         let m = ed.project.body_world_transform(b);
         if let Some(s) = live.shapes.remove(&b) {
@@ -713,7 +719,7 @@ pub(crate) fn write_mesh_to(ed: qymcad_ui_state::Editing, live: &mut LiveGeom, p
                 .filter(|(_, places)| places.len() == ed.project.bodies[i].mesh.tris.len())
                 .map(|(palette, places)| places.iter().map(|&k| palette.get(k as usize).copied()).collect())
                 .unwrap_or_default();
-            raw.push((b, ed.project.bodies[i].mesh.clone(), m, tri));
+            raw.push(Placed { own: qymcad_core::model::ExportMesh { body: b, mesh: ed.project.bodies[i].mesh.clone(), tri_colors: tri }, place: m });
         }
     }
     if moved.is_empty() && raw.is_empty() {
@@ -726,12 +732,12 @@ pub(crate) fn write_mesh_to(ed: qymcad_ui_state::Editing, live: &mut LiveGeom, p
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         // every body's mesh in its own coordinates, and where it stands in the world
-        let mut own: Vec<(Id, qymcad_core::geom::Mesh, [f64; 12], Vec<Option<[u8; 3]>>)> = Vec::new();
+        let mut own: Vec<Placed> = Vec::new();
         let mut failed = 0usize; // a body whose tessellation failed is NOT dropped silently but reported
         for (id, s, m) in &moved {
             if let Some(qymcad_core::geom::Built { mesh, faces }) = s.tessellate_merged(deflection) {
                 let tri = tri_colours(&tree, *id, &mesh, &faces);
-                own.push((*id, mesh, *m, tri));
+                own.push(Placed { own: qymcad_core::model::ExportMesh { body: *id, mesh, tri_colors: tri }, place: *m });
             } else {
                 failed += 1;
             }
@@ -746,14 +752,14 @@ pub(crate) fn write_mesh_to(ed: qymcad_ui_state::Editing, live: &mut LiveGeom, p
         let written = if tree.is_empty() {
             let world: Vec<qymcad_core::geom::Mesh> = own
                 .into_iter()
-                .map(|(_, mut mesh, m, _)| {
-                    mesh.transform(&m);
+                .map(|Placed { own: qymcad_core::model::ExportMesh { mut mesh, .. }, place }| {
+                    mesh.transform(&place);
                     mesh
                 })
                 .collect();
             write_meshes(format, &world, &p)
         } else {
-            let own: Vec<(Id, qymcad_core::geom::Mesh, Vec<Option<[u8; 3]>>)> = own.into_iter().map(|(id, mesh, _, tri)| (id, mesh, tri)).collect();
+            let own: Vec<qymcad_core::model::ExportMesh> = own.into_iter().map(|p| p.own).collect();
             match format {
                 qymcad_ui_state::MeshFormat::ThreeMf => qymcad_io::export_3mf_tree(&tree, &own, &p),
                 _ => qymcad_io::export_glb_tree(&tree, &own, &p), // `mesh_job` gives a tree to GLB and 3MF alone

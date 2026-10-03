@@ -99,9 +99,23 @@ mod tests {
         l.chars().filter(|c| c.is_alphanumeric() || *c == '_').count()
     }
 
-    /// Blocks of `impl App`, the methods inside them (working ones and test facades apart), their size in word
-    /// characters, and the worst files.
-    fn impl_app() -> (usize, usize, usize, usize, Vec<(String, usize)>) {
+    /// What `impl App` comes to: its blocks, the methods inside them (working ones and test facades apart), their size
+    /// in word characters, and the files holding most of it.
+    struct ImplApp {
+        blocks: usize,
+        methods: usize,
+        facades: usize,
+        size: usize,
+        worst: Vec<FileSize>,
+    }
+
+    /// The word characters of `impl App` one file holds.
+    struct FileSize {
+        file: String,
+        size: usize,
+    }
+
+    fn impl_app() -> ImplApp {
         let (mut blocks, mut methods, mut facades, mut lines_in, mut per) = (0usize, 0usize, 0usize, 0usize, Vec::new());
         for (name, text) in sources() {
             // The file DEFINING the counter is skipped: the words above would count themselves.
@@ -141,12 +155,12 @@ mod tests {
             }
             lines_in += here_lines;
             if here_lines > 0 {
-                per.push((name, here_lines));
+                per.push(FileSize { file: name, size: here_lines });
             }
         }
-        per.sort_by_key(|a| std::cmp::Reverse(a.1));
+        per.sort_by_key(|a| std::cmp::Reverse(a.size));
         per.truncate(10);
-        (blocks, methods, facades, lines_in, per)
+        ImplApp { blocks, methods, facades, size: lines_in, worst: per }
     }
 
     /// How many fields the `App` struct carries.
@@ -169,8 +183,8 @@ mod tests {
 
     #[test]
     fn fewer_and_fewer_places_hang_methods_on_the_application() {
-        let (blocks, methods, facades, lines_in, per) = impl_app();
-        let worst: Vec<String> = per.iter().map(|(f, n)| format!("  {n:7} word characters  {f}")).collect();
+        let ImplApp { blocks, methods, facades, size: lines_in, worst: per } = impl_app();
+        let worst: Vec<String> = per.iter().map(|FileSize { file: f, size: n }| format!("  {n:7} word characters  {f}")).collect();
         assert_eq!(
             blocks, IMPL_APP_CEILING,
             "the count of `impl App` blocks has moved off its mark of {IMPL_APP_CEILING}: now {blocks}.\n\

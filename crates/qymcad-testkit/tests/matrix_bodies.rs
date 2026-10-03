@@ -19,19 +19,30 @@ fn regen_v(p: &mut Project, body: u64, fails: &mut Vec<String>, label: &str) -> 
     shapes.get(&body).map(|s| s.volume()).unwrap_or(0.0)
 }
 
+/// A primitive by its name, how it is added, and its exact volume.
+struct Primitive {
+    label: &'static str,
+    make: Box<dyn Fn(&mut Project) -> u64>,
+    volume: f64,
+}
+
+fn primitive(label: &'static str, make: Box<dyn Fn(&mut Project) -> u64>, volume: f64) -> Primitive {
+    Primitive { label, make, volume }
+}
+
 /// Every 3D primitive: exact volume.
 #[test]
 fn matrix_primitives_3d() {
     let mut fails = Vec::new();
-    let cases: Vec<(&str, Box<dyn Fn(&mut Project) -> u64>, f64)> = vec![
-        ("box 10x20x30", Box::new(|p: &mut Project| p.add_box(10.0, 20.0, 30.0)), 6000.0),
-        ("cylinder r10 h20", Box::new(|p: &mut Project| p.add_cylinder(10.0, 20.0)), PI * 100.0 * 20.0),
-        ("sphere r10", Box::new(|p: &mut Project| p.add_sphere(10.0)), 4.0 / 3.0 * PI * 1000.0),
-        ("cone 10->5 h12", Box::new(|p: &mut Project| p.add_cone(10.0, 5.0, 12.0)), PI * 12.0 / 3.0 * (100.0 + 50.0 + 25.0)),
-        ("torus R20 r5", Box::new(|p: &mut Project| p.add_torus(20.0, 5.0)), 2.0 * PI * PI * 20.0 * 25.0),
-        ("prism 6 sides r10 h15", Box::new(|p: &mut Project| p.add_prism(10.0, 6, 15.0)), 1.5 * 3.0_f64.sqrt() * 100.0 * 15.0),
+    let cases: Vec<Primitive> = vec![
+        primitive("box 10x20x30", Box::new(|p: &mut Project| p.add_box(10.0, 20.0, 30.0)), 6000.0),
+        primitive("cylinder r10 h20", Box::new(|p: &mut Project| p.add_cylinder(10.0, 20.0)), PI * 100.0 * 20.0),
+        primitive("sphere r10", Box::new(|p: &mut Project| p.add_sphere(10.0)), 4.0 / 3.0 * PI * 1000.0),
+        primitive("cone 10->5 h12", Box::new(|p: &mut Project| p.add_cone(10.0, 5.0, 12.0)), PI * 12.0 / 3.0 * (100.0 + 50.0 + 25.0)),
+        primitive("torus R20 r5", Box::new(|p: &mut Project| p.add_torus(20.0, 5.0)), 2.0 * PI * PI * 20.0 * 25.0),
+        primitive("prism 6 sides r10 h15", Box::new(|p: &mut Project| p.add_prism(10.0, 6, 15.0)), 1.5 * 3.0_f64.sqrt() * 100.0 * 15.0),
     ];
-    for (label, mk, exp) in cases {
+    for Primitive { label, make: mk, volume: exp } in cases {
         let mut p = Project::default();
         p.new_document();
         let body = mk(&mut p);

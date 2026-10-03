@@ -7,7 +7,7 @@
 //!
 //! The reference `tests/data/assembly.igs` is written by `tests/data/gen_iges.cpp`, laid out the way that file is: the
 //! assembly of `assembly.step` - a plate twice, a subassembly holding a pin - as subfigures, solids and face colours.
-use qymcad_kernel::{read_exact_tree, ExactFormat, ImportNode};
+use qymcad_kernel::{ExactTree, read_exact_tree, ExactFormat, ImportNode};
 
 /// The names the reference was written with: the assembly, the plate, the subassembly, the pin.
 const NAMES: &str = include_str!("data/assembly.names");
@@ -16,7 +16,7 @@ fn name(k: usize) -> &'static str {
     NAMES.lines().nth(k).expect("a name of the reference")
 }
 
-fn reference() -> (Vec<qymcad_core::geom::Built>, Vec<qymcad_kernel::Shape>, Vec<ImportNode>) {
+fn reference() -> ExactTree {
     read_exact_tree(ExactFormat::Iges, concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/assembly.igs"), 0.5).expect("the reference reads")
 }
 
@@ -44,7 +44,7 @@ fn named(nodes: &[ImportNode], name: &str) -> Vec<usize> {
 
 #[test]
 fn an_iges_assembly_comes_with_its_tree_and_names() {
-    let (_, _, nodes) = reference();
+    let ExactTree { nodes, .. } = reference();
     let tree: Vec<(Option<usize>, &str)> = nodes.iter().map(|n| (n.parent, n.name.as_str())).collect();
     let roots: Vec<usize> = (0..nodes.len()).filter(|&i| nodes[i].parent.is_none()).collect();
     assert_eq!(roots.len(), 1, "one root: {tree:?}");
@@ -56,7 +56,7 @@ fn an_iges_assembly_comes_with_its_tree_and_names() {
 
 #[test]
 fn an_iges_product_is_read_once_and_placed_by_the_tree() {
-    let (bodies, shapes, nodes) = reference();
+    let ExactTree { bodies, shapes, nodes } = reference();
     assert_eq!((bodies.len(), shapes.len()), (2, 2), "two products, two bodies");
     let plates = named(&nodes, name(1));
     let first = nodes[plates[0]].solid.expect("the first plate brings its body");
@@ -73,7 +73,7 @@ fn an_iges_product_is_read_once_and_placed_by_the_tree() {
 /// THE COLOUR OF A BODY IS THE ONE ITS FACES SHARE: the file colours faces, not solids.
 #[test]
 fn an_iges_assembly_brings_the_colours_of_its_faces() {
-    let (_, _, nodes) = reference();
+    let ExactTree { nodes, .. } = reference();
     let near = |c: Option<[f32; 3]>, want: [f32; 3]| c.is_some_and(|c| c.iter().zip(want).all(|(g, w)| (g - w).abs() < 0.01));
     let plate = named(&nodes, name(1))[0];
     assert!(near(nodes[plate].color, [0.8, 0.1, 0.1]), "the plate is coloured {:?}, not red", nodes[plate].color);
@@ -87,7 +87,7 @@ fn an_iges_assembly_brings_the_colours_of_its_faces() {
 #[ignore = "the owner's file"]
 fn the_print_head_in_iges_comes_as_its_author_built_it() {
     let Ok(path) = std::env::var("QYM_CONDOR_IGS") else { return };
-    let (_, shapes, nodes) = read_exact_tree(ExactFormat::Iges, &path, 0.5).expect("reads");
+    let ExactTree { shapes, nodes, .. } = read_exact_tree(ExactFormat::Iges, &path, 0.5).expect("reads");
     let first: Vec<&str> = nodes.iter().filter(|n| n.parent.is_none()).map(|n| n.name.as_str()).collect();
     println!("{} nodes, {} bodies, {} repeats, coloured {}", nodes.len(), shapes.len(), nodes.iter().filter(|n| n.repeat_of.is_some()).count(), nodes.iter().filter(|n| n.color.is_some()).count());
     println!("faces of a colour of their own: {}", nodes.iter().map(|n| n.faces.len()).sum::<usize>());
@@ -100,7 +100,7 @@ fn the_print_head_in_iges_comes_as_its_author_built_it() {
 /// gets when the body is wrapped. A single face of another colour used to leave the whole part without one.
 #[test]
 fn an_iges_face_brings_a_colour_of_its_own() {
-    let (_, shapes, nodes) = reference();
+    let ExactTree { shapes, nodes, .. } = reference();
     let plate = named(&nodes, name(1))[0];
     let near = |c: Option<[f32; 3]>, want: [f32; 3]| c.is_some_and(|c| c.iter().zip(want).all(|(g, w)| (g - w).abs() < 0.01));
     assert!(near(nodes[plate].color, [0.8, 0.1, 0.1]), "the plate is coloured {:?}, not red", nodes[plate].color);
@@ -118,7 +118,7 @@ fn an_iges_face_brings_a_colour_of_its_own() {
 /// blue as a whole, each where the file puts it.
 #[test]
 fn a_flat_iges_comes_with_its_names_colours_and_groups() {
-    let (_, shapes, nodes) = read_exact_tree(ExactFormat::Iges, concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/flat.igs"), 0.5).expect("the flat reference reads");
+    let ExactTree { shapes, nodes, .. } = read_exact_tree(ExactFormat::Iges, concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/flat.igs"), 0.5).expect("the flat reference reads");
     let tree: Vec<(Option<usize>, &str)> = nodes.iter().map(|n| (n.parent, n.name.as_str())).collect();
     assert_eq!(shapes.len(), 2, "two solids: {tree:?}");
     let roots: Vec<&str> = nodes.iter().filter(|n| n.parent.is_none()).map(|n| n.name.as_str()).collect();
@@ -147,7 +147,7 @@ fn a_flat_iges_comes_with_its_names_colours_and_groups() {
 /// the plate red with its top face green, the pin blue, where the file puts them.
 #[test]
 fn a_file_of_surfaces_comes_with_its_names_colours_and_groups() {
-    let (bodies, shapes, nodes) = read_exact_tree(ExactFormat::Iges, concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/surfaces.igs"), 0.5).expect("the surfaces reference reads");
+    let ExactTree { bodies, shapes, nodes } = read_exact_tree(ExactFormat::Iges, concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/surfaces.igs"), 0.5).expect("the surfaces reference reads");
     let tree: Vec<(Option<usize>, &str)> = nodes.iter().map(|n| (n.parent, n.name.as_str())).collect();
     let roots: Vec<&str> = nodes.iter().filter(|n| n.parent.is_none()).map(|n| n.name.as_str()).collect();
     assert_eq!(roots, [name(1), name(2)], "the plate and the group at the top, under their names: {tree:?}");
@@ -183,7 +183,7 @@ fn a_file_of_surfaces_comes_with_its_names_colours_and_groups() {
 /// solid does, and the pin's surfaces sewn into its body under their group, in its colour.
 #[test]
 fn a_file_of_a_solid_and_surfaces_loses_neither() {
-    let (_, shapes, nodes) = read_exact_tree(ExactFormat::Iges, concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/mixed.igs"), 0.5).expect("the mixed reference reads");
+    let ExactTree { shapes, nodes, .. } = read_exact_tree(ExactFormat::Iges, concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/mixed.igs"), 0.5).expect("the mixed reference reads");
     let tree: Vec<(Option<usize>, &str)> = nodes.iter().map(|n| (n.parent, n.name.as_str())).collect();
     let roots: Vec<&str> = nodes.iter().filter(|n| n.parent.is_none()).map(|n| n.name.as_str()).collect();
     assert_eq!(roots, [name(1), name(2)], "the plate and the group at the top, under their names: {tree:?}");

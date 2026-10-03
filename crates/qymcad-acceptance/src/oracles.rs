@@ -212,31 +212,71 @@ pub fn whole(doc: &Document) -> Vec<String> {
 /// WHAT A SKETCH HOLDS, counted: its name, then its points, lines, arcs, circles, ellipses, splines, texts and
 /// constraints. The timeline keeps a node for a sketch whatever the sketch holds, so a sketch emptied by a round
 /// trip would be seen nowhere else.
-pub type SketchShape = (String, [usize; 8]);
+#[derive(Clone, Debug, PartialEq)]
+pub struct SketchShape {
+    pub name: String,
+    pub counts: [usize; 8],
+}
 
 /// The sketches of the document, counted.
 pub fn sketch_shapes(doc: &Document) -> Vec<SketchShape> {
-    doc.sketches.iter().map(|sk| (sk.name.clone(), [sk.points, sk.lines, sk.arcs, sk.circles, sk.ellipses, sk.splines, sk.texts, sk.constraints])).collect()
+    doc.sketches.iter().map(|sk| SketchShape { name: sk.name.clone(), counts: [sk.points, sk.lines, sk.arcs, sk.circles, sk.ellipses, sk.splines, sk.texts, sk.constraints] }).collect()
+}
+
+/// A node of the timeline as a check compares it: its name, its kind, and why it is red, if it is.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NodeShape {
+    pub name: String,
+    pub kind: String,
+    pub error: Option<String>,
+}
+
+/// The nodes of the timeline, in its order.
+pub fn node_shapes(doc: &Document) -> Vec<NodeShape> {
+    doc.features.iter().map(|f| NodeShape { name: f.name.clone(), kind: f.kind.clone(), error: f.error.clone() }).collect()
+}
+
+/// A named face of a body and where it lies, to a hundredth of a mm.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct NamedFace {
+    name: u32,
+    at: [i64; 3],
+}
+
+/// A body as a round trip compares it: its name, its volume in thousandths of a mm^3, its faces and edges, and the
+/// names of its faces.
+#[derive(Debug, PartialEq)]
+struct BodyShape {
+    name: String,
+    volume: i64,
+    faces: usize,
+    edges: Option<usize>,
+    named_faces: Vec<NamedFace>,
 }
 
 /// What a round trip compares: the timeline with its reasons, the bodies with their numbers and the names of their
 /// faces, and the sketches with what they hold.
-type Shape = (Vec<(String, String, Option<String>)>, Vec<(String, i64, usize, Option<usize>, Vec<(u32, [i64; 3])>)>, Vec<SketchShape>);
+#[derive(Debug, PartialEq)]
+struct Shape {
+    nodes: Vec<NodeShape>,
+    bodies: Vec<BodyShape>,
+    sketches: Vec<SketchShape>,
+}
 
 /// The names of a body's faces, each with where its face lies (to a hundredth of a mm), in the order of the names: the
 /// order the program lists faces in is its own business, a name that moves to another face is not.
-fn named_faces(b: &qymcad::Solid) -> Vec<(u32, [i64; 3])> {
-    let mut out: Vec<(u32, [i64; 3])> = b.face_names.iter().zip(&b.face_centres).map(|(n, c)| (*n, c.map(|v| (v * 100.0).round() as i64))).collect();
+fn named_faces(b: &qymcad::Solid) -> Vec<NamedFace> {
+    let mut out: Vec<NamedFace> = b.face_names.iter().zip(&b.face_centres).map(|(n, c)| NamedFace { name: *n, at: c.map(|v| (v * 100.0).round() as i64) }).collect();
     out.sort();
     out
 }
 
 fn shape(doc: &Document) -> Shape {
-    (
-        doc.features.iter().map(|f| (f.name.clone(), f.kind.clone(), f.error.clone())).collect(),
-        doc.bodies.iter().map(|b| (b.name.clone(), (b.volume * 1e3).round() as i64, b.faces, b.edges, named_faces(b))).collect(),
-        sketch_shapes(doc),
-    )
+    Shape {
+        nodes: node_shapes(doc),
+        bodies: doc.bodies.iter().map(|b| BodyShape { name: b.name.clone(), volume: (b.volume * 1e3).round() as i64, faces: b.faces, edges: b.edges, named_faces: named_faces(b) }).collect(),
+        sketches: sketch_shapes(doc),
+    }
 }
 
 /// UNDO AND THEN REDO GIVE BACK THE SAME DOCUMENT.

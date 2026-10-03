@@ -60,6 +60,32 @@ impl Pass<'_> {
     }
 }
 
+/// A NODE'S PARCEL in a wave: the node, the body it writes, and the work that builds it.
+struct Parcel {
+    node: Id,
+    body: Id,
+    job: crate::feature::KernelJob,
+}
+
+/// A parcel sent to another thread, with the worker that holds the bodies it reads.
+struct Travelling {
+    parcel: Parcel,
+    worker: Box<dyn crate::feature::KernelWorker>,
+}
+
+/// A parcel back from its thread: what it built, and the worker to give back to the shared kernel.
+struct Returned {
+    node: Id,
+    computed: Computed,
+    worker: Box<dyn crate::feature::KernelWorker>,
+}
+
+/// What a node's work came to, kept until the walk writes it down: the body it writes and the result.
+struct Computed {
+    body: Id,
+    res: Result<crate::geom::Built, crate::errors::CoreError>,
+}
+
 /// Estimate of how much work a rebuild will be; see [`Project::regen_plan`].
 #[derive(Default, Debug, Clone)]
 pub struct RegenPlan {
@@ -797,7 +823,7 @@ impl Project {
         // can be built at the same time. The document itself stays on this thread: a worker is given the bodies
         // its node needs and nothing else, and what it built comes home before anything is written down.
         let hands = kernel.workers();
-        let mut computed: std::collections::HashMap<Id, (Id, Result<crate::geom::Built, crate::errors::CoreError>, Option<Box<dyn crate::feature::KernelWorker>>)> = std::collections::HashMap::new();
+        let mut computed: std::collections::HashMap<Id, Computed> = std::collections::HashMap::new();
         let mut work = 0usize;
         // THE ORDER OF THE WALK: the timeline, except that a batch just computed is written down straight away.
         //
@@ -984,56 +1010,56 @@ impl Project {
                 let held: std::collections::HashSet<Id> = computed.keys().copied().collect();
                 let ready = self.ready_from(i, &dirty, &held, &walked, limit);
                 if ready.len() > 1 {
-                    let mut parcels: Vec<(Id, Id, crate::feature::KernelJob)> = Vec::new();
+                    let mut parcels: Vec<Parcel> = Vec::new();
                     for &j in &ready {
                         let nid = self.timeline[j].id;
                         let kind_here = self.timeline[j].kind.clone();
                         let mut p = pass!(nid);
                         if let Some((out, job)) = self.prep_node(&mut p, &kind_here) {
-                            parcels.push((nid, out, job));
+                            parcels.push(Parcel { node: nid, body: out, job });
                         }
                     }
                     // A body wanted by two parcels keeps both of them here: the shape cannot be in two threads
                     // at once, and copying it would cost what the work costs.
                     let mut wanted: std::collections::HashMap<Id, usize> = std::collections::HashMap::new();
-                    for (_, _, job) in &parcels {
-                        for b in job.inputs() {
+                    for parcel in &parcels {
+                        for b in parcel.job.inputs() {
                             *wanted.entry(*b).or_insert(0) += 1;
                         }
                     }
                     let (mut alone, mut here): (Vec<_>, Vec<_>) = (Vec::new(), Vec::new());
                     for parcel in parcels {
-                        if parcel.2.inputs().iter().all(|b| wanted.get(b).copied().unwrap_or(0) <= 1) {
+                        if parcel.job.inputs().iter().all(|b| wanted.get(b).copied().unwrap_or(0) <= 1) {
                             alone.push(parcel);
                         } else {
                             here.push(parcel);
                         }
                     }
                     // the parcels that travel: each with the bodies it needs, taken out of the shared kernel
-                    let mut sent: Vec<(Id, Id, crate::feature::KernelJob, Box<dyn crate::feature::KernelWorker>)> = Vec::new();
-                    for (nid, out, job) in alone {
-                        match kernel.split_off(job.inputs()) {
-                            Some(worker) => sent.push((nid, out, job, worker)),
-                            None => here.push((nid, out, job)),
+                    let mut sent: Vec<Travelling> = Vec::new();
+                    for parcel in alone {
+                        match kernel.split_off(parcel.job.inputs()) {
+                            Some(worker) => sent.push(Travelling { parcel, worker }),
+                            None => here.push(parcel),
                         }
                     }
                     if !sent.is_empty() {
                         report.waves.push(sent.len());
                         // as many threads as the kernel allows, each taking its share of the parcels in turn
-                        let mut lanes: Vec<Vec<(Id, Id, crate::feature::KernelJob, Box<dyn crate::feature::KernelWorker>)>> = (0..hands.min(sent.len())).map(|_| Vec::new()).collect();
+                        let mut lanes: Vec<Vec<Travelling>> = (0..hands.min(sent.len())).map(|_| Vec::new()).collect();
                         for (n, parcel) in sent.into_iter().enumerate() {
                             let lane = n % lanes.len();
                             lanes[lane].push(parcel);
                         }
-                        let mut back: Vec<(Id, Id, Result<crate::geom::Built, crate::errors::CoreError>, Box<dyn crate::feature::KernelWorker>)> = Vec::new();
+                        let mut back: Vec<Returned> = Vec::new();
                         std::thread::scope(|scope| {
                             let mut running = Vec::new();
                             for lane in lanes {
                                 running.push(scope.spawn(move || {
                                     lane.into_iter()
-                                        .map(|(nid, out, job, worker)| {
-                                            let res = job.run(worker.kernel());
-                                            (nid, out, res, worker)
+                                        .map(|Travelling { parcel, worker }| {
+                                            let res = parcel.job.run(worker.kernel());
+                                            Returned { node: parcel.node, computed: Computed { body: parcel.body, res }, worker }
                                         })
                                         .collect::<Vec<_>>()
                                 }));
@@ -1048,15 +1074,15 @@ impl Project {
                         // computed in place take their source from the shared kernel, and a source that had
                         // travelled would not be there. What a worker built carries its own face names inside
                         // the shape, so applying it later from the shared kernel answers the same.
-                        for (nid, out, res, worker) in back {
+                        for Returned { node, computed: done, worker } in back {
                             kernel.absorb(worker);
-                            computed.insert(nid, (out, res, None));
+                            computed.insert(node, done);
                         }
                     }
                     // and the ones that stayed: computed here, on the shared kernel
-                    for (nid, out, job) in here {
+                    for Parcel { node, body, job } in here {
                         let res = job.run(kernel);
-                        computed.insert(nid, (out, res, None));
+                        computed.insert(node, Computed { body, res });
                     }
                     // written down next, in timeline order, before the walk moves on (see the order of the walk)
                     for &j in ready.iter().rev() {
@@ -1072,7 +1098,7 @@ impl Project {
             // prepare, compute, apply. That is what lets a wave be computed at once (see `prep_node`): the same
             // parcels, several at a time.
             let mut done = false;
-            if let Some((out, res, _)) = computed.remove(&node_id) {
+            if let Some(Computed { body: out, res }) = computed.remove(&node_id) {
                 // already built, by this thread or another: what is left is to write it into the document
                 let mut p = pass!(node_id);
                 clear = self.apply_regen(p.landing(), out, res);

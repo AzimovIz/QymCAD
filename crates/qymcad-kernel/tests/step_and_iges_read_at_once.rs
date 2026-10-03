@@ -7,14 +7,14 @@
 //! while another thread made the first STEP one (`STEPControl_Controller::Init`). Each kind sets OCCT's data exchange up
 //! the first time it is made, in process-wide state, and each was held by a lock of its own. An import runs on a worker
 //! thread, so a document holding both can bring them together.
-use qymcad_kernel::{read_exact_tree, ExactFormat};
+use qymcad_kernel::{ExactTree, read_exact_tree, ExactFormat};
 
 const STEP: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/assembly.step");
 const IGES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/assembly.igs");
 
 /// What a reading gives, told by its counts: the bodies, the nodes of the tree, the faces of a colour of their own.
 fn read(format: ExactFormat, path: &str) -> (usize, usize, usize) {
-    let (bodies, _, nodes) = read_exact_tree(format, path, 0.5).expect("the reference reads");
+    let ExactTree { bodies, nodes, .. } = read_exact_tree(format, path, 0.5).expect("the reference reads");
     (bodies.len(), nodes.len(), nodes.iter().map(|n| n.faces.len()).sum())
 }
 

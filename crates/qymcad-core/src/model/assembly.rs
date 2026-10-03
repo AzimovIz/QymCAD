@@ -2782,3 +2782,12 @@ pub struct ExportNode {
     /// Colours of single faces of the part's body, by the face's persistent id, as sRGB bytes.
     pub face_colors: Vec<(u32, [u8; 3])>,
 }
+
+/// THE MESH OF ONE BODY GOING OUT in a tree, in the part's own coordinates. `tri_colors` holds a colour for every
+/// triangle when the faces carry colours of their own, and is empty when the part's colour covers it all.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExportMesh {
+    pub body: Id,
+    pub mesh: crate::geom::Mesh,
+    pub tri_colors: Vec<Option<[u8; 3]>>,
+}

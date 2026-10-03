@@ -966,6 +966,21 @@ fn a_slider_on_flat_faces_moves_along_the_face_not_away_from_it() {
     assert!(d[2].abs() < 1e-6, "the body moved along the face normal (up or down) when it must slide along the face: displacement {d:?}");
 }
 
+/// An anchor a joint is tried on: its name, how to build one on part `c`, and the travel axis a slider is expected
+/// to take from it.
+struct Anchor {
+    name: &'static str,
+    make: Box<MakeAnchor>,
+    axis: [f64; 3],
+}
+
+/// How an anchor is built on part `c`.
+type MakeAnchor = dyn Fn(&mut Project, Id) -> AnchorRef;
+
+fn anchor(name: &'static str, make: Box<MakeAnchor>, axis: [f64; 3]) -> Anchor {
+    Anchor { name, make, axis }
+}
+
 /// Acceptance matrix: every joint kind on every anchor kind behaves as expected.
 ///
 /// Checking a slider on an edge alone left the face case travelling along the normal. All three anchor kinds
@@ -978,16 +993,16 @@ fn every_kind_on_every_anchor_moves_the_way_a_human_expects() {
 
     // Anchors: a name, how to build one on part `c`, and the expected travel axis for a slider.
     let s = 1.0 / 2.0_f64.sqrt();
-    let anchors: Vec<(&str, Box<dyn Fn(&mut Project, Id) -> AnchorRef>, [f64; 3])> = vec![
-        ("part origin", Box::new(|_p: &mut Project, _c: Id| AnchorRef::Origin), [0.0, 0.0, 1.0]),
-        (
+    let anchors: Vec<Anchor> = vec![
+        anchor("part origin", Box::new(|_p: &mut Project, _c: Id| AnchorRef::Origin), [0.0, 0.0, 1.0]),
+        anchor(
             "planar face (normal +Z)",
             Box::new(|_p: &mut Project, _c: Id| AnchorRef::FaceCenter(1, FaceKey { index: 0, centroid: [0.0; 3], normal: [0.0, 0.0, 1.0], id: 0 })),
             // Along the face rather than along the normal: any axis in the XY plane will do, so Z is checked
             // to be near zero.
             [0.0, 0.0, 0.0],
         ),
-        (
+        anchor(
             "straight diagonal edge",
             Box::new(move |p: &mut Project, c: Id| {
                 p.set_active_component(Some(c));
@@ -1007,7 +1022,7 @@ fn every_kind_on_every_anchor_moves_the_way_a_human_expects() {
         ),
     ];
 
-    for (anchor_name, make, axis) in &anchors {
+    for Anchor { name: anchor_name, make, axis } in &anchors {
         for (kind, dof, moves) in [
             (JointKind::Rigid, 0u8, false),
             (JointKind::Revolute, 1, false),

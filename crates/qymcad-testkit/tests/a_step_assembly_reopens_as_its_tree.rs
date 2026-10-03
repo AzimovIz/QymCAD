@@ -4,7 +4,7 @@
 //! The reference is the kernel's `tests/data/assembly.step`: an assembly holding a plate twice (at x 0 and at x 30)
 //! and a subassembly at (5, 10, 0) holding a pin at z 5.
 use qymcad_core::model::Project;
-use qymcad_kernel::{document_tree, read_exact_tree, ExactFormat};
+use qymcad_kernel::{ExactTree, document_tree, read_exact_tree, ExactFormat};
 
 const STEP: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../qymcad-kernel/tests/data/assembly.step");
 const IGES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../qymcad-kernel/tests/data/assembly.igs");
@@ -42,7 +42,7 @@ fn an_iges_assembly_reopens_as_its_tree() {
 }
 
 fn reopens(format: ExactFormat, file: &str, stem: &str) {
-    let (bodies, _, nodes) = read_exact_tree(format, file, 0.5).expect("the reference reads");
+    let ExactTree { bodies, nodes, .. } = read_exact_tree(format, file, 0.5).expect("the reference reads");
     let mut p = Project::default();
     p.new_empty_document();
     let source = p.add_source(stem, std::fs::read(file).expect("the file reads"));

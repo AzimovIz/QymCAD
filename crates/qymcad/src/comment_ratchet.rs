@@ -152,13 +152,30 @@ pub(crate) mod tests {
         low.contains("пользовател") && REPORTED.iter().any(|w| low.contains(w))
     }
 
+    /// What the walk counted: comment lines naming a product, talking to a person, written in Russian; Russian
+    /// assertion texts; and, per file, its comment lines of the three kinds.
+    struct Counts {
+        product: usize,
+        voice: usize,
+        cyrillic: usize,
+        literals: usize,
+        per_file: Vec<FileCounts>,
+    }
+
+    struct FileCounts {
+        file: String,
+        product: usize,
+        voice: usize,
+        cyrillic: usize,
+    }
+
     /// Walk the workspace and count all four.
-    fn count() -> (usize, usize, usize, usize, Vec<(String, usize, usize, usize)>) {
+    fn count() -> Counts {
         // THE WHOLE REPOSITORY, not just `crates`: the post-processor scripts live beside it and carry
         // comments too. Build output and the git store are skipped — they are neither sources nor ours.
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(|p| p.parent()).expect("repository root").to_path_buf();
         let (mut prod, mut voice, mut cyr, mut lit) = (0, 0, 0, 0);
-        let mut per: Vec<(String, usize, usize, usize)> = Vec::new();
+        let mut per: Vec<FileCounts> = Vec::new();
         let mut stack = vec![root.clone()];
         while let Some(dir) = stack.pop() {
             for e in std::fs::read_dir(&dir).expect("sources are readable").flatten() {
@@ -191,12 +208,12 @@ pub(crate) mod tests {
                 voice += fv;
                 cyr += fc;
                 if fp + fv + fc > 0 {
-                    per.push((p.strip_prefix(&root).unwrap_or(&p).to_string_lossy().into_owned(), fp, fv, fc));
+                    per.push(FileCounts { file: p.strip_prefix(&root).unwrap_or(&p).to_string_lossy().into_owned(), product: fp, voice: fv, cyrillic: fc });
                 }
             }
         }
-        per.sort_by_key(|(_, _, _, c)| std::cmp::Reverse(*c));
-        (prod, voice, cyr, lit, per)
+        per.sort_by_key(|f| std::cmp::Reverse(f.cyrillic));
+        Counts { product: prod, voice, cyrillic: cyr, literals: lit, per_file: per }
     }
 
     /// All four counters only ever go down.
@@ -205,8 +222,8 @@ pub(crate) mod tests {
         if !in_the_working_tree() {
             return; // a published copy of the tree: nothing here to measure
         }
-        let (prod, voice, cyr, lit, per) = count();
-        let worst: Vec<String> = per.iter().take(10).map(|(f, p, v, c)| format!("  {c:5} cyrillic, {v:4} voice, {p:3} product  {f}")).collect();
+        let Counts { product: prod, voice, cyrillic: cyr, literals: lit, per_file: per } = count();
+        let worst: Vec<String> = per.iter().take(10).map(|FileCounts { file: f, product: p, voice: v, cyrillic: c }| format!("  {c:5} cyrillic, {v:4} voice, {p:3} product  {f}")).collect();
         let report = format!("worst files:\n{}", worst.join("\n"));
 
         assert!(

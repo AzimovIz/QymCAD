@@ -22,8 +22,11 @@ use crate::system::Chooser;
 pub(crate) struct FileAsk {
     rx: Receiver<Option<PathBuf>>,
     /// Runs on the frame thread once the answer arrives, so it is free to touch the document.
-    then: Box<dyn FnOnce(&mut App, PathBuf)>,
+    then: Box<Answered>,
 }
+
+/// What a chooser's answer is for: run once, on the frame thread, with the chosen path.
+type Answered = dyn FnOnce(&mut App, PathBuf);
 
 impl App {
     /// Ask for an existing file. `then` runs on a later frame with the chosen path; cancelling drops it

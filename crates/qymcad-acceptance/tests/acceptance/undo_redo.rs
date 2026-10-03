@@ -83,14 +83,14 @@ probe! {
         build::into_the_first_part(&mut s);
         let xy = s.word("plane-xy-table");
         s.press_word(&xy);
-        let edits: Vec<(&str, fn(&mut Session))> = vec![
-            ("drawing a rectangle", |s| {
+        let edits: Vec<Edit> = vec![
+            edit("drawing a rectangle", |s| {
                 let rect = s.word("tb-rect-hint");
                 s.press_hint(&rect);
                 s.click_on_sketch(0.0, 0.0).click_on_sketch(40.0, 30.0);
                 s.key(Key::Escape);
             }),
-            ("a dimension", |s| {
+            edit("a dimension", |s| {
                 let dim = s.word("tb-dim-hint");
                 s.press_hint(&dim);
                 s.click_on_sketch(20.0, 0.0);
@@ -99,7 +99,7 @@ probe! {
                 s.fill_hinted(&field, "40").key(Key::Enter);
                 s.key(Key::Escape);
             }),
-            ("a body", |s| {
+            edit("a body", |s| {
                 let finish = s.word("wb-finish");
                 s.press_word(&finish);
                 let extrude = s.word("tb-extrude-hint");
@@ -107,8 +107,8 @@ probe! {
                 s.key(Key::Enter);
                 s.key(Key::Escape);
             }),
-            ("a parameter", |s| build::parameter(s, "w", "40")),
-            ("a rename", |s| {
+            edit("a parameter", |s| build::parameter(s, "w", "40")),
+            edit("a rename", |s| {
                 let sketch = s.document().sketches.first().map(|sk| sk.name.clone()).expect("the sketch");
                 let row = s.find(&sketch, qymcad::pos2(0.0, 300.0)).unwrap_or_else(|| panic!("the sketch {sketch:?} is not in the tree"));
                 s.click(row.center());
@@ -213,13 +213,23 @@ probe! {
     }
 }
 
+/// An edit a person makes, by what it is called in a report.
+struct Edit {
+    what: &'static str,
+    make: fn(&mut Session),
+}
+
+fn edit(what: &'static str, make: fn(&mut Session)) -> Edit {
+    Edit { what, make }
+}
+
 /// EVERY EDIT IN TURN, TAKEN BACK AND PUT AGAIN step by step: an edit made of several things a person did (a new part,
 /// then its placement) lays a named step for each, and taking them all back gives the document before it. What fails is
 /// told at the end - one kind that cannot be taken back must not hide the rest.
-fn each_taken_back_and_put_again(s: &mut Session, edits: Vec<(&str, fn(&mut Session))>) -> Vec<String> {
+fn each_taken_back_and_put_again(s: &mut Session, edits: Vec<Edit>) -> Vec<String> {
     let mut problems: Vec<String> = Vec::new();
     let unnamed = s.word("undo-edit");
-    for (what, edit) in edits {
+    for Edit { what, make: edit } in edits {
         let before = shape(&s.document());
         let steps = s.document().undo.len();
         edit(s);
@@ -255,8 +265,8 @@ probe! {
     fn a_second_part_and_its_deletion_are_taken_back_and_put_again() {
         let mut s = Session::start();
         build::block(&mut s);
-        let edits: Vec<(&str, fn(&mut Session))> = vec![
-            ("a second part put beside", |s| {
+        let edits: Vec<Edit> = vec![
+            edit("a second part put beside", |s| {
                 build::into_a_new_part(s);
                 let assembly = s.word("wb-assembly");
                 s.press_word_near(&assembly, qymcad::pos2(0.0, 0.0));
@@ -265,7 +275,7 @@ probe! {
                 s.click(row.center());
                 s.fill("X", "40").key(Key::Enter);
             }),
-            ("a deletion", |s| {
+            edit("a deletion", |s| {
                 let made = s.document().parts.iter().filter(|p| !p.assembly).map(|p| p.name.clone()).next_back().expect("the part to delete");
                 let row = s.find(&made, qymcad::pos2(0.0, 300.0)).unwrap_or_else(|| panic!("the part {made:?} is not in the tree"));
                 s.click(row.center());

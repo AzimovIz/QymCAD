@@ -113,6 +113,16 @@ mod tests {
         assert!(bad.is_empty(), "the assembly screen shows internal codes instead of words: {bad:?}\neverything drawn: {texts:?}");
     }
 
+    /// A screen of the assembly, by its name, and how it is brought up.
+    struct Screen {
+        name: &'static str,
+        arm: fn(&mut App),
+    }
+
+    fn screen(name: &'static str, arm: fn(&mut App)) -> Screen {
+        Screen { name, arm }
+    }
+
     /// THE SAME IN THE JOINT POPUP AND IN THE TOOL BARS.
     ///
     /// The popup lives in a window of its own and does not enter the common frame; the bars are
@@ -128,15 +138,15 @@ mod tests {
         app.viewing.mode_3d = true;
 
         // every kind of screen in a pass of its own, with a FRESH egui environment
-        let screens: [(&str, fn(&mut App)); 4] = [
-            ("the joint popup", |_app: &mut App| {}),
-            ("the connector bar", |app: &mut App| app.side.joint.conn_pick = true),
-            ("the relation bar", |app: &mut App| app.side.joint.relation_pick = Some(Default::default())),
-            ("the joint assembling bar", |app: &mut App| app.side.joint.pick_faces = true),
+        let screens: [Screen; 4] = [
+            screen("the joint popup", |_app: &mut App| {}),
+            screen("the connector bar", |app: &mut App| app.side.joint.conn_pick = true),
+            screen("the relation bar", |app: &mut App| app.side.joint.relation_pick = Some(Default::default())),
+            screen("the joint assembling bar", |app: &mut App| app.side.joint.pick_faces = true),
         ];
         let mut bad: Vec<String> = Vec::new();
         let mut seen = 0usize;
-        for (name, arm) in screens {
+        for Screen { name, arm } in screens {
             let ctx = egui::Context::default();
             super::super::install_fonts(&ctx);
             app.side.joint.conn_pick = false;

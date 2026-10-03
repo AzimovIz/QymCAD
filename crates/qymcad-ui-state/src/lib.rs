@@ -184,7 +184,7 @@ pub struct Caches {
     /// The cache of the visible scene's world bounding sphere (a centre and a radius) keyed by the scene - for
     /// tight near and far planes in perspective (the z buffer's precision). Recomputed only when the scene changes,
     /// not every frame.
-    pub bounds: std::cell::Cell<(u64, Option<([f64; 3], f64)>)>,
+    pub bounds: std::cell::Cell<Cached<Option<Sphere>>>,
     /// THE CACHE OF CONSUMED BODIES: `(the revision, the bodies)`. The set is computed by a pass over the whole
     /// timeline while being asked for on every body on every frame - recomputing it is out of the question.
     pub consumed: std::cell::RefCell<Cached<std::collections::HashSet<Id>>>,
@@ -214,7 +214,7 @@ pub struct Caches {
     /// The meshes' world extents by index plus the `geom_rev` they were computed at. A cheap way of rejecting
     /// bodies for the section caps (a Common boolean is expensive, and the plane cuts a handful of bodies out of a
     /// thousand).
-    pub mesh_bounds: std::cell::RefCell<Cached<std::collections::HashMap<usize, ([f64; 3], [f64; 3])>>>,
+    pub mesh_bounds: std::cell::RefCell<Cached<std::collections::HashMap<usize, WorldBox>>>,
     /// The sketch diagnostics cache. The key is a fingerprint of the geometry and the constraints. The rank
     /// analysis builds a FULL Jacobian and runs Gaussian elimination (O(m * nv^2)) - without a cache that was
     /// computed EVERY FRAME several times over (the panel, the list, the overlay, the glyphs, the tree), and on
@@ -223,7 +223,7 @@ pub struct Caches {
     pub sk_status: std::cell::RefCell<Option<(usize, u64, SketchDiag)>>,
     /// THE BORDERS OF A BODY MADE OF A MESH THAT DID NOT CLOSE, by body index, each a loop of corners in the body's own
     /// coordinates; keyed by the meshes they were found on.
-    pub open_borders: std::cell::RefCell<Cached<std::collections::HashMap<usize, Vec<Vec<[f64; 3]>>>>>,
+    pub open_borders: std::cell::RefCell<Cached<std::collections::HashMap<usize, Vec<OpenBorder>>>>,
 }
 
 impl Default for Caches {
@@ -235,7 +235,7 @@ impl Default for Caches {
             view: std::cell::RefCell::new(None),
             norm: std::cell::RefCell::new(Cached { rev: u64::MAX, value: Vec::new() }),
             gpu_scene_key: std::cell::Cell::new(u64::MAX),
-            bounds: std::cell::Cell::new((u64::MAX, None)),
+            bounds: std::cell::Cell::new(Cached { rev: u64::MAX, value: None }),
             consumed: std::cell::RefCell::new(Cached { rev: u64::MAX, value: std::collections::HashSet::new() }),
             shown_bodies: std::cell::RefCell::new(Cached { rev: u64::MAX, value: ShownBodies::default() }),
             bbox_world: std::cell::RefCell::new(Cached { rev: u64::MAX, value: std::collections::HashMap::new() }),
@@ -3112,6 +3112,36 @@ pub fn closest_on_triangle(p: [f64; 3], t: &[[f64; 3]; 3]) -> [f64; 3] {
     at(vb * denom, vc * denom)
 }
 
+/// A side of a mesh triangle, from `a` to `b`, with the triangle's normal and its third corner `far`.
+struct TriSide {
+    a: [f64; 3],
+    b: [f64; 3],
+    normal: [f64; 3],
+    far: [f64; 3],
+}
+
+/// A face met along a piece of an edge: its normal, and the unit direction it runs on in, away from the edge.
+#[derive(Clone, Copy)]
+struct FaceRun {
+    normal: [f64; 3],
+    away: [f64; 3],
+}
+
+/// The two faces either side of a piece of an edge.
+#[derive(Clone, Copy)]
+struct FacePair {
+    one: FaceRun,
+    other: FaceRun,
+}
+
+/// At a vertex of the edge: where the blend meets each face, and the centre of a fillet's arc.
+#[derive(Clone, Copy)]
+struct Rail {
+    q1: [f64; 3],
+    q2: [f64; 3],
+    centre: [f64; 3],
+}
+
 /// THE OUTLINE OF A BLEND ALONG AN EDGE, before Enter: the two lines where a fillet (or a chamfer) meets the faces
 /// either side of the edge, then its section at both ends - an arc for a fillet, a straight cut for a chamfer. It
 /// follows the value typed: a radius of 2 on a square edge sets the lines 2 back from it, a radius of 4 sets them 4.
@@ -3159,7 +3189,7 @@ pub fn edge_blend_outline(mesh: &qymcad_core::geom::Mesh, poly: &[[f32; 3]], ble
     // whatever the size of the mesh, and each piece of the edge is looked up among them only. The third corner says
     // which way the face runs on from the edge - the one thing the two normals cannot tell an inner corner from an
     // outer one by
-    let mut sides: Vec<([f64; 3], [f64; 3], [f64; 3], [f64; 3])> = Vec::new();
+    let mut sides: Vec<TriSide> = Vec::new();
     for t in 0..mesh.tris.len() {
         let [a, b, c] = mesh.triangle(t);
         let v = [[a.x, a.y, a.z], [b.x, b.y, b.z], [c.x, c.y, c.z]];
@@ -3168,15 +3198,15 @@ pub fn edge_blend_outline(mesh: &qymcad_core::geom::Mesh, poly: &[[f32; 3]], ble
         }
         let nrm = v_norm(v_cross(v_sub(v[1], v[0]), v_sub(v[2], v[0])));
         for k in 0..3 {
-            sides.push((v[k], v[(k + 1) % 3], nrm, v[(k + 2) % 3]));
+            sides.push(TriSide { a: v[k], b: v[(k + 1) % 3], normal: nrm, far: v[(k + 2) % 3] });
         }
     }
     // per piece of the edge: the faces met, each as its normal and the way it runs on from the edge, across it
-    let mut normals: Vec<Vec<([f64; 3], [f64; 3])>> = vec![Vec::new(); n - 1];
+    let mut normals: Vec<Vec<FaceRun>> = vec![Vec::new(); n - 1];
     for (seg, ns) in normals.iter_mut().enumerate() {
         let (p, q) = (pt(poly[seg]), pt(poly[seg + 1]));
         let (m, d) = ([(p[0] + q[0]) / 2.0, (p[1] + q[1]) / 2.0, (p[2] + q[2]) / 2.0], v_norm(v_sub(q, p)));
-        for (a, b, nrm, far) in &sides {
+        for TriSide { a, b, normal: nrm, far } in &sides {
             let ab = v_sub(*b, *a);
             let len = v_dot(ab, ab).sqrt();
             if len < 1e-9 || v_dot(ab, d).abs() < 0.98 * len {
@@ -3187,18 +3217,17 @@ pub fn edge_blend_outline(mesh: &qymcad_core::geom::Mesh, poly: &[[f32; 3]], ble
             let off = v_sub(m, [a[0] + ab[0] * t, a[1] + ab[1] * t, a[2] + ab[2] * t]);
             if v_dot(off, off).sqrt() < 1e-3 + 0.02 * len {
                 let to = v_sub(*far, m);
-                ns.push((*nrm, v_norm(v_sub(to, add([0.0; 3], d, v_dot(to, d))))));
+                ns.push(FaceRun { normal: *nrm, away: v_norm(v_sub(to, add([0.0; 3], d, v_dot(to, d)))) });
             }
         }
     }
     // the two faces of each piece, kept in step along the edge so that a line does not jump from one face to the other
-    type Side = ([f64; 3], [f64; 3]);
-    let mut faces: Vec<Option<(Side, Side)>> = Vec::with_capacity(n - 1);
-    let mut prev: Option<(Side, Side)> = None;
+    let mut faces: Vec<Option<FacePair>> = Vec::with_capacity(n - 1);
+    let mut prev: Option<FacePair> = None;
     for ns in &normals {
-        let pair = ns.first().and_then(|n1| ns.iter().find(|n2| v_dot(n1.0, n2.0) < 0.999).map(|n2| (*n1, *n2)));
+        let pair = ns.first().and_then(|n1| ns.iter().find(|n2| v_dot(n1.normal, n2.normal) < 0.999).map(|n2| FacePair { one: *n1, other: *n2 }));
         let pair = match (pair, prev) {
-            (Some((a, b)), Some((pa, pb))) if v_dot(a.0, pa.0) < v_dot(a.0, pb.0) => Some((b, a)),
+            (Some(p), Some(q)) if v_dot(p.one.normal, q.one.normal) < v_dot(p.one.normal, q.other.normal) => Some(FacePair { one: p.other, other: p.one }),
             (p, _) => p,
         };
         if pair.is_some() {
@@ -3207,9 +3236,9 @@ pub fn edge_blend_outline(mesh: &qymcad_core::geom::Mesh, poly: &[[f32; 3]], ble
         faces.push(pair);
     }
     // per vertex of the edge: the two points on the faces and, for a fillet, the centre of its arc
-    let mut rails: Vec<([f64; 3], [f64; 3], [f64; 3])> = Vec::with_capacity(n);
+    let mut rails: Vec<Rail> = Vec::with_capacity(n);
     for (k, p) in poly.iter().enumerate() {
-        let Some(((n1, t1), (n2, t2))) = faces[k.min(n - 2)].or_else(|| faces[k.saturating_sub(1)]) else { continue };
+        let Some(FacePair { one: FaceRun { normal: n1, away: t1 }, other: FaceRun { normal: n2, away: t2 } }) = faces[k.min(n - 2)].or_else(|| faces[k.saturating_sub(1)]) else { continue };
         let p = pt(*p);
         // t1, t2: in each face, away from the edge. An outer edge has the faces run on away from each other's normal,
         // an inner one towards it; the fillet's centre is inside the part for the first and in the air for the second
@@ -3229,12 +3258,12 @@ pub fn edge_blend_outline(mesh: &qymcad_core::geom::Mesh, poly: &[[f32; 3]], ble
             }
         };
         let (q1, q2) = (on_surface(q1, n1), on_surface(q2, n2));
-        rails.push((q1, q2, c));
+        rails.push(Rail { q1, q2, centre: c });
     }
     if rails.len() < 2 {
         return Vec::new();
     }
-    let section = |(q1, q2, c): ([f64; 3], [f64; 3], [f64; 3])| -> Vec<[f64; 3]> {
+    let section = |Rail { q1, q2, centre: c }: Rail| -> Vec<[f64; 3]> {
         match blend {
             Blend::Round(r) => (0..=8)
                 .map(|i| {
@@ -3246,7 +3275,7 @@ pub fn edge_blend_outline(mesh: &qymcad_core::geom::Mesh, poly: &[[f32; 3]], ble
             Blend::Cut(..) => vec![q1, q2],
         }
     };
-    vec![rails.iter().map(|r| r.0).collect(), rails.iter().map(|r| r.1).collect(), section(rails[0]), section(rails[rails.len() - 1])]
+    vec![rails.iter().map(|r| r.q1).collect(), rails.iter().map(|r| r.q2).collect(), section(rails[0]), section(rails[rails.len() - 1])]
 }
 
 /// A vertex of a body for the GPU. The colour and the normal do NOT depend on the camera (the light is
@@ -6410,6 +6439,7 @@ pub struct EdgePolys {
 /// Nine cache fields were `(u64, T)`, and every one of them carried a doc comment explaining that the first
 /// place is the revision - `(the revision, the bodies)`, `(the geometry revision, a body mapped to ...)`.
 /// A comment saying what a type should say is a comment nothing checks. Two named fields say it once.
+#[derive(Clone, Copy)]
 pub struct Cached<T> {
     /// The revision the value was computed at. When it differs from the current one the value is stale.
     pub rev: u64,
@@ -7891,20 +7921,32 @@ pub fn radial_text_place(knee: Pos2, toward: egui::Vec2, size: egui::Vec2) -> (P
 /// The default radius of the arc of an angle, px, before one is placed.
 pub const ANGLE_ARC_PX: f32 = 24.0;
 
-/// Where the sides of angular dimension `ci` of sketch `si` meet and run, on the screen: the centre and, per side, its
-/// two ends (the far end first, which gives the side its direction).
-fn angle_sides(project: &Project, si: usize, c: &qymcad_core::model::Constraint, sh: &Sheet) -> Option<(Pos2, [Pos2; 2], [Pos2; 2], f64, Option<f64>)> {
+/// Where the sides of an angular dimension meet and run, on the screen, and where its arc is placed.
+struct AngleSides {
+    /// where the sides meet
+    center: Pos2,
+    /// each side by its two ends, the far end first, which gives the side its direction
+    s1: [Pos2; 2],
+    s2: [Pos2; 2],
+    /// the radius of the arc, in sketch units; 0 is the default distance on screen
+    off: f64,
+    /// where the label stands along the arc, as a share of the angle from the first side; none on the bisector
+    at: Option<f64>,
+}
+
+/// Where the sides of angular dimension `ci` of sketch `si` meet and run, on the screen.
+fn angle_sides(project: &Project, si: usize, c: &qymcad_core::model::Constraint, sh: &Sheet) -> Option<AngleSides> {
     use qymcad_core::model::Constraint;
     let p = |id| sketch_pt(project, si, id).map(|w| sh.at(w));
     match *c {
         Constraint::Angle { a, b, c, off, at, .. } => {
             let (sa, sb, sc) = (p(a)?, p(b)?, p(c)?);
-            Some((sb, [sa, sb], [sc, sb], off, at))
+            Some(AngleSides { center: sb, s1: [sa, sb], s2: [sc, sb], off, at })
         }
         Constraint::AngleLines { a, b, c, d, off, at, .. } => {
             let (sa, sb, sc, sd) = (p(a)?, p(b)?, p(c)?, p(d)?);
             let ix = lines_intersect(sa, sb, sc, sd)?;
-            Some((ix, [sb, sa], [sd, sc], off, at))
+            Some(AngleSides { center: ix, s1: [sb, sa], s2: [sd, sc], off, at })
         }
         _ => None,
     }
@@ -7914,7 +7956,7 @@ fn angle_sides(project: &Project, si: usize, c: &qymcad_core::model::Constraint,
 pub fn angle_dim_geom(project: &Project, si: usize, ci: usize, sh: &Sheet, set: &Settings) -> Option<AngleDim> {
     let c = project.sketches.get(si)?.constraints.get(ci)?;
     let size = dim_text_size(&dim_caption(project, si, c, set)?, set.dim_font);
-    let (center, s1, s2, off, at) = angle_sides(project, si, c, sh)?;
+    let AngleSides { center, s1, s2, off, at } = angle_sides(project, si, c, sh)?;
     let (u, v) = ((s1[0] - center).normalized(), (s2[0] - center).normalized());
     let pi = std::f32::consts::PI;
     let a0 = u.y.atan2(u.x);
@@ -8707,7 +8749,7 @@ pub fn proj_params(pn: &Painting, rect: Rect, scene_key: u64) -> (f64, f64, f64,
     }
     let d_eye = 1.0 / inv_d;
     let (mut z_near, mut z_far) = (d_eye * 0.05, d_eye * 4.0); // the fallback when the scene is empty
-    if let Some((c, r)) = scene_sphere_cached(pn, scene_key) {
+    if let Some(Sphere { centre: c, radius: r }) = scene_sphere_cached(pn, scene_key) {
         let (_, _, fwd) = pn.cam.basis();
         let dc = v_dot(v_sub(c, pn.cam.target), fwd); // the world depth of the sphere's centre along the line of sight
         let margin = (r * 0.05).max(1e-3);
@@ -8821,13 +8863,33 @@ pub fn current_body(dc: &DrawCtx) -> Option<Id> {
     dc.project.active_body(current_ctx_id(dc.active_path, dc.project)).or_else(|| dc.project.active_body(dc.project.current_ctx()))
 }
 
-/// The world bounding sphere (centre, radius) of the visible scene, taken from `visible_mesh_items`
+/// A loop of corners round a hole of a body made of a mesh that did not close, in the body's own coordinates.
+#[derive(Clone, Debug, PartialEq)]
+pub struct OpenBorder {
+    pub corners: Vec<[f64; 3]>,
+}
+
+/// A sphere in world coordinates.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Sphere {
+    pub centre: [f64; 3],
+    pub radius: f64,
+}
+
+/// A box in world coordinates, along the axes.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WorldBox {
+    pub min: [f64; 3],
+    pub max: [f64; 3],
+}
+
+/// The world bounding sphere of the visible scene, taken from `visible_mesh_items`
 /// (exactly what gets drawn). Cached by the scene key: recomputed only when the scene changes, not
 /// every frame.
-pub fn scene_sphere_cached(pn: &Painting, scene_key: u64) -> Option<([f64; 3], f64)> {
-    let (k, cached) = pn.cache.bounds.get();
-    if k == scene_key {
-        return cached;
+pub fn scene_sphere_cached(pn: &Painting, scene_key: u64) -> Option<Sphere> {
+    let cached = pn.cache.bounds.get();
+    if cached.rev == scene_key {
+        return cached.value;
     }
     let (mut mn, mut mx) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
     let mut any = false;
@@ -8845,9 +8907,9 @@ pub fn scene_sphere_cached(pn: &Painting, scene_key: u64) -> Option<([f64; 3], f
     let sphere = any.then(|| {
         let c = [(mn[0] + mx[0]) * 0.5, (mn[1] + mx[1]) * 0.5, (mn[2] + mx[2]) * 0.5];
         let r = (((mx[0] - mn[0]).powi(2) + (mx[1] - mn[1]).powi(2) + (mx[2] - mn[2]).powi(2)).sqrt() * 0.5).max(1e-3);
-        (c, r)
+        Sphere { centre: c, radius: r }
     });
-    pn.cache.bounds.set((scene_key, sphere));
+    pn.cache.bounds.set(Cached { rev: scene_key, value: sphere });
     sphere
 }
 
@@ -9474,7 +9536,7 @@ pub fn mesh_crosses_plane(pn: &Painting, mi: usize, o: [f64; 3], n: [f64; 3]) ->
                                                                   // the box's support point along the normal: if the WHOLE box is on one side, there is no intersection
     let (mut lo, mut hi) = (0.0, 0.0);
     for k in 0..3 {
-        let (a, b2) = ((b.0[k] - o[k]) * n[k], (b.1[k] - o[k]) * n[k]);
+        let (a, b2) = ((b.min[k] - o[k]) * n[k], (b.max[k] - o[k]) * n[k]);
         lo += a.min(b2);
         hi += a.max(b2);
     }
@@ -9482,7 +9544,7 @@ pub fn mesh_crosses_plane(pn: &Painting, mi: usize, o: [f64; 3], n: [f64; 3]) ->
 }
 
 /// The world bounding box of mesh `mi` (cached by `geom_rev` — computed once per change of the scene).
-pub fn mesh_world_bounds(pn: &Painting, mi: usize) -> Option<([f64; 3], [f64; 3])> {
+pub fn mesh_world_bounds(pn: &Painting, mi: usize) -> Option<WorldBox> {
     // the cache key accounts for VISIBILITY too (the map is built from the visible bodies): the key
     // used to be `geom_rev` alone, and a hidden body switched back on missed the cache.
     let key = {
@@ -9505,7 +9567,7 @@ pub fn mesh_world_bounds(pn: &Painting, mi: usize) -> Option<([f64; 3], [f64; 3]
             return c.value.get(&mi).copied();
         }
     }
-    let mut map: std::collections::HashMap<usize, ([f64; 3], [f64; 3])> = std::collections::HashMap::new();
+    let mut map: std::collections::HashMap<usize, WorldBox> = std::collections::HashMap::new();
     for SceneMesh { index: i, world: wt, .. } in visible_mesh_items(pn) {
         let Some(m) = pn.project.bodies.get(i).map(|b| &b.mesh) else { continue };
         let Some(bb) = m.bounds() else { continue };
@@ -9522,7 +9584,7 @@ pub fn mesh_world_bounds(pn: &Painting, mi: usize) -> Option<([f64; 3], [f64; 3]
                 }
             }
         }
-        map.insert(i, (mn, mx));
+        map.insert(i, WorldBox { min: mn, max: mx });
     }
     let out = map.get(&mi).copied();
     pn.cache.mesh_bounds.borrow_mut().put(key, map);

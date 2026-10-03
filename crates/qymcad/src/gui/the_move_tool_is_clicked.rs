@@ -48,6 +48,17 @@ mod tests {
         out
     }
 
+    /// A tool by what it does, the key of its step of undo, and the lines it should leave.
+    struct Case {
+        what: &'static str,
+        key: &'static str,
+        want: Vec<[(f64, f64); 2]>,
+    }
+
+    fn case(what: &'static str, key: &'static str, want: Vec<[(f64, f64); 2]>) -> Case {
+        Case { what, key, want }
+    }
+
     /// EACH OF THE THREE LANDS WHERE IT WAS ASKED, IS ONE STEP OF UNDO NAMED AFTER THE TOOL, AND Ctrl+Z TAKES IT
     /// BACK.
     ///
@@ -55,13 +66,13 @@ mod tests {
     #[test]
     fn the_move_copy_and_turn_land_where_asked_and_undo_by_name() {
         let start = vec![[(10.0, 0.0), (30.0, 0.0)]];
-        let cases: [(&str, &str, Vec<[(f64, f64); 2]>); 3] = [
-            ("move", "tool-move", vec![[(14.0, 4.0), (34.0, 4.0)]]),
-            ("copy", "tool-copy", vec![[(10.0, 0.0), (30.0, 0.0)], [(14.0, 4.0), (34.0, 4.0)]]),
-            ("turn", "tool-rotate", vec![[(20.0, -10.0), (20.0, 10.0)]]),
+        let cases: [Case; 3] = [
+            case("move", "tool-move", vec![[(14.0, 4.0), (34.0, 4.0)]]),
+            case("copy", "tool-copy", vec![[(10.0, 0.0), (30.0, 0.0)], [(14.0, 4.0), (34.0, 4.0)]]),
+            case("turn", "tool-rotate", vec![[(20.0, -10.0), (20.0, 10.0)]]),
         ];
         let mut problems = Vec::new();
-        for (what, key, want) in cases {
+        for Case { what, key, want } in cases {
             let (mut app, si) = a_free_line();
             let steps = app.disk.edits.undo.len();
             let mut hand = Hand::new(&mut app);

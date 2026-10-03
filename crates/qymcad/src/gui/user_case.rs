@@ -697,6 +697,17 @@ mod tests {
         made
     }
 
+    /// A sketch tool by its number, its name in a report, and the clicks it is used with.
+    struct Drawing {
+        tool: u8,
+        name: &'static str,
+        clicks: &'static [(f64, f64)],
+    }
+
+    fn drawing(tool: u8, name: &'static str, clicks: &'static [(f64, f64)]) -> Drawing {
+        Drawing { tool, name, clicks }
+    }
+
     /// SOMEONE WITH A 3D PRINTER MAKES A BOX WITH A LID: the housing, a sketch on a face, holes, fillets, a
     /// shell, a second part, an assembly, a save, and a dimension edited in the middle of it.
     #[test]
@@ -1292,20 +1303,20 @@ mod tests {
             let si = app.create_sketch_on(qymcad_core::feature::SketchPlane::default());
 
             // DRAWING: each tool with its own number of clicks, as in real work.
-            let draws: [(u8, &str, &[(f64, f64)]); 11] = [
-                (1, "line", &[(0.0, 0.0), (20.0, 0.0)]),
-                (2, "rectangle", &[(30.0, 0.0), (50.0, 15.0)]),
-                (3, "circle", &[(70.0, 10.0), (78.0, 10.0)]),
-                (4, "arc", &[(0.0, 30.0), (10.0, 40.0), (20.0, 30.0)]),
-                (5, "point", &[(30.0, 30.0)]),
-                (6, "polygon", &[(50.0, 35.0), (58.0, 35.0)]),
-                (7, "slot", &[(70.0, 30.0), (85.0, 30.0), (85.0, 35.0)]),
-                (8, "ellipse", &[(0.0, 55.0), (12.0, 55.0), (6.0, 62.0)]),
-                (9, "spline", &[(25.0, 55.0), (32.0, 62.0), (40.0, 55.0), (48.0, 60.0)]),
-                (10, "circle through three points", &[(60.0, 55.0), (68.0, 60.0), (72.0, 52.0)]),
-                (11, "text", &[(0.0, 75.0)]),
+            let draws: [Drawing; 11] = [
+                drawing(1, "line", &[(0.0, 0.0), (20.0, 0.0)]),
+                drawing(2, "rectangle", &[(30.0, 0.0), (50.0, 15.0)]),
+                drawing(3, "circle", &[(70.0, 10.0), (78.0, 10.0)]),
+                drawing(4, "arc", &[(0.0, 30.0), (10.0, 40.0), (20.0, 30.0)]),
+                drawing(5, "point", &[(30.0, 30.0)]),
+                drawing(6, "polygon", &[(50.0, 35.0), (58.0, 35.0)]),
+                drawing(7, "slot", &[(70.0, 30.0), (85.0, 30.0), (85.0, 35.0)]),
+                drawing(8, "ellipse", &[(0.0, 55.0), (12.0, 55.0), (6.0, 62.0)]),
+                drawing(9, "spline", &[(25.0, 55.0), (32.0, 62.0), (40.0, 55.0), (48.0, 60.0)]),
+                drawing(10, "circle through three points", &[(60.0, 55.0), (68.0, 60.0), (72.0, 52.0)]),
+                drawing(11, "text", &[(0.0, 75.0)]),
             ];
-            for (tool, name, pts) in draws {
+            for Drawing { tool, name, clicks: pts } in draws {
                 // TEXT LIVES IN ITS OWN LIST, as points and splines live in theirs. Counting only the entities
                 // would declare a working tool broken.
                 let count = |a: &App| {
@@ -1497,8 +1508,8 @@ mod tests {
             // DIMENSIONS: linear, angular, radial. A dimension is not a caption but A CONSTRAINT: it must take
             // away a degree of freedom, otherwise the sketch stays rubbery while it looks set.
             {
-                let dims: [(u8, &str, &[(f64, f64)]); 3] = [(1, "linear", &[(30.0, 0.0), (50.0, 15.0)]), (3, "radial", &[(70.0, 10.0)]), (2, "angular", &[(0.0, 0.0), (20.0, 0.0), (30.0, 0.0)])];
-                for (kind, name, picks) in dims {
+                let dims: [Drawing; 3] = [drawing(1, "linear", &[(30.0, 0.0), (50.0, 15.0)]), drawing(3, "radial", &[(70.0, 10.0)]), drawing(2, "angular", &[(0.0, 0.0), (20.0, 0.0), (30.0, 0.0)])];
+                for Drawing { tool: kind, name, clicks: picks } in dims {
                     // ONLY DIMENSION CONSTRAINTS ARE COUNTED. Any constraint used to count, and the fixed ones
                     // from the neighbouring block got into the tally - the check blamed a dimension for
                     // someone else's work.

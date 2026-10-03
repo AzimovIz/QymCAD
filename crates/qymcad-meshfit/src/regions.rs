@@ -1655,7 +1655,13 @@ struct Sample<'t> {
     tris: &'t [u32],
     pts: Vec<Vector3<f64>>,
     normals: Vec<Vector3<f64>>,
-    corners: std::cell::OnceCell<(Vec<Vector3<f64>>, Vec<Vector3<f64>>)>,
+    corners: std::cell::OnceCell<CornerNormals>,
+}
+
+/// Each corner of a set of triangles with the normal averaged round it, by area.
+struct CornerNormals {
+    feet: Vec<Vector3<f64>>,
+    normals: Vec<Vector3<f64>>,
 }
 
 impl<'t> Sample<'t> {
@@ -1664,9 +1670,8 @@ impl<'t> Sample<'t> {
         Sample { tris, pts: g.corners_of(tris), normals, corners: std::cell::OnceCell::new() }
     }
 
-    fn corners(&self, g: &Grower) -> (&[Vector3<f64>], &[Vector3<f64>]) {
-        let (feet, normals) = self.corners.get_or_init(|| g.corner_normals(self.tris));
-        (feet, normals)
+    fn corners(&self, g: &Grower) -> &CornerNormals {
+        self.corners.get_or_init(|| g.corner_normals(self.tris))
     }
 }
 
@@ -1806,7 +1811,7 @@ impl Grower<'_> {
     }
 
     /// Every corner of `tris` with its normal: the area-weighted mean of the normals of the triangles of `tris` round it.
-    fn corner_normals(&self, tris: &[u32]) -> (Vec<Vector3<f64>>, Vec<Vector3<f64>>) {
+    fn corner_normals(&self, tris: &[u32]) -> CornerNormals {
         let mut sum: std::collections::HashMap<u32, Vector3<f64>> = std::collections::HashMap::new();
         for &t in tris {
             let t = t as usize;
@@ -1828,7 +1833,7 @@ impl Grower<'_> {
                 normals.push(n);
             }
         }
-        (feet, normals)
+        CornerNormals { feet, normals }
     }
 
     /// The distinct corners of `tris`.
@@ -1858,12 +1863,12 @@ impl Grower<'_> {
             Kind::Plane => fit_plane(&sample.pts),
             Kind::Cylinder => fit_cylinder(&sample.pts, &sample.normals, accept),
             Kind::Cone => {
-                let (feet, normals) = sample.corners(self);
+                let CornerNormals { feet, normals } = sample.corners(self);
                 fit_cone(&sample.pts, feet, normals, accept)
             }
             Kind::Sphere => fit_sphere(&sample.pts),
             Kind::Torus => {
-                let (feet, normals) = sample.corners(self);
+                let CornerNormals { feet, normals } = sample.corners(self);
                 fit_torus(&sample.pts, feet, normals, accept)
             }
         }

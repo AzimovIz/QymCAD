@@ -627,13 +627,29 @@ fn matches(s: &mut Session, want: &Outcome) -> Result<(), String> {
     }
 }
 
-/// What a check compares of a document: its timeline, its bodies and their numbers.
-fn shape_of(doc: &Document) -> (Vec<(String, String, Option<String>)>, Vec<(String, u64, usize, Option<usize>)>, Vec<crate::oracles::SketchShape>) {
-    (
-        doc.features.iter().map(|f| (f.name.clone(), f.kind.clone(), f.error.clone())).collect(),
-        doc.bodies.iter().map(|b| (b.name.clone(), (b.volume * 1e3).round() as u64, b.faces, b.edges)).collect(),
-        crate::oracles::sketch_shapes(doc),
-    )
+/// What a check compares of a document: its timeline, its bodies and their numbers, its sketches.
+#[derive(Debug, PartialEq)]
+struct Counted {
+    nodes: Vec<crate::oracles::NodeShape>,
+    bodies: Vec<BodyCount>,
+    sketches: Vec<crate::oracles::SketchShape>,
+}
+
+/// A body by its name, its volume in thousandths of a mm^3, its faces and its edges.
+#[derive(Debug, PartialEq)]
+struct BodyCount {
+    name: String,
+    volume: u64,
+    faces: usize,
+    edges: Option<usize>,
+}
+
+fn shape_of(doc: &Document) -> Counted {
+    Counted {
+        nodes: crate::oracles::node_shapes(doc),
+        bodies: doc.bodies.iter().map(|b| BodyCount { name: b.name.clone(), volume: (b.volume * 1e3).round() as u64, faces: b.faces, edges: b.edges }).collect(),
+        sketches: crate::oracles::sketch_shapes(doc),
+    }
 }
 
 /// A place on the canvas with nothing drawn on it: a corner of the canvas.

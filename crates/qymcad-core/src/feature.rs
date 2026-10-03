@@ -1855,8 +1855,11 @@ pub struct Extruded<'a> {
 /// not shared.
 pub struct KernelJob {
     inputs: Vec<Id>,
-    work: Box<dyn FnOnce(&dyn Kernel) -> Result<Built, crate::errors::CoreError> + Send>,
+    work: Box<KernelWork>,
 }
+
+/// The work of a parcel: run once, on whichever kernel holds the bodies it reads.
+type KernelWork = dyn FnOnce(&dyn Kernel) -> Result<Built, crate::errors::CoreError> + Send;
 
 impl KernelJob {
     /// `inputs` are the bodies whose live shapes the work reads; they are what a worker has to be given.

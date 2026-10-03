@@ -1504,7 +1504,7 @@ pub(crate) mod tests {
         assert!(texts.iter().any(|(t, _)| t.contains(&said)), "the tree does not say the body did not close: {:?}", names(&texts));
         let borders = app.cache.open_borders.borrow().value.values().flatten().cloned().collect::<Vec<_>>();
         assert_eq!(borders.len(), 1, "one hole, not {} loops", borders.len());
-        assert!(borders[0].len() >= 4 && borders[0].iter().all(|q| (q[2] - 10.0).abs() < 1e-6), "the loop does not run round the open top: {:?}", borders[0]);
+        assert!(borders[0].corners.len() >= 4 && borders[0].corners.iter().all(|q| (q[2] - 10.0).abs() < 1e-6), "the loop does not run round the open top: {:?}", borders[0]);
     }
 
     /// AN OPEN SHELL, SEEN: the open box recognised, the whole window into `target/look/open-shell.window.png` - the

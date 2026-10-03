@@ -64,6 +64,16 @@ fn planes(n: i32) -> Added {
     Added { plane: n, ..Default::default() }
 }
 
+/// What a tool takes of a block: the edges picked, how long they run together on a block `h` tall, how many there
+/// are, and whether they meet in a corner of three.
+struct Take {
+    what: &'static str,
+    picks: Vec<Spot>,
+    length: fn(f64) -> f64,
+    edges: i32,
+    closes_a_corner: bool,
+}
+
 /// THE STRAIGHT EDGES OF THE BLOCK, rounded (`round`) or chamfered, with a value `v`: what is taken, worked out from
 /// the lengths - each edge its waste, less what two meeting edges share, and the corner of three its own. Then the
 /// block is made 15 tall above the tool, and the same edges must be done on it: the upright edge is 15 long now.
@@ -74,18 +84,18 @@ fn block_cases(round: bool, v: f64) -> Vec<Case> {
     let added = |n: i32, corner: bool| if round { cylinders(n, corner as i32) } else { planes(n + corner as i32) };
     let corner = if round { fillet_corner(v) } else { chamfer_corner(v) };
     // what the tool takes of a block `h` tall
-    let takes: [(&str, Vec<Spot>, fn(f64) -> f64, i32, bool); 7] = [
-        ("the top front edge", vec![TOP_FRONT.0], |_| 40.0, 1, false),
-        ("the upright front right edge", vec![FRONT_RIGHT.0], |h| h, 1, false),
-        ("the bottom front edge", vec![BOTTOM_FRONT.0], |_| 40.0, 1, false),
-        ("the top front and top back edges, apart", vec![TOP_FRONT.0, TOP_BACK.0], |_| 80.0, 2, false),
-        ("the top front and top right edges, meeting", vec![TOP_FRONT.0, TOP_RIGHT.0], |_| 70.0, 2, false),
-        ("the four edges of the top", vec![TOP_FRONT.0, TOP_RIGHT.0, TOP_BACK.0, TOP_LEFT.0], |_| 140.0, 4, false),
-        ("the three edges of the top front right corner", vec![TOP_FRONT.0, TOP_RIGHT.0, FRONT_RIGHT.0], |h| 70.0 + h, 3, true),
+    let takes: [Take; 7] = [
+        Take { what: "the top front edge", picks: vec![TOP_FRONT.0], length: |_| 40.0, edges: 1, closes_a_corner: false },
+        Take { what: "the upright front right edge", picks: vec![FRONT_RIGHT.0], length: |h| h, edges: 1, closes_a_corner: false },
+        Take { what: "the bottom front edge", picks: vec![BOTTOM_FRONT.0], length: |_| 40.0, edges: 1, closes_a_corner: false },
+        Take { what: "the top front and top back edges, apart", picks: vec![TOP_FRONT.0, TOP_BACK.0], length: |_| 80.0, edges: 2, closes_a_corner: false },
+        Take { what: "the top front and top right edges, meeting", picks: vec![TOP_FRONT.0, TOP_RIGHT.0], length: |_| 70.0, edges: 2, closes_a_corner: false },
+        Take { what: "the four edges of the top", picks: vec![TOP_FRONT.0, TOP_RIGHT.0, TOP_BACK.0, TOP_LEFT.0], length: |_| 140.0, edges: 4, closes_a_corner: false },
+        Take { what: "the three edges of the top front right corner", picks: vec![TOP_FRONT.0, TOP_RIGHT.0, FRONT_RIGHT.0], length: |h| 70.0 + h, edges: 3, closes_a_corner: true },
     ];
     takes
         .into_iter()
-        .map(|(what, picks, length, n, three)| {
+        .map(|Take { what, picks, length, edges: n, closes_a_corner: three }| {
             let meets = match n {
                 2 if what.contains("meeting") => 1.0,
                 4 => 4.0,

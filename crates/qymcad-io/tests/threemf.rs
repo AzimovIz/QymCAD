@@ -178,7 +178,7 @@ fn an_object_of_parts_the_model_names_comes_in_a_piece_a_part() {
 /// repeated part placing the object the file holds once. It reads back a piece a part, named, coloured and placed.
 #[test]
 fn a_tree_goes_out_as_an_object_of_parts() {
-    use qymcad_core::model::ExportNode;
+    use qymcad_core::model::{ExportMesh, ExportNode};
     use std::io::Read;
     let p = file("tree.3mf");
     let at = |x: f64, z: f64| [1.0, 0.0, 0.0, x, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, z];
@@ -199,7 +199,16 @@ fn a_tree_goes_out_as_an_object_of_parts() {
         node("unit", Some(0), at(0.0, 50.0), None, None, None),
         node("pin & nut", Some(3), at(5.0, 0.0), Some(3), None, blue),
     ];
-    export_3mf_tree(&nodes, &[(1, tetra(0.0), Vec::new()), (2, tetra(0.0), Vec::new()), (3, tetra(0.0), Vec::new())], &p).expect("the tree is written");
+    export_3mf_tree(
+        &nodes,
+        &[
+            ExportMesh { body: 1, mesh: tetra(0.0), tri_colors: Vec::new() },
+            ExportMesh { body: 2, mesh: tetra(0.0), tri_colors: Vec::new() },
+            ExportMesh { body: 3, mesh: tetra(0.0), tri_colors: Vec::new() },
+        ],
+        &p,
+    )
+    .expect("the tree is written");
     let mut xml = String::new();
     zip::ZipArchive::new(std::fs::File::open(&p).expect("the package")).expect("a zip").by_name("3D/3dmodel.model").expect("the model").read_to_string(&mut xml).expect("read");
     assert_eq!(xml.matches("<object ").count(), 4, "not an object per part and one of components for the head and the unit: {xml}");
@@ -217,7 +226,7 @@ fn a_tree_goes_out_as_an_object_of_parts() {
 /// the materials of the model (`pid` and `p1`) - and it reads back a colour per triangle.
 #[test]
 fn a_face_of_its_own_colour_goes_out_on_its_triangles() {
-    use qymcad_core::model::ExportNode;
+    use qymcad_core::model::{ExportMesh, ExportNode};
     use std::io::Read;
     let p = file("faces.3mf");
     let (red, green) = ([204, 26, 26], [26, 204, 26]);
@@ -226,7 +235,7 @@ fn a_face_of_its_own_colour_goes_out_on_its_triangles() {
         ExportNode { name: "head".into(), parent: None, place, body: None, same_as: None, color: None, face_colors: Vec::new() },
         ExportNode { name: "plate".into(), parent: Some(0), place, body: Some(1), same_as: None, color: Some(red), face_colors: Vec::new() },
     ];
-    export_3mf_tree(&nodes, &[(1, tetra(0.0), vec![Some(red), Some(red), Some(red), Some(green)])], &p).expect("the tree is written");
+    export_3mf_tree(&nodes, &[ExportMesh { body: 1, mesh: tetra(0.0), tri_colors: vec![Some(red), Some(red), Some(red), Some(green)] }], &p).expect("the tree is written");
     let mut xml = String::new();
     zip::ZipArchive::new(std::fs::File::open(&p).expect("the package")).expect("a zip").by_name("3D/3dmodel.model").expect("the model").read_to_string(&mut xml).expect("read");
     assert!(xml.contains(r##"displaycolor="#1ACC1A""##), "the green is not among the materials: {xml}");
@@ -240,7 +249,7 @@ fn a_face_of_its_own_colour_goes_out_on_its_triangles() {
 /// it reads back red with every triangle green, not red all over.
 #[test]
 fn a_piece_coloured_over_all_round_comes_back_so() {
-    use qymcad_core::model::ExportNode;
+    use qymcad_core::model::{ExportMesh, ExportNode};
     let p = file("over.3mf");
     let (red, green) = ([204, 26, 26], [26, 204, 26]);
     let place = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0];
@@ -248,7 +257,7 @@ fn a_piece_coloured_over_all_round_comes_back_so() {
         ExportNode { name: "head".into(), parent: None, place, body: None, same_as: None, color: None, face_colors: Vec::new() },
         ExportNode { name: "plate".into(), parent: Some(0), place, body: Some(1), same_as: None, color: Some(red), face_colors: Vec::new() },
     ];
-    export_3mf_tree(&nodes, &[(1, tetra(0.0), vec![Some(green); 4])], &p).expect("the tree is written");
+    export_3mf_tree(&nodes, &[ExportMesh { body: 1, mesh: tetra(0.0), tri_colors: vec![Some(green); 4] }], &p).expect("the tree is written");
     let back = import_3mf(&p).expect("reads back");
     assert_eq!(back[0].color, Some(red), "the plate does not come back in its own colour");
     assert_eq!(back[0].tri_colors, [green; 4], "the triangles do not come back in the colour they are given");
@@ -332,7 +341,7 @@ fn a_part_made_of_parts_comes_in_as_their_group() {
 /// placed twice, not a copy of its parts.
 #[test]
 fn a_tree_goes_out_with_its_subassemblies() {
-    use qymcad_core::model::ExportNode;
+    use qymcad_core::model::{ExportMesh, ExportNode};
     use std::io::Read;
     let p = file("levels.3mf");
     let at = |x: f64, z: f64| [1.0, 0.0, 0.0, x, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, z];
@@ -353,7 +362,16 @@ fn a_tree_goes_out_with_its_subassemblies() {
         node("unit", Some(0), at(0.0, 80.0), None, Some(2)),
         node("pin", Some(4), at(5.0, 0.0), Some(3), Some(3)),
     ];
-    export_3mf_tree(&nodes, &[(1, tetra(0.0), Vec::new()), (2, tetra(0.0), Vec::new()), (3, tetra(0.0), Vec::new())], &p).expect("the tree is written");
+    export_3mf_tree(
+        &nodes,
+        &[
+            ExportMesh { body: 1, mesh: tetra(0.0), tri_colors: Vec::new() },
+            ExportMesh { body: 2, mesh: tetra(0.0), tri_colors: Vec::new() },
+            ExportMesh { body: 3, mesh: tetra(0.0), tri_colors: Vec::new() },
+        ],
+        &p,
+    )
+    .expect("the tree is written");
     let mut xml = String::new();
     zip::ZipArchive::new(std::fs::File::open(&p).expect("the package")).expect("a zip").by_name("3D/3dmodel.model").expect("the model").read_to_string(&mut xml).expect("read");
     assert_eq!(xml.matches("<object ").count(), 4, "not an object per part, one for the unit and one for the head: {xml}");

@@ -7,7 +7,7 @@
 //! The reference `tests/data/assembly.step` is written by OCCT's own writer: an assembly holding a plate twice (at x 0
 //! and at x 30) and a subassembly (at 5, 10, 0) holding a pin (at z 5), every one of them named in Cyrillic. The
 //! plate is red, the pin blue. A plate is a 10 x 20 x 5 box, a pin a cylinder of radius 4 and height 12 standing on its base.
-use qymcad_kernel::{document_tree, read_exact_tree, ExactFormat, ImportNode};
+use qymcad_kernel::{ExactTree, document_tree, read_exact_tree, ExactFormat, ImportNode};
 
 /// The names the reference was written with, one per line - the assembly, the plate, the subassembly, the pin. They
 /// are data of the file, kept beside it, not messages.
@@ -18,7 +18,7 @@ fn name(k: usize) -> &'static str {
 }
 
 fn reference() -> Vec<ImportNode> {
-    read_exact_tree(ExactFormat::Step, concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/assembly.step"), 0.5).expect("the reference reads").2
+    read_exact_tree(ExactFormat::Step, concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/assembly.step"), 0.5).expect("the reference reads").nodes
 }
 
 /// Where node `i` stands in the world: its placement composed with every parent's.
@@ -60,7 +60,7 @@ fn a_step_assembly_comes_with_its_tree_and_names() {
 /// where it stands could not be moved or mated as a part: both plates would be different solids of the same part.
 #[test]
 fn every_occurrence_is_a_body_in_its_own_coordinates_placed_by_the_tree() {
-    let (bodies, shapes, nodes) = read_exact_tree(ExactFormat::Step, concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/assembly.step"), 0.5).expect("reads");
+    let ExactTree { bodies, shapes, nodes } = read_exact_tree(ExactFormat::Step, concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/assembly.step"), 0.5).expect("reads");
     assert_eq!((bodies.len(), shapes.len()), (2, 2), "two products, two bodies - the plate is held once");
     assert_eq!(nodes.iter().filter(|n| n.solid.is_some() || n.repeat_of.is_some()).count(), 3, "every occurrence carries its body or repeats one");
     let xs: Vec<f64> = named(&nodes, name(1)).into_iter().map(|i| world(&nodes, i)[3]).collect();
@@ -96,7 +96,7 @@ fn the_stand_in_name_of_the_writer_is_no_name() {
     let path = dir.join("unnamed.step").to_string_lossy().into_owned();
     let cube = qymcad_kernel::Shape::extrude(&[0.0, 0.0, 10.0, 0.0, 10.0, 10.0, 0.0, 10.0], 10.0).expect("a cube");
     qymcad_kernel::write_step(&[(&cube, qymcad_core::feature::PLACE_IDENTITY)], &path).expect("written");
-    let (_, _, nodes) = read_exact_tree(ExactFormat::Step, &path, 0.5).expect("reads");
+    let ExactTree { nodes, .. } = read_exact_tree(ExactFormat::Step, &path, 0.5).expect("reads");
     let names: Vec<&str> = nodes.iter().map(|n| n.name.as_str()).collect();
     assert!(!nodes.is_empty() && names.iter().all(|n| n.is_empty()), "the writer's stand-in came as a name: {names:?}");
 }
@@ -118,7 +118,7 @@ fn a_step_assembly_brings_its_colours() {
 #[ignore = "the owner's file"]
 fn the_print_head_comes_as_its_author_built_it() {
     let Ok(path) = std::env::var("QYM_CONDOR") else { return };
-    let (_, shapes, nodes) = read_exact_tree(ExactFormat::Step, &path, 0.5).expect("reads");
+    let ExactTree { shapes, nodes, .. } = read_exact_tree(ExactFormat::Step, &path, 0.5).expect("reads");
     let root = (0..nodes.len()).find(|&i| nodes[i].parent.is_none()).expect("a root");
     let first: Vec<&str> = nodes.iter().filter(|n| n.parent == Some(root)).map(|n| n.name.as_str()).collect();
     println!("root {:?}, {} nodes, {} bodies, coloured {}", nodes[root].name, nodes.len(), shapes.len(), nodes.iter().filter(|n| n.color.is_some()).count());
@@ -154,7 +154,7 @@ fn a_colour_covers_what_is_under_it() {
 /// rather than bringing a copy of it - which is what lets it come in as a clone of the same part.
 #[test]
 fn a_repeated_product_is_read_once() {
-    let (bodies, _, nodes) = read_exact_tree(ExactFormat::Step, concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/assembly.step"), 0.5).expect("reads");
+    let ExactTree { bodies, nodes, .. } = read_exact_tree(ExactFormat::Step, concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/assembly.step"), 0.5).expect("reads");
     let plates = named(&nodes, name(1));
     let first = nodes[plates[0]].solid.expect("the first plate brings its body");
     assert_eq!((nodes[plates[1]].solid, nodes[plates[1]].repeat_of), (None, Some(first)), "the second plate is read again instead of repeating the first");
@@ -186,7 +186,7 @@ fn a_name_past_ascii_is_spelled_as_the_format_holds_it() {
 /// carries that colour by the face's persistent id - 6, the number the plate's top face gets when the body is wrapped.
 #[test]
 fn a_face_brings_a_colour_of_its_own() {
-    let (_, shapes, nodes) = read_exact_tree(ExactFormat::Step, concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/assembly.step"), 0.5).expect("the reference reads");
+    let ExactTree { shapes, nodes, .. } = read_exact_tree(ExactFormat::Step, concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/assembly.step"), 0.5).expect("the reference reads");
     let plate = named(&nodes, name(1))[0];
     let faces = &nodes[plate].faces;
     assert_eq!(faces.iter().map(|(id, _)| *id).collect::<Vec<_>>(), [6], "the plate's faces of a colour of their own: {faces:?}");

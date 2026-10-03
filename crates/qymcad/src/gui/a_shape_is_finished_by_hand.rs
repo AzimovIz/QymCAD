@@ -73,26 +73,37 @@ mod tests {
         assert_eq!(spline_nodes(&app, si), vec![vec![(0.0, 0.0), (10.0, 10.0), (20.0, 0.0)]], "Esc on a spline of three nodes, under the hint {hint:?}");
     }
 
+    /// A drawing tool by its number, the key of its name, and the clicks that draw with it.
+    struct Drawing {
+        tool: u8,
+        key: &'static str,
+        clicks: &'static [(f64, f64)],
+    }
+
+    fn drawing(tool: u8, key: &'static str, clicks: &'static [(f64, f64)]) -> Drawing {
+        Drawing { tool, key, clicks }
+    }
+
     /// EVERY DRAWING TOOL NAMES ITS STEP OF UNDO AFTER WHAT IT DREW.
     ///
     /// Failures are gathered and given out together.
     #[test]
     fn every_drawing_tool_names_its_step_of_undo() {
-        let tools: [(u8, &str, &[(f64, f64)]); 11] = [
-            (1, "sk-line", &[(0.0, 0.0), (20.0, 0.0)]),
-            (2, "sk-rect", &[(0.0, 0.0), (20.0, 15.0)]),
-            (3, "sk-circle", &[(0.0, 0.0), (8.0, 0.0)]),
-            (4, "sk-arc", &[(0.0, 0.0), (10.0, 10.0), (20.0, 0.0)]),
-            (5, "sk-point", &[(5.0, 5.0)]),
-            (6, "sk-polygon", &[(0.0, 0.0), (8.0, 0.0)]),
-            (7, "sk-slot", &[(0.0, 0.0), (15.0, 0.0), (15.0, 5.0)]),
-            (8, "sk-ellipse", &[(0.0, 0.0), (12.0, 0.0), (6.0, 7.0)]),
-            (9, "sk-spline", &[(0.0, 0.0), (7.0, 7.0), (15.0, 0.0)]),
-            (10, "sk-circle", &[(0.0, 0.0), (8.0, 5.0), (12.0, -3.0)]),
-            (11, "sk-text", &[(0.0, 0.0)]),
+        let tools: [Drawing; 11] = [
+            drawing(1, "sk-line", &[(0.0, 0.0), (20.0, 0.0)]),
+            drawing(2, "sk-rect", &[(0.0, 0.0), (20.0, 15.0)]),
+            drawing(3, "sk-circle", &[(0.0, 0.0), (8.0, 0.0)]),
+            drawing(4, "sk-arc", &[(0.0, 0.0), (10.0, 10.0), (20.0, 0.0)]),
+            drawing(5, "sk-point", &[(5.0, 5.0)]),
+            drawing(6, "sk-polygon", &[(0.0, 0.0), (8.0, 0.0)]),
+            drawing(7, "sk-slot", &[(0.0, 0.0), (15.0, 0.0), (15.0, 5.0)]),
+            drawing(8, "sk-ellipse", &[(0.0, 0.0), (12.0, 0.0), (6.0, 7.0)]),
+            drawing(9, "sk-spline", &[(0.0, 0.0), (7.0, 7.0), (15.0, 0.0)]),
+            drawing(10, "sk-circle", &[(0.0, 0.0), (8.0, 5.0), (12.0, -3.0)]),
+            drawing(11, "sk-text", &[(0.0, 0.0)]),
         ];
         let mut problems = Vec::new();
-        for (tool, key, clicks) in tools {
+        for Drawing { tool, key, clicks } in tools {
             let (mut app, _si) = a_sketch();
             let mut hand = Hand::new(&mut app);
             if tool == 11 {

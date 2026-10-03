@@ -20,12 +20,18 @@ fn pattern(hint: &str, count: &str, dir: Option<&str>) -> Session {
     s
 }
 
+/// A case by its name, and its check: what went wrong, or nothing.
+struct Case {
+    what: String,
+    check: Box<dyn Fn() -> Option<String>>,
+}
+
 /// Every case, all that go wrong reported at once.
-fn run(cases: Vec<(String, Box<dyn Fn() -> Option<String>>)>) {
+fn run(cases: Vec<Case>) {
     let n = cases.len();
     let failed: Vec<String> = cases
         .into_iter()
-        .filter_map(|(what, c)| {
+        .filter_map(|Case { what, check: c }| {
             let mut out = None;
             let problem = qymcad_acceptance::refusal(|| out = c());
             let problem = if problem.is_empty() { out } else { Some(problem) };
@@ -39,17 +45,17 @@ probe! {
     budget = 1800;
     /// A ROW of the part along X and along Y, two, three and five long: the part and its copies stand 30 apart.
     fn rows_of_parts() {
-        let mut cases: Vec<(String, Box<dyn Fn() -> Option<String>>)> = Vec::new();
+        let mut cases: Vec<Case> = Vec::new();
         for (dir, k) in [("X", 0usize), ("Y", 1usize)] {
             for n in [2usize, 3, 5] {
-                cases.push((format!("{n} along {dir}"), Box::new(move || {
+                cases.push(Case { what: format!("{n} along {dir}"), check: Box::new(move || {
                     let mut s = pattern("tb-comp-lin-array-hint", &n.to_string(), Some(dir));
                     let mut along: Vec<f64> = s.document().parts.iter().map(|p| p.at[k]).collect();
                     along.sort_by(f64::total_cmp);
                     let want: Vec<f64> = (0..n).map(|i| 30.0 * i as f64).collect();
                     let fits = along.len() == n && along.iter().zip(&want).all(|(a, w)| (a - w).abs() < 1e-3);
                     (!fits).then(|| format!("the parts stand at {along:?} along {dir}, they should at {want:?}; the program says {:?}", s.status()))
-                })));
+                }) });
             }
         }
         run(cases);
@@ -63,7 +69,7 @@ probe! {
         run([3usize, 4, 6]
             .into_iter()
             .map(|n| {
-                (format!("{n} round"), Box::new(move || {
+                Case { what: format!("{n} round"), check: Box::new(move || {
                     let mut s = pattern("tb-comp-circ-array-hint", &n.to_string(), None);
                     let parts = s.document().parts;
                     let mut places: Vec<[i64; 3]> = parts.iter().map(|p| p.at.map(|v| (v * 1000.0).round() as i64)).collect();
@@ -73,7 +79,7 @@ probe! {
                     turns.sort();
                     turns.dedup();
                     (parts.len() != n || places.len().max(turns.len()) != n).then(|| format!("{} parts, {} places and {} turns among them, not {n} of each; the program says {:?}", parts.len(), places.len(), turns.len(), s.status()))
-                }) as Box<dyn Fn() -> Option<String>>)
+                }) }
             })
             .collect());
     }
@@ -86,7 +92,7 @@ probe! {
         run(["1", "0"]
             .into_iter()
             .map(|n| {
-                (format!("a row of {n}"), Box::new(move || {
+                Case { what: format!("a row of {n}"), check: Box::new(move || {
                     let mut s = Fixture::BlockInAssemblyPicked.start();
                     let status = s.status();
                     let hint = s.word("tb-comp-lin-array-hint");
@@ -96,7 +102,7 @@ probe! {
                     s.key(Key::Enter).key(Key::Enter);
                     let parts = s.document().parts.len();
                     (parts != 1 || s.status() == status).then(|| format!("{parts} parts, and the program says {:?}", s.status()))
-                }) as Box<dyn Fn() -> Option<String>>)
+                }) }
             })
             .collect());
     }

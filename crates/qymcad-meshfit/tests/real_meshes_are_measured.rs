@@ -240,7 +240,7 @@ fn real_meshes_are_measured() {
 #[ignore = "the owner's files"]
 fn the_owners_head_is_measured_against_its_step() {
     let (Ok(step), Ok(file)) = (std::env::var("QYM_CONDOR"), std::env::var("QYM_CONDOR_MESH")) else { return };
-    let (bodies, _, nodes) = qymcad_kernel::read_exact_tree(qymcad_kernel::ExactFormat::Step, &step, 0.1).expect("the STEP reads");
+    let qymcad_kernel::ExactTree { bodies, nodes, .. } = qymcad_kernel::read_exact_tree(qymcad_kernel::ExactFormat::Step, &step, 0.1).expect("the STEP reads");
     let then = |a: &[f64; 12], b: &[f64; 12]| -> [f64; 12] {
         let mut m = [0.0; 12];
         for r in 0..3 {

@@ -785,16 +785,17 @@ fn draw_open_borders(pn: &Painting, painter: &egui::Painter, scr: &qymcad_ui_sta
         for &mi in &open {
             let mesh = &pn.project.bodies[mi].mesh;
             let p = qymcad_meshfit::prepare(mesh, qymcad_meshfit::weld_tolerance(mesh));
-            let loops: Vec<Vec<[f64; 3]>> = p
+            let loops: Vec<qymcad_ui_state::OpenBorder> = p
                 .holes
                 .iter()
-                .map(|l| {
-                    l.iter()
+                .map(|l| qymcad_ui_state::OpenBorder {
+                    corners: l
+                        .iter()
                         .map(|&v| {
                             let q = p.mesh.verts[v as usize];
                             [q.x, q.y, q.z]
                         })
-                        .collect()
+                        .collect(),
                 })
                 .collect();
             found.insert(mi, loops);
@@ -805,7 +806,7 @@ fn draw_open_borders(pn: &Painting, painter: &egui::Painter, scr: &qymcad_ui_sta
     for item in qymcad_ui_state::visible_mesh_items(pn) {
         let Some(loops) = borders.value.get(&item.index) else { continue };
         for l in loops {
-            let pts: Vec<egui::Pos2> = l.iter().map(|&q| scr.at(qymcad_core::feature::apply12(&item.world, q)).0).collect();
+            let pts: Vec<egui::Pos2> = l.corners.iter().map(|&q| scr.at(qymcad_core::feature::apply12(&item.world, q)).0).collect();
             painter.add(egui::Shape::closed_line(pts, egui::Stroke::new(3.0, pn.scheme.pal.remove())));
         }
     }

@@ -4,7 +4,7 @@
 //! The export used to write every body baked into the world, as "Open CASCADE STEP translator 7.9 N" - no tree, no
 //! names, no colours, a clone written out twice.
 use qymcad_core::model::Project;
-use qymcad_kernel::{document_tree, read_exact_tree, write_step_tree, ExactFormat, ImportNode};
+use qymcad_kernel::{ExactTree, document_tree, read_exact_tree, write_step_tree, ExactFormat, ImportNode};
 
 const STEP: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../qymcad-kernel/tests/data/assembly.step");
 
@@ -35,7 +35,7 @@ fn world(nodes: &[ImportNode], i: usize) -> [f64; 3] {
 
 #[test]
 fn a_step_assembly_goes_out_as_its_tree() {
-    let (bodies, shapes, nodes) = read_exact_tree(ExactFormat::Step, STEP, 0.5).expect("the reference reads");
+    let ExactTree { bodies, shapes, nodes } = read_exact_tree(ExactFormat::Step, STEP, 0.5).expect("the reference reads");
     let mut p = Project::default();
     p.new_empty_document();
     let source = p.add_source("assembly.step", std::fs::read(STEP).expect("the file reads"));
@@ -50,7 +50,7 @@ fn a_step_assembly_goes_out_as_its_tree() {
     let pairs: Vec<(u64, &qymcad_kernel::Shape)> = live.iter().map(|(k, s)| (*k, s)).collect();
     write_step_tree(&tree, &pairs, &out).expect("the tree is written");
 
-    let (back_bodies, _, back) = read_exact_tree(ExactFormat::Step, &out, 0.5).expect("the file written reads back");
+    let ExactTree { bodies: back_bodies, nodes: back, .. } = read_exact_tree(ExactFormat::Step, &out, 0.5).expect("the file written reads back");
     let named = |n: &str| (0..back.len()).filter(|&i| back[i].name == n).collect::<Vec<_>>();
     let roots: Vec<usize> = (0..back.len()).filter(|&i| back[i].parent.is_none()).collect();
     assert_eq!(roots.iter().map(|&i| back[i].name.as_str()).collect::<Vec<_>>(), [name(0)], "the root does not go out under its name");

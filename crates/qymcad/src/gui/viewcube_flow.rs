@@ -203,12 +203,12 @@ mod tests {
     #[test]
     fn the_surface_is_closed_every_edge_shared_by_two_zones() {
         use std::collections::HashMap;
-        let key = |p: &[f64; 3]| (((p[0] * 1000.0).round()) as i64, ((p[1] * 1000.0).round()) as i64, ((p[2] * 1000.0).round()) as i64);
-        let mut count: HashMap<((i64, i64, i64), (i64, i64, i64)), usize> = HashMap::new();
+        let key = |p: &[f64; 3]| p.map(|v| (v * 1000.0).round() as i64);
+        let mut count: HashMap<[[i64; 3]; 2], usize> = HashMap::new();
         for z in zones() {
             for i in 0..z.poly.len() {
                 let (a, b) = (key(&z.poly[i]), key(&z.poly[(i + 1) % z.poly.len()]));
-                let e = if a <= b { (a, b) } else { (b, a) };
+                let e = if a <= b { [a, b] } else { [b, a] };
                 *count.entry(e).or_insert(0) += 1;
             }
         }
