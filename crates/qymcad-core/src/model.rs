@@ -1831,7 +1831,7 @@ impl WorkPlane {
 type EdgeRenames = std::collections::HashMap<Id, std::collections::HashMap<u32, u32>>;
 
 mod assembly;
-pub use assembly::{ExportMesh, ExportNode, ImportNode};
+pub use assembly::{ExportMesh, ExportNode, FileGroup, ImportNode};
 pub mod contours;
 mod regen;
 pub use regen::{ArrayAxis, BodyOp, ChamferShape, CombineSpan, ExtrudeSpan, HoleTool, RevolveAxis, RevolveTurn};

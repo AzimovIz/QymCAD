@@ -19,6 +19,9 @@
 //!
 //! Measured on closing, over the whole tree and with nothing exempt at all: twelve signatures wider than
 //! seven remain, and all twelve are `extern "C"` declarations. Not one is a function written in Rust.
+//!
+//! THE OTHER HALF OF THE SAME CURE is kept here too: no alias names a tuple (`no_alias_names_a_tuple`). An alias
+//! narrows a signature without naming a single place, so the width check alone could be passed by one.
 
 #[cfg(test)]
 pub(crate) mod tests {
@@ -26,11 +29,18 @@ pub(crate) mod tests {
     ///
     /// Counting commas is not enough: `&([f64; 3], [f64; 3], [f64; 3])` is ONE argument, and a counter
     /// that misses that reported 128 where there were 63. The earlier measure did exactly this.
+    ///
+    /// The `>` of an arrow closes nothing: `valid: &dyn Fn(&str) -> bool, with_list: bool` read as depth -1 after the
+    /// arrow, every comma after it was skipped, and a signature of nine was counted as seven.
     fn split_args(t: &str) -> Vec<&str> {
         let (mut out, mut depth, mut start) = (Vec::new(), 0i32, 0usize);
+        let mut prev = ' ';
         for (i, ch) in t.char_indices() {
+            let arrow = ch == '>' && prev == '-';
+            prev = ch;
             match ch {
                 '<' | '(' | '[' | '{' => depth += 1,
+                '>' if arrow => {}
                 '>' | ')' | ']' | '}' => depth -= 1,
                 ',' if depth == 0 => {
                     out.push(t[start..i].trim());
@@ -75,9 +85,16 @@ pub(crate) mod tests {
         false
     }
 
-    /// Every `fn` in the file whose argument list is longer than seven: its name, its width, the offset
-    /// of the name.
-    fn wide_fns(text: &str) -> Vec<(String, usize, usize)> {
+    /// A function whose argument list is longer than seven: its name, its width, the offset of the name.
+    #[derive(Debug)]
+    struct WideFn {
+        name: String,
+        width: usize,
+        at: usize,
+    }
+
+    /// Every `fn` in the file whose argument list is longer than seven.
+    fn wide_fns(text: &str) -> Vec<WideFn> {
         let mut out = Vec::new();
         let bytes = text.as_bytes();
         let mut i = 0usize;
@@ -113,7 +130,7 @@ pub(crate) mod tests {
             let Some(close) = close else { break };
             let n = split_args(&text[open + 1..close]).len();
             if n > 7 {
-                out.push((name.to_string(), n, s));
+                out.push(WideFn { name: name.to_string(), width: n, at: s });
             }
         }
         out
@@ -143,13 +160,15 @@ pub(crate) mod tests {
         );
         let found = wide_fns(sample);
         assert_eq!(found.len(), 2, "both wide signatures must be seen: {found:?}");
-        let exempt: Vec<&str> = found.iter().filter(|(_, _, at)| is_bridge(sample, *at)).map(|(n, _, _)| n.as_str()).collect();
+        let exempt: Vec<&str> = found.iter().filter(|f| is_bridge(sample, f.at)).map(|f| f.name.as_str()).collect();
         assert_eq!(
             exempt,
             ["qym_shape_hole"],
             "only the C declaration is exempt; a Rust wrapper around it is ours to narrow, and pretending otherwise \
              is what hid a signature of sixteen"
         );
+        let past_an_arrow = "fn field(a: u8, valid: &dyn Fn(&str) -> bool, c: u8, d: u8, e: u8, f: u8, g: u8, h: u8) {}\n";
+        assert_eq!(wide_fns(past_an_arrow).len(), 1, "the commas after the arrow of a closure type count too");
         let narrow = "fn small(a: u8, b: u8) -> u8 {\n    0\n}\n";
         assert!(wide_fns(narrow).is_empty(), "a signature of two must not be reported");
     }
@@ -180,7 +199,7 @@ pub(crate) mod tests {
                 }
                 files += 1;
                 let text = std::fs::read_to_string(&p).expect("file is readable");
-                for (name, n, at) in wide_fns(&text) {
+                for WideFn { name, width: n, at } in wide_fns(&text) {
                     if is_bridge(&text, at) {
                         exempt += 1;
                         continue;
@@ -198,5 +217,62 @@ pub(crate) mod tests {
              Scanned {files} files, {exempt} exempt as `extern \"C\"` declarations.\n{}",
             offenders.join("\n")
         );
+    }
+
+    /// THE LINES OF A FILE THAT NAME A TUPLE WITH AN ALIAS: `type Row = (&str, fn(&mut App));`.
+    ///
+    /// An alias gives a tuple a name and leaves its places without one: the reader still counts commas to tell the
+    /// name from the action, and a check of the width of signatures or of the complexity of types sees one word where
+    /// there are three. That is how a seven-place `MeshPiece` and five tables of probes passed both. A group that
+    /// travels together is a struct with named fields.
+    fn tuple_aliases(text: &str) -> Vec<String> {
+        text.lines()
+            .map(str::trim_start)
+            .filter(|t| {
+                let t = t.strip_prefix("pub(crate) ").or_else(|| t.strip_prefix("pub(super) ")).or_else(|| t.strip_prefix("pub ")).unwrap_or(t);
+                t.strip_prefix("type ").and_then(|rest| rest.split_once('=')).is_some_and(|(_, rhs)| rhs.trim_start().starts_with('('))
+            })
+            .map(str::to_string)
+            .collect()
+    }
+
+    /// The signal on a sample: an alias of a tuple is caught, an alias of a closure or of a struct is not.
+    #[test]
+    fn the_signal_catches_an_alias_of_a_tuple() {
+        let sample = concat!(
+            "pub type MeshPiece = (String, Mesh, Vec<MeshFace>);\n",
+            "        type Row = (&'static str, fn(&mut Project));\n",
+            "type KernelWork = dyn FnOnce(&dyn Kernel) -> Result<Built, CoreError> + Send;\n",
+            "pub type TrialFaces = std::sync::Arc<Vec<[[f64; 3]; 3]>>;\n",
+        );
+        let found = tuple_aliases(sample);
+        assert_eq!(found.len(), 2, "the two aliases of a tuple must be seen, and only they: {found:?}");
+    }
+
+    /// The sweep: no alias of a tuple anywhere in the workspace.
+    #[test]
+    fn no_alias_names_a_tuple() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().and_then(|p| p.parent()).expect("repository root").join("crates");
+        let mut offenders: Vec<String> = Vec::new();
+        let mut stack = vec![root.clone()];
+        while let Some(dir) = stack.pop() {
+            for e in std::fs::read_dir(&dir).expect("sources are readable").flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    if p.file_name().and_then(|n| n.to_str()) != Some("target") {
+                        stack.push(p);
+                    }
+                    continue;
+                }
+                // this file holds the sample the detector is tried on
+                if p.extension().and_then(|x| x.to_str()) != Some("rs") || p.file_name().and_then(|n| n.to_str()) == Some("wide_signature_ratchet.rs") {
+                    continue;
+                }
+                let text = std::fs::read_to_string(&p).expect("file is readable");
+                let rel = p.strip_prefix(&root).unwrap_or(&p).display().to_string();
+                offenders.extend(tuple_aliases(&text).into_iter().map(|l| format!("{rel}: {l}")));
+            }
+        }
+        assert!(offenders.is_empty(), "a tuple is named by an alias. Make it a struct with named fields:\n{}", offenders.join("\n"));
     }
 }

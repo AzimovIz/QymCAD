@@ -218,7 +218,7 @@ fn a_tree_goes_out_as_an_object_of_parts() {
     let back = import_3mf(&p).expect("the tree reads back");
     assert_eq!(back.iter().map(|b| b.name.as_str()).collect::<Vec<_>>(), ["plate", "plate", "pin & nut"]);
     assert_eq!(back.iter().map(|b| b.color).collect::<Vec<_>>(), [red, red, blue]);
-    assert_eq!([back[1].place[3], back[2].place[3], back[2].within[0].2[11]], [30.0, 5.0, 50.0], "the parts are not placed where they stand");
+    assert_eq!([back[1].place[3], back[2].place[3], back[2].within[0].place[11]], [30.0, 5.0, 50.0], "the parts are not placed where they stand");
     assert_eq!(back[2].mesh.verts, tetra(0.0).verts, "the pin is not at its own zero, to the last bit");
 }
 
@@ -327,10 +327,10 @@ fn a_part_made_of_parts_comes_in_as_their_group() {
     let p = package("nested.3mf", &[("_rels/.rels", RELS), ("3D/3dmodel.model", &model("millimeter", &resources, r#"<item objectid="4"/>"#))]);
     let back = import_3mf(&p).expect("reads");
     assert_eq!(back.iter().map(|m| m.name.as_str()).collect::<Vec<_>>(), ["pin", "plate"], "the unit came in as one piece");
-    let chain = |k: usize| back[k].within.iter().map(|(_, n, _)| n.as_str()).collect::<Vec<_>>();
+    let chain = |k: usize| back[k].within.iter().map(|g| g.name.as_str()).collect::<Vec<_>>();
     assert_eq!((chain(0), chain(1)), (vec!["unit"], vec!["unit"]), "the pin and the plate do not come in within the unit");
-    assert_eq!(back[0].within[0].0, back[1].within[0].0, "the unit is not one group for both");
-    assert_eq!(back[0].within[0].2[11], 50.0, "the unit does not stand 50 up");
+    assert_eq!(back[0].within[0].index, back[1].within[0].index, "the unit is not one group for both");
+    assert_eq!(back[0].within[0].place[11], 50.0, "the unit does not stand 50 up");
     assert_eq!(back[0].place[3], 5.0, "the pin does not stand 5 along in the unit");
 }
 
@@ -378,8 +378,8 @@ fn a_tree_goes_out_with_its_subassemblies() {
     assert!(xml.contains(r#"name="unit" type="model">"#) && xml.matches("<components>").count() == 2, "the unit is not an object of components: {xml}");
     let back = import_3mf(&p).expect("the tree reads back");
     assert_eq!(back.iter().map(|b| b.name.as_str()).collect::<Vec<_>>(), ["plate", "pin", "pin"]);
-    let chain = |k: usize| back[k].within.iter().map(|(_, n, _)| n.as_str()).collect::<Vec<_>>();
+    let chain = |k: usize| back[k].within.iter().map(|g| g.name.as_str()).collect::<Vec<_>>();
     assert_eq!((chain(0), chain(1), chain(2)), (vec![], vec!["unit"], vec!["unit"]), "the pins do not come in within their units");
-    assert_ne!(back[1].within[0].0, back[2].within[0].0, "the two units came in as one group");
-    assert_eq!([back[1].within[0].2[11], back[2].within[0].2[11], back[1].place[3]], [50.0, 80.0, 5.0], "the units or the pin do not stand where they were");
+    assert_ne!(back[1].within[0].index, back[2].within[0].index, "the two units came in as one group");
+    assert_eq!([back[1].within[0].place[11], back[2].within[0].place[11], back[1].place[3]], [50.0, 80.0, 5.0], "the units or the pin do not stand where they were");
 }

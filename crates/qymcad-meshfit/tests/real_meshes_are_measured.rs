@@ -284,7 +284,7 @@ fn the_owners_head_is_measured_against_its_step() {
         .map(|piece| {
             let mut placed = piece.mesh.clone();
             placed.transform(&piece.place);
-            for (_, _, place) in piece.within.iter().rev() {
+            for place in piece.within.iter().rev().map(|g| &g.place) {
                 placed.transform(place);
             }
             boxed(&placed)

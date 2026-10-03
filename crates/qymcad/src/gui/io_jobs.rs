@@ -684,7 +684,7 @@ fn mesh_dialog(format: qymcad_ui_state::MeshFormat, base: &str) -> rfd::AsyncFil
 
 /// What the status says once meshes have come in: the format, how many bodies, how many triangles.
 pub(super) fn mesh_added(format: qymcad_ui_state::MeshFormat, pieces: &[qymcad_ui_state::MeshPiece]) -> String {
-    let tris: usize = pieces.iter().map(|(_, m, ..)| m.tris.len()).sum();
+    let tris: usize = pieces.iter().map(|p| p.mesh.tris.len()).sum();
     crate::i18n::trn("io-mesh-added", &[("format", crate::gui::mesh_entry(format).name()), ("bodies", &pieces.len().to_string()), ("n", &tris.to_string())])
 }
 

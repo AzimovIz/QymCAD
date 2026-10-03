@@ -61,15 +61,22 @@ mod tests {
         let keys = super::super::screen_keys::tests::catalogue_keys();
         assert!(keys.len() > 500, "GUARD: suspiciously few catalogue keys were collected: {}", keys.len());
 
-        type Surface = (&'static str, fn(&mut App));
+        /// A bar of the assembly by its name, and how it is brought up.
+        struct Surface {
+            name: &'static str,
+            arm: fn(&mut App),
+        }
+        fn surface(name: &'static str, arm: fn(&mut App)) -> Surface {
+            Surface { name, arm }
+        }
         let surfaces: &[Surface] = &[
-            ("the mate bar", |a: &mut App| a.arm_joint_pick_for_test()),
-            ("the anchor bar", |a: &mut App| a.start_conn_pick()),
-            ("the group bar", |a: &mut App| a.start_group_pick()),
-            ("the width bar", |a: &mut App| a.start_width_pick()),
-            ("the tangency bar", |a: &mut App| a.start_tangent_pick()),
-            ("the relation bar", |a: &mut App| a.start_relation_pick()),
-            ("the ground bar", |a: &mut App| a.start_ground_pick()),
+            surface("the mate bar", |a: &mut App| a.arm_joint_pick_for_test()),
+            surface("the anchor bar", |a: &mut App| a.start_conn_pick()),
+            surface("the group bar", |a: &mut App| a.start_group_pick()),
+            surface("the width bar", |a: &mut App| a.start_width_pick()),
+            surface("the tangency bar", |a: &mut App| a.start_tangent_pick()),
+            surface("the relation bar", |a: &mut App| a.start_relation_pick()),
+            surface("the ground bar", |a: &mut App| a.start_ground_pick()),
         ];
 
         let prev = crate::i18n::language();
@@ -77,7 +84,7 @@ mod tests {
         let mut drawn = 0usize;
         for code in ["ru", "en"] {
             crate::i18n::set_language(code);
-            for (name, arm) in surfaces {
+            for Surface { name, arm } in surfaces {
                 let mut app = App::default();
                 let jid = an_assembly(&mut app);
                 app.workbench = super::super::Workbench::Assembly;

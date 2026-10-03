@@ -55,10 +55,10 @@ pub fn trial_refusal(pc: &mut PartCtx, ctx: &egui::Context) -> Trial {
         return Trial::Clear;
     }
     let key = state_key(pc);
-    if let Some((k, answer)) = ctx.data(|d| d.get_temp::<qymcad_ui_state::TrialSlot>(id)) {
+    if let Some(qymcad_ui_state::TrialSlot { key: k, answer }) = ctx.data(|d| d.get_temp::<qymcad_ui_state::TrialSlot>(id)) {
         if k == key {
             qymcad_ui_state::trial_is_current(ctx);
-            let got = answer.lock().ok().and_then(|a| a.clone()).map(|(t, _)| t);
+            let got = answer.lock().ok().and_then(|a| a.clone()).map(|a| a.verdict);
             if got.is_none() {
                 ctx.request_repaint_after(std::time::Duration::from_millis(30));
                 // a frame when the answer lands
@@ -68,17 +68,17 @@ pub fn trial_refusal(pc: &mut PartCtx, ctx: &egui::Context) -> Trial {
     }
     let first = pc.cmd.params.first().map(|p| p.key.to_string()).unwrap_or_default();
     let job = gather(pc);
-    let answer: Arc<Mutex<Option<(Trial, qymcad_ui_state::TrialFaces)>>> = Arc::new(Mutex::new(None));
+    let answer: Arc<Mutex<Option<qymcad_ui_state::TrialAnswer>>> = Arc::new(Mutex::new(None));
     let out = answer.clone();
     std::thread::spawn(move || {
         // a trial names no field: the command's first one says it
         let (words, faces) = run_trial(job);
         let verdict = words.map_or(Trial::Clear, |w| Trial::Refused(first, w));
         if let Ok(mut a) = out.lock() {
-            *a = Some((verdict, Arc::new(faces)));
+            *a = Some(qymcad_ui_state::TrialAnswer { verdict, faces: Arc::new(faces) });
         }
     });
-    ctx.data_mut(|d| d.insert_temp::<qymcad_ui_state::TrialSlot>(id, (key, answer)));
+    ctx.data_mut(|d| d.insert_temp::<qymcad_ui_state::TrialSlot>(id, qymcad_ui_state::TrialSlot { key, answer }));
     qymcad_ui_state::trial_is_current(ctx);
     ctx.request_repaint_after(std::time::Duration::from_millis(30));
     Trial::Checking

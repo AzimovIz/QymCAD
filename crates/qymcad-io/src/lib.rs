@@ -52,7 +52,7 @@ pub struct NamedMesh {
     /// The groups of the file the piece stands in, from the top down - a glTF node that holds others: its number in
     /// the file, its name and its place in the group above it; `place` is then the piece's place in the last of them.
     /// Empty for a piece at the top of its file, and for every piece of a file that holds no groups.
-    pub within: Vec<(usize, String, [f64; 12])>,
+    pub within: Vec<qymcad_core::model::FileGroup>,
 }
 
 /// A NAME A WRITER PUTS WHERE IT HAS NONE is no name: the program that wrote the owner's print head numbers its pieces

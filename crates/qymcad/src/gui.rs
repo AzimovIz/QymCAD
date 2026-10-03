@@ -2897,7 +2897,7 @@ pub(super) fn open_mesh(regen: &mut Rebuilding, path: String, format: qymcad_ui_
             Ok(meshes) => {
                 let pieces = meshes.into_iter().map(|n| {
                     let faces = n.mesh.detect_faces(8.0);
-                    (n.name, n.mesh, faces, n.color, n.place, n.tri_colors, n.within)
+                    qymcad_ui_state::MeshPiece { name: n.name, mesh: n.mesh, faces, color: n.color, place: n.place, tri_colors: n.tri_colors, within: n.within }
                 });
                 JobResult::MeshImported { path: p, format, pieces: pieces.collect() }
             }

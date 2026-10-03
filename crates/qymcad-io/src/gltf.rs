@@ -136,7 +136,7 @@ struct Scene<'a> {
 /// of the node's transform are the piece's place. `rest` is what the nodes above scale, shear or mirror: it takes this
 /// node whole, its shift too, and what it and the node's own transform leave beyond a turn is baked into the node's
 /// mesh and handed down to its children.
-fn walk(scene: &Scene, at: usize, rest: &crate::rigid::Lin, within: &[(usize, String, [f64; 12])], out: &mut Vec<NamedMesh>, depth: usize) -> Result<(), String> {
+fn walk(scene: &Scene, at: usize, rest: &crate::rigid::Lin, within: &[qymcad_core::model::FileGroup], out: &mut Vec<NamedMesh>, depth: usize) -> Result<(), String> {
     let (doc, buffers) = (scene.doc, scene.buffers);
     let node = &doc["nodes"][at];
     if node.is_null() || depth > 64 {
@@ -152,7 +152,7 @@ fn walk(scene: &Scene, at: usize, rest: &crate::rigid::Lin, within: &[(usize, St
     // a node that holds others is a group; its own mesh, where it has one, stands in it at the group's zero
     let (inner, piece_place) = if !kids.is_empty() {
         let mut w = within.to_vec();
-        w.push((at, name.clone(), place));
+        w.push(qymcad_core::model::FileGroup { index: at, name: name.clone(), place });
         (w, qymcad_core::feature::PLACE_IDENTITY)
     } else {
         (within.to_vec(), place)

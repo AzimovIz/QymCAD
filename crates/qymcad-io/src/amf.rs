@@ -136,9 +136,9 @@ fn parse(xml: &str) -> Result<Vec<NamedMesh>, String> {
         for c in tops {
             tree.expand(c.attr("id").unwrap_or(""), &[], &HOME, 0, &mut placed)?;
         }
-        for (within, p, k) in placed {
+        for Instance { within, at: p, object: k } in placed {
             let (_, name, m) = &objects[k];
-            let within = within.into_iter().map(|(g, n, at)| (g, n, placement(&at, to_mm))).collect();
+            let within = within.into_iter().map(|g| qymcad_core::model::FileGroup { index: g.index, name: g.name, place: placement(&g.at, to_mm) }).collect();
             out.push(NamedMesh { name: name.clone(), mesh: place_mesh(m, &HOME), color: colours[k], place: placement(&p, to_mm), tri_colors: Vec::new(), within });
         }
     }
@@ -149,7 +149,19 @@ fn parse(xml: &str) -> Result<Vec<NamedMesh>, String> {
 }
 
 /// A group met on the walk through the constellations: its number, its name and its place in the group above it.
-type Group = (usize, String, Place);
+#[derive(Clone)]
+struct Group {
+    index: usize,
+    name: String,
+    at: Place,
+}
+
+/// An object as the walk places it: the groups it stands in, its place in the last of them, and its index.
+struct Instance {
+    within: Vec<Group>,
+    at: Place,
+    object: usize,
+}
 
 /// The constellations and objects of a file on a walk through them, and the number the next group takes.
 struct Tree<'a> {
@@ -162,18 +174,18 @@ impl Tree<'_> {
     /// Every object `id` stands for, at any depth, into `out`: the groups it stands in, its place in the last of them
     /// and the index of the object. A constellation - the top one and every one instanced in another - is a group of
     /// its own at the place it is put, one per instance, so a unit placed twice is two groups.
-    fn expand(&mut self, id: &str, within: &[Group], at: &Place, depth: usize, out: &mut Vec<(Vec<Group>, Place, usize)>) -> Result<(), String> {
+    fn expand(&mut self, id: &str, within: &[Group], at: &Place, depth: usize, out: &mut Vec<Instance>) -> Result<(), String> {
         if depth > 32 {
             return Err("io-amf-bad-constellation".into());
         }
         if let Some(k) = self.objects.iter().position(|(oid, _, _)| oid == id) {
-            out.push((within.to_vec(), *at, k));
+            out.push(Instance { within: within.to_vec(), at: *at, object: k });
             return Ok(());
         }
         let c = self.cons.iter().find(|c| c.attr("id") == Some(id)).ok_or_else(|| format!("io-amf-no-object#{id}"))?;
         let name = c.all("metadata").find(|m| m.attr("type") == Some("name")).map(|m| m.text.trim().to_string()).unwrap_or_default();
         let mut inner = within.to_vec();
-        inner.push((self.next, name, *at));
+        inner.push(Group { index: self.next, name, at: *at });
         self.next += 1;
         for i in c.all("instance") {
             let num = |name: &str| i.child(name).and_then(|n| n.text.trim().parse::<f64>().ok()).unwrap_or(0.0);

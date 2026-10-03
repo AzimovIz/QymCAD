@@ -31,8 +31,8 @@ pub(crate) fn land_mesh(wc: &mut WinCtx, path: String, format: MeshFormat, piece
     keep_pending(wc);
     *wc.dxf_path = Some(path.clone()); // the next file chooser opens where this file was
     let said = super::io_jobs::mesh_added(format, &pieces);
-    let span = span_of(pieces.iter().map(|(_, m, ..)| m));
-    let read: Vec<Built> = pieces.iter().map(|(_, m, f, ..)| Built { mesh: m.clone(), faces: f.clone() }).collect();
+    let span = span_of(pieces.iter().map(|p| &p.mesh));
+    let read: Vec<Built> = pieces.iter().map(|p| Built { mesh: p.mesh.clone(), faces: p.faces.clone() }).collect();
     let first = wc.project.bodies.len();
     qymcad_ui_state::begin_edit(wc.edits, wc.project, crate::i18n::tr1("io-import-mesh", "format", super::mesh_entry(format).name())); // an EDIT of the document: bodies are added to the current one
     let source = super::embed_source(wc.project, &path).unwrap_or(0);
@@ -41,7 +41,7 @@ pub(crate) fn land_mesh(wc: &mut WinCtx, path: String, format: MeshFormat, piece
     // Reported behaviour: a mesh came in as bodies with no part, seen only at the top of the assembly.
     let many = pieces.len() > 1;
     let mut tops: Vec<Entry> = Vec::new();
-    for (k, (own, mesh, faces, color, place, tri_colors, within)) in pieces.into_iter().enumerate() {
+    for (k, qymcad_ui_state::MeshPiece { name: own, mesh, faces, color, place, tri_colors, within }) in pieces.into_iter().enumerate() {
         let body = wc.project.add_mesh(mesh);
         wc.live.faces.insert(body, faces.clone()); // a face cache keyed by body Id, for quick access
         wc.project.set_body_faces(body, faces);
@@ -94,8 +94,8 @@ enum Entry {
 }
 
 /// `leaf` into `level`, under the groups `chain` names from the top down, each made where it is first met.
-fn put(level: &mut Vec<Entry>, chain: &[(usize, String, [f64; 12])], leaf: qymcad_core::model::ImportNode) {
-    let Some(((id, name, place), rest)) = chain.split_first() else {
+fn put(level: &mut Vec<Entry>, chain: &[qymcad_core::model::FileGroup], leaf: qymcad_core::model::ImportNode) {
+    let Some((qymcad_core::model::FileGroup { index: id, name, place }, rest)) = chain.split_first() else {
         level.push(Entry::Piece(leaf));
         return;
     };

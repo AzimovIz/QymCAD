@@ -161,7 +161,7 @@ mod tests {
     fn world_box(piece: &qymcad_io::NamedMesh) -> [f64; 6] {
         let mut mesh = piece.mesh.clone();
         mesh.transform(&piece.place);
-        for (_, _, place) in piece.within.iter().rev() {
+        for place in piece.within.iter().rev().map(|g| &g.place) {
             mesh.transform(place);
         }
         let b = mesh.bounds().expect("a mesh");

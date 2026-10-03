@@ -29,7 +29,7 @@ fn close(a: f64, b: f64) -> bool {
 fn placed(piece: &qymcad_io::NamedMesh) -> Mesh {
     let mut m = piece.mesh.clone();
     m.transform(&piece.place);
-    for (_, _, place) in piece.within.iter().rev() {
+    for place in piece.within.iter().rev().map(|g| &g.place) {
         m.transform(place);
     }
     m
@@ -118,7 +118,7 @@ fn a_scene_tree_places_its_meshes() {
     });
     let back = import_gltf(&file("tree.gltf", Some(gltf.to_string().as_bytes()))).expect("the scene reads");
     assert_eq!(back.len(), 2, "two nodes carry meshes");
-    assert_eq!(back[0].within.iter().map(|(_, n, _)| n.as_str()).collect::<Vec<_>>(), ["carrier"], "the carrier does not come as the group its children stand in");
+    assert_eq!(back[0].within.iter().map(|g| g.name.as_str()).collect::<Vec<_>>(), ["carrier"], "the carrier does not come as the group its children stand in");
     // the turned triangle: a quarter turn about glTF's Y takes +X to -Z, which is our +Y; then 0.1 m along X
     let t = &placed(&back[0]).verts;
     assert!(close(t[1].x, 100.0) && close(t[1].y, 1.0) && close(t[1].z, 0.0), "the child's turn or the parent's move was lost: {:?}", t[1]);
@@ -293,10 +293,10 @@ fn a_tree_comes_back_as_its_groups() {
     export_glb_tree(&nodes, &[ExportMesh { body: 1, mesh: tetra(0.0, 0.0), tri_colors: Vec::new() }, ExportMesh { body: 2, mesh: tetra(0.0, 0.0), tri_colors: Vec::new() }], &p)
         .expect("the tree is written");
     let back = import_gltf(&p).expect("the tree reads back");
-    let chain = |k: usize| back[k].within.iter().map(|(_, n, _)| n.as_str()).collect::<Vec<_>>();
+    let chain = |k: usize| back[k].within.iter().map(|g| g.name.as_str()).collect::<Vec<_>>();
     assert_eq!((chain(0), chain(1)), (vec!["head"], vec!["head", "unit"]), "the pieces do not come back in their groups");
-    assert_eq!(back[0].within[0].0, back[1].within[0].0, "the head is not one group for both pieces");
-    let unit = back[1].within[1].2;
+    assert_eq!(back[0].within[0].index, back[1].within[0].index, "the head is not one group for both pieces");
+    let unit = back[1].within[1].place;
     assert!(close(unit[11], 50.0) && unit[3].abs() < 1e-9 && unit[7].abs() < 1e-9, "the unit stands at {unit:?}");
     assert!(close(back[0].place[3], 30.0) && close(back[1].place[3], 5.0), "the pieces stand at {:?} and {:?}", back[0].place, back[1].place);
     let lo = back[1].mesh.bounds().expect("a mesh").min;
@@ -328,8 +328,8 @@ fn a_node_that_scales_keeps_the_tree() {
         {"name": "leaf", "mesh": 0, "translation": [0.001, 0.0, 0.0]}
     ]));
     let back = import_gltf(&file("scaled.gltf", Some(gltf.to_string().as_bytes()))).expect("the scene reads");
-    assert_eq!(back[0].within.iter().map(|(_, n, _)| n.as_str()).collect::<Vec<_>>(), ["carrier"], "a node that scales flattened the tree");
-    for place in [back[0].place, back[0].within[0].2] {
+    assert_eq!(back[0].within.iter().map(|g| g.name.as_str()).collect::<Vec<_>>(), ["carrier"], "a node that scales flattened the tree");
+    for place in [back[0].place, back[0].within[0].place] {
         let columns: Vec<f64> = (0..3).map(|c| (0..3).map(|r| place[r * 4 + c].powi(2)).sum::<f64>()).collect();
         assert!(columns.iter().all(|l| close(*l, 1.0)), "a place carries a scale: {place:?}");
     }

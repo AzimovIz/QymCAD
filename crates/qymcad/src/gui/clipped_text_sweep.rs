@@ -48,43 +48,50 @@ mod tests {
     #[test]
     #[ignore = "a measurement: prints the text painted past its own edge, surface by surface"]
     fn what_is_painted_past_its_own_edge() {
-        type Surface = (&'static str, fn(&mut App, &mut egui::Ui));
+        /// A part of the window by its name, and how it is drawn.
+        struct Surface {
+            name: &'static str,
+            draw: fn(&mut App, &mut egui::Ui),
+        }
+        fn surface(name: &'static str, draw: fn(&mut App, &mut egui::Ui)) -> Surface {
+            Surface { name, draw }
+        }
         let surfaces: &[Surface] = &[
-            ("tree", |a, c| a.tree_panel(c)),
-            ("properties", |a, c| a.properties_panel(c)),
-            ("menu", |a, c| {
+            surface("tree", |a, c| a.tree_panel(c)),
+            surface("properties", |a, c| a.properties_panel(c)),
+            surface("menu", |a, c| {
                 let mut asks = Vec::new();
                 crate::gui::panels_bars::menu_bar(&mut a.bar_ctx(&mut asks), c);
                 let c = c.ctx().clone();
                 a.do_bar_asks(asks, &c);
             }),
-            ("tool bar", |a, c| {
+            surface("tool bar", |a, c| {
                 let mut asks = Vec::new();
                 crate::gui::panels_bars::tool_options_bar(&mut a.bar_ctx(&mut asks), c);
                 let c = c.ctx().clone();
                 a.do_bar_asks(asks, &c);
             }),
-            ("command bar", |a, c| a.feat_command_bar(c)),
-            ("settings", |a, c| {
+            surface("command bar", |a, c| a.feat_command_bar(c)),
+            surface("settings", |a, c| {
                 let mut asks = Vec::new();
                 crate::gui::panels_windows::settings_window(&mut a.win_ctx(&mut asks), c);
                 a.do_win_asks(asks, c);
             }),
-            ("parameters", |a, c| {
+            surface("parameters", |a, c| {
                 let mut asks = Vec::new();
                 crate::gui::panels_windows::params_window(&mut a.win_ctx(&mut asks), c);
                 a.do_win_asks(asks, c);
             }),
-            ("parts library", |a, c| {
+            surface("parts library", |a, c| {
                 let mut asks = Vec::new();
                 crate::gui::panels_windows::parts_library_window(&mut a.win_ctx(&mut asks), c);
                 a.do_win_asks(asks, c);
             }),
-            ("hotkeys", |a, c| a.hotkeys_window(c)),
-            ("about", |a, c| crate::gui::panels_windows::about_dialog(&mut a.win, &a.scheme, c)),
+            surface("hotkeys", |a, c| a.hotkeys_window(c)),
+            surface("about", |a, c| crate::gui::panels_windows::about_dialog(&mut a.win, &a.scheme, c)),
         ];
         let mut worst: Vec<(f32, String)> = Vec::new();
-        for (name, draw) in surfaces {
+        for Surface { name, draw } in surfaces {
             let mut app = crate::gui::screen_keys::tests::populated();
             app.win.open(WinKind::Settings);
             app.win.open(WinKind::Params);

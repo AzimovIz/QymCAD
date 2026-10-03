@@ -1699,8 +1699,19 @@ impl Trial {
 /// The triangles of the faces a trial build adds, in the frame of the context: what the preview shows.
 pub type TrialFaces = std::sync::Arc<Vec<[[f64; 3]; 3]>>;
 
-/// A trial in flight or done, for the command's state key: the worker writes its answer and the faces it adds.
-pub type TrialSlot = (u64, std::sync::Arc<std::sync::Mutex<Option<(Trial, TrialFaces)>>>);
+/// What a trial came to: the verdict, and the faces the build adds.
+#[derive(Clone)]
+pub struct TrialAnswer {
+    pub verdict: Trial,
+    pub faces: TrialFaces,
+}
+
+/// A trial in flight or done, for the command's state key: the worker writes its answer when it has one.
+#[derive(Clone)]
+pub struct TrialSlot {
+    pub key: u64,
+    pub answer: std::sync::Arc<std::sync::Mutex<Option<TrialAnswer>>>,
+}
 
 /// Where the trial of the command in hand is kept in the frame's memory.
 pub fn trial_slot_id() -> egui::Id {
@@ -1730,9 +1741,9 @@ pub fn trial_faces(ctx: &egui::Context) -> Option<TrialFaces> {
     if seen + 1 < ctx.cumulative_frame_nr() {
         return None;
     }
-    let (_, answer) = ctx.data(|d| d.get_temp::<TrialSlot>(trial_slot_id()))?;
-    let got = answer.lock().ok()?.clone()?;
-    (got.0 == Trial::Clear && !got.1.is_empty()).then_some(got.1)
+    let slot = ctx.data(|d| d.get_temp::<TrialSlot>(trial_slot_id()))?;
+    let got = slot.answer.lock().ok()?.clone()?;
+    (got.verdict == Trial::Clear && !got.faces.is_empty()).then_some(got.faces)
 }
 
 /// A POINT AN AXIS IS PICKED THROUGH: a datum point by its id, or a vertex of a body by its edge and end - both followed
@@ -2857,9 +2868,19 @@ pub enum AxisHit {
 #[derive(Clone, Copy)]
 pub struct LabelKey(&'static str);
 
-/// A piece of a mesh file on its way into the document: its name, its mesh and faces, its colour, its place, the colour
-/// of every triangle where the file gives one, and the groups of the file it stands in (see `qymcad_io::NamedMesh`).
-pub type MeshPiece = (String, qymcad_core::geom::Mesh, Vec<qymcad_core::geom::MeshFace>, Option<[u8; 3]>, [f64; 12], Vec<[u8; 3]>, Vec<(usize, String, [f64; 12])>);
+/// A piece of a mesh file on its way into the document: a piece as the file names it (see `qymcad_io::NamedMesh`) with
+/// the faces found on its mesh.
+pub struct MeshPiece {
+    pub name: String,
+    pub mesh: qymcad_core::geom::Mesh,
+    pub faces: Vec<qymcad_core::geom::MeshFace>,
+    pub color: Option<[u8; 3]>,
+    pub place: [f64; 12],
+    /// the colour of every triangle, where the file gives one
+    pub tri_colors: Vec<[u8; 3]>,
+    /// the groups of the file the piece stands in, from the top down
+    pub within: Vec<qymcad_core::model::FileGroup>,
+}
 
 /// The result of a background (worker thread) import or export, arriving at the interface over a channel.
 pub enum JobResult {
@@ -10645,7 +10666,7 @@ pub fn expr_value_label(dc: &DrawCtx, ui: &mut egui::Ui, text: &str) {
 /// THE EXPRESSION FIELD. `model` is what is written in the document right now; the field shows it
 /// until an edit is begun.
 pub fn expr_field(ui: &mut egui::Ui, project: &Project, id: egui::Id, model: &str, w: f32, hint: &str) -> ExprOut {
-    field(ui, project, id, model, w, hint, &|_| true, true, false)
+    field(ui, project, id, model, w, hint, FieldRules { valid: &|_| true, list: NameList::Offered, focus: Focus::Waits })
 }
 
 /// THE NAME FIELD. The same thing, but WITHOUT the list of drivers.
@@ -10655,7 +10676,28 @@ pub fn expr_field(ui: &mut egui::Ui, project: &Project, id: egui::Id, model: &st
 /// in the expression field only, and that is no trifle: a measurement showed that with the list open on
 /// the name "h" Enter went to the list and the edit was not applied at all.
 pub fn name_field(ui: &mut egui::Ui, project: &Project, id: egui::Id, model: &str, w: f32, hint: &str, valid: &dyn Fn(&str) -> bool) -> ExprOut {
-    field(ui, project, id, model, w, hint, valid, false, false)
+    field(ui, project, id, model, w, hint, FieldRules { valid, list: NameList::Not, focus: Focus::Waits })
+}
+
+/// Whether a field offers the names of the parameters while a name is typed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NameList {
+    Offered,
+    Not,
+}
+
+/// Whether a field takes the keyboard as soon as it is drawn, selecting what it holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Focus {
+    Takes,
+    Waits,
+}
+
+/// How a field treats what is typed into it: what it accepts, whether it offers names, whether it takes the keyboard.
+pub struct FieldRules<'a> {
+    pub valid: &'a dyn Fn(&str) -> bool,
+    pub list: NameList,
+    pub focus: Focus,
 }
 
 /// THE SAME FIELD, BUT WITH A CHECK BEFORE THE COMMIT.
@@ -10664,7 +10706,9 @@ pub fn name_field(ui: &mut egui::Ui, project: &Project, id: egui::Id, model: &st
 /// not release the focus — otherwise out comes exactly the reported trouble: typing `len` and having
 /// the `n` deleted automatically. A person finishes the name or presses Escape, and meanwhile the
 /// program says what is wrong.
-pub fn field(ui: &mut egui::Ui, project: &Project, id: egui::Id, model: &str, w: f32, hint: &str, valid: &dyn Fn(&str) -> bool, with_list: bool, autofocus: bool) -> ExprOut {
+pub fn field(ui: &mut egui::Ui, project: &Project, id: egui::Id, model: &str, w: f32, hint: &str, rules: FieldRules) -> ExprOut {
+    let FieldRules { valid, list, focus } = rules;
+    let (with_list, autofocus) = (list == NameList::Offered, focus == Focus::Takes);
     let mut st: FieldState = ui.data_mut(|d| d.get_temp(id)).unwrap_or_default();
     // A VALUE SET FROM ELSEWHERE REACHES A FIELD NOBODY HAS TYPED INTO: the field that took the focus when the tool
     // opened keeps its text as a buffer, and a pick that sizes the tool (a thread sized to the cylinder picked) was
@@ -12727,7 +12771,7 @@ pub struct PlaceCtx<'a> {
 /// away, with no aiming of the mouse at the field and no erasing of the old one. This behaviour must
 /// not be lost when moving onto the shared field.
 pub fn expr_field_autofocus(ui: &mut egui::Ui, project: &Project, id: egui::Id, model: &str, w: f32, hint: &str, want_focus: bool) -> ExprOut {
-    field(ui, project, id, model, w, hint, &|_| true, true, want_focus)
+    field(ui, project, id, model, w, hint, FieldRules { valid: &|_| true, list: NameList::Offered, focus: if want_focus { Focus::Takes } else { Focus::Waits } })
 }
 
 /// The editing button: with a ready selection it applies at once, otherwise it waits for one (Esc cancels).

@@ -2768,6 +2768,15 @@ impl ImportNode {
     }
 }
 
+/// A GROUP OF A FILE a piece stands in - a glTF node, a 3MF object or an AMF constellation that holds others: its
+/// number in the file, its name, and its place in the group above it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FileGroup {
+    pub index: usize,
+    pub name: String,
+    pub place: [f64; 12],
+}
+
 /// ONE NODE OF A TREE GOING OUT to an exact file: a subassembly (no body) or a part carrying its body, under its name,
 /// where it stands in its parent. `same_as` points at an earlier node whose product this one repeats - a clone goes
 /// out as a second occurrence of its original, not as a copy. `color` is the part's colour.

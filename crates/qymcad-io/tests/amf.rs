@@ -25,7 +25,7 @@ fn tetra(x: f64) -> Mesh {
 fn placed(piece: &qymcad_io::NamedMesh) -> Mesh {
     let mut m = piece.mesh.clone();
     m.transform(&piece.place);
-    for (_, _, place) in piece.within.iter().rev() {
+    for place in piece.within.iter().rev().map(|g| &g.place) {
         m.transform(place);
     }
     m
@@ -121,11 +121,16 @@ fn a_constellation_comes_as_a_group_of_its_own() {
     let unit = format!("<constellation id=\"20\"><metadata type=\"name\">unit</metadata>{}</constellation>", at(2, 5.0, 0.0, 0.0));
     let head = format!("<constellation id=\"10\"><metadata type=\"name\">head</metadata>{}{}{}</constellation>", at(1, 30.0, 0.0, 0.0), at(20, 0.0, 50.0, 90.0), at(20, 0.0, 80.0, 0.0));
     let back = import_amf(&file("groups.amf", Some(&format!("<amf unit=\"millimeter\">{}{}{unit}{head}</amf>", tri(1), tri(2))))).expect("reads");
-    let chain = |k: usize| back[k].within.iter().map(|(_, n, _)| n.as_str()).collect::<Vec<_>>();
+    let chain = |k: usize| back[k].within.iter().map(|g| g.name.as_str()).collect::<Vec<_>>();
     assert_eq!((back.len(), chain(0), chain(1), chain(2)), (3, vec!["head"], vec!["head", "unit"], vec!["head", "unit"]), "the pieces do not come in their groups");
-    assert_ne!(back[1].within[1].0, back[2].within[1].0, "the unit placed twice is one group, not two");
+    assert_ne!(back[1].within[1].index, back[2].within[1].index, "the unit placed twice is one group, not two");
     assert!((back[0].place[3] - 30.0).abs() < 1e-12 && (back[1].place[3] - 5.0).abs() < 1e-12, "the pieces stand at {:?} and {:?}", back[0].place, back[1].place);
-    assert!((back[1].within[1].2[11] - 50.0).abs() < 1e-12 && (back[2].within[1].2[11] - 80.0).abs() < 1e-12, "the units stand at {:?} and {:?}", back[1].within[1].2, back[2].within[1].2);
+    assert!(
+        (back[1].within[1].place[11] - 50.0).abs() < 1e-12 && (back[2].within[1].place[11] - 80.0).abs() < 1e-12,
+        "the units stand at {:?} and {:?}",
+        back[1].within[1].place,
+        back[2].within[1].place
+    );
     assert_eq!(back[1].mesh.verts[1].x, 1.0, "the pin's mesh is baked where it stands, not in its object's frame");
     // where the first pin stands: 5 along the unit's X, which the unit's quarter turn takes to +Y, 50 up
     let p = placed(&back[1]).verts[1];

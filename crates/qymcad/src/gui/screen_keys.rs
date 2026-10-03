@@ -177,11 +177,18 @@ pub(in crate::gui) mod tests {
         let keys = catalogue_keys();
         assert!(keys.len() > 500, "suspiciously few catalogue keys were collected: {}", keys.len());
 
-        type Surface = (&'static str, fn(&mut App, &mut egui::Ui));
+        /// A part of the window by its name, and how it is drawn.
+        struct Surface {
+            name: &'static str,
+            draw: fn(&mut App, &mut egui::Ui),
+        }
+        fn surface(name: &'static str, draw: fn(&mut App, &mut egui::Ui)) -> Surface {
+            Surface { name, draw }
+        }
         let surfaces: &[Surface] = &[
-            ("tree", |a, c| a.tree_panel(c)),
-            ("properties", |a, c| a.properties_panel(c)),
-            ("menu", |a, c| {
+            surface("tree", |a, c| a.tree_panel(c)),
+            surface("properties", |a, c| a.properties_panel(c)),
+            surface("menu", |a, c| {
                 let mut asks = Vec::new();
                 crate::gui::panels_bars::menu_bar(&mut a.bar_ctx(&mut asks), c);
                 let c = c.ctx().clone();
@@ -190,7 +197,7 @@ pub(in crate::gui) mod tests {
             // EACH BAR IS ARMED FIRST, the way the shell arms it. All four drew NOTHING before this: they
             // stood in the list, were counted as covered, and were not. The condition each one is drawn
             // under is written in `live()` beside its place - the same condition is met here.
-            ("tool bar", |a, c| {
+            surface("tool bar", |a, c| {
                 if let Some(s) = a.project.sketches.first() {
                     a.sketch_ses.editing = Some(s.id); // the tool bar belongs to an open sketch
                 }
@@ -200,11 +207,11 @@ pub(in crate::gui) mod tests {
                 let c = c.ctx().clone();
                 a.do_bar_asks(asks, &c);
             }),
-            ("command bar", |a, c| {
+            surface("command bar", |a, c| {
                 a.start_feat_cmd(4); // a fillet: a command with fields, so the bar has something to show
                 a.feat_command_bar(c);
             }),
-            ("section bar", |a, c| {
+            surface("section bar", |a, c| {
                 a.side.section.plane = Some(([0.0; 3], [0.0, 0.0, 1.0]));
                 crate::gui::panels_bars::section_bar(
                     &mut qymcad_part::PlaneBarCtx {
@@ -221,42 +228,42 @@ pub(in crate::gui) mod tests {
                     c,
                 );
             }),
-            ("component pattern bar", |a, c| {
+            surface("component pattern bar", |a, c| {
                 a.side.carr.mode = 1;
                 crate::gui::panels_bars::comp_array_bar(&mut a.part_ctx(), c);
             }),
-            ("settings", |a, c| {
+            surface("settings", |a, c| {
                 let mut asks = Vec::new();
                 crate::gui::panels_windows::settings_window(&mut a.win_ctx(&mut asks), c);
                 a.do_win_asks(asks, c);
             }),
-            ("parameters", |a, c| {
+            surface("parameters", |a, c| {
                 let mut asks = Vec::new();
                 crate::gui::panels_windows::params_window(&mut a.win_ctx(&mut asks), c);
                 a.do_win_asks(asks, c);
             }),
-            ("parts library", |a, c| {
+            surface("parts library", |a, c| {
                 let mut asks = Vec::new();
                 crate::gui::panels_windows::parts_library_window(&mut a.win_ctx(&mut asks), c);
                 a.do_win_asks(asks, c);
             }),
-            ("hotkeys", |a, c| a.hotkeys_window(c)),
-            ("about", |a, c| crate::gui::panels_windows::about_dialog(&mut a.win, &a.scheme, c)),
+            surface("hotkeys", |a, c| a.hotkeys_window(c)),
+            surface("about", |a, c| crate::gui::panels_windows::about_dialog(&mut a.win, &a.scheme, c)),
             // THE OTHER FIVE WINDOWS. They were absent, so an untranslated key in any of them reached the
             // screen with nothing to say so - and this is the check whose whole job is to notice that.
-            ("document properties", |a, c| {
+            surface("document properties", |a, c| {
                 let mut asks = Vec::new();
                 crate::gui::panels_windows::doc_props_window(&mut a.win_ctx(&mut asks), c);
                 a.do_win_asks(asks, c);
             }),
-            ("save as a template", |a, c| {
+            surface("save as a template", |a, c| {
                 let mut asks = Vec::new();
                 crate::gui::panels_windows::save_template_dialog(&mut a.win_ctx(&mut asks), c);
                 a.do_win_asks(asks, c);
             }),
-            ("report a problem", |a, c| a.report_window(c)),
-            ("command search", |a, c| a.command_search_window(c)),
-            ("start screen", |a, c| a.start_screen(c)),
+            surface("report a problem", |a, c| a.report_window(c)),
+            surface("command search", |a, c| a.command_search_window(c)),
+            surface("start screen", |a, c| a.start_screen(c)),
         ];
 
         let prev = i18n::language();
@@ -268,7 +275,7 @@ pub(in crate::gui) mod tests {
         let mut per_surface: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
         for code in ["ru", "en"] {
             i18n::set_language(code);
-            for (name, draw) in surfaces {
+            for Surface { name, draw } in surfaces {
                 let mut app = populated();
                 // windows are drawn only when open, and CAM only with the module switched on
                 app.win.open(WinKind::Settings);
@@ -311,7 +318,7 @@ pub(in crate::gui) mod tests {
         }
         i18n::set_language(&prev);
         assert!(drawn > 200, "the frames came out empty ({drawn} captions) — the test checked nothing");
-        let mute: Vec<&str> = surfaces.iter().map(|(n, _)| *n).filter(|n| per_surface.get(n).copied().unwrap_or(0) == 0).collect();
+        let mute: Vec<&str> = surfaces.iter().map(|s| s.name).filter(|n| per_surface.get(n).copied().unwrap_or(0) == 0).collect();
         assert!(mute.is_empty(), "a surface drew NOTHING, so it was checked in name only: {mute:?}");
         assert!(leaks.is_empty(), "an internal name reached the screen instead of words ({}):\n{}", leaks.len(), leaks.join("\n"));
     }

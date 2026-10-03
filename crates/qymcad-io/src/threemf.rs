@@ -170,7 +170,7 @@ impl Parts<'_> {
     /// A PART STANDING AT `t` IN ITS GROUP: a group of its own parts where its object is made of parts someone named,
     /// to any depth, and otherwise one piece with its components baked in. Its place holds the turn and the shift of
     /// `t`; what `t` scales, shears or mirrors is baked into its mesh, or handed down to its own parts.
-    fn part(&self, id: &str, t: &T, within: &[(usize, String, [f64; 12])], out: &mut Vec<NamedMesh>) -> Result<(), String> {
+    fn part(&self, id: &str, t: &T, within: &[qymcad_core::model::FileGroup], out: &mut Vec<NamedMesh>) -> Result<(), String> {
         if within.len() > 32 {
             return Err("io-3mf-bad-model".into());
         }
@@ -181,7 +181,7 @@ impl Parts<'_> {
         let components: Vec<&Node> = self.objects.get(id).and_then(|o| o.child("components")).map(|cs| cs.all("component").collect()).unwrap_or_default();
         if components.iter().any(|c| c.attr("objectid").is_some_and(|p| self.named(p))) {
             let mut w = within.to_vec();
-            w.push((self.groups.replace(self.groups.get() + 1), self.name(id), at));
+            w.push(qymcad_core::model::FileGroup { index: self.groups.replace(self.groups.get() + 1), name: self.name(id), place: at });
             let left = row(&rest, [0.0; 3]);
             for c in components {
                 self.part(c.attr("objectid").ok_or("io-3mf-bad-model")?, &then(&parse_t(c.attr("transform"))?, &left), &w, out)?;

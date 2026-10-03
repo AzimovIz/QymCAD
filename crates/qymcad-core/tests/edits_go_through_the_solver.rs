@@ -147,26 +147,33 @@ fn no_editing_tool_leaves_a_constraint_unsatisfied() {
         (p, si, mover, mb, sa)
     };
 
-    type Row = (&'static str, fn(&mut Project, usize, u64));
+    /// An editing tool by its name, and what it does to entity `e` of sketch `si`.
+    struct Row {
+        name: &'static str,
+        act: fn(&mut Project, usize, u64),
+    }
+    fn row(name: &'static str, act: fn(&mut Project, usize, u64)) -> Row {
+        Row { name, act }
+    }
     let rows: [Row; 6] = [
-        ("move", |p, si, e| p.move_entities(si, &[e], 5.0, 3.0)),
-        ("rotate", |p, si, e| p.rotate_entities(si, &[e], 10.0, 0.0, 30.0)),
-        ("scale", |p, si, e| p.scale_entities(si, &[e], 10.0, 0.0, 2.0)),
-        ("trim", |p, si, e| {
+        row("move", |p, si, e| p.move_entities(si, &[e], 5.0, 3.0)),
+        row("rotate", |p, si, e| p.rotate_entities(si, &[e], 10.0, 0.0, 30.0)),
+        row("scale", |p, si, e| p.scale_entities(si, &[e], 10.0, 0.0, 2.0)),
+        row("trim", |p, si, e| {
             p.add_line_entity(si, 20.0, -10.0, 20.0, 10.0, qymcad_core::feature::Purpose::Real); // the cutting line
             p.trim_line(si, e, 25.0, 0.0);
         }),
-        ("extend", |p, si, e| {
+        row("extend", |p, si, e| {
             p.add_line_entity(si, 45.0, -10.0, 45.0, 10.0, qymcad_core::feature::Purpose::Real); // the line extended up to
             p.extend_line(si, e, 29.0, 0.0);
         }),
-        ("break", |p, si, e| {
+        row("break", |p, si, e| {
             p.break_line(si, e, 20.0, 0.0);
         }),
     ];
 
     let mut sins: Vec<String> = Vec::new();
-    for (name, act) in rows {
+    for Row { name, act } in rows {
         let (mut p, si, mover, mb, sa) = build();
         act(&mut p, si, mover);
         let at = |id: u64| p.sketches[si].points.iter().find(|q| q.id == id).map(|q| (q.x, q.y));
@@ -194,13 +201,20 @@ fn no_editing_tool_leaves_a_constraint_unsatisfied() {
 #[test]
 fn an_editing_tool_leaves_a_pinned_point_where_it_is() {
     let mut sins: Vec<String> = Vec::new();
-    type Row = (&'static str, fn(&mut Project, usize, u64));
+    /// An editing tool by its name, and what it does to entity `e` of sketch `si`.
+    struct Row {
+        name: &'static str,
+        act: fn(&mut Project, usize, u64),
+    }
+    fn row(name: &'static str, act: fn(&mut Project, usize, u64)) -> Row {
+        Row { name, act }
+    }
     let rows: [Row; 3] = [
-        ("move", |p, si, e| p.move_entities(si, &[e], 5.0, 3.0)),
-        ("rotate", |p, si, e| p.rotate_entities(si, &[e], 0.0, 0.0, 30.0)),
-        ("scale", |p, si, e| p.scale_entities(si, &[e], 0.0, 0.0, 2.0)),
+        row("move", |p, si, e| p.move_entities(si, &[e], 5.0, 3.0)),
+        row("rotate", |p, si, e| p.rotate_entities(si, &[e], 0.0, 0.0, 30.0)),
+        row("scale", |p, si, e| p.scale_entities(si, &[e], 0.0, 0.0, 2.0)),
     ];
-    for (name, act) in rows {
+    for Row { name, act } in rows {
         let (mut p, si) = new_sketch();
         let eid = p.add_line_entity(si, 10.0, 0.0, 30.0, 0.0, qymcad_core::feature::Purpose::Real);
         let (a, _) = {
