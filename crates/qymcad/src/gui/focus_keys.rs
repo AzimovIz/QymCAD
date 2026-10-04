@@ -146,7 +146,9 @@ mod tests {
             });
         }
         let typing = qymcad_ui_state::hotkey_hint(&app.draw_ctx(), &ctx2, "part.contour-reselect");
-        assert_eq!(typing, "Alt+U", "with focus in a field the hint should call for Alt rather than \"{typing}\"");
+        // written the way this system writes keys: `Alt+U`, and `⌥U` on a Mac
+        let alt = qymcad_ui_state::key_label("Alt+U");
+        assert_eq!(typing, alt, "with focus in a field the hint should call for Alt ({alt}) rather than \"{typing}\"");
     }
 
     /// AND THE RULE IS WRITTEN IN ONE PLACE rather than smeared across the handlers.
@@ -255,7 +257,7 @@ mod tests {
                 });
             });
         }
-        assert_eq!(qymcad_ui_state::hotkey_hint(&app.draw_ctx(), &ctx, "part.contour-reselect"), "Ctrl+J", "a Ctrl chord works from a field as it is");
+        assert_eq!(qymcad_ui_state::hotkey_hint(&app.draw_ctx(), &ctx, "part.contour-reselect"), qymcad_ui_state::key_label("Ctrl+J"), "a Ctrl chord works from a field as it is");
     }
 
     /// A BINDING THIS SYSTEM KEEPS DOES NOT RUN, though a profile from another system brought it: Cmd+W, free on a
