@@ -372,6 +372,7 @@ hotkeys-alt-note = Курсор в поле ввода — буква печат
 hotkeys-taken = Клавиша { $key } уже занята: { $what }
 hotkeys-reserved = Эта клавиша закреплена за системой и не назначается.
 hotkeys-filter-hint = Найти команду или клавишу
+hotkeys-filter-clear = Очистить поиск
 hotkeys-nothing = Ничего не найдено по «{ $q }».
 hotkeys-swap = Поменять местами
 hotkeys-swap-tip = «{ $what }» получит { $key }

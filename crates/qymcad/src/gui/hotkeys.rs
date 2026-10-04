@@ -79,8 +79,14 @@ pub(crate) fn hotkeys_window(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Conte
                     // THE WHOLE FIELD, margins included: `desired_width` is the width of the text alone, and the field's
                     // own margins on top of it pushed the row, and the body with it, past the title bar
                     let field = (ui.available_width() - glass - ui.spacing().item_spacing.x).max(60.0);
-                    let edit = egui::TextEdit::singleline(&mut wc.hotkeys.filter).hint_text(crate::i18n::tr("hotkeys-filter-hint"));
-                    ui.add_sized([field, ui.spacing().interact_size.y], edit);
+                    let side = ui.spacing().interact_size.y;
+                    // the right margin keeps the text clear of the clear icon drawn over the field's right end, and is
+                    // kept while the field is empty too, so the text does not move when the icon appears
+                    let edit = egui::TextEdit::singleline(&mut wc.hotkeys.filter)
+                        .hint_text(crate::i18n::tr("hotkeys-filter-hint"))
+                        .margin(egui::Margin { left: 4, right: 4 + side as i8, top: 2, bottom: 2 });
+                    let resp = ui.add_sized([field, side], edit);
+                    filter_clear(ui, &resp, &mut wc.hotkeys.filter);
                     ui.label(ph::MAGNIFYING_GLASS);
                 });
             });
@@ -344,6 +350,26 @@ fn settle(hk: &mut qymcad_ui_state::HotkeyCapture) {
     hk.action = None;
     hk.clash = None;
     hk.note.clear();
+}
+
+/// THE CLEAR ICON INSIDE THE FILTER FIELD, at its right end, while there is something to clear. Placed over the field
+/// rather than beside it: a widget beside it in this right-to-left row would push the field and the glass along when
+/// it appears. Registered after the field, so it is the one under the pointer there; the click gives the keyboard
+/// back to the field.
+fn filter_clear(ui: &egui::Ui, field: &egui::Response, filter: &mut String) {
+    if filter.is_empty() {
+        return;
+    }
+    let side = field.rect.height();
+    let rect = egui::Rect::from_min_size(egui::pos2(field.rect.right() - side, field.rect.top()), egui::vec2(side, side));
+    let x = ui.interact(rect, field.id.with("clear"), egui::Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
+    let body = egui::TextStyle::Body.resolve(ui.style());
+    let color = if x.hovered() { ui.visuals().strong_text_color() } else { ui.visuals().weak_text_color() };
+    ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, ph::X, egui::FontId::new(body.size * 0.85, body.family), color);
+    if x.on_hover_text(crate::i18n::tr("hotkeys-filter-clear")).clicked() {
+        filter.clear();
+        field.request_focus();
+    }
 }
 
 /// The room between the clear icon and the reset icon.

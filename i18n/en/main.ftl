@@ -372,6 +372,7 @@ hotkeys-alt-note = With the cursor in a text field a letter is typed, not run as
 hotkeys-taken = { $key } is already taken: { $what }
 hotkeys-reserved = This key belongs to the system and cannot be assigned.
 hotkeys-filter-hint = Find a command or a key
+hotkeys-filter-clear = Clear the search
 hotkeys-nothing = Nothing matches “{ $q }”.
 hotkeys-swap = Swap
 hotkeys-swap-tip = “{ $what }” gets { $key } instead

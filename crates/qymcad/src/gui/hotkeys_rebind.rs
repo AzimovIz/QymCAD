@@ -677,4 +677,32 @@ mod tests {
         }
         assert!((choices[0].min.x - row.min.x).abs() < 12.0, "Swap starts at x {}, the description at {}: the line does not start under it", choices[0].min.x, row.min.x);
     }
+
+    /// THE FILTER IS CLEARED BY THE X INSIDE ITS FIELD, which shows only while there is something to clear. Driven
+    /// by a click on the field, typed text and a click on the X through whole frames.
+    #[test]
+    fn the_x_inside_the_filter_clears_it() {
+        let mut w = Frames::open();
+        let what = super::super::hotkeys::hotkey_what(HOTKEYS.iter().find(|r| r.action == "part.extrude").expect("the extrude row"));
+        let shapes = w.frame(Vec::new());
+        let hint = text_rect(&shapes, &crate::i18n::tr("hotkeys-filter-hint")).expect("the empty filter shows its hint");
+        let on_field = |shapes: &[egui::Shape]| {
+            shapes.iter().find_map(|s| match s {
+                egui::Shape::Text(t) if t.galley.text() == egui_phosphor::regular::X && t.pos.x > hint.max.x && (t.pos.y + t.galley.size().y * 0.5 - hint.center().y).abs() < 6.0 => {
+                    Some(t.pos + t.galley.size() * 0.5)
+                }
+                _ => None,
+            })
+        };
+        assert!(on_field(&shapes).is_none(), "the empty filter already shows a clear icon");
+        w.click(hint.center());
+        w.frame(vec![egui::Event::Text("no such command".into())]);
+        let shapes = w.frame(Vec::new());
+        assert!(text_rect(&shapes, &what).is_none(), "the filter did not take the typed text: the extrude row is still drawn");
+        let x = on_field(&shapes).expect("the filter holds text and shows no clear icon inside its field");
+        w.click(x);
+        let shapes = w.frame(Vec::new());
+        assert!(text_rect(&shapes, &what).is_some(), "the click on the clear icon did not bring the rows back");
+        assert!(on_field(&shapes).is_none(), "the cleared filter still shows its clear icon");
+    }
 }
