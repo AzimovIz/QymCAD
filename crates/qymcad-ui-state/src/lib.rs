@@ -12,6 +12,7 @@
 //! THIS FILE NAMES `App` NOWHERE. That is the whole point, and it is guarded rather than promised.
 
 pub mod grab;
+pub mod platform_keys;
 /// Clipping a triangle by a plane for the SECTION view: a pure module with no `self`, so it can be unit-tested.
 pub mod smallvec_tris {
     /// A clipped vertex: its world position plus the barycentric weights of the original vertices (for interpolating colour).
@@ -7362,21 +7363,173 @@ pub struct HotkeyCapture {
     pub action: Option<String>,
     /// Why the last press was refused. Shown in that same window; empty means nothing was refused.
     pub note: String,
+    /// A PRESS THAT HIT A TAKEN KEY, held until the person decides: swap the two, take the key away from
+    /// the other action, or keep things as they were. Refusing outright sent people hunting for the
+    /// other row to free it first - two edits for one intention.
+    pub clash: Option<HotkeyClash>,
+    /// The filter typed above the table: a word of the description or a key.
+    pub filter: String,
+}
+
+/// A key asked for by one action while another already holds it in the same area.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HotkeyClash {
+    /// The action being assigned.
+    pub action: String,
+    /// The chord pressed for it, in its stored spelling.
+    pub chord: String,
+    /// The action that holds that chord now.
+    pub holder: &'static str,
+}
+
+/// A KEY WITH ITS MODIFIERS: `W`, `Shift+W`, `Ctrl+J`, `Ctrl+Shift+F5`, `Control+J`.
+///
+/// Ctrl stands for the platform's command key (Cmd on a Mac), as everywhere else in the program: the factory
+/// layout and a profile mean the same keys on every system. Control is the Mac's own Control key, a modifier of
+/// its own there; what each system refuses is in `platform_keys`. ALT IS NOT A MODIFIER OF A BINDING: it is the
+/// way to reach a bare binding from inside a text field (Alt+U instead of U), and a chord that needed Alt would be
+/// unreachable exactly there.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Chord {
+    /// The Mac's Control key (never set elsewhere: off a Mac the Ctrl key is `ctrl`).
+    pub control: bool,
+    pub ctrl: bool,
+    pub shift: bool,
+    pub key: egui::Key,
+}
+
+impl From<egui::Key> for Chord {
+    fn from(key: egui::Key) -> Self {
+        Chord { control: false, ctrl: false, shift: false, key }
+    }
+}
+
+impl Chord {
+    /// THE CHORD OF A PRESS, Alt aside. egui reports the command key as `command` everywhere and the physical
+    /// Ctrl key as `ctrl`; off a Mac they are one key, on a Mac `command` is Cmd (`mac_cmd`) and `ctrl` is Control.
+    /// So Control is `ctrl` that is not the command key, or `ctrl` held beside Cmd.
+    pub fn of_press(mods: egui::Modifiers, key: egui::Key) -> Chord {
+        Chord { control: mods.ctrl && (mods.mac_cmd || !mods.command), ctrl: mods.command, shift: mods.shift, key }
+    }
+
+    /// Reads the stored spelling. `None` for anything that is not a chord: an empty record (an unbound
+    /// action), a description like `Ctrl+Z / Ctrl+Y`, a key egui does not know.
+    pub fn parse(s: &str) -> Option<Chord> {
+        let mut c = Chord::from(egui::Key::Escape);
+        let mut parts = s.split('+').map(str::trim).peekable();
+        while let Some(p) = parts.next() {
+            if parts.peek().is_none() {
+                c.key = egui::Key::from_name(p)?;
+                return Some(c);
+            }
+            match p {
+                "Control" => c.control = true,
+                "Ctrl" => c.ctrl = true,
+                "Shift" => c.shift = true,
+                _ => return None,
+            }
+        }
+        None
+    }
+
+    /// The stored and the shown spelling at once - one form, so a record reads the way the window shows it.
+    pub fn name(&self) -> String {
+        let mut s = String::new();
+        if self.control {
+            s.push_str("Control+");
+        }
+        if self.ctrl {
+            s.push_str("Ctrl+");
+        }
+        if self.shift {
+            s.push_str("Shift+");
+        }
+        s.push_str(self.key.name());
+        s
+    }
+
+    /// WHETHER THE KEY ITSELF CAN CARRY A BINDING: letters, digits and F3-F12.
+    ///
+    /// Everything else already means something that must not move. Space opens the search, F1 is help, F2
+    /// renames, the arrows and Home/End walk a caret through a field, Tab walks the focus, Enter, Esc and
+    /// Delete are the ladder of every dialogue. Bound to a tool, any of them would quietly stop doing the
+    /// thing every program does with it.
+    pub fn bindable_key(&self) -> bool {
+        use egui::Key as K;
+        let n = self.key.name();
+        let letter_or_digit = n.len() == 1 && n.chars().all(|c| c.is_ascii_alphanumeric());
+        letter_or_digit || matches!(self.key, K::F3 | K::F4 | K::F5 | K::F6 | K::F7 | K::F8 | K::F9 | K::F10 | K::F11 | K::F12)
+    }
+}
+
+// HOW A KEY IS WRITTEN ON SCREEN lives in the dictionary crate, which writes every caption: a key typed into a
+// sentence ("Copy (Ctrl+C)") has to follow the system just like a key in the table.
+pub use qymcad_i18n::keys::{key_label, key_label_in, key_style, set_key_style, KeyStyle};
+
+/// WHY A CHORD CANNOT GO TO THIS ACTION on this system - a catalogue key, or `None` when it can.
+pub fn hotkey_refusal(action: &str, chord: &Chord) -> Option<&'static str> {
+    hotkey_refusal_on(platform_keys::Os::current(), action, chord)
+}
+
+/// The same for a given system, so the rules of each can be checked on any of them.
+///
+/// An action's own factory key is never refused: bare X is the factory key of the sketch's construction
+/// toggle, and refusing it would make "put it back as it was" impossible by hand.
+pub fn hotkey_refusal_on(os: platform_keys::Os, action: &str, chord: &Chord) -> Option<&'static str> {
+    if !chord.bindable_key() {
+        return Some("hotkeys-reserved");
+    }
+    let factory = HOTKEYS.iter().find(|r| r.action == action).is_some_and(|r| Chord::parse(r.key) == Some(*chord));
+    // everything else is the system's table (see `platform_keys`)
+    platform_keys::platform_keys(os).refusal(chord).filter(|_| !factory)
 }
 
 /// WHETHER THE KEY in this area is taken by somebody else - the name of the neighbouring action.
 ///
 /// Two commands on one key is not "the last one wins" but a silently lost tool: the habitual key is
 /// pressed, something else arrives, and it is not clear what broke. So rebinding asks here first.
+/// Compared as CHORDS, not as text: `Shift+Ctrl+W` written by hand and `Ctrl+Shift+W` are one key.
 pub fn hotkey_taken_by(set: &Settings, area: &str, key: &str, except: &str) -> Option<&'static str> {
-    HOTKEYS.iter().filter(|r| r.area == area && r.action != except).find(|r| hotkey_key(set, r.action) == key).map(|r| r.action)
+    let want = Chord::parse(key)?;
+    HOTKEYS.iter().filter(|r| r.area == area && r.action != except).find(|r| Chord::parse(&hotkey_key(set, r.action)) == Some(want)).map(|r| r.action)
 }
 
+/// The key bound to an action now: the person's record, else the factory one. EMPTY means the action
+/// was deliberately left without a key.
 pub fn hotkey_key(set: &Settings, action: &str) -> String {
     if let Some(k) = set.hotkeys.get(action) {
         return k.clone();
     }
     HOTKEYS.iter().find(|r| r.action == action).map(|r| r.key.to_string()).unwrap_or_default()
+}
+
+/// RECORDS A BINDING keeping the record clean: the factory key removes the entry rather than repeating it.
+pub fn set_hotkey(set: &mut Settings, action: &str, key: &str) {
+    if HOTKEYS.iter().any(|r| r.action == action && r.key == key) {
+        set.hotkeys.remove(action);
+    } else {
+        set.hotkeys.insert(action.to_string(), key.to_string());
+    }
+}
+
+/// HOW A CLASH IS SETTLED, as chosen in the window.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClashChoice {
+    /// The holder gets the key the asking action had: nothing ends up without a key.
+    Swap,
+    /// The asking action takes the key, the holder is left with none.
+    Unbind,
+}
+
+/// SETTLES A CLASH: the asking action always gets its chord, the holder gets what the choice says.
+pub fn resolve_hotkey_clash(set: &mut Settings, clash: &HotkeyClash, choice: ClashChoice) {
+    let old = hotkey_key(set, &clash.action);
+    let for_holder = match choice {
+        ClashChoice::Swap => old,
+        ClashChoice::Unbind => String::new(),
+    };
+    set_hotkey(set, &clash.action, &clash.chord);
+    set_hotkey(set, clash.holder, &for_holder);
 }
 
 /// The thread standard for the index of the command bar's switch.
@@ -7413,7 +7566,7 @@ pub struct HotkeyRow {
     /// literal of that shape. The code of an action is not text for a person and must not be translated;
     /// the dot tells one from the other by eye and in the guards.
     pub action: &'static str,
-    /// The DEFAULT key, exactly as in `egui::Key`. What is actually pressed — see `App::hotkey_key`.
+    /// The DEFAULT key, in the spelling of `Chord::name`. What is actually pressed — see `hotkey_key`.
     pub key: &'static str,
     /// A catalogue key (`hotkey-<area>-<key>`), not a phrase.
     pub what: &'static str,
@@ -11057,11 +11210,51 @@ pub fn ring_drag_sign(axis_depth: f64) -> f64 {
     }
 }
 
+/// THE CHORD PRESSED THIS FRAME that a tool key may answer to, or `None`.
+///
+/// FOCUS IN A FIELD MUST NOT KILL EVERY KEY - and must not let a letter through either. A bare letter in a
+/// field types itself (expressions hold both `w` and `len`); Alt plus a letter types nothing, so it goes to the
+/// command. The rule is one: with no focus, the bare key; with focus, Alt.
+///
+/// CHORDS: a Ctrl or Control chord that can be bound types nothing in a field - the letters a field edits with
+/// under either are refused at binding (`platform_keys`) - so it is heard as it is, focus or not. Without them the
+/// rule above holds, Shift included: Shift+W in a field is a capital letter.
+///
+/// "CTRL" IS THE COMMAND KEY: Cmd on a Mac. The Mac's own Control key is a modifier of its own (`Chord::of_press`).
+///
+/// ANY BINDABLE KEY, NOT A FIXED LIST. Twenty-three letters were listed by hand in the handler, and a tool
+/// rebound to W or Z was saved, shown in the window, and never heard: the press did not reach the table.
+pub fn pressed_chord(ctx: &egui::Context) -> Option<Chord> {
+    // asked BEFORE `ctx.input`: inside it `wants_keyboard_input` deadlocks on the input lock
+    let typing = ctx.egui_wants_keyboard_input();
+    ctx.input(|i| {
+        let held = Chord::of_press(i.modifiers, egui::Key::Escape);
+        let chord_key = held.ctrl || held.control;
+        // Alt and Ctrl together reach nothing: Alt is the way out of a field, Ctrl and Control do not need one
+        let ok = if typing { i.modifiers.alt != chord_key } else { !i.modifiers.alt };
+        if !ok {
+            return None;
+        }
+        i.events.iter().find_map(|e| match e {
+            egui::Event::Key { key, pressed: true, repeat: false, .. } => Some(Chord { key: *key, ..held }),
+            _ => None,
+        })
+    })
+    .filter(Chord::bindable_key)
+}
+
 /// Which action a key press means in this area. It reads the settings and nothing else - the whole
 /// application was never needed for a table lookup.
-pub fn hotkey_action(set: &Settings, area: &str, key: egui::Key) -> Option<&'static str> {
-    let pressed = key.name();
-    HOTKEYS.iter().filter(|r| r.area == area).find(|r| hotkey_key(set, r.action) == pressed).map(|r| r.action)
+pub fn hotkey_action(set: &Settings, area: &str, key: impl Into<Chord>) -> Option<&'static str> {
+    let pressed = key.into();
+    // A BINDING THIS SYSTEM REFUSES IS NOT RUN. The settings travel with the profile: Cmd+W bound on a Mac arrives
+    // on Linux as Ctrl+W, which a field erases a word with - running the tool there would do both.
+    HOTKEYS
+        .iter()
+        .filter(|r| r.area == area)
+        .find(|r| Chord::parse(&hotkey_key(set, r.action)) == Some(pressed))
+        .map(|r| r.action)
+        .filter(|a| hotkey_refusal(a, &pressed).is_none())
 }
 
 pub fn sel_point_ids(sel_sk: &SketchSelection) -> Vec<Id> {
@@ -13708,7 +13901,7 @@ pub fn end_feat_cmd_state(picks: FeatPicks, cmd: &mut FeatCommand, gsel: &mut Ge
 }
 
 /// THE KEY HINT, ALLOWING FOR FOCUS: "U" while the keyboard is free, and "Alt+U" while the caret sits
-/// in an input field.
+/// in an input field. Written the way this system writes keys (`⌥U` on a Mac).
 ///
 /// The rule "hold Alt when focused" would be a secret without this hint, and secret mechanisms go
 /// unused: `U` gets pressed once, nothing happens, and it is never tried again.
@@ -13717,10 +13910,11 @@ pub fn hotkey_hint(dc: &DrawCtx, ctx: &egui::Context, action: &str) -> String {
     if k.is_empty() {
         return String::new();
     }
-    if ctx.egui_wants_keyboard_input() {
-        format!("Alt+{k}")
+    // a Ctrl chord types nothing, so it works from a field as it is; only the rest need Alt there
+    if ctx.egui_wants_keyboard_input() && !k.starts_with("Ctrl+") {
+        key_label(&format!("Alt+{k}"))
     } else {
-        k
+        key_label(&k)
     }
 }
 
