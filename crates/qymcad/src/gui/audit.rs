@@ -354,7 +354,7 @@ mod live_session {
         // every mode at once — a state that in life is built up one at a time
         fn dirty(app: &mut App) {
             app.tools.armed = qymcad_ui_state::Armed::Draw(1);
-            app.tools.armed = qymcad_ui_state::Armed::Modify(2);
+            app.tools.armed = qymcad_ui_state::Armed::Modify(qymcad_ui_state::EditTool::Chamfer);
             app.tools.tool.pts.push(qymcad_core::geom::Point2 { x: 1.0, y: 2.0 });
             app.tools.tool.circ_tan = Some(super::super::EdgeRef::Circle { center: 1, r: 5.0 });
             app.tools.armed = qymcad_ui_state::Armed::ClickOp(3);
@@ -370,7 +370,7 @@ mod live_session {
             app.tools.measure.pts.push(qymcad_core::geom::Point2::new(1.0, 2.0));
             app.tools.armed = qymcad_ui_state::Armed::Pattern(1);
             app.tools.sel_sk.constraint = Some(0);
-            app.tools.sel_sk.modify = Some(0);
+            app.tools.sel_sk.modify = Some(qymcad_ui_state::EditTool::Delete);
             app.tools.picking = Picking::FilletAll;
             app.tools.drag = super::super::Dragging::Dim(0);
             app.tools.inline = super::super::InlineEdit::Note(0);
@@ -379,7 +379,7 @@ mod live_session {
         // what must be extinguished after entering any tool
         fn tail(app: &App) -> Vec<&'static str> {
             let mut t = Vec::new();
-            if app.tools.armed.modify() != 0 {
+            if app.tools.armed.modify().is_some() {
                 t.push("the modify mode")
             }
             if !app.tools.tool.pts.is_empty() {

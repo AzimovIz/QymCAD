@@ -25,7 +25,7 @@ mod tests {
         match t {
             DrawTool::Draw => app.set_sk_tool(1),
             DrawTool::ClickOp => qymcad_ui_state::set_click_op(&mut qymcad_ui_state::tools_of!(app), &mut app.viewing.mode_3d, 1),
-            DrawTool::Modify => qymcad_ui_state::modify_button(qymcad_ui_state::editing_of!(app), &mut qymcad_ui_state::tools_of!(app), app.sk_pat, &app.tool_prefs, 1),
+            DrawTool::Modify => qymcad_ui_state::modify_button(qymcad_ui_state::editing_of!(app), &mut qymcad_ui_state::tools_of!(app), app.sk_pat, &app.tool_prefs, qymcad_ui_state::EditTool::Mirror),
             DrawTool::Move => qymcad_part::start_move_tool(&mut qymcad_ui_state::tools_of!(app), &mut app.status, 1),
             DrawTool::Pattern => qymcad_part::start_pattern(&mut qymcad_ui_state::tools_of!(app), &mut app.status, 1),
             DrawTool::Dimension => qymcad_ui_state::set_dim_tool(&mut qymcad_ui_state::tools_of!(app), &mut app.viewing.mode_3d, &app.project, app.chosen.sel, app.sketch_ses, &mut app.status, 1),

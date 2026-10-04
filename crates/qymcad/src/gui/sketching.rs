@@ -7,6 +7,7 @@ pub(crate) use qymcad_ui_state::{sketch_closed_contours, sketch_diag};
 pub(crate) use qymcad_pick::{constraint_glyphs, sketch_ref_edges_2d};
 pub(crate) use qymcad_sketch::*;
 use super::*;
+use qymcad_ui_state::EditTool;
 
 impl App {
     /// The sketch key layout: drawing (S/L/R/C/A/P/G/E/O/N/T), editing (F corner fillet, M mirror, K trim,
@@ -26,7 +27,7 @@ impl App {
             "sketch.dim" => qymcad_ui_state::set_dim_tool(&mut qymcad_ui_state::tools_of!(self), &mut self.viewing.mode_3d, &self.project, self.chosen.sel, self.sketch_ses, &mut self.status, 1),
             "sketch.corner-fillet" => qymcad_ui_state::set_click_op(&mut qymcad_ui_state::tools_of!(self), &mut self.viewing.mode_3d, 4),
             "sketch.trim" => qymcad_ui_state::set_click_op(&mut qymcad_ui_state::tools_of!(self), &mut self.viewing.mode_3d, 1),
-            "sketch.mirror" => qymcad_ui_state::modify_button(qymcad_ui_state::editing_of!(self), &mut qymcad_ui_state::tools_of!(self), self.sk_pat, &self.tool_prefs, 1),
+            "sketch.mirror" => qymcad_ui_state::modify_button(qymcad_ui_state::editing_of!(self), &mut qymcad_ui_state::tools_of!(self), self.sk_pat, &self.tool_prefs, EditTool::Mirror),
             "sketch.construction" => self.tools.tool.construction = !self.tools.tool.construction,
             _ => {}
         }

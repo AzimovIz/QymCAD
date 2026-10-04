@@ -37,7 +37,7 @@ mod tests {
     fn press_mirror(app: &mut App) {
         let mut asks = Vec::new();
         let bc = app.bar_ctx(&mut asks);
-        qymcad_ui_state::modify_button(qymcad_ui_state::editing_in!(bc), &mut qymcad_ui_state::tools_in!(bc), *bc.sk_pat, &*bc.tool_prefs, 1);
+        qymcad_ui_state::modify_button(qymcad_ui_state::editing_in!(bc), &mut qymcad_ui_state::tools_in!(bc), *bc.sk_pat, &*bc.tool_prefs, qymcad_ui_state::EditTool::Mirror);
     }
 
     /// Pointing at the X (0) or Y (1) axis as the thing to mirror about.
@@ -76,7 +76,7 @@ mod tests {
 
         press_mirror(&mut app);
 
-        assert_eq!(app.tools.sel_sk.modify, Some(1), "the tool must be in hand, waiting for the geometry");
+        assert_eq!(app.tools.sel_sk.modify, Some(qymcad_ui_state::EditTool::Mirror), "the tool must be in hand, waiting for the geometry");
         assert!(app.tools.sel_sk.mirror_of.is_empty(), "and it has nothing to mirror yet");
         assert_eq!(app.project.sketches[si].entities.len(), before, "nothing was mirrored");
     }

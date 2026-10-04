@@ -34,7 +34,12 @@ mod tests {
                 _ => {}
             }
         }
-        tail[..end?].rsplit(',').next()?.trim().parse::<u8>().ok()
+        let last = tail[..end?].rsplit(',').next()?.trim();
+        // an editing tool is named, not numbered: `EditTool::Mirror` reads as the button's number of the mirror
+        last.parse::<u8>().ok().or_else(|| {
+            let name = last.rsplit("::").next()?;
+            qymcad_ui_state::EditTool::ALL.iter().find(|t| format!("{t:?}") == name).map(|t| t.code())
+        })
     }
 
     use crate::{help, help_map};

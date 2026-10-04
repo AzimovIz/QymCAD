@@ -94,7 +94,7 @@ mod tests {
         if app.tools.armed.click_op() != 0 {
             t.push("a click operation");
         }
-        if app.tools.armed.modify() != 0 {
+        if app.tools.armed.modify().is_some() {
             t.push("editing the selection");
         }
         if app.tools.armed.dim_kind() != 0 {

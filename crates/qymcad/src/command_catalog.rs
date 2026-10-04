@@ -29,7 +29,7 @@ pub enum Launch {
     /// A click operation of a sketch: trim, extend, project (`set_click_op`).
     ClickOp(u8),
     /// Editing the selection in a sketch: delete, mirror, offset (`modify_button`).
-    Modify(u8),
+    Modify(qymcad_ui_state::EditTool),
     /// An assembly or view action with a launch of its own (mate, ground, measure).
     Action(&'static str),
 }
@@ -74,9 +74,9 @@ pub const COMMANDS: &[Command] = &[
     Command { code: "sketch.project", workbench: "sketch", launch: Launch::ClickOp(6), name_key: "" },
     Command { code: "sketch.corner", workbench: "sketch", launch: Launch::ClickOp(4), name_key: "" },
     Command { code: "sketch.corner-chamfer", workbench: "sketch", launch: Launch::ClickOp(5), name_key: "cmdname-corner-chamfer" },
-    Command { code: "sketch.delete", workbench: "sketch", launch: Launch::Modify(0), name_key: "" },
-    Command { code: "sketch.mirror", workbench: "sketch", launch: Launch::Modify(1), name_key: "" },
-    Command { code: "sketch.offset", workbench: "sketch", launch: Launch::Modify(6), name_key: "" },
+    Command { code: "sketch.delete", workbench: "sketch", launch: Launch::Modify(qymcad_ui_state::EditTool::Delete), name_key: "" },
+    Command { code: "sketch.mirror", workbench: "sketch", launch: Launch::Modify(qymcad_ui_state::EditTool::Mirror), name_key: "" },
+    Command { code: "sketch.offset", workbench: "sketch", launch: Launch::Modify(qymcad_ui_state::EditTool::Offset), name_key: "" },
     // ── Part ────────────────────────────────────────────────────────────────────────────────
     Command { code: "part.extrude", workbench: "part", launch: Launch::Feat(1), name_key: "" },
     Command { code: "part.revolve", workbench: "part", launch: Launch::Feat(3), name_key: "" },
@@ -163,7 +163,7 @@ impl Command {
             Launch::SkTool(n) => crate::help_map::sketch_article("sk", n),
             Launch::Dim(n) => crate::help_map::sketch_article("dim", n),
             Launch::ClickOp(n) => crate::help_map::sketch_article("click", n),
-            Launch::Modify(n) => crate::help_map::sketch_article("mod", n),
+            Launch::Modify(tool) => crate::help_map::sketch_article("mod", tool.code()),
             Launch::Action("joint") => crate::help_map::assembly_article("asm.joint"),
             Launch::Action("piece") => Some("part/13-split-body"),
             Launch::Action(_) => None,

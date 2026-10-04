@@ -1674,6 +1674,44 @@ pub fn sel_text_indices(project: &Project, sel_sk: &SketchSelection, si: usize) 
     sel_sk.items.iter().filter(|(k, _)| *k == SEL_TEXT).filter_map(|(_, id)| s.texts.iter().position(|t| t.id == *id)).collect()
 }
 
+/// AN EDITING TOOL OF THE SKETCH: a button that works on the selected entities, or waits in hand for them.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum EditTool {
+    /// Delete the selected entities.
+    Delete,
+    /// Mirror them about an axis or a line, pointed at after they are picked.
+    Mirror,
+    /// Copy them in a row.
+    LinearPattern,
+    /// Copy them round a centre.
+    CircularPattern,
+    /// Round the corner of two picked lines.
+    Fillet,
+    /// Cut the corner of two picked lines.
+    Chamfer,
+    /// Lay a copy at a distance beside them.
+    Offset,
+}
+
+impl EditTool {
+    /// Every editing tool, in the order of the button numbers.
+    pub const ALL: [EditTool; 7] = [EditTool::Delete, EditTool::Mirror, EditTool::LinearPattern, EditTool::CircularPattern, EditTool::Fillet, EditTool::Chamfer, EditTool::Offset];
+
+    /// THE BUTTON'S NUMBER: the help table (`qymcad_help::map::SKETCH`, under "mod") knows the tools by it, and
+    /// that crate knows nothing of this one.
+    pub fn code(self) -> u8 {
+        match self {
+            EditTool::Delete => 0,
+            EditTool::Mirror => 1,
+            EditTool::LinearPattern => 2,
+            EditTool::CircularPattern => 3,
+            EditTool::Fillet => 4,
+            EditTool::Chamfer => 5,
+            EditTool::Offset => 6,
+        }
+    }
+}
+
 /// THE SKETCH SELECTION AND THE DEFERRED ACTION ON IT.
 ///
 /// "What is selected" and "what to do once enough has been gathered" are one state: a constraint or an editing
@@ -1686,7 +1724,7 @@ pub struct SketchSelection {
     /// awaiting a set for a constraint (the constraint's code)
     pub constraint: Option<u8>,
     /// awaiting a set for an editing tool
-    pub modify: Option<u8>,
+    pub modify: Option<EditTool>,
     /// WHAT THE MIRROR IS ABOUT TO REFLECT, while the axis is being pointed at.
     ///
     /// Non-empty means the tool is on its SECOND step: it has been told what, and waits to be told about
@@ -6617,7 +6655,7 @@ pub enum Armed {
     /// Trim, extend, break, corner fillet - the ones that act on a click.
     ClickOp(u8),
     /// Mirror, offset and the rest of the editing buttons.
-    Modify(u8),
+    Modify(EditTool),
     /// Move, copy, rotate.
     Move(u8),
     /// The sketch pattern: 1 linear, 2 circular.
@@ -6650,29 +6688,13 @@ impl Armed {
         }
     }
 
-    /// The code of the editing button in hand, or zero.
-    pub fn modify(&self) -> u8 {
+    /// The editing tool in hand, if one is.
+    pub fn modify(&self) -> Option<EditTool> {
         if let Armed::Modify(k) = self {
-            *k
+            Some(*k)
         } else {
-            0
+            None
         }
-    }
-
-    /// THE BUTTON'S OWN NUMBER of the editing tool in hand (0 delete, 1 mirror, 2 and 3 the patterns, 4 and 5 fillet and
-    /// chamfer of the picked, 6 offset) - the reverse of the order `modify_button` keeps it in; `None` with no editing
-    /// tool. The help and the catalogue know the tools by the button's number.
-    pub fn modify_op(&self) -> Option<u8> {
-        let Armed::Modify(k) = self else { return None };
-        Some(match k {
-            4 => 1,
-            5 => 2,
-            6 => 3,
-            1 => 4,
-            2 => 5,
-            3 => 6,
-            _ => 0,
-        })
     }
 
     /// The code of the move tool, or zero.
@@ -12916,16 +12938,16 @@ pub fn slot_contour_under_2d(pick: &PickCtx, rect: Rect, screen: Pos2, cands: &[
 }
 
 /// Apply an edit operation to the selection. Returns true when it was applied.
-/// `op`: 0 delete, 1 mirror, 2 linear array, 3 circular array, 4 fillet, 5 chamfer, 6 offset.
-pub fn try_modify(mut ed: Editing, sel_sk: &mut SketchSelection, sk_pat: SketchPattern, tool_prefs: &SketchToolPrefs, op: u8) -> bool {
+pub fn try_modify(mut ed: Editing, sel_sk: &mut SketchSelection, sk_pat: SketchPattern, tool_prefs: &SketchToolPrefs, op: EditTool) -> bool {
     // THE BOUNDARY OF AN OPERATION: one step of undo, named after the tool
     let name = match op {
-        0 => "sk-delete",
-        2 => "tool-lin-array",
-        3 => "tool-circ-array",
-        4 => "tool-fillet",
-        5 => "tool-chamfer",
-        _ => "tool-offset",
+        EditTool::Delete => "sk-delete",
+        EditTool::Mirror => "tool-mirror",
+        EditTool::LinearPattern => "tool-lin-array",
+        EditTool::CircularPattern => "tool-circ-array",
+        EditTool::Fillet => "tool-fillet",
+        EditTool::Chamfer => "tool-chamfer",
+        EditTool::Offset => "tool-offset",
     };
     begin_edit(ed.edits, &*ed.project, qymcad_i18n::tr(name));
     let ok = try_modify_in(ed.reborrow(), sel_sk, sk_pat, tool_prefs, op);
@@ -12933,14 +12955,14 @@ pub fn try_modify(mut ed: Editing, sel_sk: &mut SketchSelection, sk_pat: SketchP
     ok
 }
 
-fn try_modify_in(ed: Editing, sel_sk: &mut SketchSelection, sk_pat: SketchPattern, tool_prefs: &SketchToolPrefs, op: u8) -> bool {
+fn try_modify_in(ed: Editing, sel_sk: &mut SketchSelection, sk_pat: SketchPattern, tool_prefs: &SketchToolPrefs, op: EditTool) -> bool {
     let Sel::Sketch(si) = *ed.sel else { return false };
     let eids: Vec<Id> = sel_sk.items.iter().filter(|(k, _)| *k == 1).map(|(_, id)| *id).collect();
     if eids.is_empty() {
         return false;
     }
     let ok = match op {
-        0 => {
+        EditTool::Delete => {
             ed.project.delete_entities(si, &eids);
             sel_sk.clear(); // the selection and whatever was waiting for it
             true
@@ -12949,35 +12971,34 @@ fn try_modify_in(ed: Editing, sel_sk: &mut SketchSelection, sk_pat: SketchPatter
         // selection, `mirror_about_axis` or `mirror_about_line` finishes it), and applying here would mean
         // mirroring on the FIRST entity clicked - which is how several things could never be mirrored
         // together, and how a misclick became an edit.
-        1 => return false,
-        2 => {
+        EditTool::Mirror => return false,
+        EditTool::LinearPattern => {
             ed.project.array_linear(si, &eids, sk_pat.dx, sk_pat.dy, sk_pat.count);
             true
         }
-        3 => {
+        EditTool::CircularPattern => {
             let (cx, cy) = if let Some(p) = sel_point_ids(sel_sk).first().and_then(|id| sketch_pt(ed.project, si, *id)) { (p.x, p.y) } else { ed.project.entities_centroid(si, &eids) };
             ed.project.array_circular(si, &eids, cx, cy, sk_pat.count, sk_pat.angle);
             true
         }
-        4 => {
+        EditTool::Fillet => {
             eids.len() >= 2 && ed.project.fillet_lines(si, eids[0], eids[1], tool_prefs.fillet) && {
                 sel_sk.clear(); // the selection and whatever was waiting for it
                 true
             }
         }
-        5 => {
+        EditTool::Chamfer => {
             eids.len() >= 2 && ed.project.chamfer_lines(si, eids[0], eids[1], chamfer_legs(tool_prefs)) && {
                 sel_sk.clear(); // the selection and whatever was waiting for it
                 true
             }
         }
         // the distance field refusing its value refuses the offset too: the last good distance is not what was typed
-        6 if bar_field_bad("sk_offset") => {
+        EditTool::Offset if bar_field_bad("sk_offset") => {
             *ed.status = qymcad_i18n::tr("sk-offset-field-bad");
             false
         }
-        6 => ed.project.offset_entities(si, &eids, tool_prefs.offset) > 0,
-        _ => false,
+        EditTool::Offset => ed.project.offset_entities(si, &eids, tool_prefs.offset) > 0,
     };
     if ok {
         invalidate(ed.regen);
@@ -13018,30 +13039,22 @@ pub fn expr_field_autofocus(ui: &mut egui::Ui, project: &Project, id: egui::Id, 
 }
 
 /// The editing button: with a ready selection it applies at once, otherwise it waits for one (Esc cancels).
-pub fn modify_button(mut ed: Editing, t: &mut Tools, sk_pat: SketchPattern, tool_prefs: &SketchToolPrefs, op: u8) {
+pub fn modify_button(mut ed: Editing, t: &mut Tools, sk_pat: SketchPattern, tool_prefs: &SketchToolPrefs, op: EditTool) {
     // PRESSED AGAIN WITH THE TOOL IN HAND it is put down, as every tool button does - except the mirror with
     // geometry selected, where the press is the way on to the axis (see below)
     let held = t.sel_sk.modify == Some(op);
-    let mirror_forward = op == 1 && t.sel_sk.items.iter().any(|(k, _)| *k == 1);
+    let mirror_forward = op == EditTool::Mirror && t.sel_sk.items.iter().any(|(k, _)| *k == 1);
     exit_draw_tools(&mut t.reborrow());
     if held && !mirror_forward {
         return;
     }
     let Tools { armed, annot: _, cmd: _, corner: _, dim: _, drag: _, gsel: _, inline: _, measure: _, pat: _, pending_import: _, picking: _, place: _, sel_sk, tool: _ } = t;
     sel_sk.constraint = None;
-    **armed = Armed::Modify(match op {
-        4 => 1,
-        5 => 2,
-        6 => 3,
-        1 => 4,
-        2 => 5,
-        3 => 6,
-        _ => 0,
-    });
+    **armed = Armed::Modify(op);
     // THE MIRROR HAS TWO STEPS OF ITS OWN: what, then about what. Pressing the button with geometry
     // selected answers the first and asks the second; pressing it with a selection made while the tool was
     // already in hand does the same, which is why the button is the way forward rather than a stray click.
-    if op == 1 {
+    if op == EditTool::Mirror {
         let eids: Vec<Id> = sel_sk.items.iter().filter(|(k, _)| *k == 1).map(|(_, id)| *id).collect();
         if !eids.is_empty() {
             // THE SELECTION STAYS ON SCREEN. It used to be moved into the tool and cleared, so the person

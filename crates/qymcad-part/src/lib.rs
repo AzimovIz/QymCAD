@@ -5955,11 +5955,11 @@ pub fn wb_toolbar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
                     }
                     // --- Editing and replication (over the selected entities) ---
                     cat(ui, &qymcad_i18n::tr("tb-group-edit"));
-                    if qymcad_ui_state::icon_tool(ui, ph::TRASH, &qymcad_i18n::tr("tb-delete-hint"), bc.sel_sk.modify == Some(0)) {
-                        qymcad_ui_state::modify_button(qymcad_ui_state::editing_in!(bc), &mut qymcad_ui_state::tools_in!(bc), *bc.sk_pat, &*bc.tool_prefs, 0);
+                    if qymcad_ui_state::icon_tool(ui, ph::TRASH, &qymcad_i18n::tr("tb-delete-hint"), bc.sel_sk.modify == Some(qymcad_ui_state::EditTool::Delete)) {
+                        qymcad_ui_state::modify_button(qymcad_ui_state::editing_in!(bc), &mut qymcad_ui_state::tools_in!(bc), *bc.sk_pat, &*bc.tool_prefs, qymcad_ui_state::EditTool::Delete);
                     }
-                    if qymcad_render::sym_button(ui, qymcad_ui_state::Gly::Mirror, &qymcad_i18n::tr("tb-mirror-sketch-hint"), bc.sel_sk.modify == Some(1)) {
-                        qymcad_ui_state::modify_button(qymcad_ui_state::editing_in!(bc), &mut qymcad_ui_state::tools_in!(bc), *bc.sk_pat, &*bc.tool_prefs, 1);
+                    if qymcad_render::sym_button(ui, qymcad_ui_state::Gly::Mirror, &qymcad_i18n::tr("tb-mirror-sketch-hint"), bc.sel_sk.modify == Some(qymcad_ui_state::EditTool::Mirror)) {
+                        qymcad_ui_state::modify_button(qymcad_ui_state::editing_in!(bc), &mut qymcad_ui_state::tools_in!(bc), *bc.sk_pat, &*bc.tool_prefs, qymcad_ui_state::EditTool::Mirror);
                     }
                     if qymcad_render::sym_button(ui, qymcad_ui_state::Gly::ArrayLin, &qymcad_i18n::tr("tb-lin-array-hint"), bc.armed.pat_op() == 1) {
                         start_pattern(&mut qymcad_ui_state::tools_in!(bc), &mut *bc.status, 1);
@@ -5986,8 +5986,8 @@ pub fn wb_toolbar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
                             qymcad_ui_state::fillet_all_corners(&mut *bc.corner, &mut *bc.picking, *bc.sel, &*bc.sel_sk, &mut *bc.status, &*bc.tool_prefs);
                         }
                     }
-                    if qymcad_render::sym_button(ui, qymcad_ui_state::Gly::Offset, &qymcad_i18n::tr("tb-offset-hint"), bc.sel_sk.modify == Some(6)) {
-                        qymcad_ui_state::modify_button(qymcad_ui_state::editing_in!(bc), &mut qymcad_ui_state::tools_in!(bc), *bc.sk_pat, &*bc.tool_prefs, 6);
+                    if qymcad_render::sym_button(ui, qymcad_ui_state::Gly::Offset, &qymcad_i18n::tr("tb-offset-hint"), bc.sel_sk.modify == Some(qymcad_ui_state::EditTool::Offset)) {
+                        qymcad_ui_state::modify_button(qymcad_ui_state::editing_in!(bc), &mut qymcad_ui_state::tools_in!(bc), *bc.sk_pat, &*bc.tool_prefs, qymcad_ui_state::EditTool::Offset);
                     }
                     if qymcad_ui_state::icon_tool(ui, ph::ARROWS_OUT_CARDINAL, &qymcad_i18n::tr("tb-move-hint"), bc.armed.move_op() == 1) {
                         start_move_tool(&mut qymcad_ui_state::tools_in!(bc), &mut *bc.status, 1);
@@ -6421,12 +6421,12 @@ pub fn tool_options_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
             }
         } else {
             match bc.armed.modify() {
-                1 => qymcad_i18n::tr("tool-fillet"),
-                2 => qymcad_i18n::tr("tool-chamfer"),
-                3 => qymcad_i18n::tr("tool-offset"),
-                4 => qymcad_i18n::tr("tool-mirror"),
-                5 => qymcad_i18n::tr("tool-lin-array-short"),
-                6 => qymcad_i18n::tr("tool-circ-array-short"),
+                Some(qymcad_ui_state::EditTool::Fillet) => qymcad_i18n::tr("tool-fillet"),
+                Some(qymcad_ui_state::EditTool::Chamfer) => qymcad_i18n::tr("tool-chamfer"),
+                Some(qymcad_ui_state::EditTool::Offset) => qymcad_i18n::tr("tool-offset"),
+                Some(qymcad_ui_state::EditTool::Mirror) => qymcad_i18n::tr("tool-mirror"),
+                Some(qymcad_ui_state::EditTool::LinearPattern) => qymcad_i18n::tr("tool-lin-array-short"),
+                Some(qymcad_ui_state::EditTool::CircularPattern) => qymcad_i18n::tr("tool-circ-array-short"),
                 _ => qymcad_i18n::tr("tool-select"),
             }
         };
@@ -6632,11 +6632,11 @@ pub fn tool_options_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
             }
         } else {
             match bc.armed.modify() {
-                1 | 2 => {
-                    if bc.armed.modify() == 2 {
+                Some(qymcad_ui_state::EditTool::Fillet | qymcad_ui_state::EditTool::Chamfer) => {
+                    if bc.armed.modify() == Some(qymcad_ui_state::EditTool::Chamfer) {
                         chamfer_modes(bc, ui);
                     }
-                    ui.label(qymcad_i18n::tr(if bc.armed.modify() == 1 { "opt-radius" } else { qymcad_ui_state::chamfer_d1_label(bc.tool_prefs.chamfer_mode) }));
+                    ui.label(qymcad_i18n::tr(if bc.armed.modify() == Some(qymcad_ui_state::EditTool::Fillet) { "opt-radius" } else { qymcad_ui_state::chamfer_d1_label(bc.tool_prefs.chamfer_mode) }));
                     bc.tool_prefs.fillet = qymcad_ui_state::num_or_expr(
                         &mut qymcad_ui_state::ExprBarCtx { bar_exprs: &mut *bc.bar_exprs, project: &*bc.project, scheme: &*bc.scheme },
                         ui,
@@ -6644,11 +6644,11 @@ pub fn tool_options_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
                         bc.tool_prefs.fillet,
                         qymcad_ui_state::NumFormat { lo: 0.01, hi: 10000.0, integer: false, suffix: &qymcad_i18n::tr("unit-mm-suffix"), nonzero: false },
                     );
-                    if bc.armed.modify() == 2 {
+                    if bc.armed.modify() == Some(qymcad_ui_state::EditTool::Chamfer) {
                         chamfer_second_field(bc, ui);
                     }
                 }
-                3 => {
+                Some(qymcad_ui_state::EditTool::Offset) => {
                     ui.label(qymcad_i18n::tr("opt-distance"));
                     bc.tool_prefs.offset = qymcad_ui_state::num_or_expr(
                         &mut qymcad_ui_state::ExprBarCtx { bar_exprs: &mut *bc.bar_exprs, project: &*bc.project, scheme: &*bc.scheme },
@@ -6658,7 +6658,7 @@ pub fn tool_options_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
                         qymcad_ui_state::NumFormat { lo: -10000.0, hi: 10000.0, integer: false, suffix: &qymcad_i18n::tr("unit-mm-suffix"), nonzero: true },
                     );
                 }
-                5 => {
+                Some(qymcad_ui_state::EditTool::LinearPattern) => {
                     ui.label(qymcad_i18n::tr("opt-count"));
                     bc.sk_pat.count = qymcad_ui_state::num_or_expr(
                         &mut qymcad_ui_state::ExprBarCtx { bar_exprs: &mut *bc.bar_exprs, project: &*bc.project, scheme: &*bc.scheme },
@@ -6682,7 +6682,7 @@ pub fn tool_options_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
                         qymcad_ui_state::NumFormat { lo: -100000.0, hi: 100000.0, integer: false, suffix: "", nonzero: false },
                     );
                 }
-                6 => {
+                Some(qymcad_ui_state::EditTool::CircularPattern) => {
                     ui.label(qymcad_i18n::tr("opt-count"));
                     bc.sk_pat.count = qymcad_ui_state::num_or_expr(
                         &mut qymcad_ui_state::ExprBarCtx { bar_exprs: &mut *bc.bar_exprs, project: &*bc.project, scheme: &*bc.scheme },
@@ -6699,7 +6699,7 @@ pub fn tool_options_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
                         qymcad_ui_state::NumFormat { lo: -360.0, hi: 360.0, integer: false, suffix: "°", nonzero: false },
                     );
                 }
-                4 => {
+                Some(qymcad_ui_state::EditTool::Mirror) => {
                     ui.label(egui::RichText::new(qymcad_i18n::tr("opt-mirror-axis-hint")).weak());
                 }
                 _ => {

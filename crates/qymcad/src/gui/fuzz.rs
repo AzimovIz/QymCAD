@@ -44,7 +44,7 @@ mod random_session {
         // This is the very class that was reported three times, and never by an invented scenario.
         if what == "cancel everything" {
             let tail = app.tools.armed.draw_kind() != 0
-                || app.tools.armed.modify() != 0
+                || app.tools.armed.modify().is_some()
                 || app.tools.armed.dim_kind() != 0
                 || app.tools.armed.measuring()
                 || !app.tools.measure.pts.is_empty()

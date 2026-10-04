@@ -31,7 +31,12 @@ mod tests {
                 _ => {}
             }
         }
-        tail[..end?].rsplit(',').next()?.trim().parse::<u8>().ok()
+        let last = tail[..end?].rsplit(',').next()?.trim();
+        // an editing tool is named, not numbered: `EditTool::Mirror` reads as the button's number of the mirror
+        last.parse::<u8>().ok().or_else(|| {
+            let name = last.rsplit("::").next()?;
+            qymcad_ui_state::EditTool::ALL.iter().find(|t| format!("{t:?}") == name).map(|t| t.code())
+        })
     }
 
     /// The tools wired to a button, each as the kind of launch and its number: the part and primitive commands, and
@@ -106,7 +111,7 @@ mod tests {
                 ("sk", Launch::SkTool(m)) => m == *n,
                 ("dim", Launch::Dim(m)) => m == *n,
                 ("click", Launch::ClickOp(m)) => m == *n,
-                ("mod", Launch::Modify(m)) => m == *n,
+                ("mod", Launch::Modify(m)) => m.code() == *n,
                 _ => false,
             });
             assert!(found, "{h}({n}) is in the panel and not in the catalogue");
@@ -124,7 +129,7 @@ mod tests {
                 Launch::SkTool(n) => sk.contains(&("sk".to_string(), n)),
                 Launch::Dim(n) => sk.contains(&("dim".to_string(), n)),
                 Launch::ClickOp(n) => sk.contains(&("click".to_string(), n)),
-                Launch::Modify(n) => sk.contains(&("mod".to_string(), n)),
+                Launch::Modify(tool) => sk.contains(&("mod".to_string(), tool.code())),
                 Launch::Action(_) => true, // assembly actions have launches of their own and need no numbers
             };
             assert!(ok, "the catalogue promises \"{}\" and there is no button for it in the interface", c.code);

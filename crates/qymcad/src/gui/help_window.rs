@@ -4,6 +4,7 @@
 //! colour from THE SCHEME. Someone else's renderer would bring a palette of its own and drift apart from
 //! the light theme exactly as the canvas of the viewport once did.
 use super::App;
+use qymcad_ui_state::EditTool;
 use crate::help::{Block, Span};
 use egui_phosphor::regular as ph;
 
@@ -86,8 +87,8 @@ impl App {
                 return a;
             }
         }
-        let (a, modify) = (&self.tools.armed, self.tools.armed.modify_op());
-        if let Some(art) = self.sketch_ses.editing.and(crate::help_map::sketch_tool_article(a.draw_kind(), a.dim_kind(), a.click_op(), modify)) {
+        let a = &self.tools.armed;
+        if let Some(art) = self.sketch_ses.editing.and(crate::help_map::sketch_tool_article(a.draw_kind(), a.dim_kind(), a.click_op(), a.modify().map(EditTool::code))) {
             return art;
         }
         // TOOLBAR BUTTONS WITH NO COMMAND NUMBER are an occupied hand as well, and F1 must answer about
