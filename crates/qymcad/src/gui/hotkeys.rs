@@ -137,6 +137,26 @@ pub(crate) fn hotkeys_window(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Conte
     capture_hotkey(wc, ctx);
 }
 
+/// WHETHER THE KEYBOARD IS THE REFERENCE WINDOW'S this frame - asked before the cancel ladder, which runs before
+/// anything is drawn.
+///
+/// While the window waits for a key, every press is the name of a binding. Otherwise Esc, with no field holding
+/// the keyboard, steps back through the window: an open clash question is answered "keep as it was", and then
+/// the window closes. The key is taken, so the ladder does not also clear the selection behind the window.
+pub(crate) fn hotkeys_take_keyboard(win: &mut qymcad_ui_state::Windows, hk: &mut qymcad_ui_state::HotkeyCapture, ctx: &egui::Context) -> bool {
+    if hk.action.is_some() {
+        return true;
+    }
+    if !win.is(WinKind::Hotkeys) || ctx.egui_wants_keyboard_input() || !ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+        return false;
+    }
+    if hk.clash.take().is_none() {
+        win.set(WinKind::Hotkeys, false);
+        hk.note.clear();
+    }
+    true
+}
+
 /// WHETHER A ROW ANSWERS THE FILTER: by its description or by its key, either way round.
 fn row_matches(set: &qymcad_ui_state::Settings, r: &HotkeyRow, q: &str) -> bool {
     let key = qymcad_ui_state::hotkey_key(set, r.action);
