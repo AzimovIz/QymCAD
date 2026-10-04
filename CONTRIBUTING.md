@@ -5,6 +5,22 @@
 Contributions are accepted on the usual terms: the code goes under the same licence as everything
 else — [AGPL-3.0-or-later](LICENSE).
 
+## Taking an issue
+
+The work is listed in the [issues](https://github.com/QymIs-Tech/QymCAD/issues), and nowhere else.
+
+- **What can be taken** carries `help wanted`, or `good first issue` when it is small and lies in one place.
+  An issue without either is a report or a proposal not yet agreed on: ask in it before starting.
+- **Say "I take it"** in the issue, and a maintainer assigns it to you — so two people do not do one thing.
+- **Two weeks.** An assigned issue with no news for 12 days gets a question from a bot; at 14 days it is
+  free again. A comment keeps it yours, and an open pull request referring to it keeps it as long as it is
+  open.
+- **The pull request names the issue** with `Fixes #N`, and the issue closes when it is merged.
+- **Something large** — a new tool, a file format, a workbench — is best talked over in an issue first. A
+  large pull request that comes without one is welcome too: an issue is opened for it then.
+- **A new issue** is checked by whoever gets to it first: a comment saying whether it happens for you, with
+  the build and the system, helps more than a thumbs-up.
+
 ## Signing off a commit (DCO)
 
 Every commit must carry a `Signed-off-by` line. The `-s` flag adds it:

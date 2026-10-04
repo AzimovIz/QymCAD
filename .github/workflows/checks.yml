@@ -55,6 +55,8 @@ jobs:
         run: cargo fmt --all --check
       - name: The search for anything personal catches what it is for
         run: python3 tools/frisk.py --self-test
+      - name: The rule that frees a quiet claim decides its cases right
+        run: python3 tools/stale_claims.py --self-test
       - name: Nothing personal in the files and in the messages of the commits
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then

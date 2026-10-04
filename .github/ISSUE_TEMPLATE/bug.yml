@@ -3,7 +3,7 @@
 # they drift apart the prefilling stops SILENTLY and the form simply comes up empty.
 name: Problem report
 description: Something does not work, or works differently from what was expected
-labels: ["bug"]
+labels: ["bug", "needs-triage"]
 body:
   - type: markdown
     attributes:

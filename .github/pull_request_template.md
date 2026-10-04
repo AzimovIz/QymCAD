@@ -2,7 +2,9 @@
 
 ## What changes
 
-<!-- What was wrong or missing, and what the change does. For a reported fault, the issue number. -->
+<!-- What was wrong or missing, and what the change does. -->
+
+Fixes #
 
 ## What works and what does not
 
