@@ -740,13 +740,42 @@ pub fn ellipse_input_popup(pl: &mut qymcad_ui_state::PlaceCtx, ctx: &egui::Conte
     }
 }
 
-/// A rectangle: width by height, rebuilt from the anchor corner so the signs are kept.
+/// A rectangle: width by height. From two corners it is rebuilt from the anchor corner so the signs
+/// are kept; from the centre it grows about the centre, so the centre never travels while the numbers
+/// are typed.
 pub fn rect_input_popup(pl: &mut qymcad_ui_state::PlaceCtx, ctx: &egui::Context, rect: Rect, si: usize) {
+    // WHAT STAYS PUT while the numbers are typed: the first corner, or the centre.
+    enum Anchor {
+        Corner { fixed: Point2, signs: Point2 },
+        Center { at: Point2 },
+    }
+    // The numbers the fields open on, where the popup stands, and what is being rebuilt.
+    struct Active {
+        anchor: Anchor,
+        ids: Vec<Id>,
+        w0: f64,
+        h0: f64,
+        at: Point2,
+    }
+    let active = pl
+        .place
+        .rect()
+        .map(|(a, b, ids)| {
+            let signs = Point2::new((b.x - a.x).signum(), (b.y - a.y).signum());
+            Active { anchor: Anchor::Corner { fixed: a, signs }, ids, w0: (b.x - a.x).abs(), h0: (b.y - a.y).abs(), at: Point2::new(a.x.max(b.x), a.y.max(b.y)) }
+        })
+        .or_else(|| {
+            pl.place.rect_center().map(|(center, corner, ids)| Active {
+                anchor: Anchor::Center { at: center },
+                ids,
+                w0: 2.0 * (corner.x - center.x).abs(),
+                h0: 2.0 * (corner.y - center.y).abs(),
+                at: Point2::new(center.x.max(corner.x), center.y.max(corner.y)),
+            })
+        });
     // a rectangle: width by height (text fields, with auto-focus, Tab and Enter)
-    if let Some((a, b, ids)) = pl.place.rect() {
-        let (w0, h0) = ((b.x - a.x).abs(), (b.y - a.y).abs());
-        let (sx, sy) = ((b.x - a.x).signum(), (b.y - a.y).signum());
-        let at = (qymcad_ui_state::Sheet { view: *pl.view, rect }).at(Point2::new(a.x.max(b.x), a.y.max(b.y)));
+    if let Some(active) = active {
+        let Active { anchor, ids, w0, h0, at } = active;
         let want_focus = std::mem::take(&mut pl.place.focus);
         if want_focus {
             pl.place.buf[0] = format!("{}", (w0 * 1000.0).round() / 1000.0);
@@ -755,26 +784,29 @@ pub fn rect_input_popup(pl: &mut qymcad_ui_state::PlaceCtx, ctx: &egui::Context,
         let enter = ctx.input(|i| i.key_pressed(egui::Key::Enter));
         let (mut chg, mut close, mut got_focus) = (false, false, false);
         let mut buf = [std::mem::take(&mut pl.place.buf[0]), std::mem::take(&mut pl.place.buf[1])];
-        egui::Area::new(egui::Id::new(("rectinput", si))).fixed_pos(qymcad_ui_state::clamp_popup(at, rect) + egui::vec2(10.0, -10.0)).order(egui::Order::Foreground).show(ctx, |ui| {
-            egui::Frame::popup(ui.style()).show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(qymcad_i18n::tr("sk-width-short"));
-                    let r0 = qymcad_ui_state::focus_edit(ui, &mut buf[0], 60.0, "", want_focus);
-                    chg |= r0.changed();
-                    got_focus |= r0.has_focus();
-                    ui.label(qymcad_i18n::tr("sk-height-short"));
-                    let r1 = qymcad_ui_state::focus_edit(ui, &mut buf[1], 60.0, "", false);
-                    chg |= r1.changed();
-                    got_focus |= r1.has_focus();
-                    if (r0.lost_focus() || r1.lost_focus()) && enter {
-                        close = true;
-                    }
-                    if ui.button(ph::CHECK).clicked() {
-                        close = true;
-                    }
+        egui::Area::new(egui::Id::new(("rectinput", si)))
+            .fixed_pos(qymcad_ui_state::clamp_popup((qymcad_ui_state::Sheet { view: *pl.view, rect }).at(at), rect) + egui::vec2(10.0, -10.0))
+            .order(egui::Order::Foreground)
+            .show(ctx, |ui| {
+                egui::Frame::popup(ui.style()).show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(qymcad_i18n::tr("sk-width-short"));
+                        let r0 = qymcad_ui_state::focus_edit(ui, &mut buf[0], 60.0, "", want_focus);
+                        chg |= r0.changed();
+                        got_focus |= r0.has_focus();
+                        ui.label(qymcad_i18n::tr("sk-height-short"));
+                        let r1 = qymcad_ui_state::focus_edit(ui, &mut buf[1], 60.0, "", false);
+                        chg |= r1.changed();
+                        got_focus |= r1.has_focus();
+                        if (r0.lost_focus() || r1.lost_focus()) && enter {
+                            close = true;
+                        }
+                        if ui.button(ph::CHECK).clicked() {
+                            close = true;
+                        }
+                    });
                 });
             });
-        });
         pl.place.buf = buf.clone();
         if got_focus {
             pl.place.focus = false;
@@ -782,10 +814,20 @@ pub fn rect_input_popup(pl: &mut qymcad_ui_state::PlaceCtx, ctx: &egui::Context,
         if chg {
             let nw = parse_num(pl.project, &buf[0]).unwrap_or(w0).max(0.01);
             let nh = parse_num(pl.project, &buf[1]).unwrap_or(h0).max(0.01);
-            let nb = Point2::new(a.x + if sx < 0.0 { -nw } else { nw }, a.y + if sy < 0.0 { -nh } else { nh });
-            pl.project.delete_entities(si, &ids);
-            let nids = pl.project.add_rect_entity(si, a.x, a.y, nb.x, nb.y, qymcad_core::feature::Purpose::Real);
-            pl.place.set(qymcad_ui_state::PlacingShape::Rect(a, nb, nids));
+            match anchor {
+                Anchor::Corner { fixed, signs } => {
+                    let nb = Point2::new(fixed.x + if signs.x < 0.0 { -nw } else { nw }, fixed.y + if signs.y < 0.0 { -nh } else { nh });
+                    pl.project.delete_entities(si, &ids);
+                    let nids = pl.project.add_rect_entity(si, fixed.x, fixed.y, nb.x, nb.y, qymcad_core::feature::Purpose::Real);
+                    pl.place.set(qymcad_ui_state::PlacingShape::Rect { a: fixed, b: nb, ids: nids });
+                }
+                Anchor::Center { at: center } => {
+                    let (na, nb) = (Point2::new(center.x - nw / 2.0, center.y - nh / 2.0), Point2::new(center.x + nw / 2.0, center.y + nh / 2.0));
+                    pl.project.delete_entities(si, &ids);
+                    let nids = pl.project.add_rect_entity(si, na.x, na.y, nb.x, nb.y, qymcad_core::feature::Purpose::Real);
+                    pl.place.set(qymcad_ui_state::PlacingShape::RectCenter { center, corner: nb, ids: nids });
+                }
+            }
             qymcad_ui_state::invalidate(pl.regen);
         }
         if close || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
@@ -2625,31 +2667,39 @@ pub fn sketch_tool_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, 
             sk.tool.pts.push(w);
             let need = if sk.tool_prefs.rect_mode == 2 { 3 } else { 2 };
             if sk.tool.pts.len() == need {
-                // (the ids of the sides, corner a and corner b for the width-by-height editor, whether it is
-                // axis-aligned)
-                let (ids, ra, rb, axis_aligned) = match sk.tool_prefs.rect_mode {
+                // Centre plus a corner keeps the centre while the width and height are typed; two
+                // corners keep the first corner. A rotated rectangle (three points) offers no typing.
+                match sk.tool_prefs.rect_mode {
                     1 => {
                         // centre plus a corner: the opposite corner is its mirror through the centre
                         let (c, cr) = (sk.tool.pts[0], sk.tool.pts[1]);
                         let a = Point2::new(2.0 * c.x - cr.x, 2.0 * c.y - cr.y);
-                        (sk.project.add_rect_entity(si, a.x, a.y, cr.x, cr.y, qymcad_core::feature::Purpose::of(con)), a, cr, true)
+                        let ids = sk.project.add_rect_entity(si, a.x, a.y, cr.x, cr.y, qymcad_core::feature::Purpose::of(con));
+                        sk.tool.pts.clear();
+                        qymcad_ui_state::invalidate(&mut *sk.regen);
+                        if !con {
+                            sk.place.set(qymcad_ui_state::PlacingShape::RectCenter { center: c, corner: cr, ids }); // typing the width and height about the centre
+                            sk.place.focus = true;
+                        }
                     }
                     2 => {
                         // three points give a rotated rectangle
                         let (p1, p2, p3) = (sk.tool.pts[0], sk.tool.pts[1], sk.tool.pts[2]);
-                        (sk.project.add_rect3_entity(si, Point2::new(p1.x, p1.y), Point2::new(p2.x, p2.y), Point2::new(p3.x, p3.y), qymcad_core::feature::Purpose::of(con)), p1, p2, false)
+                        sk.project.add_rect3_entity(si, Point2::new(p1.x, p1.y), Point2::new(p2.x, p2.y), Point2::new(p3.x, p3.y), qymcad_core::feature::Purpose::of(con));
+                        sk.tool.pts.clear();
+                        qymcad_ui_state::invalidate(&mut *sk.regen);
                     }
                     _ => {
                         let (a, b) = (sk.tool.pts[0], sk.tool.pts[1]);
-                        (sk.project.add_rect_entity(si, a.x, a.y, b.x, b.y, qymcad_core::feature::Purpose::of(con)), a, b, true)
+                        let ids = sk.project.add_rect_entity(si, a.x, a.y, b.x, b.y, qymcad_core::feature::Purpose::of(con));
+                        sk.tool.pts.clear();
+                        qymcad_ui_state::invalidate(&mut *sk.regen);
+                        if !con {
+                            sk.place.set(qymcad_ui_state::PlacingShape::Rect { a, b, ids }); // typing the width and height from the first corner
+                            sk.place.focus = true;
+                        }
                     }
                 };
-                sk.tool.pts.clear();
-                qymcad_ui_state::invalidate(&mut *sk.regen);
-                if !con && axis_aligned {
-                    sk.place.set(qymcad_ui_state::PlacingShape::Rect(ra, rb, ids)); // typing the width and height (axis-aligned)
-                    sk.place.focus = true;
-                }
             }
         }
         3 if sk.tool_prefs.circ_mode == 2 => {

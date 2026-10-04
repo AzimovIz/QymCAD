@@ -753,7 +753,15 @@ impl Placing {
 
     pub fn rect(&self) -> Option<(Point2, Point2, Vec<Id>)> {
         match &self.shape {
-            PlacingShape::Rect(a, b, ids) => Some((*a, *b, ids.clone())),
+            PlacingShape::Rect { a, b, ids } => Some((*a, *b, ids.clone())),
+            _ => None,
+        }
+    }
+
+    /// A rectangle drawn from its centre: the centre plus the corner under the pointer.
+    pub fn rect_center(&self) -> Option<(Point2, Point2, Vec<Id>)> {
+        match &self.shape {
+            PlacingShape::RectCenter { center, corner, ids } => Some((*center, *corner, ids.clone())),
             _ => None,
         }
     }
@@ -2764,7 +2772,10 @@ pub enum PlacingShape {
     #[default]
     None,
     /// a rectangle: two corners and the entities it created
-    Rect(Point2, Point2, Vec<Id>),
+    Rect { a: Point2, b: Point2, ids: Vec<Id> },
+    /// a rectangle drawn from the centre: the centre stays put while the width and height are typed,
+    /// the corner under the pointer follows them
+    RectCenter { center: Point2, corner: Point2, ids: Vec<Id> },
     /// a polygon by its inscribed or circumscribed circle
     Poly(Id),
     /// an ellipse: the entity and its centre
