@@ -2729,9 +2729,11 @@ impl Project {
             }
         }
     }
-    /// Whether a sketch is typed (built from points and entities).
+    /// Whether a sketch is typed: built from points the sketcher edits - its entities, or its splines, which are
+    /// kept apart from the entities. A sketch of splines alone is typed too; read from the entities only, its nodes
+    /// could not be dragged.
     pub fn is_typed_sketch(&self, si: usize) -> bool {
-        self.sketches.get(si).is_some_and(|s| !s.entities.is_empty())
+        self.sketches.get(si).is_some_and(|s| !s.entities.is_empty() || !s.splines.is_empty())
     }
     /// Rebuild the contours of a sketch from its entities, as a multi-loop tessellation. The contour ids are
     /// preserved where possible (see the matching below).

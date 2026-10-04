@@ -62,6 +62,32 @@ mod tests {
         assert_eq!(step.as_deref(), Some(crate::i18n::tr("sk-spline").as_str()), "the spline is not one step of undo named after it");
     }
 
+    /// THE NODES OF A SPLINE ARE DRAGGED WITH THE MOUSE in a sketch that holds nothing but the spline - the ends and a
+    /// middle one - and an undo puts each back.
+    ///
+    /// Reported behaviour (issue #30): the tangent handle turned the curve, but a node did not move, because a sketch of
+    /// splines alone was not taken for one that can be edited.
+    #[test]
+    fn the_nodes_of_a_lone_spline_are_dragged() {
+        let drawn = vec![vec![(0.0, 0.0), (20.0, 10.0), (40.0, 0.0)]];
+        let mut problems = Vec::new();
+        for (node, to) in [(0usize, (0.0, -10.0)), (1, (20.0, 25.0)), (2, (45.0, -8.0))] {
+            let (mut app, si) = a_sketch();
+            Hand::new(&mut app).sk_tool(9).click2d(0.0, 0.0).click2d(20.0, 10.0).double_click2d(40.0, 0.0);
+            assert_eq!(spline_nodes(&app, si), drawn, "setup: the spline as clicked");
+            Hand::new(&mut app).sk_tool(0).drag2d(drawn[0][node], to);
+            let got = spline_nodes(&app, si)[0][node];
+            if (got.0 - to.0).hypot(got.1 - to.1) > 0.5 {
+                problems.push(format!("node {node} dragged to {to:?} stands at {got:?}"));
+            }
+            Hand::new(&mut app).undo();
+            if spline_nodes(&app, si) != drawn {
+                problems.push(format!("node {node}: an undo leaves {:?}", spline_nodes(&app, si)));
+            }
+        }
+        assert!(problems.is_empty(), "{}", problems.join("\n"));
+    }
+
     /// Esc ENDS A SPLINE, AS ITS HINT SAYS, keeping the nodes that were clicked.
     #[test]
     fn escape_ends_a_spline_as_its_hint_says() {

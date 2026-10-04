@@ -3783,7 +3783,13 @@ pub fn snap_world(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, screen: Pos2)
             }
             for cid in &s.contour_ids {
                 let Some(ci) = sk.project.contour_index(*cid) else { continue };
-                for p in sk.project.contours[ci].points.iter().filter(|p| !own(**p)) {
+                // NOR TO THE CURVE IT DRAGS ALONG: a spline drawn through a dragged node runs under the cursor, and
+                // the points it is cut into caught the node - the middle node of a spline led to (20, 25) stopped at
+                // (18.7, 24.8). The true corners of such a contour are points of the sketch, snapped above.
+                if sk.project.contours[ci].points.iter().any(|p| own(*p)) {
+                    continue;
+                }
+                for p in sk.project.contours[ci].points.iter() {
                     let d = sd(*p, &*sk.view);
                     if best.is_none_or(|(bd, _, _)| d < bd) {
                         best = Some((d, *p, 0));
