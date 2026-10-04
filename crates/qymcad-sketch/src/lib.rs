@@ -532,6 +532,34 @@ fn corner_pair(cc: &qymcad_ui_state::CornerCtx, ctx: &egui::Context, si: usize, 
     qymcad_ui_state::corner_pair_now(cc.project, si, pid, cc.corner.pair, cursor)
 }
 
+/// THE ARC OF THE PREVIEW AS A LINE ON THE SCREEN, walked from `from` to `to` the short way round.
+///
+/// The two angles are read off the SCREEN points and not off the drawing's own coordinates, and that is the whole
+/// difference between the arc that will be made and the arc that is shown: the sheet turns the drawing over
+/// (`Sheet::at` takes the sign of y off), so an angle taken before the turn is walked the other way round on the
+/// screen, and the preview of a fillet came out on the far side of the horizontal line while the fillet itself landed
+/// in the corner.
+pub fn corner_arc_points(centre: Pos2, r_px: f32, from: Pos2, to: Pos2) -> Vec<Pos2> {
+    let dx = |p: Pos2| (p.x - centre.x) as f64;
+    let dy = |p: Pos2| (p.y - centre.y) as f64;
+    let a0 = dy(from).atan2(dx(from));
+    let a1 = dy(to).atan2(dx(to));
+    let mut sweep = a1 - a0;
+    while sweep <= -std::f64::consts::PI {
+        sweep += std::f64::consts::TAU;
+    }
+    while sweep > std::f64::consts::PI {
+        sweep -= std::f64::consts::TAU;
+    }
+    const STEPS: usize = 24;
+    (0..=STEPS)
+        .map(|k| {
+            let a = a0 + sweep * k as f64 / STEPS as f64;
+            Pos2::new(centre.x + a.cos() as f32 * r_px, centre.y + a.sin() as f32 * r_px)
+        })
+        .collect()
+}
+
 /// THE CORNER AS IT WOULD BE, drawn on the sheet: the two ends the lines will be cut at and the arc or the straight
 /// cut that will stand between them. Nothing of the sketch is changed — the lines keep the ends they have, and what
 /// is drawn is only where the corner will go. A value too big for the corner is drawn as nothing and said in words
@@ -555,24 +583,7 @@ fn draw_corner_preview(cc: &qymcad_ui_state::CornerCtx, ctx: &egui::Context, rec
         }
         Some((c, r)) => {
             // the arc is walked in the sheet's own scale, so it looks the same whatever the zoom
-            let centre = at(c);
-            let px = (r * cc.view.scale as f64) as f32;
-            let a0 = (b.ends[0][1] - c[1]).atan2(b.ends[0][0] - c[0]);
-            let a1 = (b.ends[1][1] - c[1]).atan2(b.ends[1][0] - c[0]);
-            let mut sweep = a1 - a0;
-            while sweep <= -std::f64::consts::PI {
-                sweep += std::f64::consts::TAU;
-            }
-            while sweep > std::f64::consts::PI {
-                sweep -= std::f64::consts::TAU;
-            }
-            let steps = 24;
-            let pts: Vec<Pos2> = (0..=steps)
-                .map(|k| {
-                    let a = a0 + sweep * k as f64 / steps as f64;
-                    Pos2::new(centre.x + a.cos() as f32 * px, centre.y + a.sin() as f32 * px)
-                })
-                .collect();
+            let pts = corner_arc_points(at(c), (r * cc.view.scale as f64) as f32, at(b.ends[0]), at(b.ends[1]));
             layer.add(egui::Shape::line(pts, egui::Stroke::new(2.0, col)));
         }
     }
