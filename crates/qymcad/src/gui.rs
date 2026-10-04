@@ -631,9 +631,6 @@ pub(crate) fn install_fonts(ctx: &egui::Context) {
     });
 }
 
-/// The name of the BOLD font family. One place: family names spelled out separately drift apart and
-/// give a silent fallback to the default font — the text still draws, only not bold, and that is
-/// invisible to the eye in the code.
 /// ⌃ ⌘ ⇧ ⌥ FOR THE KEYS OF A MAC, where people read keys as symbols and `Ctrl+W` names the wrong key.
 ///
 /// The fonts the program carries cannot draw them: ⌥ and ⌃ are in none of them, and ⇧ only in the monospace one, so
@@ -657,6 +654,9 @@ fn mac_key_symbols(fonts: &mut egui::FontDefinitions) {
     qymcad_ui_state::set_key_style(qymcad_ui_state::KeyStyle::MacSymbols);
 }
 
+/// The name of the BOLD font family. One place: family names spelled out separately drift apart and
+/// give a silent fallback to the default font — the text still draws, only not bold, and that is
+/// invisible to the eye in the code.
 pub(crate) const BOLD_FONT: &str = "qym-bold";
 
 /// The bold font at a given size.
