@@ -91,7 +91,8 @@ By making a contribution to this project, I certify that:
 - **Comments and assertion messages are in English.** Interface strings go through the `i18n/`
   catalogue only, never inline in the code.
 - **Formatted by rustfmt.** Run `cargo fmt` before sending; the layout is set by `rustfmt.toml` and the
-  checks refuse a tree `cargo fmt --check` would change.
+  checks refuse a tree `cargo fmt --check` would change. Once after cloning, `git config core.hooksPath
+  tools/hooks` makes every commit check the layout (a second) and every push search for anything personal.
 - **clippy has nothing to say.** Every clippy remark is an error in the manifest; run `cargo clippy
   --workspace --all-targets` before sending. A remark is mended, not silenced: no `#[allow(clippy::...)]`.
 - **Values say what they are.** A group of values that travels together is a struct with named fields — not

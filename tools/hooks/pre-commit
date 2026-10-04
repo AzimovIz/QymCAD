@@ -1,21 +1,20 @@
 #!/usr/bin/env python3
-"""A COMMIT GOES THROUGH THE GATE: only a tree the full level ran on and passed is committed.
+"""A COMMIT IS LAID OUT BY RUSTFMT: `cargo fmt --all --check` before the commit, a second.
 
-`tools/gate.py full` leaves `target/gate-full.json` with the tree it ran on; this compares that tree with the one
-being committed. Switched on by `git config core.hooksPath tools/hooks`; `git commit --no-verify` goes round it.
+The checks of a pull request refuse a tree `cargo fmt` would change; found here, it costs a second instead of a round
+of CI. The tests are not run here - a commit is made for every piece of work, and they run before a pull request
+(`tools/gate.py fast`) and on it. Switched on by `git config core.hooksPath tools/hooks`; `git commit --no-verify`
+goes round it.
 """
-import json
 import os
 import subprocess
 import sys
 
 root = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True).stdout.strip()
-mark = os.path.join(root, "target", "gate-full.json")
-tree = subprocess.run(["git", "write-tree"], cwd=root, capture_output=True, text=True).stdout.strip()
-if not os.path.exists(mark):
-    sys.exit("the commit is refused: no full level was run - `tools/gate.py full` first")
-m = json.load(open(mark, encoding="utf-8"))
-if m.get("tree") != tree:
-    sys.exit("the commit is refused: the full level ran on another tree than the one being committed - `tools/gate.py full` on this one")
-if not m.get("passed"):
-    sys.exit("the commit is refused: the full level found reds:\n" + "\n".join("  " + r for r in m.get("red", [])))
+checked = subprocess.run(["cargo", "fmt", "--all", "--check"], cwd=root, capture_output=True, text=True)
+if checked.returncode != 0:
+    # rustfmt says "Diff in /the/file.rs:59:" for every place it would change
+    places = [line.removeprefix("Diff in ").strip().rstrip(":") for line in checked.stdout.splitlines() if line.startswith("Diff in ")]
+    changed = sorted({os.path.relpath(p.rsplit(":", 1)[0], root) for p in places})
+    listed = "\n".join("  " + f for f in changed[:20]) + (f"\n  ... and {len(changed) - 20} more" if len(changed) > 20 else "")
+    sys.exit(f"the commit is refused: the layout is not rustfmt's in {len(changed)} file(s) - run `cargo fmt --all`:\n{listed}")
