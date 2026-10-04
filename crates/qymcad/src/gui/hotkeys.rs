@@ -54,7 +54,11 @@ pub(crate) fn hotkeys_window(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Conte
         return;
     }
     let mut open = true;
-    egui::Window::new(crate::i18n::tr("hotkeys-title")).open(&mut open).resizable(true).default_width(560.0).show(ctx, |ui| {
+    // AS WIDE AS THE TABLE AND AS TALL AS A PERSON DRAGS IT: dragging the width only ever showed empty space or cut
+    // the descriptions, while the height is what decides how much of the table is seen at once
+    egui::Window::new(crate::i18n::tr("hotkeys-title")).open(&mut open).resizable([false, true]).default_height(600.0).show(ctx, |ui| {
+        let cols = columns(wc.set, ui);
+        ui.set_width(cols.key + cols.what + cols.tools + 2.0 * GRID_GAP + ui.spacing().scroll.allocated_width());
         ui.horizontal(|ui| {
             ui.label(ph::MAGNIFYING_GLASS);
             let reset_w = if wc.set.hotkeys.is_empty() { 0.0 } else { 240.0 };
@@ -65,13 +69,10 @@ pub(crate) fn hotkeys_window(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Conte
                 wc.hotkeys.clash = None;
             }
         });
-        // ABOVE THE TABLE, NOT UNDER IT: what the window waits for, why a key was refused, which key clashes.
-        // At the foot of the scrolled table they stood out of sight - a refused key said nothing a person could see.
-        status_line(wc, ui);
         ui.separator();
         let q = wc.hotkeys.filter.trim().to_lowercase();
         let mut shown = 0;
-        egui::ScrollArea::vertical().max_height(520.0).show(ui, |ui| {
+        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
             for area in AREAS {
                 let rows: Vec<&HotkeyRow> = HOTKEYS.iter().filter(|r| r.area == area && row_matches(wc.set, r, &q)).collect();
                 if rows.is_empty() {
@@ -79,12 +80,16 @@ pub(crate) fn hotkeys_window(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Conte
                 }
                 shown += rows.len();
                 area_header(wc, ui, area);
-                egui::Grid::new(format!("hk_{area}")).num_columns(3).min_col_width(28.0).spacing([14.0, 4.0]).striped(true).show(ui, |ui| {
+                egui::Grid::new(format!("hk_{area}")).num_columns(3).min_col_width(0.0).spacing([GRID_GAP, 4.0]).striped(true).show(ui, |ui| {
                     for r in rows {
-                        key_cell(wc, ui, r);
-                        ui.label(hotkey_what(r));
+                        key_cell(wc, ui, r, cols.key);
+                        ui.scope(|ui| {
+                            ui.set_min_width(cols.what);
+                            ui.label(hotkey_what(r));
+                        });
                         row_tools(wc, ui, r);
                         ui.end_row();
+                        row_status(wc, ui, r.action, cols.what);
                     }
                 });
                 ui.add_space(10.0);
@@ -124,33 +129,76 @@ fn what_of(action: &str) -> String {
     HOTKEYS.iter().find(|r| r.action == action).map(hotkey_what).unwrap_or_default()
 }
 
-/// The line between the filter and the table: a clash to settle, a press being waited for, or a refusal.
-fn status_line(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui) {
-    if let Some(clash) = wc.hotkeys.clash.clone() {
-        let old = qymcad_ui_state::key_label(&qymcad_ui_state::hotkey_key(wc.set, &clash.action));
-        let holder = what_of(clash.holder);
-        ui.horizontal_wrapped(|ui| {
-            ui.label(egui::RichText::new(ph::WARNING).color(wc.scheme.pal.warning()));
-            ui.label(crate::i18n::tr2("hotkeys-taken", "key", &qymcad_ui_state::key_label(&clash.chord), "what", &holder));
-            let swap = ui.add_enabled(!old.is_empty(), egui::Button::new(crate::i18n::tr("hotkeys-swap")));
-            if swap.on_hover_text(crate::i18n::tr2("hotkeys-swap-tip", "what", &holder, "key", &old)).clicked() {
-                qymcad_ui_state::resolve_hotkey_clash(wc.set, &clash, qymcad_ui_state::ClashChoice::Swap);
-                wc.hotkeys.clash = None;
-            }
-            if ui.button(crate::i18n::tr("hotkeys-take")).on_hover_text(crate::i18n::tr1("hotkeys-take-tip", "what", &holder)).clicked() {
-                qymcad_ui_state::resolve_hotkey_clash(wc.set, &clash, qymcad_ui_state::ClashChoice::Unbind);
-                wc.hotkeys.clash = None;
-            }
-            if ui.button(crate::i18n::tr("hotkeys-cancel")).clicked() {
-                wc.hotkeys.clash = None;
-            }
-        });
-    } else if let Some(action) = wc.hotkeys.action.clone() {
-        ui.label(egui::RichText::new(crate::i18n::tr1("hotkeys-waiting", "what", &what_of(&action))).color(wc.scheme.pal.ui_accent()));
+/// The gap between the columns of the table.
+const GRID_GAP: f32 = 14.0;
+
+/// THE WIDTHS EVERY SECTION SHARES, measured from the text rather than left to each grid: the sections line up,
+/// and nothing that appears in a row - a reset icon, a clash under it - can widen a column a frame later.
+struct Columns {
+    /// The key buttons: the widest key now bound or caption of the button, and never narrower than `KEY_W`.
+    key: f32,
+    /// The widest description in the language of the window.
+    what: f32,
+    /// The two row icons.
+    tools: f32,
+}
+
+fn columns(set: &qymcad_ui_state::Settings, ui: &egui::Ui) -> Columns {
+    let body = egui::TextStyle::Body.resolve(ui.style());
+    let mono = egui::TextStyle::Monospace.resolve(ui.style());
+    let width = |text: String, font: &egui::FontId| ui.ctx().fonts_mut(|f| f.layout_no_wrap(text, font.clone(), egui::Color32::WHITE).size().x);
+    let what = HOTKEYS.iter().map(|r| width(hotkey_what(r), &body)).fold(0.0, f32::max);
+    let pad = 2.0 * ui.spacing().button_padding.x;
+    // the button also says "press a key" while it waits and "no key" when unbound
+    let words = ["hotkeys-press", "hotkeys-unbound"].map(|k| width(crate::i18n::tr(k), &body) + pad);
+    let key = HOTKEYS.iter().map(|r| width(qymcad_ui_state::key_label(&qymcad_ui_state::hotkey_key(set, r.action)), &mono) + pad).chain(words).fold(KEY_W, f32::max);
+    let tools = 2.0 * ui.spacing().interact_size.y + ui.spacing().item_spacing.x;
+    Columns { key, what, tools }
+}
+
+/// The narrowest key button: a single letter still gets a target worth aiming at.
+const KEY_W: f32 = 110.0;
+
+/// UNDER THE ROW BEING REASSIGNED: what the window waits for, why a press was refused, which key clashes. Shown
+/// where the person looks - the key they just pressed - and not at the top of a table they may have scrolled far
+/// down. Wrapped inside the description column, so a long message never widens the table.
+fn row_status(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui, action: &str, width: f32) {
+    let clash = wc.hotkeys.clash.clone().filter(|c| c.action == action);
+    let waiting = wc.hotkeys.action.as_deref() == Some(action);
+    if clash.is_none() && !waiting {
+        return;
     }
-    if !wc.hotkeys.note.is_empty() {
-        ui.label(egui::RichText::new(&wc.hotkeys.note).color(wc.scheme.pal.error_mild()).small());
-    }
+    ui.label("");
+    ui.scope(|ui| {
+        ui.set_width(width);
+        if let Some(clash) = clash {
+            let old = qymcad_ui_state::key_label(&qymcad_ui_state::hotkey_key(wc.set, &clash.action));
+            let holder = what_of(clash.holder);
+            ui.horizontal_wrapped(|ui| {
+                ui.label(egui::RichText::new(ph::WARNING).color(wc.scheme.pal.warning()));
+                ui.label(crate::i18n::tr2("hotkeys-taken", "key", &qymcad_ui_state::key_label(&clash.chord), "what", &holder));
+                let swap = ui.add_enabled(!old.is_empty(), egui::Button::new(crate::i18n::tr("hotkeys-swap")));
+                if swap.on_hover_text(crate::i18n::tr2("hotkeys-swap-tip", "what", &holder, "key", &old)).clicked() {
+                    qymcad_ui_state::resolve_hotkey_clash(wc.set, &clash, qymcad_ui_state::ClashChoice::Swap);
+                    wc.hotkeys.clash = None;
+                }
+                if ui.button(crate::i18n::tr("hotkeys-take")).on_hover_text(crate::i18n::tr1("hotkeys-take-tip", "what", &holder)).clicked() {
+                    qymcad_ui_state::resolve_hotkey_clash(wc.set, &clash, qymcad_ui_state::ClashChoice::Unbind);
+                    wc.hotkeys.clash = None;
+                }
+                if ui.button(crate::i18n::tr("hotkeys-cancel")).clicked() {
+                    wc.hotkeys.clash = None;
+                }
+            });
+        } else {
+            ui.label(egui::RichText::new(crate::i18n::tr1("hotkeys-waiting", "what", &what_of(action))).color(wc.scheme.pal.ui_accent()));
+            if !wc.hotkeys.note.is_empty() {
+                ui.label(egui::RichText::new(&wc.hotkeys.note).color(wc.scheme.pal.error_mild()).small());
+            }
+        }
+    });
+    ui.label("");
+    ui.end_row();
 }
 
 /// The caption of a section, and the way back to the factory keys of that section alone.
@@ -173,11 +221,14 @@ fn area_header(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui, area: &str) 
 
 /// THE KEY IS A BUTTON. Press it, the program waits for a press, it is recorded. A text field here would be
 /// a lie: modifiers would be typed into it as words.
-fn key_cell(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui, r: &HotkeyRow) {
+fn key_cell(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui, r: &HotkeyRow, width: f32) {
     // SHOWN the way this system writes keys; stored and compared in the portable spelling
     let cur = qymcad_ui_state::key_label(&qymcad_ui_state::hotkey_key(wc.set, r.action));
     if !rebindable(r.area) {
-        ui.label(egui::RichText::new(&cur).monospace().strong()).on_hover_text(crate::i18n::tr("hotkeys-fixed"));
+        ui.scope(|ui| {
+            ui.set_min_width(width);
+            ui.label(egui::RichText::new(&cur).monospace().strong()).on_hover_text(crate::i18n::tr("hotkeys-fixed"));
+        });
         return;
     }
     let waiting = wc.hotkeys.action.as_deref() == Some(r.action);
@@ -197,7 +248,7 @@ fn key_cell(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui, r: &HotkeyRow) 
     } else {
         egui::RichText::new(&cur).monospace().strong()
     };
-    let mut resp = ui.add(egui::Button::new(text).selected(waiting).min_size(egui::vec2(110.0, 0.0)));
+    let mut resp = ui.add(egui::Button::new(text).selected(waiting).min_size(egui::vec2(width, 0.0)));
     if let Some(why) = refused {
         resp = resp.on_hover_text(crate::i18n::tr(why));
     }
