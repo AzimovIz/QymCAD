@@ -58,27 +58,39 @@ pub(crate) fn hotkeys_window(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Conte
     // descriptions, while the height is what decides how much of the table is seen at once. The width is fixed rather
     // than taken from the longest text: a long description or message wraps onto the next line instead of
     // stretching the window.
-    egui::Window::new(crate::i18n::tr("hotkeys-title")).open(&mut open).resizable([false, true]).default_height(520.0).min_width(TABLE_W).max_width(TABLE_W).show(ctx, |ui| {
-        // THE WIDTH IS THE CONTAINER'S, the window wraps it - and is held to it: egui keeps a window's size between
-        // runs and only ever grows it to the content, so a width saved while the window could still be dragged wider
-        // came back at every start. The saved height, the one a person drags, is kept.
-        let cols = columns(wc.set, ui);
+    //
+    // THE WIDTH IS THE WINDOW'S, and everything inside takes what it leaves: the title bar and the body share the
+    // window's width, and content given a width of its own - 540 pt inside margins the window keeps - stood wider than
+    // the title bar. Held by min and max because egui keeps a window's size between runs and only ever grows it to
+    // the content: a width saved while the window could still be dragged wider came back at every start. The saved
+    // height, the one a person drags, is kept.
+    egui::Window::new(crate::i18n::tr("hotkeys-title")).open(&mut open).resizable([false, true]).default_height(520.0).min_width(WINDOW_W).max_width(WINDOW_W).show(ctx, |ui| {
         ui.vertical(|ui| {
-            ui.set_width(TABLE_W);
+            // laid out from the right: the reset button takes what it needs, the filter the rest - no guessed width.
+            // Inside a one-row `horizontal`: a right-to-left layout of its own would take the whole remaining height
+            // and centre the row in it.
             ui.horizontal(|ui| {
-                ui.label(ph::MAGNIFYING_GLASS);
-                let reset_w = if wc.set.hotkeys.is_empty() { 0.0 } else { 240.0 };
-                ui.add(egui::TextEdit::singleline(&mut wc.hotkeys.filter).desired_width((ui.available_width() - reset_w).max(120.0)).hint_text(crate::i18n::tr("hotkeys-filter-hint")));
-                if !wc.set.hotkeys.is_empty() && ui.button(crate::i18n::tr("hotkeys-reset-all")).clicked() {
-                    wc.set.hotkeys.clear();
-                    wc.hotkeys.note.clear();
-                    wc.hotkeys.clash = None;
-                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if !wc.set.hotkeys.is_empty() && ui.button(crate::i18n::tr("hotkeys-reset-all")).clicked() {
+                        wc.set.hotkeys.clear();
+                        wc.hotkeys.note.clear();
+                        wc.hotkeys.clash = None;
+                    }
+                    let glass = ui.fonts_mut(|f| f.layout_no_wrap(ph::MAGNIFYING_GLASS.to_string(), egui::TextStyle::Body.resolve(ui.style()), egui::Color32::WHITE).size().x);
+                    // THE WHOLE FIELD, margins included: `desired_width` is the width of the text alone, and the field's
+                    // own margins on top of it pushed the row, and the body with it, past the title bar
+                    let field = (ui.available_width() - glass - ui.spacing().item_spacing.x).max(60.0);
+                    let edit = egui::TextEdit::singleline(&mut wc.hotkeys.filter).hint_text(crate::i18n::tr("hotkeys-filter-hint"));
+                    ui.add_sized([field, ui.spacing().interact_size.y], edit);
+                    ui.label(ph::MAGNIFYING_GLASS);
+                });
             });
             ui.separator();
             let q = wc.hotkeys.filter.trim().to_lowercase();
             let mut shown = 0;
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+                // measured inside the scroll area: whatever margin it keeps around its content is not the table's
+                let cols = columns(wc.set, ui, ui.available_width());
                 for area in AREAS {
                     let rows: Vec<&HotkeyRow> = HOTKEYS.iter().filter(|r| r.area == area && row_matches(wc.set, r, &q)).collect();
                     if rows.is_empty() {
@@ -139,8 +151,8 @@ fn what_of(action: &str) -> String {
 /// The gap between the columns of the table.
 const GRID_GAP: f32 = 14.0;
 
-/// The width of the table: the key, the description and the row icons.
-const TABLE_W: f32 = 540.0;
+/// The width of the window, title bar and margins included.
+const WINDOW_W: f32 = 556.0;
 
 /// Empty room after the row icons, so the reset icon, framed when hovered, does not touch the scroll bar.
 const TOOLS_PAD: f32 = 2.0;
@@ -154,7 +166,7 @@ struct Columns {
     what: f32,
 }
 
-fn columns(set: &qymcad_ui_state::Settings, ui: &egui::Ui) -> Columns {
+fn columns(set: &qymcad_ui_state::Settings, ui: &egui::Ui, table: f32) -> Columns {
     let body = egui::TextStyle::Body.resolve(ui.style());
     let mono = egui::TextStyle::Monospace.resolve(ui.style());
     let width = |text: String, font: &egui::FontId| ui.ctx().fonts_mut(|f| f.layout_no_wrap(text, font.clone(), egui::Color32::WHITE).size().x);
@@ -162,9 +174,9 @@ fn columns(set: &qymcad_ui_state::Settings, ui: &egui::Ui) -> Columns {
     // the button also says "press a key" while it waits and "no key" when unbound
     let words = ["hotkeys-press", "hotkeys-unbound"].map(|k| width(crate::i18n::tr(k), &body) + pad);
     let key = HOTKEYS.iter().map(|r| width(qymcad_ui_state::key_label(&qymcad_ui_state::hotkey_key(set, r.action)), &mono) + pad).chain(words).fold(KEY_W, f32::max);
-    // the two row icons and the room after them
-    let tools = 2.0 * ui.spacing().interact_size.y + ui.spacing().item_spacing.x + TOOLS_PAD;
-    let what = (TABLE_W - key - tools - 2.0 * GRID_GAP).max(KEY_W);
+    // the two row icons, the gaps after each and the room at the end
+    let tools = 2.0 * ui.spacing().interact_size.y + 2.0 * ui.spacing().item_spacing.x + TOOLS_PAD;
+    let what = (table - key - tools - 2.0 * GRID_GAP).max(KEY_W);
     Columns { key, what }
 }
 
