@@ -92,6 +92,9 @@ pub enum Fixture {
     ArcInSketch,
     /// The same sketch with two lines from the origin: one along X, one at 45 degrees to it.
     TwoLinesInSketch,
+    /// The same two lines, the one at 45 degrees 20 long against 30: lines of one length are tied Equal as they are
+    /// drawn, and a midpoint of one end on the other line can then be met only by shrinking both to a point.
+    TwoLinesOfTwoLengths,
     /// The same sketch with a circle of radius 10 about the origin and a line across it from (-20, 0) to (20, 0): the
     /// line cuts the circle at (-10, 0) and (10, 0).
     LineThroughCircle,
@@ -367,6 +370,11 @@ impl Fixture {
                 Fixture::SketchOnXy.build_here(s);
                 draw(s, "tb-line-hint", &[(0.0, 0.0), (30.0, 0.0)]);
                 draw(s, "tb-line-hint", &[(0.0, 0.0), (21.21, 21.21)]);
+            }
+            Fixture::TwoLinesOfTwoLengths => {
+                Fixture::SketchOnXy.build_here(s);
+                draw(s, "tb-line-hint", &[(0.0, 0.0), (30.0, 0.0)]);
+                draw(s, "tb-line-hint", &[(0.0, 0.0), (14.14, 14.14)]);
             }
             Fixture::LineThroughCircle => {
                 Fixture::SketchOnXy.build_here(s);

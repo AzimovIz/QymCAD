@@ -100,7 +100,16 @@ impl Scene {
                 .iter()
                 .copied()
                 .filter(|t| {
-                    matches!(t.fixture, Fixture::SketchOnXy | Fixture::RectangleInSketch | Fixture::CircleInSketch | Fixture::ArcInSketch | Fixture::TwoLinesInSketch | Fixture::TwoCirclesInSketch)
+                    matches!(
+                        t.fixture,
+                        Fixture::SketchOnXy
+                            | Fixture::RectangleInSketch
+                            | Fixture::CircleInSketch
+                            | Fixture::ArcInSketch
+                            | Fixture::TwoLinesInSketch
+                            | Fixture::TwoLinesOfTwoLengths
+                            | Fixture::TwoCirclesInSketch
+                    )
                 })
                 .collect(),
         }

@@ -1780,14 +1780,16 @@ pub static CON_MIDPOINT: Tool = Tool {
     title: "sk-midpoint",
     entries: &[Entry::Button("con-midpoint-hint")],
     other: (Entry::Button("tb-line-hint"), "tool-line"),
-    fixture: Fixture::TwoLinesInSketch,
-    picks: &[Pick::Sketch(30.0, 0.0), Pick::Sketch(10.6, 10.6)],
+    // two lines of different lengths: of one length they are tied Equal as drawn, and the midpoint is then met only by
+    // both shrinking to a point - which is refused
+    fixture: Fixture::TwoLinesOfTwoLengths,
+    picks: &[Pick::Sketch(30.0, 0.0), Pick::Sketch(5.0, 5.0)],
     pick_trial: &[],
     wrong_picks: &[],
     words: &[],
     fields: &[],
     modes: &[],
-    result: Outcome::Sketch { points: 3, lines: 2, arcs: 0, circles: 0, ellipses: 0, splines: 0, texts: 0, notes: 0, constraints: Some(3), dof: Some(2), box_of: None, size_of: None, under: &[] },
+    result: Outcome::Sketch { points: 3, lines: 2, arcs: 0, circles: 0, ellipses: 0, splines: 0, texts: 0, notes: 0, constraints: Some(2), dof: Some(3), box_of: None, size_of: None, under: &[] },
     node: "Sketch",
     // one step of undo named by the kind of edit, "Constraint", as the other constraints name theirs
     undo: "sk-constraint",
