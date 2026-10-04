@@ -190,9 +190,9 @@ fn what_the_table_says(s: &mut Session) -> Vec<String> {
 }
 
 probe! {
-    /// A KEY ANOTHER TOOL OF THE SAME WORKBENCH ALREADY HOLDS IS REFUSED IN WORDS, and pressing it while the table
-    /// waits does not run that tool.
-    fn a_key_already_taken_is_refused_in_words() {
+    /// A KEY ANOTHER TOOL OF THE SAME WORKBENCH ALREADY HOLDS IS NAMED, with a way to swap the two; pressing it
+    /// while the table waits does not run that tool, and the swap gives each the other's key.
+    fn a_key_already_taken_can_be_swapped() {
         let mut s = Session::start();
         let _ = waiting_for_a_key(&mut s);
         s.key(Key::H); // the shell's key in this workbench
@@ -200,6 +200,12 @@ probe! {
         let line = s.word("hotkeys-taken").replace("{ $key }", "H").replace("{$key}", "H");
         let head = line.split(['{', ':']).next().unwrap_or(&line).trim().to_string();
         assert!(said.iter().any(|w| w.contains(&head)), "H is taken by another tool and the table says nothing of {head:?}; on screen: {said:?}");
+        let swap = s.word("hotkeys-swap");
+        s.press_word(&swap);
+        let title = s.word("hotkeys-title");
+        s.close_window(&title);
+        s.key(Key::H);
+        assert!(the_extrusion_is_in_hand(&mut s), "the extrusion was swapped onto H and H does not take it: the bar says {:?}", s.in_hand());
     }
 }
 

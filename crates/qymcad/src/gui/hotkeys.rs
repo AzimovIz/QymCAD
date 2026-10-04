@@ -8,6 +8,7 @@
 //! the test is red.
 pub(crate) use qymcad_ui_state::{HotkeyRow, HOTKEYS};
 use super::App;
+use egui_phosphor::regular as ph;
 use crate::gui::WinKind;
 
 /// What the key does - in the language of the person. A free function rather than a method: the row is a
@@ -43,55 +44,55 @@ impl App {
 }
 
 /// THE HOTKEY WINDOW. A reference that can be edited: every key of a workbench is a button, pressing it puts
-/// the window into waiting, and the next press is recorded.
+/// the window into waiting, and the next press - a key or a Ctrl/Shift chord - is recorded.
+///
+/// Laid out for the question people bring to it, "what is the key for X": a filter on top, the sections
+/// below, and in every row the key and what it does. Everything that is not the
+/// factory layout is marked, and each mark has its own way back.
 pub(crate) fn hotkeys_window(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Context) {
     if !wc.win.is(WinKind::Hotkeys) {
         return;
     }
     let mut open = true;
-    egui::Window::new(crate::i18n::tr("hotkeys-title")).open(&mut open).resizable(true).default_width(520.0).show(ctx, |ui| {
-        // ABOVE THE TABLE, NOT UNDER IT: why a key was refused and the way back to the factory keys. At the foot of the
-        // scrolled table they stood out of sight - a refused key said nothing a person could see.
-        if !wc.hotkeys.note.is_empty() {
-            ui.label(egui::RichText::new(&wc.hotkeys.note).color(wc.scheme.pal.error_mild()).small());
-        }
-        if !wc.set.hotkeys.is_empty() && ui.button(crate::i18n::tr("hotkeys-reset-all")).clicked() {
-            wc.set.hotkeys.clear();
-            wc.hotkeys.note.clear();
-        }
-        egui::ScrollArea::vertical().max_height(560.0).show(ui, |ui| {
+    egui::Window::new(crate::i18n::tr("hotkeys-title")).open(&mut open).resizable(true).default_width(560.0).show(ctx, |ui| {
+        ui.horizontal(|ui| {
+            ui.label(ph::MAGNIFYING_GLASS);
+            let reset_w = if wc.set.hotkeys.is_empty() { 0.0 } else { 240.0 };
+            ui.add(egui::TextEdit::singleline(&mut wc.hotkeys.filter).desired_width((ui.available_width() - reset_w).max(120.0)).hint_text(crate::i18n::tr("hotkeys-filter-hint")));
+            if !wc.set.hotkeys.is_empty() && ui.button(crate::i18n::tr("hotkeys-reset-all")).clicked() {
+                wc.set.hotkeys.clear();
+                wc.hotkeys.note.clear();
+                wc.hotkeys.clash = None;
+            }
+        });
+        // ABOVE THE TABLE, NOT UNDER IT: what the window waits for, why a key was refused, which key clashes.
+        // At the foot of the scrolled table they stood out of sight - a refused key said nothing a person could see.
+        status_line(wc, ui);
+        ui.separator();
+        let q = wc.hotkeys.filter.trim().to_lowercase();
+        let mut shown = 0;
+        egui::ScrollArea::vertical().max_height(520.0).show(ui, |ui| {
             for area in AREAS {
-                ui.label(egui::RichText::new(crate::i18n::tr(&format!("hotkeys-area-{area}"))).strong());
-                egui::Grid::new(format!("hk_{area}")).num_columns(3).spacing([14.0, 3.0]).striped(true).show(ui, |ui| {
-                    for r in HOTKEYS.iter().filter(|r| r.area == area) {
-                        let cur = qymcad_ui_state::hotkey_key(wc.set, r.action);
-                        let waiting = wc.hotkeys.action.as_deref() == Some(r.action);
-                        if rebindable(area) {
-                            // THE KEY IS A BUTTON. Press it, the program waits for a press, it is
-                            // recorded. A text field here would be a lie: modifiers would be typed
-                            // into it as words.
-                            let label = if waiting { crate::i18n::tr("hotkeys-press") } else { cur.clone() };
-                            if ui.add(egui::Button::new(egui::RichText::new(label).monospace().strong()).min_size(egui::vec2(84.0, 0.0))).clicked() {
-                                wc.hotkeys.action = if waiting { None } else { Some(r.action.to_string()) };
-                                wc.hotkeys.note.clear();
-                            }
-                        } else {
-                            ui.label(egui::RichText::new(&cur).monospace().strong());
-                        }
-                        ui.label(crate::gui::hotkeys::hotkey_what(r));
-                        // "restore the factory key" only where it really was changed
-                        if rebindable(area) && wc.set.hotkeys.contains_key(r.action) {
-                            if ui.small_button(crate::i18n::tr("hotkeys-reset-one")).on_hover_text(crate::i18n::tr1("hotkeys-default-is", "key", r.key)).clicked() {
-                                wc.set.hotkeys.remove(r.action);
-                            }
-                        } else {
-                            ui.label("");
-                        }
+                let rows: Vec<&HotkeyRow> = HOTKEYS.iter().filter(|r| r.area == area && row_matches(wc.set, r, &q)).collect();
+                if rows.is_empty() {
+                    continue;
+                }
+                shown += rows.len();
+                area_header(wc, ui, area);
+                egui::Grid::new(format!("hk_{area}")).num_columns(3).min_col_width(28.0).spacing([14.0, 4.0]).striped(true).show(ui, |ui| {
+                    for r in rows {
+                        key_cell(wc, ui, r);
+                        ui.label(hotkey_what(r));
+                        row_tools(wc, ui, r);
                         ui.end_row();
                     }
                 });
-                ui.add_space(8.0);
+                ui.add_space(10.0);
             }
+            if shown == 0 {
+                ui.label(egui::RichText::new(crate::i18n::tr1("hotkeys-nothing", "q", wc.hotkeys.filter.trim())).weak());
+            }
+            ui.separator();
             ui.label(egui::RichText::new(crate::i18n::tr("hotkeys-note")).weak().small());
             // THE FOCUS RULE GOES HERE AND NOT ONLY IN THE HELP. A caret in a field extinguishes
             // bare letters (otherwise `w` in an expression would launch a command), and Alt is the
@@ -102,8 +103,132 @@ pub(crate) fn hotkeys_window(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Conte
             ui.label(egui::RichText::new(crate::i18n::tr("hotkeys-rebind-note")).weak().small());
         });
     });
+    if !open {
+        // closing the window drops whatever it was in the middle of: a later press must not land in it
+        wc.hotkeys.action = None;
+        wc.hotkeys.clash = None;
+        wc.hotkeys.note.clear();
+    }
     wc.win.set(WinKind::Hotkeys, open);
     capture_hotkey(wc, ctx);
+}
+
+/// WHETHER A ROW ANSWERS THE FILTER: by its description or by its key, either way round.
+fn row_matches(set: &qymcad_ui_state::Settings, r: &HotkeyRow, q: &str) -> bool {
+    let key = qymcad_ui_state::hotkey_key(set, r.action);
+    // the stored spelling AND the shown one: a Mac user types what they see (⌘), anybody may type "ctrl"
+    q.is_empty() || hotkey_what(r).to_lowercase().contains(q) || key.to_lowercase().contains(q) || qymcad_ui_state::key_label(&key).to_lowercase().contains(q)
+}
+
+fn what_of(action: &str) -> String {
+    HOTKEYS.iter().find(|r| r.action == action).map(hotkey_what).unwrap_or_default()
+}
+
+/// The line between the filter and the table: a clash to settle, a press being waited for, or a refusal.
+fn status_line(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui) {
+    if let Some(clash) = wc.hotkeys.clash.clone() {
+        let old = qymcad_ui_state::key_label(&qymcad_ui_state::hotkey_key(wc.set, &clash.action));
+        let holder = what_of(clash.holder);
+        ui.horizontal_wrapped(|ui| {
+            ui.label(egui::RichText::new(ph::WARNING).color(wc.scheme.pal.warning()));
+            ui.label(crate::i18n::tr2("hotkeys-taken", "key", &qymcad_ui_state::key_label(&clash.chord), "what", &holder));
+            let swap = ui.add_enabled(!old.is_empty(), egui::Button::new(crate::i18n::tr("hotkeys-swap")));
+            if swap.on_hover_text(crate::i18n::tr2("hotkeys-swap-tip", "what", &holder, "key", &old)).clicked() {
+                qymcad_ui_state::resolve_hotkey_clash(wc.set, &clash, qymcad_ui_state::ClashChoice::Swap);
+                wc.hotkeys.clash = None;
+            }
+            if ui.button(crate::i18n::tr("hotkeys-take")).on_hover_text(crate::i18n::tr1("hotkeys-take-tip", "what", &holder)).clicked() {
+                qymcad_ui_state::resolve_hotkey_clash(wc.set, &clash, qymcad_ui_state::ClashChoice::Unbind);
+                wc.hotkeys.clash = None;
+            }
+            if ui.button(crate::i18n::tr("hotkeys-cancel")).clicked() {
+                wc.hotkeys.clash = None;
+            }
+        });
+    } else if let Some(action) = wc.hotkeys.action.clone() {
+        ui.label(egui::RichText::new(crate::i18n::tr1("hotkeys-waiting", "what", &what_of(&action))).color(wc.scheme.pal.ui_accent()));
+    }
+    if !wc.hotkeys.note.is_empty() {
+        ui.label(egui::RichText::new(&wc.hotkeys.note).color(wc.scheme.pal.error_mild()).small());
+    }
+}
+
+/// The caption of a section, and the way back to the factory keys of that section alone.
+fn area_header(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui, area: &str) {
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new(crate::i18n::tr(&format!("hotkeys-area-{area}"))).strong());
+        if !rebindable(area) {
+            ui.label(egui::RichText::new(ph::LOCK_SIMPLE).weak()).on_hover_text(crate::i18n::tr("hotkeys-fixed"));
+            return;
+        }
+        let changed: Vec<&str> = HOTKEYS.iter().filter(|r| r.area == area && wc.set.hotkeys.contains_key(r.action)).map(|r| r.action).collect();
+        if !changed.is_empty() && ui.small_button(crate::i18n::tr("hotkeys-reset-area")).clicked() {
+            for a in changed {
+                wc.set.hotkeys.remove(a);
+            }
+            wc.hotkeys.clash = None;
+        }
+    });
+}
+
+/// THE KEY IS A BUTTON. Press it, the program waits for a press, it is recorded. A text field here would be
+/// a lie: modifiers would be typed into it as words.
+fn key_cell(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui, r: &HotkeyRow) {
+    // SHOWN the way this system writes keys; stored and compared in the portable spelling
+    let cur = qymcad_ui_state::key_label(&qymcad_ui_state::hotkey_key(wc.set, r.action));
+    if !rebindable(r.area) {
+        ui.label(egui::RichText::new(&cur).monospace().strong()).on_hover_text(crate::i18n::tr("hotkeys-fixed"));
+        return;
+    }
+    let waiting = wc.hotkeys.action.as_deref() == Some(r.action);
+    let changed = wc.set.hotkeys.contains_key(r.action);
+    // A KEY THIS SYSTEM KEEPS, brought by a profile from another one: it does not run here (see `hotkey_action`),
+    // and saying nothing would leave a key in the table that silently does nothing
+    let refused = qymcad_ui_state::Chord::parse(&qymcad_ui_state::hotkey_key(wc.set, r.action)).and_then(|c| qymcad_ui_state::hotkey_refusal(r.action, &c));
+    let text = if waiting {
+        egui::RichText::new(crate::i18n::tr("hotkeys-press")).italics()
+    } else if cur.is_empty() {
+        egui::RichText::new(crate::i18n::tr("hotkeys-unbound")).italics().weak()
+    } else if refused.is_some() {
+        egui::RichText::new(&cur).monospace().strong().strikethrough().color(wc.scheme.pal.error_mild())
+    } else if changed {
+        // A CHANGED KEY LOOKS CHANGED: whoever comes back to the window in a month sees at once what is theirs
+        egui::RichText::new(&cur).monospace().strong().color(wc.scheme.pal.ui_accent())
+    } else {
+        egui::RichText::new(&cur).monospace().strong()
+    };
+    let mut resp = ui.add(egui::Button::new(text).selected(waiting).min_size(egui::vec2(110.0, 0.0)));
+    if let Some(why) = refused {
+        resp = resp.on_hover_text(crate::i18n::tr(why));
+    }
+    if resp.clicked() {
+        wc.hotkeys.action = if waiting { None } else { Some(r.action.to_string()) };
+        wc.hotkeys.note.clear();
+        wc.hotkeys.clash = None;
+        // A FOCUSED BUTTON TAKES SPACE AND ENTER for a click: the press meant for the binding would
+        // switch the waiting straight back off.
+        resp.surrender_focus();
+    }
+}
+
+/// Per row: leave the action without a key, and - where it was changed - put the factory key back.
+fn row_tools(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui, r: &HotkeyRow) {
+    ui.horizontal(|ui| {
+        if !rebindable(r.area) {
+            return;
+        }
+        if !qymcad_ui_state::hotkey_key(wc.set, r.action).is_empty() && ui.small_button(ph::X).on_hover_text(crate::i18n::tr("hotkeys-clear")).clicked() {
+            qymcad_ui_state::set_hotkey(wc.set, r.action, "");
+            wc.hotkeys.clash = None;
+        }
+        // "restore the factory key" only where it really was changed
+        if wc.set.hotkeys.contains_key(r.action)
+            && ui.small_button(crate::i18n::tr("hotkeys-reset-one")).on_hover_text(crate::i18n::tr1("hotkeys-default-is", "key", &qymcad_ui_state::key_label(r.key))).clicked()
+        {
+            wc.set.hotkeys.remove(r.action);
+            wc.hotkeys.clash = None;
+        }
+    });
 }
 
 /// THE PRESS THAT ASSIGNS A KEY, while the window waits for one.
@@ -113,31 +238,71 @@ fn capture_hotkey(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Context) {
         wc.hotkeys.action = None;
         return;
     };
-    let pressed: Option<egui::Key> =
-        ctx.input(|i| i.events.iter().find_map(|e| matches!(e, egui::Event::Key { pressed: true, .. }).then(|| if let egui::Event::Key { key, .. } = e { Some(*key) } else { None }).flatten()));
-    let Some(key) = pressed else { return };
-    if key == egui::Key::Escape {
-        wc.hotkeys.action = None; // leaving the mode rather than assigning Esc
-        return;
-    }
-    if matches!(key, egui::Key::Enter | egui::Key::Delete | egui::Key::Tab | egui::Key::Backspace) {
+    let (pressed, clipboard) = ctx.input(|i| {
+        let key = i.events.iter().find_map(|e| match e {
+            egui::Event::Key { key, pressed: true, repeat: false, modifiers, .. } => Some((*key, *modifiers)),
+            _ => None,
+        });
+        // egui turns Ctrl+C/X/V into clipboard events and the key itself never arrives
+        (key, i.events.iter().any(|e| matches!(e, egui::Event::Copy | egui::Event::Cut | egui::Event::Paste(_))))
+    });
+    if clipboard {
         wc.hotkeys.note = crate::i18n::tr("hotkeys-reserved");
         return;
     }
-    let name = key.name().to_string();
-    if let Some(other) = qymcad_ui_state::hotkey_taken_by(wc.set, area, &name, &action) {
-        let what = HOTKEYS.iter().find(|r| r.action == other).map(crate::gui::hotkeys::hotkey_what).unwrap_or_default();
-        wc.hotkeys.note = crate::i18n::tr2("hotkeys-taken", "key", &name, "what", &what);
-        return;
+    let Some((key, mods)) = pressed else { return };
+    match capture_outcome(wc.set, area, &action, key, mods) {
+        Capture::Cancel => wc.hotkeys.action = None,
+        Capture::Refused(why) => {
+            wc.hotkeys.note = crate::i18n::tr(why);
+            return;
+        }
+        Capture::Clash(clash) => {
+            wc.hotkeys.clash = Some(clash);
+            wc.hotkeys.action = None;
+        }
+        Capture::Bind(chord) => {
+            qymcad_ui_state::set_hotkey(wc.set, &action, &chord);
+            wc.hotkeys.action = None;
+        }
     }
-    // it matches the factory key - no override is needed, the record is kept CLEAN
-    if HOTKEYS.iter().any(|r| r.action == action && r.key == name) {
-        wc.set.hotkeys.remove(&action);
-    } else {
-        wc.set.hotkeys.insert(action, name);
-    }
-    wc.hotkeys.action = None;
     wc.hotkeys.note.clear();
+}
+
+/// What a press in the waiting window comes to.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum Capture {
+    /// Esc: leave the waiting, change nothing.
+    Cancel,
+    /// Not assignable; the catalogue key says why.
+    Refused(&'static str),
+    /// Taken in the same area - the person decides.
+    Clash(qymcad_ui_state::HotkeyClash),
+    /// Recorded as is (empty: left without a key).
+    Bind(String),
+}
+
+/// THE DECISION, apart from the window, so the tests can ask it without a frame.
+pub(super) fn capture_outcome(set: &qymcad_ui_state::Settings, area: &str, action: &str, key: egui::Key, mods: egui::Modifiers) -> Capture {
+    let bare = !mods.any();
+    if key == egui::Key::Escape && bare {
+        return Capture::Cancel; // leaving the mode rather than assigning Esc
+    }
+    if matches!(key, egui::Key::Backspace | egui::Key::Delete) && bare {
+        return Capture::Bind(String::new()); // the gesture of every field: erase
+    }
+    if mods.alt {
+        return Capture::Refused("hotkeys-no-alt");
+    }
+    let chord = qymcad_ui_state::Chord::of_press(mods, key);
+    if let Some(why) = qymcad_ui_state::hotkey_refusal(action, &chord) {
+        return Capture::Refused(why);
+    }
+    let name = chord.name();
+    match qymcad_ui_state::hotkey_taken_by(set, area, &name, action) {
+        Some(holder) => Capture::Clash(qymcad_ui_state::HotkeyClash { action: action.to_string(), chord: name, holder }),
+        None => Capture::Bind(name),
+    }
 }
 
 #[cfg(test)]
@@ -188,9 +353,9 @@ mod tests {
     /// that watches for a handler matching a raw key must not demand `hotkey_action` of it, while the guards
     /// that compare the reference with the code must read both.
     const HANDLERS: [(&str, &str, bool); 4] = [
-        ("part", "pub(super) fn part_hotkey(&mut self, key: egui::Key) {", true),
-        ("assembly", "pub(super) fn assembly_hotkey(&mut self, key: egui::Key) {", true),
-        ("sketch", "pub(super) fn sketch_hotkey(&mut self, key: egui::Key)", true),
+        ("part", "pub(super) fn part_hotkey(&mut self, key: impl Into<qymcad_ui_state::Chord>) {", true),
+        ("assembly", "pub(super) fn assembly_hotkey(&mut self, key: impl Into<qymcad_ui_state::Chord>) {", true),
+        ("sketch", "pub(super) fn sketch_hotkey(&mut self, key: impl Into<qymcad_ui_state::Chord>)", true),
         ("sketch", "pub fn tool_for_action(action: &str) -> Option<u8>", false),
     ];
 
