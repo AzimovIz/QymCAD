@@ -1054,7 +1054,9 @@ par-driver-goto = где лежит этот размер — щёлкните, 
 par-driver-where = где лежит этот размер
 par-owner-project = параметр проекта
 par-search = поиск по имени или пути
-par-name-taken = Имя «{ $name }» уже занято: { $where }
+par-name-taken =
+    Имя «{ $name }» уже занято:
+    { $where }
 par-name-bad = Имя «{ $name }» не годится в формулу: только буквы, цифры и «_», и не с цифры
 par-rename-step = переименование параметра
 par-edit-step = правка параметра

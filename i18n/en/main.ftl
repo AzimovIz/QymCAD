@@ -1054,7 +1054,9 @@ par-driver-goto = where this dimension lives — click to go there
 par-driver-where = where this dimension lives
 par-owner-project = a project parameter
 par-search = search by name or path
-par-name-taken = The name "{ $name }" is already taken: { $where }
+par-name-taken =
+    The name "{ $name }" is already taken by:
+    { $where }
 par-name-bad = The name "{ $name }" cannot be used in a formula: letters, digits and "_" only, not starting with a digit
 par-rename-step = parameter rename
 par-edit-step = parameter edit

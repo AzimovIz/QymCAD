@@ -213,6 +213,9 @@ mod tests {
         // language fails whenever the run uses another, and not because the program stayed silent.
         let said = crate::i18n::tr2("par-name-taken", "name", "h", "where", &crate::i18n::tr("par-owner-project"));
         assert!(t.shows(&said), "the program did not say why it refused: \"{said}\" was expected, and the frame holds {:?}", t.drawn);
+        // THE OWNER ON A LINE OF ITS OWN, under the refusal: the path of a dimension is long
+        let owner = format!("\n{}", crate::i18n::tr("par-owner-project"));
+        assert!(t.shows(&owner), "the owner of the name does not start a line of its own: {:?}", t.drawn);
         assert!(t.shows("h"), "the name typed vanished from the field: {:?}", t.drawn);
     }
 
