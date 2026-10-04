@@ -213,8 +213,8 @@ fn columns(set: &qymcad_ui_state::Settings, ui: &egui::Ui, table: f32) -> Column
 /// The narrowest key button: a single letter still gets a target worth aiming at.
 const KEY_W: f32 = 110.0;
 
-/// UNDER THE DESCRIPTION OF THE ROW BEING REASSIGNED: what the window waits for, why a press was refused (under
-/// the waiting line), which key clashes. Shown where the person looks - the key they just pressed - and not at the
+/// UNDER THE DESCRIPTION OF THE ROW BEING REASSIGNED: what the window waits for, why a press was refused (in place
+/// of the waiting line), which key clashes. Shown where the person looks - the key they just pressed - and not at the
 /// top of a table they may have scrolled far down. Wrapped inside the description column, so a long message never
 /// widens the table.
 fn row_status(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui, action: &str) {
@@ -246,9 +246,18 @@ fn row_status(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui, action: &str)
             }
         });
     } else {
-        ui.add(egui::Label::new(egui::RichText::new(crate::i18n::tr1("hotkeys-waiting", "what", &what_of(action))).color(wc.scheme.pal.ui_accent())).wrap());
-        if !wc.hotkeys.note.is_empty() {
-            ui.add(egui::Label::new(egui::RichText::new(&wc.hotkeys.note).color(wc.scheme.pal.error_mild()).small()).wrap());
+        // A REFUSED PRESS SAYS WHY IN PLACE OF THE WAITING LINE: one line under the row, not two. A stop sign, not
+        // the clash's warning triangle: there is no choice to make, the key cannot be had. The sign and the words are
+        // ONE LABEL in the waiting line's font: as two widgets on a wrapping line the line took the height of a
+        // button, and the rows below moved down 3 points when the refusal appeared.
+        if wc.hotkeys.note.is_empty() {
+            ui.add(egui::Label::new(egui::RichText::new(crate::i18n::tr("hotkeys-waiting")).color(wc.scheme.pal.ui_accent())).wrap());
+        } else {
+            let font = egui::TextStyle::Body.resolve(ui.style());
+            let mut line = egui::text::LayoutJob::default();
+            line.append(ph::WARNING_OCTAGON, 0.0, egui::TextFormat::simple(font.clone(), wc.scheme.pal.error()));
+            line.append(&wc.hotkeys.note, ui.spacing().item_spacing.x, egui::TextFormat::simple(font, ui.visuals().text_color()));
+            ui.add(egui::Label::new(line).wrap());
         }
     }
 }

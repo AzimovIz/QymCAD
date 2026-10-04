@@ -560,6 +560,25 @@ mod tests {
         }
     }
 
+    /// The colour `text` is drawn in: the one its words ask for, else the painter's own.
+    fn text_color(shapes: &[egui::Shape], text: &str) -> Option<egui::Color32> {
+        shapes.iter().find_map(|s| match s {
+            egui::Shape::Text(t) if t.galley.text() == text => {
+                let asked = t.galley.job.sections.first().map(|s| s.format.color).filter(|c| *c != egui::Color32::PLACEHOLDER);
+                Some(t.override_text_color.or(asked).unwrap_or(t.fallback_color))
+            }
+            _ => None,
+        })
+    }
+
+    /// The text drawn whose words hold `text`.
+    fn text_with<'a>(shapes: &'a [egui::Shape], text: &str) -> Option<&'a egui::epaint::TextShape> {
+        shapes.iter().find_map(|s| match s {
+            egui::Shape::Text(t) if t.galley.text().contains(text) => Some(t),
+            _ => None,
+        })
+    }
+
     fn text_rect(shapes: &[egui::Shape], text: &str) -> Option<egui::Rect> {
         shapes.iter().find_map(|s| match s {
             egui::Shape::Text(t) if t.galley.text() == text => Some(egui::Rect::from_min_size(t.pos, t.galley.size())),
@@ -567,17 +586,24 @@ mod tests {
         })
     }
 
-    /// WHY A PRESS WAS REFUSED STANDS UNDER THE WAITING LINE, and holding a modifier refuses nothing yet.
+    /// WHY A PRESS WAS REFUSED TAKES THE PLACE OF THE WAITING LINE, behind a stop sign in words of the row's colour, and holding a modifier
+    /// refuses nothing yet.
     ///
-    /// Reported behaviour: the refusal stood in a column of its own beside the waiting line, and it showed as soon
-    /// as Cmd went down, before the letter. A grid cell lays its content out left to right, and egui reports the
-    /// modifier key itself as a press. Driven by a click on the key and key presses through whole frames.
+    /// Reported behaviour: the refusal stood on a line of its own under the waiting line, and before that in a column
+    /// of its own beside it; it also showed as soon as Cmd went down, before the letter. egui reports the modifier
+    /// key itself as a press. Driven by a click on the key and key presses through whole frames.
     #[test]
-    fn the_refusal_stands_under_the_waiting_line() {
+    fn the_refusal_takes_the_place_of_the_waiting_line() {
         let mut w = Frames::open();
         let what = w.wait_for_extrude_key("E");
-        let waiting = crate::i18n::tr1("hotkeys-waiting", "what", &what);
+        let waiting = crate::i18n::tr("hotkeys-waiting");
         let refused = crate::i18n::tr("hotkeys-reserved");
+        let rows: Vec<_> = HOTKEYS.iter().filter(|r| r.area == "part").collect();
+        let at = rows.iter().position(|r| r.action == "part.extrude").expect("the extrude row");
+        let next = super::super::hotkeys::hotkey_what(rows.get(at + 1).expect("a row under the extrusion"));
+        let shapes = w.frame(Vec::new());
+        let line = text_rect(&shapes, &waiting).expect("the click on the key did not make the window wait");
+        let below = text_rect(&shapes, &next).expect("the row under the extrusion is drawn").min.y;
         for (key, mods) in [(Key::SuperLeft, Modifiers::MAC_CMD), (Key::ControlLeft, Modifiers::COMMAND)] {
             w.key_down(key, mods);
             let shapes = w.frame(Vec::new());
@@ -588,10 +614,21 @@ mod tests {
         w.key_down(Key::Z, Modifiers::COMMAND); // undo: the system's
         w.key_up(Key::Z);
         let shapes = w.frame(Vec::new());
-        let line = text_rect(&shapes, &waiting).expect("the waiting line is gone after a refused press");
-        let why = text_rect(&shapes, &refused).expect("the refusal of Ctrl+Z is not drawn");
-        assert!(why.min.y >= line.max.y - 0.5, "the refusal {why:?} does not stand under the waiting line {line:?}");
-        assert!((why.min.x - line.min.x).abs() < 1.0, "the refusal starts at x {} and the waiting line at {}: a column of its own", why.min.x, line.min.x);
+        // THE BLOCK UNDER THE ROW KEEPS ITS HEIGHT: the row below stays where it stood while the window waited
+        let y = text_rect(&shapes, &next).expect("the row under the extrusion is drawn").min.y;
+        assert!((y - below).abs() < 0.5, "the refusal moved the row under the extrusion from y {below} to {y}");
+        let why = text_with(&shapes, &refused).expect("the refusal of Ctrl+Z is not drawn");
+        assert!(text_rect(&shapes, &waiting).is_none(), "the waiting line still stands beside the refusal");
+        assert!((why.pos - line.min).length() < 0.5, "the refusal starts at {:?}, the waiting line stood at {:?}", why.pos, line.min);
+        // THE STOP SIGN OPENS THE LINE: a refusal is not the clash, which asks a question under a warning triangle
+        let stop = egui_phosphor::regular::WARNING_OCTAGON;
+        assert!(why.galley.text().starts_with(stop), "the refusal is drawn without its stop sign: {:?}", why.galley.text());
+        // THE SIGN SAYS STOP, the words are read in the colour of the row's own: red words beside a red sign shout
+        let plain = text_color(&shapes, &what).expect("the extrude row is drawn");
+        let color_of = |part: &str| why.galley.job.sections.iter().find(|s| why.galley.text().get(s.byte_range.start.0..s.byte_range.end.0) == Some(part)).map(|s| s.format.color);
+        assert_eq!(color_of(&refused), Some(plain), "the words of the refusal are coloured, the row's description is not");
+        assert!(color_of(stop).is_some_and(|c| c != plain), "the stop sign is drawn in the colour of plain words");
+        assert!(text_rect(&shapes, &crate::i18n::tr("hotkeys-press")).is_some(), "the refused press ended the waiting");
     }
 
     /// THE ROWS GO BACK TO THEIR PLACES ONCE A KEY IS ASSIGNED.
@@ -636,7 +673,7 @@ mod tests {
     fn a_click_on_x_or_reset_ends_the_waiting() {
         let mut w = Frames::open();
         let what = w.wait_for_extrude_key("E");
-        let waiting = crate::i18n::tr1("hotkeys-waiting", "what", &what);
+        let waiting = crate::i18n::tr("hotkeys-waiting");
         let shapes = w.frame(Vec::new());
         let line = text_rect(&shapes, &waiting).expect("the click on the key did not make the window wait");
         let row = text_rect(&shapes, &what).expect("the extrude row is drawn");
