@@ -2843,6 +2843,12 @@ pub fn sketch_drag_start(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Contex
     if qymcad_ui_state::Gesture::chord_held(ctx) {
         return;
     }
+    // A DRAWING TOOL IN HAND TAKES NO DRAG: picking up a point, a dimension or the selection, and the selection box, are
+    // the work of selection mode. Reported behaviour (issue #33): with Line in hand a drag over empty space selected
+    // what lay in the band, and a drag from a point moved it.
+    if sk.armed.draw_kind() != 0 {
+        return;
+    }
     let sh = qymcad_ui_state::Sheet { view: *sk.view, rect };
     if resp.drag_started() && ctx.input(|i| i.pointer.button_down(egui::PointerButton::Primary)) {
         // WHAT IS TAKEN IS WHAT WAS PRESSED ON. egui decides that a press is a drag once the pointer is
@@ -3443,8 +3449,9 @@ pub fn sketch_drag_update(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Conte
             }
             sk.tree_sel.box_start = None;
         }
-    } else if resp.dragged_by(egui::PointerButton::Primary) {
-        // the fallback pan is for the left button only - a middle drag is served by the EXPLICIT
+    } else if resp.dragged_by(egui::PointerButton::Primary) && sk.armed.draw_kind() == 0 {
+        // the fallback pan is for the left button only, and not with a drawing tool in hand - the drawing would slide
+        // away under the tool - a middle drag is served by the EXPLICIT
         // handler below (otherwise the middle button would pan twice, at double speed)
         let d = resp.drag_delta();
         sk.view.center.x -= d.x / sk.view.scale;

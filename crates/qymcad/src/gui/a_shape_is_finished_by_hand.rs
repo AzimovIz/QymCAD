@@ -250,6 +250,49 @@ mod tests {
         assert!(problems.is_empty(), "{}", problems.join("\n"));
     }
 
+    /// WITH A DRAWING TOOL IN HAND A DRAG NEITHER SELECTS NOR MOVES WHAT IS DRAWN: a band over two lines selects nothing,
+    /// a drag from the end of a line leaves it where it is - with every drawing tool; in selection mode both work as
+    /// before.
+    ///
+    /// Reported behaviour (issue #33): with Line in hand a drag over empty space selected the geometry in the band, and a
+    /// drag from a point moved the point.
+    #[test]
+    fn a_drawing_tool_in_hand_takes_no_drag() {
+        let lines_drawn = |app: &mut App| {
+            for y in [0.0, 10.0] {
+                Hand::new(app).sk_tool(1).click2d(0.0, y).double_click2d(20.0, y);
+                Hand::new(app).key(egui::Key::Escape);
+            }
+        };
+        let end_at = |app: &App, si: usize| app.project.sketches[si].points.iter().any(|p| (p.x - 20.0).abs() < 1e-6 && (p.y - 10.0).abs() < 1e-6);
+        let mut problems = Vec::new();
+        for tool in [1u8, 2, 3, 4, 7] {
+            let (mut app, si) = a_sketch();
+            lines_drawn(&mut app);
+            Hand::new(&mut app).sk_tool(tool).drag2d((-5.0, -5.0), (25.0, 15.0));
+            if !app.tools.sel_sk.items.is_empty() {
+                problems.push(format!("tool {tool}: a band selected {} items; status {:?}", app.tools.sel_sk.items.len(), app.status));
+            }
+            Hand::new(&mut app).drag2d((20.0, 10.0), (25.0, 18.0));
+            if !end_at(&app, si) {
+                problems.push(format!("tool {tool}: a drag from the end of a line moved it"));
+            }
+        }
+        // in selection mode the same drags still select and move
+        let (mut app, si) = a_sketch();
+        lines_drawn(&mut app);
+        Hand::new(&mut app).sk_tool(0).drag2d((-5.0, -5.0), (25.0, 15.0));
+        if app.tools.sel_sk.items.is_empty() {
+            problems.push("selection mode: a band selected nothing".to_string());
+        }
+        Hand::new(&mut app).key(egui::Key::Escape);
+        Hand::new(&mut app).drag2d((20.0, 10.0), (25.0, 18.0));
+        if end_at(&app, si) {
+            problems.push("selection mode: a drag from the end of a line did not move it".to_string());
+        }
+        assert!(problems.is_empty(), "{}", problems.join("\n"));
+    }
+
     /// Esc ENDS A SPLINE, AS ITS HINT SAYS, keeping the nodes that were clicked.
     #[test]
     fn escape_ends_a_spline_as_its_hint_says() {
