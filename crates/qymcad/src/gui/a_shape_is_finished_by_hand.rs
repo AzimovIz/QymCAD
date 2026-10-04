@@ -327,6 +327,22 @@ mod tests {
         (app, si, (g.x, g.y))
     }
 
+    /// THE TEXT TOOL IS PUT DOWN ONCE A LABEL IS PLACED: a second click places nothing, as in the CAD programs people
+    /// know - a label is placed once, and a stray click must not lay a copy of it.
+    ///
+    /// Reported behaviour (found checking issue #32): after a label was placed the tool stayed in hand, offering to place
+    /// the same label again on every click until Esc.
+    #[test]
+    fn the_text_tool_is_put_down_once_a_label_is_placed() {
+        let (mut app, si) = a_sketch();
+        Hand::new(&mut app).sk_text("CAD", 10.0).click2d(0.0, 0.0);
+        let after_one = app.project.sketches[si].texts.len();
+        let in_hand = app.tools.armed.draw_kind();
+        Hand::new(&mut app).click2d(0.0, 30.0);
+        let after_two = app.project.sketches[si].texts.len();
+        assert!(after_one == 1 && in_hand != 11 && after_two == 1, "one label placed: {after_one}; the tool in hand after it: {in_hand}; labels after a second click: {after_two}");
+    }
+
     /// WHILE A LABEL IS EDITED, NO NEW ONE FOLLOWS THE POINTER: the text tool shows where a click would put a label when it
     /// is taken to write one, and not when a double click opened an existing label for editing.
     ///

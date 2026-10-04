@@ -2782,6 +2782,7 @@ pub fn sketch_tool_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, 
             if !sk.tool_prefs.text.trim().is_empty() {
                 sk.project.add_note(si, w.x, w.y, sk.tool_prefs.text.clone());
                 *sk.status = qymcad_i18n::tr("sk-note-added");
+                *sk.armed = qymcad_ui_state::Armed::None; // placed once, as a label is
             }
         }
         11 if sk.tool_prefs.text.trim().is_empty() => {
@@ -2796,9 +2797,9 @@ pub fn sketch_tool_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, 
             };
         }
         11 => {
-            // A CLICK ON A LABEL THAT IS ALREADY THERE PLACES NOTHING. The tool stays in hand after a label is
-            // placed, and the next thing a person does to fix a typo is double-click the label: each click of
-            // that double click would place a label of its own on top of it - three labels where there was one.
+            // A CLICK ON A LABEL THAT IS ALREADY THERE PLACES NOTHING. The tool is in hand while a label is edited, and
+            // the next thing a person does to fix a typo is double-click the label: each click of that double click
+            // would place a label of its own on top of it - three labels where there was one.
             // The double click itself opens the editor, in the frame of its second click.
             //
             // Not opened here, on the first click: the second click of the double click lands outside the field
@@ -2825,6 +2826,9 @@ pub fn sketch_tool_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, 
                 qymcad_ui_state::invalidate(&mut *sk.regen);
                 sk.view.initialized = false;
                 *sk.status = qymcad_i18n::tr1("sk-text-placed", "n", &n.to_string());
+                // A LABEL IS PLACED ONCE: the tool is put down, as in the CAD programs people know. Kept in hand it laid
+                // a copy of the label on every stray click until Esc (found checking issue #32).
+                *sk.armed = qymcad_ui_state::Armed::None;
             } else if !qymcad_ui_state::any_font_at_all(&mut *sk.font_cache) {
                 *sk.status = qymcad_i18n::tr("sk-font-not-found");
             } else if !qymcad_ui_state::font_can_write(&mut *sk.font_cache, &font, &sk.tool_prefs.text) {

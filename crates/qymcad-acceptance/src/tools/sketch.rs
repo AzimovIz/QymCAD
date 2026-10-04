@@ -714,7 +714,8 @@ pub static TEXT: Tool = Tool {
     node: "Sketch",
     undo: "sk-text",
     undo_steps: 1,
-    stays: true,
+    // a label is placed once: the tool is put down, as in the CAD programs people know (found checking issue #32)
+    stays: false,
     upstream: None,
     dependency: None,
     contexts: &[Context::SecondPart],

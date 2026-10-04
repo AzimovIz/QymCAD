@@ -9,7 +9,8 @@ Key **T**.
 1. Press **Text** and type the string and the height (**h.**) in the bar above.
 2. The **Font…** button opens the font window: search by name, and each font shows whether it holds your letters;
    **From a file...** takes a font file from the disk. The button shows the name of the chosen font.
-3. Click a place on the sheet — the text stands there. A double-click on the text later opens it for editing.
+3. Click a place on the sheet — the text stands there, and the tool is put down: a stray click places no copy. For
+   another label press **Text** again. A double-click on the text later opens it for editing.
 
 ## What you get
 

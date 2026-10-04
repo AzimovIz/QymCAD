@@ -29,7 +29,7 @@ move at the first edit. A defined sketch behaves predictably: change a dimension
 ## How you draw
 
 A tool is turned on with a button on the left or a key and stays in hand: you can draw several lines in a row. **Esc**
-puts the tool down. If an icon is unclear, rest the pointer on it — the hint names it and its key.
+puts the tool down. **Text** puts itself down as soon as the label is placed. If an icon is unclear, rest the pointer on it — the hint names it and its key.
 
 **Auto constraints** (the magic wand in the bar above) add the obvious by themselves: draw a nearly horizontal line —
 get a horizontal. If one is wrong, delete it in the list of constraints on the right: hover a row — the constraint

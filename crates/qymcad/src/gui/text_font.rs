@@ -271,8 +271,8 @@ mod tests {
 
     /// A DOUBLE CLICK ON A LABEL OPENS IT WITH THE TEXT TOOL STILL IN HAND, and puts no other label on it.
     ///
-    /// The tool stays in hand after a label is placed, so the next thing a person does to fix a typo is
-    /// double-click the label - and in the window the two clicks of that double click placed two more labels on
+    /// With the text tool taken up again - to place the next label - the thing a person does to fix a typo in the
+    /// last one is double-click it, and in the window the two clicks of that double click placed two more labels on
     /// top of it before the editor opened: measured, three labels where one was.
     #[test]
     fn a_double_click_on_a_label_with_the_text_tool_in_hand_places_nothing() {
@@ -281,7 +281,9 @@ mod tests {
         app.chosen.sel = Sel::Sketch(si);
         Hand::new(&mut app).pick_font_file(OURS).sk_text("Ag", 20.0).click2d(0.0, 0.0);
         assert_eq!(app.project.sketches[si].texts.len(), 1, "setup: the label was not placed");
-        assert_eq!(app.tools.armed.draw_kind(), 11, "setup: the text tool is not in hand after placing");
+        // a label is placed once and the tool put down: it is taken up again, as for the next label
+        Hand::new(&mut app).sk_tool(11);
+        assert_eq!(app.tools.armed.draw_kind(), 11, "setup: the text tool is not in hand");
 
         let (x0, y0, x1, y1) = app.project.sketch_text_bbox(si, 0).expect("the label is there");
         let opened = Hand::canvas(&mut app).sk_open_text_edit(((x0 + x1) / 2.0, (y0 + y1) / 2.0));
