@@ -222,6 +222,9 @@ fn row_status(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui, action: &str)
         ui.horizontal_wrapped(|ui| {
             ui.label(egui::RichText::new(ph::WARNING).color(wc.scheme.pal.warning()));
             ui.add(egui::Label::new(crate::i18n::tr2("hotkeys-taken", "key", &qymcad_ui_state::key_label(&clash.chord), "what", &holder)).wrap());
+        });
+        // THE CHOICES ON A LINE OF THEIR OWN, under the question: beside it they wrapped wherever the text happened to end
+        ui.horizontal_wrapped(|ui| {
             let swap = ui.add_enabled(!old.is_empty(), egui::Button::new(crate::i18n::tr("hotkeys-swap")));
             if swap.on_hover_text(crate::i18n::tr2("hotkeys-swap-tip", "what", &holder, "key", &old)).clicked() {
                 qymcad_ui_state::resolve_hotkey_clash(wc.set, &clash, qymcad_ui_state::ClashChoice::Swap);

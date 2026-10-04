@@ -654,4 +654,27 @@ mod tests {
         assert_eq!(qymcad_ui_state::hotkey_key(&w.app.set, "part.extrude"), "E", "the click on reset did not put the factory key back");
         assert!(text_rect(&shapes, &waiting).is_none(), "the window still waits for a key after reset was clicked");
     }
+
+    /// THE CHOICES OF A CLASH STAND ON A LINE OF THEIR OWN, under the question. Driven by a click on the extrude key
+    /// and a press of F, the fillet's key, through whole frames.
+    #[test]
+    fn the_clash_choices_stand_on_their_own_line() {
+        let mut w = Frames::open();
+        let what = w.wait_for_extrude_key("E");
+        w.key_down(Key::F, Modifiers::NONE);
+        w.key_up(Key::F);
+        let shapes = w.frame(Vec::new());
+        let holder = super::super::hotkeys::hotkey_what(HOTKEYS.iter().find(|r| r.action == "part.fillet").expect("the fillet row"));
+        let question = text_rect(&shapes, &crate::i18n::tr2("hotkeys-taken", "key", &qymcad_ui_state::key_label("F"), "what", &holder)).expect("the clash question is not drawn");
+        let row = text_rect(&shapes, &what).expect("the extrude row is drawn");
+        let choices: Vec<egui::Rect> = ["hotkeys-swap", "hotkeys-take", "hotkeys-cancel"]
+            .iter()
+            .map(|k| text_rect(&shapes, &crate::i18n::tr(k)).unwrap_or_else(|| panic!("the choice {k} is not drawn")))
+            .collect();
+        for (k, c) in ["hotkeys-swap", "hotkeys-take", "hotkeys-cancel"].iter().zip(&choices) {
+            assert!(c.min.y >= question.max.y - 0.5, "the choice {k} at {c:?} stands beside the question {question:?}, not under it");
+            assert!((c.center().y - choices[0].center().y).abs() < 1.0, "the choice {k} at {c:?} is not on the line of Swap {:?}", choices[0]);
+        }
+        assert!((choices[0].min.x - row.min.x).abs() < 12.0, "Swap starts at x {}, the description at {}: the line does not start under it", choices[0].min.x, row.min.x);
+    }
 }
