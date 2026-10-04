@@ -1820,7 +1820,7 @@ pub fn draw_sketch_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
         11 if pn.tool_prefs.text_note => {
             painter.text(sc, egui::Align2::LEFT_BOTTOM, &pn.tool_prefs.text, egui::FontId::proportional(14.0), col);
         }
-        11 => {
+        11 if qymcad_ui_state::text_ghost_shown(pn.armed, &pn.inline) => {
             for glyph in pn.tool.text_ghost.iter().flat_map(|(.., g)| g) {
                 let pts: Vec<Pos2> = glyph.iter().chain(glyph.first()).map(|p| sh.at(Point2::new(cur.x + p.x, cur.y + p.y))).collect();
                 painter.add(egui::Shape::line(pts, stroke));

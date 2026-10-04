@@ -1652,6 +1652,13 @@ pub struct FeatOptions {
 /// picked apart from the selection, and Move and Rotate never saw it.
 pub const SEL_TEXT: u8 = 4;
 
+/// DOES THE TEXT TOOL SHOW ITS LABEL AT THE POINTER - where a click would put a new one. Not while a label is being
+/// edited: the tool is taken up for the edit, and its ghost followed the pointer over the label being edited. Reported
+/// behaviour (found checking issue #32): a double click on a text, and a second copy of it slid about under the cursor.
+pub fn text_ghost_shown(armed: &Armed, inline: &InlineEdit) -> bool {
+    armed.draw_kind() == 11 && inline.text().is_none()
+}
+
 /// The indices of the texts selected in sketch `si`, in the order they were picked.
 pub fn sel_text_indices(project: &Project, sel_sk: &SketchSelection, si: usize) -> Vec<usize> {
     let Some(s) = project.sketches.get(si) else { return Vec::new() };

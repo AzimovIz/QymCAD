@@ -327,6 +327,27 @@ mod tests {
         (app, si, (g.x, g.y))
     }
 
+    /// WHILE A LABEL IS EDITED, NO NEW ONE FOLLOWS THE POINTER: the text tool shows where a click would put a label when it
+    /// is taken to write one, and not when a double click opened an existing label for editing.
+    ///
+    /// Reported behaviour (found checking issue #32): a double click on a text, and a yellow copy of it moved about under
+    /// the cursor.
+    #[test]
+    fn an_edited_label_has_no_ghost_at_the_pointer() {
+        // the pointer far from the label: whatever is drawn there in the colour of the sketch follows the pointer
+        let away = (60.0, -40.0);
+        let (mut app, _si, on) = a_text();
+        let ink = app.scheme.pal.sketch_line();
+        Hand::new(&mut app).sk_tool(11);
+        let writing = Hand::new(&mut app).strokes_near2d(away, ink);
+        assert!(writing > 0, "GUARD: the text tool taken to write shows no label at the pointer, so the check below would see nothing");
+        Hand::new(&mut app).key(egui::Key::Escape);
+        let mut hand = Hand::new(&mut app);
+        assert!(hand.sk_open_text_edit(on), "setup: the double click opens the label for editing");
+        let editing = hand.strokes_near2d(away, ink);
+        assert_eq!(editing, 0, "a label being edited has {editing} strokes of the text tool's ghost following the pointer");
+    }
+
     /// A TEXT IS TURNED, MOVED AND COPIED BY THE TOOLS, alone and together with a line, and stays turned after its string
     /// is edited; the outlines a profile is taken from turn with it.
     ///

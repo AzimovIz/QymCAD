@@ -519,6 +519,25 @@ impl<'a> Hand<'a> {
         })
     }
 
+    /// HOW MANY STROKES OF `colour` THE FRAME DRAWS NEAR THE POINTER, the hand resting over `place` of the sketch: a
+    /// path or a segment with a point within 40 px of it. What follows the pointer is drawn there.
+    pub fn strokes_near2d(&mut self, place: (f64, f64), colour: egui::Color32) -> usize {
+        fn near(s: &egui::Shape, at: egui::Pos2, colour: egui::Color32) -> usize {
+            match s {
+                egui::Shape::Path(p) if p.stroke.color == egui::epaint::ColorMode::Solid(colour) && p.points.iter().any(|q| q.distance(at) < 40.0) => 1,
+                egui::Shape::LineSegment { points, stroke } if stroke.color == colour && points.iter().any(|q| q.distance(at) < 40.0) => 1,
+                egui::Shape::Vec(v) => v.iter().map(|x| near(x, at, colour)).sum(),
+                _ => 0,
+            }
+        }
+        // on the sheet of the sketch, as the other `...2d` hands are: a new hand starts in the 3D view
+        self.app.viewing.mode_3d = false;
+        let at = self.rest_over2d(place);
+        let n = self.win.shapes.iter().map(|cs| near(&cs.shape, at, colour)).sum();
+        self.close_window();
+        n
+    }
+
     /// SHIFT AND A CLICK on the sketch: what is under the pointer joins the selection, as a person adds to one. The
     /// window closes after it.
     pub fn shift_click2d(&mut self, x: f64, y: f64) -> &mut Self {
