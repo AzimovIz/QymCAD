@@ -526,9 +526,11 @@ pub fn constraint_parts(dc: &qymcad_ui_state::DrawCtx, si: usize, c: &qymcad_cor
 /// A corner fillet radius or a chamfer leg, at the corner clicked.
 /// THE TWO EDGES OF THE CORNER IN THE FIELD: the pair the cursor stands between where more than two edges meet at the
 /// point, and otherwise the pair the corner was named by. The cursor is read only while it is over the sheet — a
-/// person typing in the field has it elsewhere, and the corner must not change under the value being written.
+/// person typing in the field has it elsewhere, and the corner must not change under the value being written — and
+/// only while it stands near the point, or it would name a corner of a point the cursor has walked away from.
 fn corner_pair(cc: &qymcad_ui_state::CornerCtx, ctx: &egui::Context, si: usize, pid: Id, rect: Rect) -> Option<(Id, Id)> {
     let cursor = ctx.input(|i| i.pointer.hover_pos()).filter(|p| rect.contains(*p)).map(|p| qymcad_ui_state::to_world(cc.view, rect, p)).map(|w| (w.x, w.y));
+    let cursor = qymcad_ui_state::corner_cursor(cc.project, si, pid, cursor, cc.corner.track_px, cc.view.scale);
     qymcad_ui_state::corner_pair_now(cc.project, si, pid, cc.corner.pair, cursor)
 }
 
@@ -3878,6 +3880,9 @@ pub fn sketch_click_at(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context,
                 // the tick (a default of 3 mm used to be applied silently, and on a small part that
                 // failed)
                 if let qymcad_ui_state::Sel::Sketch(si) = *sk.sel {
+                    // how far the cursor reaches from the point to name one of several corners there, remembered
+                    // for as long as the field stands open
+                    sk.corner.track_px = qymcad_ui_state::corner_reach(sk.set);
                     if let Some(pid) = qymcad_pick::nearest_vertex(&sk.pick(), rect, pos, si) {
                         // named by its POINT: where four lines meet there, the corner is the one the cursor
                         // stands in, and the field is opened at the point to say which side that was

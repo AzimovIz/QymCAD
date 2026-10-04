@@ -26,6 +26,12 @@ pub enum Grab {
     Label,
     /// A guide: a sketch axis, the band of a dimension extension line. Narrow but endless.
     Guide,
+    /// A POINT WITH SEVERAL EDGES IN IT: the cursor standing near it says which of the corners there is meant.
+    ///
+    /// A shade wider than a point - the same aim would stop the choice exactly where the click catches the point,
+    /// and a person who aimed there has the corner open and cannot move it - and still narrow, or the corner would
+    /// follow the pointer across the whole sheet while the radius is being typed.
+    Corner,
     /// A SNAP while drawing is not a selection but an attraction of the cursor. Its radius is its
     /// own: too generous and it steals the freedom to place a point near a node, too mean and the snap
     /// is useless.
@@ -46,6 +52,7 @@ impl Grab {
             Grab::Label => 12.0,
             Grab::Guide => 6.0,
             Grab::Snap => 9.0,
+            Grab::Corner => 12.0,
         }
     }
 }

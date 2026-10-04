@@ -945,6 +945,11 @@ pub struct CornerInput {
     pub only: Option<std::collections::HashSet<Id>>,
     /// why the value in the field was refused, said beside it
     pub why: Option<String>,
+    /// HOW NEAR THE POINT THE CURSOR COUNTS, in pixels, remembered when the popup was opened: `Grab::Corner` read
+    /// with the pick precision of the person. Farther than that the cursor is over the rest of the sheet and says
+    /// nothing about which of the corners at the point is meant, so the corner does not follow the pointer across
+    /// the drawing while the radius is being typed.
+    pub track_px: f32,
 }
 
 impl CornerInput {
@@ -13221,6 +13226,15 @@ pub fn open_corner_popup(corner: &mut CornerInput, prefs: &SketchToolPrefs, si: 
     corner.focus = true;
 }
 
+/// HOW FAR THE CURSOR REACHES TO NAME ONE OF SEVERAL CORNERS AT A POINT, in pixels.
+///
+/// `Grab::Corner` - a shade wider than the aim a point itself is caught from - with the pick precision of the person
+/// applied. The corner popup remembers this when it opens (`CornerInput::track_px`), so the number is read here,
+/// where the settings are at hand, and the drawing side reads the one number it needs.
+pub fn corner_reach(set: &Settings) -> f32 {
+    grab::grab(set, grab::Grab::Corner)
+}
+
 /// THE CORNER AS A POINT IN THE DRAWING: where the field was opened, read on the sheet. It is the side of the point
 /// the person pressed on, which is what says which corner of several is meant where more than two lines meet there.
 pub fn corner_where(cc: &CornerCtx, rect: Rect) -> Option<(f64, f64)> {
@@ -13242,6 +13256,22 @@ pub fn corner_pair_now(project: &Project, si: usize, pid: Id, named: Option<(Id,
         }
     }
     named.filter(|p| project.corner_of_pair(si, p.0, p.1) == Some(pid)).or_else(|| project.vertex_pair(si, pid, None))
+}
+
+/// THE CURSOR AS A SAY IN THE CORNER, and only while it stands near the point.
+///
+/// The cursor answers "which of the corners at this point" by the side of the point it is on, which is only worth
+/// asking while it is ON the point: ten units away it is over some other part of the drawing, and taking its word for
+/// it made the corner change as the pointer crossed the sheet, so the radius being typed was cut at a corner nobody
+/// was looking at. `track_px` is the reach of the aim for the point itself, `Grab::Corner` - a shade wider than the
+/// point is caught from, because a person who aimed there has the corner open and cannot move it.
+///
+/// `None` - no cursor over the sheet, or one out of reach - says nothing, and the pair stands as it was named.
+pub fn corner_cursor(project: &Project, si: usize, pid: Id, cursor: Option<(f64, f64)>, track_px: f32, scale: f32) -> Option<(f64, f64)> {
+    let c = cursor?;
+    let s = project.sketches.get(si)?;
+    let (px, py) = s.points.iter().find(|q| q.id == pid).map(|q| (q.x, q.y))?;
+    (((c.0 - px).hypot(c.1 - py) * scale as f64) <= track_px as f64).then_some(c)
 }
 
 /// THE CORNER A SELECTION ALREADY NAMES: what the fillet or the chamfer is offered the moment it is pressed.
@@ -13317,6 +13347,7 @@ pub fn start_corner_tool(bc: &mut BarCtx, op: u8) {
         return; // pressed again: the tool goes back down, and what was chosen stays chosen
     }
     *bc.status = qymcad_i18n::tr(if op == 5 { "tb-chamfer-sketch-hint" } else { "tb-fillet-sketch-hint" });
+    bc.corner.track_px = corner_reach(&*bc.set);
     let si = match *bc.sel {
         Sel::Sketch(si) => si,
         _ => return,

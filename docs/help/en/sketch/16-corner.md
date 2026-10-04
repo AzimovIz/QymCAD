@@ -36,7 +36,9 @@ While the field stands open the sheet shows where the corner will go: the segmen
 lines — where they will be cut. The lines themselves are not changed; this is only the preview, and **Enter** applies it.
 
 - A value too big for that corner draws no preview, and the field says so.
-- Where four lines meet, the corner follows the cursor: point it at the sector to be taken.
+- Where four lines meet, the corner follows the cursor: point it at the sector to be taken. The cursor counts only
+  while it stands near the point, at about the radius the point itself is caught from and a shade wider: move it away
+  and the corner stands as it was named by the two lines or by the point.
 - Where there is no corner at all (the lines do not meet at an angle), the field says that too.
 
 ## What you get
