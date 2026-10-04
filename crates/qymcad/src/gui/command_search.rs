@@ -112,7 +112,7 @@ pub(crate) fn command_search_window(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui
             }
             for (i, c) in hits.iter().enumerate() {
                 let mine = c.workbench == wb_code;
-                let key = qymcad_ui_state::hotkey_key(wc.set, c.code);
+                let key = qymcad_ui_state::key_label(&qymcad_ui_state::hotkey_key(wc.set, c.code));
                 ui.horizontal(|ui| {
                     let mut text = egui::RichText::new(c.name());
                     if i == sel {

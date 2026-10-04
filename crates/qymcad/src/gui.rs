@@ -609,6 +609,7 @@ pub(crate) fn install_fonts(ctx: &egui::Context) {
     // Liberation Sans Bold: OFL (the licence sits next to the file), Latin plus Cyrillic.
     fonts.font_data.insert(BOLD_FONT.to_string(), std::sync::Arc::new(egui::FontData::from_static(include_bytes!("../../../assets/fonts/LiberationSans-Bold.ttf"))));
     fonts.families.insert(egui::FontFamily::Name(BOLD_FONT.into()), vec![BOLD_FONT.to_string()]);
+    mac_key_symbols(&mut fonts);
     ctx.set_fonts(fonts);
     // THE HINT SIZE, set here because this is the one place that already decides how text is drawn - and
     // because a size set in two places drifts.
@@ -633,6 +634,29 @@ pub(crate) fn install_fonts(ctx: &egui::Context) {
 /// The name of the BOLD font family. One place: family names spelled out separately drift apart and
 /// give a silent fallback to the default font — the text still draws, only not bold, and that is
 /// invisible to the eye in the code.
+/// ⌃ ⌘ ⇧ ⌥ FOR THE KEYS OF A MAC, where people read keys as symbols and `Ctrl+W` names the wrong key.
+///
+/// The fonts the program carries cannot draw them: ⌥ and ⌃ are in none of them, and ⇧ only in the monospace one, so
+/// the symbols alone would be boxes. Every Mac has Apple Symbols, and it is taken from the system rather than
+/// carried - it is drawn on a Mac only. Second in each family, right after the main face: the emoji fonts
+/// further down have a ⌘ of a different look. Without the file the keys are written in words (`Shift+Cmd+W`).
+fn mac_key_symbols(fonts: &mut egui::FontDefinitions) {
+    if !cfg!(target_os = "macos") {
+        return;
+    }
+    let Ok(bytes) = std::fs::read("/System/Library/Fonts/Apple Symbols.ttf") else {
+        qymcad_ui_state::set_key_style(qymcad_ui_state::KeyStyle::MacWords);
+        return;
+    };
+    const NAME: &str = "mac-key-symbols";
+    fonts.font_data.insert(NAME.to_string(), std::sync::Arc::new(egui::FontData::from_owned(bytes)));
+    for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+        let list = fonts.families.entry(family).or_default();
+        list.insert(list.len().min(1), NAME.to_string());
+    }
+    qymcad_ui_state::set_key_style(qymcad_ui_state::KeyStyle::MacSymbols);
+}
+
 pub(crate) const BOLD_FONT: &str = "qym-bold";
 
 /// The bold font at a given size.
