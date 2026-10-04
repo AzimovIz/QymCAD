@@ -405,9 +405,7 @@ mod tests {
         let cross = shapes
             .iter()
             .filter_map(|s| match s {
-                egui::Shape::Text(t) if t.galley.text() == egui_phosphor::regular::X && (t.pos.y + t.galley.size().y * 0.5 - row.center().y).abs() < 6.0 => {
-                    Some(t.pos + t.galley.size() * 0.5)
-                }
+                egui::Shape::Text(t) if t.galley.text() == egui_phosphor::regular::X && (t.pos.y + t.galley.size().y * 0.5 - row.center().y).abs() < 6.0 => Some(t.pos + t.galley.size() * 0.5),
                 _ => None,
             })
             .next()
@@ -458,6 +456,25 @@ mod tests {
             v.sort();
             v.dedup();
             v
+        }
+    }
+
+    /// A MODIFIER ON ITS OWN IS NOT A PRESS. egui reports Cmd, Ctrl, Shift and Alt as keys when they go down; judged
+    /// as a whole chord, the Cmd held before the letter was refused.
+    #[test]
+    fn a_modifier_alone_is_not_a_press() {
+        let app = App::default();
+        for (key, mods) in [
+            (Key::SuperLeft, Modifiers::MAC_CMD),
+            (Key::SuperRight, Modifiers::MAC_CMD),
+            (Key::ControlLeft, Modifiers::COMMAND),
+            (Key::ControlRight, Modifiers::COMMAND),
+            (Key::ShiftLeft, Modifiers::SHIFT),
+            (Key::ShiftRight, Modifiers::SHIFT),
+            (Key::AltLeft, Modifiers::ALT),
+            (Key::AltRight, Modifiers::ALT),
+        ] {
+            assert_eq!(capture_outcome(&app.set, "part", "part.extrude", key, mods), Capture::Pending, "{key:?} alone was judged as a chord");
         }
     }
 }

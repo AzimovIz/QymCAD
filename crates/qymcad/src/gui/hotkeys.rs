@@ -357,7 +357,8 @@ fn capture_hotkey(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Context) {
     };
     let (pressed, clipboard) = ctx.input(|i| {
         let key = i.events.iter().find_map(|e| match e {
-            egui::Event::Key { key, pressed: true, repeat: false, modifiers, .. } => Some((*key, *modifiers)),
+            // a modifier on its own is the start of a chord, not a press: the key that completes it may come in the same frame
+            egui::Event::Key { key, pressed: true, repeat: false, modifiers, .. } if !modifier_alone(*key) => Some((*key, *modifiers)),
             _ => None,
         });
         // egui turns Ctrl+C/X/V into clipboard events and the key itself never arrives
@@ -369,6 +370,7 @@ fn capture_hotkey(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Context) {
     }
     let Some((key, mods)) = pressed else { return };
     match capture_outcome(wc.set, area, &action, key, mods) {
+        Capture::Pending => return,
         Capture::Cancel => wc.hotkeys.action = None,
         Capture::Refused(why) => {
             wc.hotkeys.note = crate::i18n::tr(why);
@@ -386,11 +388,21 @@ fn capture_hotkey(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Context) {
     wc.hotkeys.note.clear();
 }
 
+/// WHETHER THE PRESS IS A MODIFIER KEY ITSELF. egui reports Shift, Ctrl, Alt and Cmd as keys of their own when they
+/// go down. Reported behaviour: holding Cmd before the letter showed "This key belongs to the system" - the Cmd
+/// press was judged as a whole chord and refused.
+fn modifier_alone(key: egui::Key) -> bool {
+    use egui::Key as K;
+    matches!(key, K::ShiftLeft | K::ShiftRight | K::ControlLeft | K::ControlRight | K::AltLeft | K::AltRight | K::SuperLeft | K::SuperRight)
+}
+
 /// What a press in the waiting window comes to.
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Capture {
     /// Esc: leave the waiting, change nothing.
     Cancel,
+    /// A modifier on its own: the chord is not finished, the window goes on waiting.
+    Pending,
     /// Not assignable; the catalogue key says why.
     Refused(&'static str),
     /// Taken in the same area - the person decides.
@@ -401,6 +413,9 @@ pub(super) enum Capture {
 
 /// THE DECISION, apart from the window, so the tests can ask it without a frame.
 pub(super) fn capture_outcome(set: &qymcad_ui_state::Settings, area: &str, action: &str, key: egui::Key, mods: egui::Modifiers) -> Capture {
+    if modifier_alone(key) {
+        return Capture::Pending;
+    }
     let bare = !mods.any();
     if key == egui::Key::Escape && bare {
         return Capture::Cancel; // leaving the mode rather than assigning Esc
