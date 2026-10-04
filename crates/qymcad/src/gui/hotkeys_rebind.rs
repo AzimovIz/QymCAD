@@ -372,4 +372,92 @@ mod tests {
             assert!(shown.chars().all(|c| c.is_ascii() || "⌃⌘⇧⌥".contains(c)), "{} is shown on a Mac with a glyph no loaded font promises: {shown}", r.key);
         }
     }
+
+    /// THE TABLE KEEPS ITS WIDTH WHEN A ROW IS CHANGED. Reported behaviour: pressing a row's X brought up its
+    /// reset button and the stripes of the section ran past the table. The reset was a word, wider than the
+    /// column of the X, and it appeared on that row alone: the column, and every stripe with it, widened.
+    ///
+    /// Driven by a click through whole frames; the stripes are measured before the click and in each frame after.
+    #[test]
+    fn clearing_a_key_does_not_widen_the_table() {
+        let prev = qymcad_i18n::language();
+        qymcad_i18n::set_language("en");
+        let mut app = App::default();
+        app.win.open(crate::gui::WinKind::Hotkeys);
+        let ctx = egui::Context::default();
+        super::super::install_fonts(&ctx);
+        let screen = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(1400.0, 900.0));
+        let mut time = 0.0;
+        let mut frame = |app: &mut App, events: Vec<egui::Event>| {
+            time += 1.0 / 60.0;
+            let input = egui::RawInput { screen_rect: Some(screen), time: Some(time), events, ..Default::default() };
+            let out = ctx.run_ui(input, |ui| app.hotkeys_window(ui.ctx()));
+            let mut shapes = Vec::new();
+            out.shapes.into_iter().for_each(|c| flat(c.shape, &mut shapes));
+            shapes
+        };
+        for _ in 0..10 {
+            frame(&mut app, Vec::new()); // the window fades in and the grid learns its columns
+        }
+        let shapes = frame(&mut app, Vec::new());
+        let what = super::super::hotkeys::hotkey_what(HOTKEYS.iter().find(|r| r.action == "part.extrude").expect("the extrude row"));
+        let row = text_rect(&shapes, &what).expect("the extrude row is drawn");
+        let cross = shapes
+            .iter()
+            .filter_map(|s| match s {
+                egui::Shape::Text(t) if t.galley.text() == egui_phosphor::regular::X && (t.pos.y + t.galley.size().y * 0.5 - row.center().y).abs() < 6.0 => {
+                    Some(t.pos + t.galley.size() * 0.5)
+                }
+                _ => None,
+            })
+            .next()
+            .expect("the X of the extrude row is drawn");
+        let before = stripes(&shapes, row);
+        assert!(!before.is_empty(), "no stripe was found - the check would measure nothing");
+
+        frame(&mut app, vec![egui::Event::PointerMoved(cross)]);
+        let press = |pressed| egui::Event::PointerButton { pos: cross, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
+        frame(&mut app, vec![press(true)]);
+        let mut after = vec![frame(&mut app, vec![press(false)])];
+        for _ in 0..3 {
+            after.push(frame(&mut app, Vec::new()));
+        }
+        qymcad_i18n::set_language(&prev);
+        assert_eq!(qymcad_ui_state::hotkey_key(&app.set, "part.extrude"), "", "the click on X left the key in place");
+        for (i, shapes) in after.iter().enumerate() {
+            assert_eq!(stripes(shapes, row), before, "frame {i} after the click: the stripes changed width");
+        }
+        assert!(
+            after.last().is_some_and(|s| s.iter().any(|s| matches!(s, egui::Shape::Text(t) if t.galley.text() == egui_phosphor::regular::ARROW_COUNTER_CLOCKWISE))),
+            "the way back to the factory key is not drawn as its icon"
+        );
+
+        fn flat(s: egui::Shape, out: &mut Vec<egui::Shape>) {
+            match s {
+                egui::Shape::Vec(v) => v.into_iter().for_each(|s| flat(s, out)),
+                s => out.push(s),
+            }
+        }
+        fn text_rect(shapes: &[egui::Shape], text: &str) -> Option<egui::Rect> {
+            shapes.iter().find_map(|s| match s {
+                egui::Shape::Text(t) if t.galley.text() == text => Some(egui::Rect::from_min_size(t.pos, t.galley.size())),
+                _ => None,
+            })
+        }
+        /// The left and right edges, to a tenth of a point, of the filled bands under the description and the rows next to it.
+        fn stripes(shapes: &[egui::Shape], row: egui::Rect) -> Vec<(i32, i32)> {
+            let mut v: Vec<(i32, i32)> = shapes
+                .iter()
+                .filter_map(|s| match s {
+                    egui::Shape::Rect(r) if r.rect.min.x < row.min.x && r.rect.max.x > row.max.x && (r.rect.center().y - row.center().y).abs() < 3.0 * row.height() => {
+                        Some(((r.rect.min.x * 10.0).round() as i32, (r.rect.max.x * 10.0).round() as i32))
+                    }
+                    _ => None,
+                })
+                .collect();
+            v.sort();
+            v.dedup();
+            v
+        }
+    }
 }

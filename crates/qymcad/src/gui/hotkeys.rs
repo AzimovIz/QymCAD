@@ -212,23 +212,34 @@ fn key_cell(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui, r: &HotkeyRow) 
 }
 
 /// Per row: leave the action without a key, and - where it was changed - put the factory key back.
+///
+/// Both are icons in slots of one fixed size that are always laid out, shown or not: a button that appears
+/// only on a changed row widened the column, and the grid stretched every row of the section to the new width
+/// a frame later.
 fn row_tools(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui, r: &HotkeyRow) {
     ui.horizontal(|ui| {
         if !rebindable(r.area) {
             return;
         }
-        if !qymcad_ui_state::hotkey_key(wc.set, r.action).is_empty() && ui.small_button(ph::X).on_hover_text(crate::i18n::tr("hotkeys-clear")).clicked() {
+        let bound = !qymcad_ui_state::hotkey_key(wc.set, r.action).is_empty();
+        if row_icon(ui, bound, ph::X).on_hover_text(crate::i18n::tr("hotkeys-clear")).clicked() {
             qymcad_ui_state::set_hotkey(wc.set, r.action, "");
             wc.hotkeys.clash = None;
         }
         // "restore the factory key" only where it really was changed
-        if wc.set.hotkeys.contains_key(r.action)
-            && ui.small_button(crate::i18n::tr("hotkeys-reset-one")).on_hover_text(crate::i18n::tr1("hotkeys-default-is", "key", &qymcad_ui_state::key_label(r.key))).clicked()
-        {
+        let changed = wc.set.hotkeys.contains_key(r.action);
+        let tip = crate::i18n::tr1("hotkeys-default-is", "key", &qymcad_ui_state::key_label(r.key));
+        if row_icon(ui, changed, ph::ARROW_COUNTER_CLOCKWISE).on_hover_text(tip).clicked() {
             wc.set.hotkeys.remove(r.action);
             wc.hotkeys.clash = None;
         }
     });
+}
+
+/// A square icon button of one size for every row, framed under the pointer; hidden, it still holds its place.
+fn row_icon(ui: &mut egui::Ui, shown: bool, icon: &str) -> egui::Response {
+    let side = ui.spacing().interact_size.y;
+    ui.add_visible(shown, egui::Button::new(icon).frame_when_inactive(false).min_size(egui::vec2(side, side)))
 }
 
 /// THE PRESS THAT ASSIGNS A KEY, while the window waits for one.
