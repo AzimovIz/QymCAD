@@ -244,11 +244,12 @@ pub fn tr(key: &str) -> String {
 pub fn tr_args(key: &str, args: Option<&FluentArgs>) -> String {
     let cur = language();
     LANGS.with(|m| {
+        // a key typed into a sentence ("Copy (Ctrl+C)") is written the way this system writes keys
         if let Some(s) = m.get(&cur).and_then(|l| l.get(key, args)) {
-            return s;
+            return keys::keys_in_text(&s);
         }
         if let Some(s) = m.get(FALLBACK).and_then(|l| l.get(key, args)) {
-            return s;
+            return keys::keys_in_text(&s);
         }
         key.to_string()
     })
@@ -380,4 +381,5 @@ macro_rules! t {
 /// flag, so a helper hidden behind it is invisible to the guards of every other crate - and four of them
 /// read source through `working_part`.
 pub mod error_words;
+pub mod keys;
 pub mod ratchet;
