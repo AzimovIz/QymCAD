@@ -154,9 +154,6 @@ const GRID_GAP: f32 = 14.0;
 /// The width of the window, title bar and margins included.
 const WINDOW_W: f32 = 556.0;
 
-/// Empty room after the row icons, so the reset icon, framed when hovered, does not touch the scroll bar.
-const TOOLS_PAD: f32 = 2.0;
-
 /// THE WIDTHS EVERY SECTION SHARES, fixed rather than left to each grid: the sections line up, and nothing that
 /// appears in a row - a reset icon, a clash under it - can widen a column a frame later.
 struct Columns {
@@ -174,8 +171,11 @@ fn columns(set: &qymcad_ui_state::Settings, ui: &egui::Ui, table: f32) -> Column
     // the button also says "press a key" while it waits and "no key" when unbound
     let words = ["hotkeys-press", "hotkeys-unbound"].map(|k| width(crate::i18n::tr(k), &body) + pad);
     let key = HOTKEYS.iter().map(|r| width(qymcad_ui_state::key_label(&qymcad_ui_state::hotkey_key(set, r.action)), &mono) + pad).chain(words).fold(KEY_W, f32::max);
-    // the two row icons, the gaps after each and the room at the end
-    let tools = 2.0 * ui.spacing().interact_size.y + 2.0 * ui.spacing().item_spacing.x + TOOLS_PAD;
+    // THE TWO ROW ICONS AS WIDE AS THEY ARE DRAWN - the glyph and the button's padding, wider than the square they
+    // ask for - then the gap between them and the room after the reset icon. Counted as squares, the column came
+    // out narrower than drawn, and the table pushed the body of the window past its title bar.
+    let icon = |glyph: &str| (width(glyph.to_string(), &body) + pad).max(ui.spacing().interact_size.y);
+    let tools = icon(ph::X) + icon(ph::ARROW_COUNTER_CLOCKWISE) + ICON_GAP + RESET_PAD;
     let what = (table - key - tools - 2.0 * GRID_GAP).max(KEY_W);
     Columns { key, what }
 }
@@ -296,11 +296,15 @@ fn row_tools(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui, r: &HotkeyRow)
         if !rebindable(r.area) {
             return;
         }
+        // THE GAPS ARE SET HERE, exactly: with no item spacing in the row, `ICON_GAP` alone stands between the icons
+        // and `RESET_PAD` alone between the reset icon and the end of the cell, the last column of the table
+        ui.spacing_mut().item_spacing.x = 0.0;
         let bound = !qymcad_ui_state::hotkey_key(wc.set, r.action).is_empty();
         if row_icon(ui, bound, ph::X).on_hover_text(crate::i18n::tr("hotkeys-clear")).clicked() {
             qymcad_ui_state::set_hotkey(wc.set, r.action, "");
             wc.hotkeys.clash = None;
         }
+        ui.add_space(ICON_GAP);
         // "restore the factory key" only where it really was changed
         let changed = wc.set.hotkeys.contains_key(r.action);
         let tip = crate::i18n::tr1("hotkeys-default-is", "key", &qymcad_ui_state::key_label(r.key));
@@ -308,9 +312,15 @@ fn row_tools(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui, r: &HotkeyRow)
             wc.set.hotkeys.remove(r.action);
             wc.hotkeys.clash = None;
         }
-        ui.add_space(TOOLS_PAD);
+        ui.add_space(RESET_PAD);
     });
 }
+
+/// The room between the clear icon and the reset icon.
+const ICON_GAP: f32 = 2.0;
+
+/// The room after the reset icon, the last thing in a row.
+const RESET_PAD: f32 = 6.0;
 
 /// A square icon button of one size for every row, framed under the pointer; hidden, it still holds its place.
 fn row_icon(ui: &mut egui::Ui, shown: bool, icon: &str) -> egui::Response {
