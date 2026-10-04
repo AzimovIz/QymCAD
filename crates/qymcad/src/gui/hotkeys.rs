@@ -73,8 +73,7 @@ pub(crate) fn hotkeys_window(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Conte
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if !wc.set.hotkeys.is_empty() && ui.button(crate::i18n::tr("hotkeys-reset-all")).clicked() {
                         wc.set.hotkeys.clear();
-                        wc.hotkeys.note.clear();
-                        wc.hotkeys.clash = None;
+                        settle(wc.hotkeys);
                     }
                     let glass = ui.fonts_mut(|f| f.layout_no_wrap(ph::MAGNIFYING_GLASS.to_string(), egui::TextStyle::Body.resolve(ui.style()), egui::Color32::WHITE).size().x);
                     // THE WHOLE FIELD, margins included: `desired_width` is the width of the text alone, and the field's
@@ -135,9 +134,7 @@ pub(crate) fn hotkeys_window(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Conte
     });
     if !open {
         // closing the window drops whatever it was in the middle of: a later press must not land in it
-        wc.hotkeys.action = None;
-        wc.hotkeys.clash = None;
-        wc.hotkeys.note.clear();
+        settle(wc.hotkeys);
     }
     wc.win.set(WinKind::Hotkeys, open);
     capture_hotkey(wc, ctx);
@@ -259,7 +256,7 @@ fn area_header(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui, area: &str) 
             for a in changed {
                 wc.set.hotkeys.remove(a);
             }
-            wc.hotkeys.clash = None;
+            settle(wc.hotkeys);
         }
     });
 }
@@ -323,7 +320,7 @@ fn row_tools(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui, r: &HotkeyRow)
         let bound = !qymcad_ui_state::hotkey_key(wc.set, r.action).is_empty();
         if row_icon(ui, bound, ph::X).on_hover_text(crate::i18n::tr("hotkeys-clear")).clicked() {
             qymcad_ui_state::set_hotkey(wc.set, r.action, "");
-            wc.hotkeys.clash = None;
+            settle(wc.hotkeys);
         }
         ui.add_space(ICON_GAP);
         // "restore the factory key" only where it really was changed
@@ -331,10 +328,19 @@ fn row_tools(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui, r: &HotkeyRow)
         let tip = crate::i18n::tr1("hotkeys-default-is", "key", &qymcad_ui_state::key_label(r.key));
         if row_icon(ui, changed, ph::ARROW_COUNTER_CLOCKWISE).on_hover_text(tip).clicked() {
             wc.set.hotkeys.remove(r.action);
-            wc.hotkeys.clash = None;
+            settle(wc.hotkeys);
         }
         ui.add_space(RESET_PAD);
     });
+}
+
+/// AN EDIT MADE BY A CLICK ENDS WHATEVER THE WINDOW WAS IN THE MIDDLE OF: the waiting for a key, a clash question,
+/// a refusal. Reported behaviour: X or reset clicked while the window waited for a key changed the key, and the
+/// window went on waiting - the next press overwrote what the click had just set.
+fn settle(hk: &mut qymcad_ui_state::HotkeyCapture) {
+    hk.action = None;
+    hk.clash = None;
+    hk.note.clear();
 }
 
 /// The room between the clear icon and the reset icon.

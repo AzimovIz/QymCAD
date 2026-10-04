@@ -529,15 +529,16 @@ mod tests {
             self.frame(vec![egui::Event::Key { key, physical_key: None, pressed: false, repeat: false, modifiers: Modifiers::NONE }])
         }
 
-        /// A click on the key button of the extrude row, so the window waits for its key; the row's description.
-        fn wait_for_extrude_key(&mut self) -> String {
+        /// A click on the key button of the extrude row, which shows `key`, so the window waits for its key; the row's
+        /// description.
+        fn wait_for_extrude_key(&mut self, key: &str) -> String {
             let what = super::super::hotkeys::hotkey_what(HOTKEYS.iter().find(|r| r.action == "part.extrude").expect("the extrude row"));
             let shapes = self.frame(Vec::new());
             let row = text_rect(&shapes, &what).expect("the extrude row is drawn");
             let key = shapes
                 .iter()
                 .find_map(|s| match s {
-                    egui::Shape::Text(t) if t.galley.text() == "E" && t.pos.x < row.min.x && (t.pos.y + t.galley.size().y * 0.5 - row.center().y).abs() < 6.0 => Some(t.pos + t.galley.size() * 0.5),
+                    egui::Shape::Text(t) if t.galley.text() == key && t.pos.x < row.min.x && (t.pos.y + t.galley.size().y * 0.5 - row.center().y).abs() < 6.0 => Some(t.pos + t.galley.size() * 0.5),
                     _ => None,
                 })
                 .expect("the key button of the extrude row is drawn");
@@ -574,7 +575,7 @@ mod tests {
     #[test]
     fn the_refusal_stands_under_the_waiting_line() {
         let mut w = Frames::open();
-        let what = w.wait_for_extrude_key();
+        let what = w.wait_for_extrude_key("E");
         let waiting = crate::i18n::tr1("hotkeys-waiting", "what", &what);
         let refused = crate::i18n::tr("hotkeys-reserved");
         for (key, mods) in [(Key::SuperLeft, Modifiers::MAC_CMD), (Key::ControlLeft, Modifiers::COMMAND)] {
@@ -605,7 +606,7 @@ mod tests {
         let at = rows.iter().position(|r| r.action == "part.extrude").expect("the extrude row");
         let next = super::super::hotkeys::hotkey_what(rows.get(at + 1).expect("a row under the extrusion"));
         let before = text_rect(&w.frame(Vec::new()), &next).expect("the row under the extrusion is drawn").min.y;
-        w.wait_for_extrude_key();
+        w.wait_for_extrude_key("E");
         w.key_down(Key::W, Modifiers::NONE);
         assert_eq!(qymcad_ui_state::hotkey_key(&w.app.set, "part.extrude"), "W", "the press did not assign W");
         let mut after = vec![w.key_up(Key::W)];
@@ -616,5 +617,41 @@ mod tests {
             let y = text_rect(shapes, &next).expect("the row under the extrusion is drawn").min.y;
             assert!((y - before).abs() < 0.5, "frame {i} after the key was assigned: the row under it stands at {y}, it stood at {before}");
         }
+    }
+
+    /// THE CENTRE OF A ROW ICON drawn on the line of the extrude row.
+    fn icon_on_row(shapes: &[egui::Shape], glyph: &str, what: &str) -> Option<egui::Pos2> {
+        let row = text_rect(shapes, what)?;
+        shapes.iter().find_map(|s| match s {
+            egui::Shape::Text(t) if t.galley.text() == glyph && t.pos.x > row.min.x && (t.pos.y + t.galley.size().y * 0.5 - row.center().y).abs() < 6.0 => Some(t.pos + t.galley.size() * 0.5),
+            _ => None,
+        })
+    }
+
+    /// X AND RESET END THE WAITING. Reported behaviour: with the window waiting for a key, a click on X cleared the
+    /// key and the window went on waiting; a click on reset put the factory key back, the X came back, and the window
+    /// still waited - the next press would overwrite what the click had set. Driven by clicks through whole frames.
+    #[test]
+    fn a_click_on_x_or_reset_ends_the_waiting() {
+        let mut w = Frames::open();
+        let what = w.wait_for_extrude_key("E");
+        let waiting = crate::i18n::tr1("hotkeys-waiting", "what", &what);
+        let shapes = w.frame(Vec::new());
+        assert!(text_rect(&shapes, &waiting).is_some(), "the click on the key did not make the window wait");
+        let x = icon_on_row(&shapes, egui_phosphor::regular::X, &what).expect("the X of the extrude row is drawn");
+        w.click(x);
+        let shapes = w.frame(Vec::new());
+        assert_eq!(qymcad_ui_state::hotkey_key(&w.app.set, "part.extrude"), "", "the click on X left the key in place");
+        assert!(text_rect(&shapes, &waiting).is_none(), "the window still waits for a key after X was clicked");
+
+        let unbound = crate::i18n::tr("hotkeys-unbound");
+        w.wait_for_extrude_key(&unbound);
+        let shapes = w.frame(Vec::new());
+        assert!(text_rect(&shapes, &waiting).is_some(), "the click on the unbound key did not make the window wait");
+        let reset = icon_on_row(&shapes, egui_phosphor::regular::ARROW_COUNTER_CLOCKWISE, &what).expect("the reset of the extrude row is drawn");
+        w.click(reset);
+        let shapes = w.frame(Vec::new());
+        assert_eq!(qymcad_ui_state::hotkey_key(&w.app.set, "part.extrude"), "E", "the click on reset did not put the factory key back");
+        assert!(text_rect(&shapes, &waiting).is_none(), "the window still waits for a key after reset was clicked");
     }
 }
