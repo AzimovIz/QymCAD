@@ -102,7 +102,7 @@ mod tests {
 
     use super::super::hotkeys::{capture_outcome, Capture};
     use egui::{Key, Modifiers};
-    use qymcad_ui_state::{resolve_hotkey_clash, Chord, ClashChoice, HotkeyClash};
+    use qymcad_ui_state::{reset_hotkey, resolve_hotkey_clash, Chord, ClashChoice, HotkeyClash};
 
     /// A CHORD READS BACK AS IT IS WRITTEN, and the order of the modifiers in a hand-edited record does not matter.
     #[test]
@@ -325,6 +325,48 @@ mod tests {
         assert_eq!(qymcad_ui_state::hotkey_action(&app.set, "part", Key::F), Some("part.extrude"));
         assert_eq!(qymcad_ui_state::hotkey_key(&app.set, "part.fillet"), "", "the fillet kept a key");
         assert_eq!(qymcad_ui_state::hotkey_action(&app.set, "part", Key::E), None, "the old key of the extrusion still runs something");
+    }
+
+    /// A RESET ONTO A KEY ANOTHER COMMAND HOLDS IS A QUESTION, and nothing changes until it is answered.
+    ///
+    /// Reported behaviour: after a swap, the reset of one row put its factory key back while the other row still held
+    /// it - two commands on one key. The reset is the press of the factory key and meets the same clash.
+    #[test]
+    fn a_reset_onto_a_held_key_becomes_a_question() {
+        let mut app = App::default();
+        let swap = HotkeyClash { action: "part.extrude".into(), chord: "F".into(), holder: "part.fillet" };
+        resolve_hotkey_clash(&mut app.set, &swap, ClashChoice::Swap);
+        let back = HotkeyClash { action: "part.extrude".into(), chord: "E".into(), holder: "part.fillet" };
+        assert_eq!(reset_hotkey(&mut app.set, "part.extrude"), Some(back.clone()), "the reset onto E, held by the fillet, asked nothing");
+        assert_eq!(qymcad_ui_state::hotkey_key(&app.set, "part.extrude"), "F", "the reset changed the key before the question was answered");
+        resolve_hotkey_clash(&mut app.set, &back, ClashChoice::Swap);
+        assert!(app.set.hotkeys.is_empty(), "the swap answering the reset left the record holding {:?}", app.set.hotkeys);
+    }
+
+    /// A RESET ONTO A FREE KEY IS APPLIED AT ONCE: after "Take it" each row goes back by its own reset.
+    #[test]
+    fn a_reset_onto_a_free_key_is_applied_at_once() {
+        let mut app = App::default();
+        let take = HotkeyClash { action: "part.extrude".into(), chord: "F".into(), holder: "part.fillet" };
+        resolve_hotkey_clash(&mut app.set, &take, ClashChoice::Unbind);
+        assert_eq!(reset_hotkey(&mut app.set, "part.fillet"), Some(HotkeyClash { action: "part.fillet".into(), chord: "F".into(), holder: "part.extrude" }), "F is held by the extrusion");
+        assert_eq!(reset_hotkey(&mut app.set, "part.extrude"), None, "E is free and the reset asked a question");
+        assert_eq!(reset_hotkey(&mut app.set, "part.fillet"), None, "F is free once the extrusion is back on E");
+        assert!(app.set.hotkeys.is_empty(), "both reset and the record still holds {:?}", app.set.hotkeys);
+    }
+
+    /// NO FACTORY KEY STANDS TWICE IN ONE AREA. The reset of a section and of every key asks nothing, since it puts
+    /// the whole area on its factory keys; a factory layout with one key twice would make them two commands on it.
+    #[test]
+    fn no_factory_key_stands_twice_in_an_area() {
+        let mut twice = Vec::new();
+        for (i, a) in HOTKEYS.iter().enumerate() {
+            let chord = Chord::parse(a.key);
+            if let Some(b) = HOTKEYS[..i].iter().find(|b| b.area == a.area && !a.key.is_empty() && Chord::parse(b.key) == chord) {
+                twice.push(format!("{} and {} on {} in {}", b.action, a.action, a.key, a.area));
+            }
+        }
+        assert!(twice.is_empty(), "factory keys standing twice: {twice:?}");
     }
 
     /// EVERY FACTORY KEY OF A WORKBENCH IS A CHORD THE DISPATCHER CAN HEAR. A factory key the parser does not
@@ -693,6 +735,38 @@ mod tests {
         let shapes = w.frame(Vec::new());
         assert_eq!(qymcad_ui_state::hotkey_key(&w.app.set, "part.extrude"), "E", "the click on reset did not put the factory key back");
         assert!(text_rect(&shapes, &waiting).is_none(), "the window still waits for a key after reset was clicked");
+    }
+
+    /// THE RESET OF A SWAPPED ROW ASKS UNDER THAT ROW, and Swap answers it with both rows back on their factory keys.
+    /// Driven by a click on the extrude key, a press of F, a click on Swap, a click on the extrude row's reset and a
+    /// click on Swap again, through whole frames.
+    #[test]
+    fn the_reset_of_a_swapped_row_asks_and_swaps_back() {
+        let mut w = Frames::open();
+        let what = w.wait_for_extrude_key("E");
+        w.key_down(Key::F, Modifiers::NONE);
+        w.key_up(Key::F);
+        let swap = text_rect(&w.frame(Vec::new()), &crate::i18n::tr("hotkeys-swap")).expect("the clash of F is not asked");
+        w.click(swap.center());
+        assert_eq!(qymcad_ui_state::hotkey_key(&w.app.set, "part.fillet"), "E", "Swap did not give the fillet E");
+        // the grid lays a row out in the height it had a frame before, with the question still under it
+        for _ in 0..3 {
+            w.frame(Vec::new());
+        }
+        let shapes = w.frame(Vec::new());
+        let row = text_rect(&shapes, &what).expect("the extrude row is drawn");
+        let reset = icon_on_row(&shapes, egui_phosphor::regular::ARROW_COUNTER_CLOCKWISE, row).expect("the reset of the extrude row is drawn");
+        w.click(reset);
+        let holder = super::super::hotkeys::hotkey_what(HOTKEYS.iter().find(|r| r.action == "part.fillet").expect("the fillet row"));
+        let shapes = w.frame(Vec::new());
+        let question = text_rect(&shapes, &crate::i18n::tr2("hotkeys-taken", "key", &qymcad_ui_state::key_label("E"), "what", &holder)).expect("the reset onto E, held by the fillet, asked nothing");
+        let row = text_rect(&shapes, &what).expect("the extrude row is drawn");
+        assert!(question.min.y >= row.max.y - 0.5, "the question {question:?} does not stand under the extrude row {row:?}");
+        assert_eq!(qymcad_ui_state::hotkey_key(&w.app.set, "part.extrude"), "F", "the reset changed the key before the question was answered");
+        let swap = text_rect(&shapes, &crate::i18n::tr("hotkeys-swap")).expect("Swap is not offered for the reset");
+        w.click(swap.center());
+        assert_eq!(qymcad_ui_state::hotkey_key(&w.app.set, "part.extrude"), "E", "Swap did not put the extrusion back on E");
+        assert_eq!(qymcad_ui_state::hotkey_key(&w.app.set, "part.fillet"), "F", "Swap did not put the fillet back on F");
     }
 
     /// THE CHOICES OF A CLASH STAND ON A LINE OF THEIR OWN, under the question. Driven by a click on the extrude key

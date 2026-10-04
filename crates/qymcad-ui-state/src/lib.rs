@@ -7532,6 +7532,17 @@ pub fn resolve_hotkey_clash(set: &mut Settings, clash: &HotkeyClash, choice: Cla
     set_hotkey(set, clash.holder, &for_holder);
 }
 
+/// RESETS A BINDING TO THE FACTORY KEY unless another action of the area holds that key: then nothing changes and
+/// the clash is handed back, to be asked like the press of that key. Applied regardless, two commands would share it.
+pub fn reset_hotkey(set: &mut Settings, action: &str) -> Option<HotkeyClash> {
+    let row = HOTKEYS.iter().find(|r| r.action == action)?;
+    if let Some(holder) = hotkey_taken_by(set, row.area, row.key, action) {
+        return Some(HotkeyClash { action: action.to_string(), chord: row.key.to_string(), holder });
+    }
+    set.hotkeys.remove(action);
+    None
+}
+
 /// The thread standard for the index of the command bar's switch.
 pub fn thread_standard(idx: u8) -> qymcad_core::thread::ThreadStandard {
     use qymcad_core::thread::ThreadStandard as S;

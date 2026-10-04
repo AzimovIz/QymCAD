@@ -346,8 +346,9 @@ fn row_tools(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui, r: &HotkeyRow)
         let changed = wc.set.hotkeys.contains_key(r.action);
         let tip = crate::i18n::tr1("hotkeys-default-is", "key", &qymcad_ui_state::key_label(r.key));
         if row_icon(ui, changed, ph::ARROW_COUNTER_CLOCKWISE).on_hover_text(tip).clicked() {
-            wc.set.hotkeys.remove(r.action);
             settle(wc.hotkeys);
+            // the factory key held by another row is asked about under this one, as the press of that key would be
+            wc.hotkeys.clash = qymcad_ui_state::reset_hotkey(wc.set, r.action);
         }
         ui.add_space(RESET_PAD);
     });
