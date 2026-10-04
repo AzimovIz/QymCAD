@@ -179,13 +179,11 @@ fn waiting_for_a_key(s: &mut Session) -> String {
     what
 }
 
-/// WHAT THE TABLE SAYS once it is scrolled down to where it says things.
+/// WHAT THE TABLE SAYS about the key just pressed. The answer stands under the row that waits, so it is read
+/// where the row is: scrolling the table down takes it off the screen.
 fn what_the_table_says(s: &mut Session) -> Vec<String> {
     let title = s.word("hotkeys-title");
-    let at = s.find(&title, qymcad::pos2(640.0, 400.0)).unwrap_or_else(|| panic!("the table of the keys is not open; on screen: {:?}", s.words()));
-    for _ in 0..8 {
-        s.wheel(qymcad::pos2(at.center().x, at.center().y + 200.0), qymcad::vec2(0.0, -50.0), qymcad::Modifiers::NONE);
-    }
+    assert!(s.shows(&title), "the table of the keys is not open; on screen: {:?}", s.words());
     s.words()
 }
 
