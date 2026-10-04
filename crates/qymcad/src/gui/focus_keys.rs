@@ -152,11 +152,122 @@ mod tests {
     /// AND THE RULE IS WRITTEN IN ONE PLACE rather than smeared across the handlers.
     #[test]
     fn the_rule_lives_in_one_place() {
+        // the rule moved out of the god object into `pressed_chord`, and the handler must still go through it
+        let rule = include_str!("../../../qymcad-ui-state/src/lib.rs");
+        assert!(crate::gui::render_source::has(rule, "if typing { i.modifiers.alt"), "the \"with focus, use Alt\" rule is gone from the common place");
         let src = include_str!("input.rs");
-        assert!(crate::gui::render_source::has(src, "if typing { i.modifiers.alt"), "the \"with focus, use Alt\" rule is gone from the common place");
+        assert!(src.contains("qymcad_ui_state::pressed_chord(ctx)"), "the tool keys no longer read the press through the common rule");
         assert!(
             !crate::gui::render_source::has(src, "if ctx.egui_wants_keyboard_input() {\n            return;\n        }\n        use egui::Key;"),
             "the unconditional muting of every key on focus has come back"
         );
+    }
+
+    /// Is the contour re-pick open - the half-sketcher of the extrude command, in 2D?
+    fn repicking(app: &App) -> bool {
+        matches!(app.tools.armed.cmd_kind(), 1 | 3) && app.tools.cmd.sketch.is_some() && !app.viewing.mode_3d
+    }
+
+    /// A KEY OUTSIDE THE FACTORY LETTERS IS HEARD once something is bound to it.
+    ///
+    /// The handler listed twenty-three letters by hand. A tool rebound to W was saved and shown in the
+    /// reference, and W never reached the table: the rebinding worked everywhere except at the keyboard.
+    #[test]
+    fn a_key_rebound_outside_the_factory_letters_is_heard() {
+        let mut app = extruding();
+        app.set.hotkeys.insert("part.contour-reselect".into(), "W".into());
+        press(&mut app, Key::W, Modifiers::NONE, false);
+        assert!(repicking(&app), "the re-pick was moved to W and W does nothing");
+    }
+
+    /// A CTRL CHORD IS HEARD, AND FROM A FIELD AS WELL: Ctrl types nothing, so it needs no Alt.
+    #[test]
+    fn a_ctrl_chord_is_heard_with_and_without_focus() {
+        for focus in [false, true] {
+            let mut app = extruding();
+            app.set.hotkeys.insert("part.contour-reselect".into(), "Ctrl+J".into());
+            press(&mut app, Key::J, Modifiers::NONE, focus);
+            assert!(!repicking(&app), "the binding is Ctrl+J and a bare J ran it (focus: {focus})");
+            press(&mut app, Key::J, Modifiers::COMMAND, focus);
+            assert!(repicking(&app), "Ctrl+J is bound and does nothing (focus: {focus})");
+        }
+    }
+
+    /// SHIFT IS PART OF THE KEY: Shift+W runs what is on Shift+W, and a bare W does not.
+    #[test]
+    fn shift_is_part_of_the_key() {
+        let mut app = extruding();
+        app.set.hotkeys.insert("part.contour-reselect".into(), "Shift+W".into());
+        press(&mut app, Key::W, Modifiers::NONE, false);
+        assert!(!repicking(&app), "the binding is Shift+W and a bare W ran it");
+        press(&mut app, Key::W, Modifiers::SHIFT, false);
+        assert!(repicking(&app), "Shift+W is bound and does nothing");
+    }
+
+    /// A MODIFIER NOBODY ASKED FOR STOPS A BARE KEY: Ctrl+U is not U.
+    #[test]
+    fn a_bare_key_does_not_fire_under_ctrl() {
+        let mut app = extruding();
+        press(&mut app, Key::U, Modifiers::COMMAND, false);
+        assert!(!repicking(&app), "Ctrl+U ran what is bound to a bare U");
+    }
+
+    /// THE MAC'S CONTROL KEY IS A MODIFIER OF ITS OWN, not Cmd and not nothing. `ctrl` without `command` is exactly
+    /// how egui reports it there: a Control+J press runs what is bound to Control+J - on a Mac, the only system with
+    /// that key - and neither the Cmd+J binding nor the bare J.
+    #[test]
+    fn the_macs_control_key_is_its_own_modifier() {
+        let mac_control = Modifiers { ctrl: true, ..Modifiers::NONE };
+        let mut app = extruding();
+        app.set.hotkeys.insert("part.contour-reselect".into(), "Ctrl+J".into());
+        press(&mut app, Key::J, mac_control, false);
+        assert!(!repicking(&app), "the Mac's Control+J ran what is bound to Cmd+J");
+        let mut app = extruding();
+        press(&mut app, Key::U, mac_control, false);
+        assert!(!repicking(&app), "the Mac's Control+U ran what is bound to a bare U");
+        let mut app = extruding();
+        app.set.hotkeys.insert("part.contour-reselect".into(), "Control+J".into());
+        press(&mut app, Key::J, mac_control, false);
+        assert_eq!(repicking(&app), cfg!(target_os = "macos"), "Control+J runs its binding on a Mac and nowhere else");
+    }
+
+    /// AN ACTION LEFT WITHOUT A KEY is not run by its factory key either.
+    #[test]
+    fn an_unbound_action_is_not_run_by_its_factory_key() {
+        let mut app = extruding();
+        app.set.hotkeys.insert("part.contour-reselect".into(), String::new());
+        press(&mut app, Key::U, Modifiers::NONE, false);
+        assert!(!repicking(&app), "the re-pick was left without a key and U still runs it");
+    }
+
+    /// THE HINT OF A CTRL CHORD needs no Alt from a field.
+    #[test]
+    fn the_hint_of_a_ctrl_chord_has_no_alt() {
+        let mut app = extruding();
+        app.set.hotkeys.insert("part.contour-reselect".into(), "Ctrl+J".into());
+        let ctx = egui::Context::default();
+        super::super::install_fonts(&ctx);
+        for _ in 0..2 {
+            let _ = ctx.run_ui(egui::RawInput::default(), |c| {
+                egui::Area::new(egui::Id::new("f")).show(c, |ui| {
+                    let mut s = String::new();
+                    ui.text_edit_singleline(&mut s).request_focus();
+                });
+            });
+        }
+        assert_eq!(qymcad_ui_state::hotkey_hint(&app.draw_ctx(), &ctx, "part.contour-reselect"), "Ctrl+J", "a Ctrl chord works from a field as it is");
+    }
+
+    /// A BINDING THIS SYSTEM KEEPS DOES NOT RUN, though a profile from another system brought it: Cmd+W, free on a
+    /// Mac, is the word eraser of a field on Linux and Windows.
+    #[test]
+    fn a_binding_this_system_keeps_does_not_run() {
+        if qymcad_ui_state::platform_keys::Os::current() == qymcad_ui_state::platform_keys::Os::Mac {
+            return; // there Cmd+W is a lawful binding - checked by the rules of each system in `hotkeys_rebind`
+        }
+        let mut app = extruding();
+        app.set.hotkeys.insert("part.contour-reselect".into(), "Ctrl+W".into());
+        press(&mut app, Key::W, Modifiers::COMMAND, false);
+        assert!(!repicking(&app), "Ctrl+W, carried from a Mac, ran a tool where it erases a word");
     }
 }

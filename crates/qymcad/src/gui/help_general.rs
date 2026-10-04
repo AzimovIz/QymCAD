@@ -81,7 +81,11 @@ mod tests {
         let input = include_str!("input.rs");
         let from = input.find("fn handle_tool_hotkeys").expect("the key handler is in place");
         let to = input[from..].find("\n    /// ").map(|i| from + i).unwrap_or(input.len());
-        assert!(input[from..to].contains("modifiers.alt"), "the Alt rule is declared in the help, and the key handler knows nothing about Alt");
+        // the handler reads the press through `pressed_chord`, and that is where Alt is looked at
+        assert!(input[from..to].contains("pressed_chord("), "the key handler no longer reads the press through the common rule");
+        let state = include_str!("../../../qymcad-ui-state/src/lib.rs");
+        let rule = state.find("pub fn pressed_chord").map(|i| &state[i..i + state[i..].find("\n}\n").unwrap_or(0)]).unwrap_or("");
+        assert!(rule.contains("modifiers.alt"), "the Alt rule is declared in the help, and the key handler knows nothing about Alt");
 
         for l in langs() {
             let note = crate::i18n::tr_in(&l, "hotkeys-alt-note").unwrap_or_else(|| panic!("there is no remark about Alt in language {l}"));

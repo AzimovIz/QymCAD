@@ -1913,8 +1913,11 @@ impl App {
             ctx.request_repaint();
             crate::gui::file_ask::inert_while_choosing(ui); // the system chooser is modal: nothing here answers until it does
         }
+        // THE KEYBOARD IS THE REFERENCE WINDOW'S while it waits for a key to assign: the press is a
+        // name for a binding there, not a command - Esc must not walk the cancel ladder, E must not extrude.
+        let capturing = self.hotkeys.action.is_some();
         // Ctrl+S saves (silently into the current file, or a dialogue for a new one); Ctrl+Shift+S is "save as".
-        if !choosing && !ctx.egui_wants_keyboard_input() && ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::S)) {
+        if !choosing && !capturing && !ctx.egui_wants_keyboard_input() && ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::S)) {
             if ctx.input(|i| i.modifiers.shift) {
                 self.save_project_as();
             } else {
@@ -1941,7 +1944,7 @@ impl App {
         self.keep_selection_on_edited_sketch(); // the selection follows the sketch being edited — in one phase
                                                 // THE KEYBOARD IS THE CHOOSER'S while it is open: a barrier eats clicks, but these two read the
                                                 // input directly and would go on obeying Delete, Escape and every tool letter behind it.
-        if !choosing {
+        if !choosing && !capturing {
             self.handle_key_commands(ctx); // the frame's keyboard commands — in one phase
             self.handle_tool_hotkeys(ctx); // the tool shortcuts (L/R/C/A/P/G/D/S, E)
         }
@@ -2298,7 +2301,7 @@ impl App {
 
     /// The Part layout: K a new sketch, D a datum plane, E extrude, Q cut, R revolve, F fillet, C chamfer,
     /// H shell, O hole, M mirror, B box, Y cylinder.
-    pub(super) fn part_hotkey(&mut self, key: egui::Key) {
+    pub(super) fn part_hotkey(&mut self, key: impl Into<qymcad_ui_state::Chord>) {
         // WE MATCH ON THE ACTION, NOT ON THE KEY. While `Key::E` stood in the `match`, remapping was
         // inexpressible: the letter and the meaning were one and the same thing. Which key leads to which
         // action is decided by `hotkey_action` — one place for every workbench.
@@ -2333,7 +2336,7 @@ impl App {
 
     /// The Assembly layout: K a new skeleton sketch, D a datum plane, N a new part, U a subassembly,
     /// I insert a component (STEP or STL), J a rigid joint (picking faces).
-    pub(super) fn assembly_hotkey(&mut self, key: egui::Key) {
+    pub(super) fn assembly_hotkey(&mut self, key: impl Into<qymcad_ui_state::Chord>) {
         let Some(action) = qymcad_ui_state::hotkey_action(&self.set, "assembly", key) else { return };
         match action {
             // there are NO sketch keys in an Assembly: a sketch is inert there (see `create_panel_common`)

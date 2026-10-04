@@ -313,55 +313,15 @@ impl App {
         }
     }
 
-    /// The tool hotkeys, as in grown-up CAD. They work without modifiers and when the focus is not in a
-    /// text field. The context decides the layout: editing a sketch gives drawing, editing, dimensions
-    /// and constraints; a Part gives features and primitives; an Assembly gives components and mates. The
-    /// hotkeys are repeated in the tooltips of the buttons.
+    /// The tool hotkeys, as in grown-up CAD. The context decides the layout: editing a sketch gives drawing,
+    /// editing, dimensions and constraints; a Part gives features and primitives; an Assembly gives components
+    /// and mates. The hotkeys are repeated in the tooltips of the buttons.
     pub(super) fn handle_tool_hotkeys(&mut self, ctx: &egui::Context) {
-        // FOCUS IN A FIELD MUST NOT KILL EVERY KEY.
-        //
-        // An unconditional `return` stood here, and it extinguished ALL 23 tool keys in ALL commands the
-        // moment the cursor landed in any input field. The most visible case: inside an extrusion `U`
-        // ("re-choose the contour") could not be pressed until the focus was knocked off with the mouse.
-        //
-        // A bare letter in a field is not intercepted — it must type itself: expressions contain both `w`
-        // and `len`. But ALT plus a letter does not type itself in a field, and that is given to the
-        // command. The rule is one: with no focus, the bare letter; with focus, Alt.
-        let typing = ctx.egui_wants_keyboard_input();
-        use egui::Key;
-        let key = ctx.input(|i| {
-            let ok = if typing { i.modifiers.alt && !i.modifiers.command && !i.modifiers.ctrl } else { !i.modifiers.any() };
-            if !ok {
-                return None;
-            }
-            const KEYS: [Key; 23] = [
-                Key::S,
-                Key::L,
-                Key::R,
-                Key::C,
-                Key::A,
-                Key::P,
-                Key::G,
-                Key::D,
-                Key::E,
-                Key::O,
-                Key::N,
-                Key::T,
-                Key::F,
-                Key::M,
-                Key::X,
-                Key::K,
-                Key::Q,
-                Key::H,
-                Key::U,
-                Key::J,
-                Key::I,
-                Key::B,
-                Key::Y,
-            ];
-            KEYS.into_iter().find(|&k| i.key_pressed(k))
-        });
-        let Some(key) = key else { return };
+        if self.hotkeys.action.is_some() {
+            return; // the reference window is waiting for a key to ASSIGN, not to run
+        }
+        // which press a tool key answers to (bare, Alt from a field, Ctrl always) is decided by `pressed_chord`
+        let Some(key) = qymcad_ui_state::pressed_chord(ctx) else { return };
         if qymcad_ui_state::edit_si(&self.project, &self.sketch_ses).is_some() {
             self.sketch_hotkey(key);
         } else {

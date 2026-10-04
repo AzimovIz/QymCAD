@@ -11249,12 +11249,7 @@ pub fn hotkey_action(set: &Settings, area: &str, key: impl Into<Chord>) -> Optio
     let pressed = key.into();
     // A BINDING THIS SYSTEM REFUSES IS NOT RUN. The settings travel with the profile: Cmd+W bound on a Mac arrives
     // on Linux as Ctrl+W, which a field erases a word with - running the tool there would do both.
-    HOTKEYS
-        .iter()
-        .filter(|r| r.area == area)
-        .find(|r| Chord::parse(&hotkey_key(set, r.action)) == Some(pressed))
-        .map(|r| r.action)
-        .filter(|a| hotkey_refusal(a, &pressed).is_none())
+    HOTKEYS.iter().filter(|r| r.area == area).find(|r| Chord::parse(&hotkey_key(set, r.action)) == Some(pressed)).map(|r| r.action).filter(|a| hotkey_refusal(a, &pressed).is_none())
 }
 
 pub fn sel_point_ids(sel_sk: &SketchSelection) -> Vec<Id> {

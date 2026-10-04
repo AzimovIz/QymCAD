@@ -87,7 +87,6 @@ pub fn key_label_in(stored: &str, style: KeyStyle) -> String {
         .join(" / ")
 }
 
-
 /// THE KEYS INSIDE A SENTENCE, written the way this system writes them: "Copy (Ctrl+C)" is "Copy (⌘C)" on a
 /// Mac. A key is one or more of `Control+`, `Ctrl+`, `Shift+`, `Alt+` and then a key name (`C`, `Enter`, `F5`); the word
 /// "Ctrl" alone - "Ctrl combinations" - is a word about the key, not a key, and stays.
