@@ -62,6 +62,16 @@ mod tests {
             hand.sk_tool(0);
             assert!(hand.press_hint(&qymcad_i18n::tr("tb-chamfer-sketch-hint")), "no sketch chamfer button");
             assert!(hand.press_word(&qymcad_i18n::tr(mode), egui::pos2(400.0, 0.0)), "no {mode} on the bar");
+            // THE FIELDS OF ONE CHAMFER STAND TOGETHER on the bar, the modes before them: with the modes between them the
+            // two values of one cut were read as two settings
+            // by the right ends: a label in a wrapping row is laid out from the start of the row, so its left end says nothing
+            let first = hand.written_at(&qymcad_i18n::tr(captions[0])).map(|r| r.max.x);
+            for word in ["cmd-symmetric", "cmd-two-distances", "cmd-leg-angle"] {
+                let at = hand.written_at(&qymcad_i18n::tr(word)).map(|r| r.max.x);
+                if at.zip(first).is_none_or(|(at, first)| at > first) {
+                    sins.push(format!("{mode}: the mode {word} ends at {at:?}, not before the caption of the first field at {first:?}"));
+                }
+            }
             for place in ["the bar", "the corner"] {
                 if place == "the corner" {
                     hand.click2d(0.4, 0.1);

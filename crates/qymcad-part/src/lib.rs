@@ -6282,14 +6282,20 @@ pub fn wb_toolbar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
 /// HOW A SKETCH CHAMFER IS GIVEN, on the bar of the chamfer: equal legs, two legs, or a leg and an angle - the words of
 /// the chamfer of a part - and, for the last two, the second value beside the first leg. Reported (issue #35): the
 /// sketch chamfer took one distance only, and a chamfer of 5 x 3 or of 5 at 30 deg had to be built by hand.
-fn chamfer_mode_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
+/// The modes of a sketch chamfer, before its fields: the fields of one chamfer stand together after them.
+fn chamfer_modes(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
     use qymcad_core::feature::ChamferMode;
-    ui.separator();
     for (mode, word) in [(ChamferMode::Symmetric, "cmd-symmetric"), (ChamferMode::TwoDist, "cmd-two-distances"), (ChamferMode::DistAngle, "cmd-leg-angle")] {
         if ui.selectable_label(bc.tool_prefs.chamfer_mode == mode, qymcad_i18n::tr(word)).clicked() {
             qymcad_ui_state::set_chamfer_mode(bc.tool_prefs, mode);
         }
     }
+    ui.separator();
+}
+
+/// The second field of a sketch chamfer of two legs or of a leg and an angle, right after the first.
+fn chamfer_second_field(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
+    use qymcad_core::feature::ChamferMode;
     if bc.tool_prefs.chamfer_mode != ChamferMode::Symmetric {
         let angle = bc.tool_prefs.chamfer_mode == ChamferMode::DistAngle;
         ui.label(qymcad_i18n::tr(qymcad_ui_state::chamfer_d2_label(bc.tool_prefs.chamfer_mode)));
@@ -6518,6 +6524,9 @@ pub fn tool_options_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
             ui.label(egui::RichText::new(qymcad_i18n::tr("opt-dim-hint")).weak());
         } else if bc.armed.click_op() != 0 {
             if bc.armed.click_op() == 4 || bc.armed.click_op() == 5 {
+                if bc.armed.click_op() == 5 {
+                    chamfer_modes(bc, ui);
+                }
                 ui.label(qymcad_i18n::tr(if bc.armed.click_op() == 4 { "opt-radius" } else { qymcad_ui_state::chamfer_d1_label(bc.tool_prefs.chamfer_mode) }));
                 // with a corner clicked, the most it takes; short of it, the largest the field ever takes
                 let corner_hi = bc.corner.at.and_then(|(si, pid, ch)| (pid != 0).then(|| bc.project.corner_limit(si, pid, ch)).flatten()).map_or(10000.0, |l| l * (1.0 - 1e-9));
@@ -6529,7 +6538,7 @@ pub fn tool_options_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
                     qymcad_ui_state::NumFormat { lo: 0.01, hi: corner_hi, integer: false, suffix: &qymcad_i18n::tr("unit-mm-suffix"), nonzero: false },
                 );
                 if bc.armed.click_op() == 5 {
-                    chamfer_mode_bar(bc, ui);
+                    chamfer_second_field(bc, ui);
                 }
             }
             if bc.armed.click_op() == 6 {
@@ -6624,6 +6633,9 @@ pub fn tool_options_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
         } else {
             match bc.armed.modify() {
                 1 | 2 => {
+                    if bc.armed.modify() == 2 {
+                        chamfer_modes(bc, ui);
+                    }
                     ui.label(qymcad_i18n::tr(if bc.armed.modify() == 1 { "opt-radius" } else { qymcad_ui_state::chamfer_d1_label(bc.tool_prefs.chamfer_mode) }));
                     bc.tool_prefs.fillet = qymcad_ui_state::num_or_expr(
                         &mut qymcad_ui_state::ExprBarCtx { bar_exprs: &mut *bc.bar_exprs, project: &*bc.project, scheme: &*bc.scheme },
@@ -6633,7 +6645,7 @@ pub fn tool_options_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
                         qymcad_ui_state::NumFormat { lo: 0.01, hi: 10000.0, integer: false, suffix: &qymcad_i18n::tr("unit-mm-suffix"), nonzero: false },
                     );
                     if bc.armed.modify() == 2 {
-                        chamfer_mode_bar(bc, ui);
+                        chamfer_second_field(bc, ui);
                     }
                 }
                 3 => {

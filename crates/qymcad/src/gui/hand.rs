@@ -150,8 +150,13 @@ impl<'a> Hand<'a> {
 
     /// IS `word` WRITTEN ANYWHERE in the window, the next frame drawn.
     pub fn shows(&mut self, word: &str) -> bool {
+        self.written_at(word).is_some()
+    }
+
+    /// WHERE `word` IS WRITTEN, the next frame drawn - the place written first, when it is written in several.
+    pub fn written_at(&mut self, word: &str) -> Option<egui::Rect> {
         self.frame(Vec::new());
-        self.win.drawn.iter().any(|(t, _)| t == word)
+        self.win.drawn.iter().find(|(t, _)| t == word).map(|(_, r)| *r)
     }
 
     /// PRESS WHERE `word` IS WRITTEN - the one nearest to `near` when the frame wrote it in several places.
