@@ -398,6 +398,69 @@ impl Project {
             false
         }
     }
+    /// THE NEW CONSTRAINTS THAT CONSTRAIN SOMETHING, in their order: each is kept only when it raises the rank of the
+    /// Jacobian over what the sketch holds and the ones kept before it. A second Vertical on a line that has one, or
+    /// Vertical on a line Vertical by other constraints, constrains nothing, and laid beside the first it turned both
+    /// redundant (yellow). Equal radii pass untouched: the caller makes a radius a reference for them first.
+    pub fn independent_of(&self, si: usize, new: Vec<Constraint>) -> Vec<Constraint> {
+        let Some(s) = self.sketches.get(si) else { return Vec::new() };
+        let radii = self.entity_radii(si);
+        let mut active: Vec<Constraint> = s.constraints.iter().filter(|x| !x.is_driven()).cloned().collect();
+        active.extend(self.entity_intrinsics(si));
+        let (mut dof_now, _) = crate::solver::dof(&s.points, &radii, &active);
+        let mut kept = Vec::new();
+        for c in new {
+            if matches!(c, Constraint::EqualRadius { .. }) {
+                kept.push(c);
+                continue;
+            }
+            active.push(c.clone());
+            let (dof_with, _) = crate::solver::dof(&s.points, &radii, &active);
+            if dof_with < dof_now {
+                dof_now = dof_with;
+                kept.push(c);
+            } else {
+                active.pop();
+            }
+        }
+        kept
+    }
+    /// LIFT THE RELATIONS A NEW ONE MADE REDUNDANT: among the constraints standing before index `had`, a relation
+    /// between lines (horizontal, vertical, parallel, perpendicular, equal, collinear) whose points all lie in `among`
+    /// and whose removal frees no degree of freedom is removed. Collinear on three vertical lines makes the Vertical of
+    /// the second and third follow from the first; kept, they stood yellow. Returns how many went.
+    pub fn drop_implied_relations(&mut self, si: usize, had: usize, among: &std::collections::HashSet<Id>) -> usize {
+        let Some(s) = self.sketches.get(si) else { return 0 };
+        if self.sketch_dof(si).1 <= 0 {
+            return 0;
+        }
+        let radii = self.entity_radii(si);
+        let intr = self.entity_intrinsics(si);
+        let relation = |c: &Constraint| {
+            matches!(
+                c,
+                Constraint::Horizontal { .. } | Constraint::Vertical { .. } | Constraint::Parallel { .. } | Constraint::Perpendicular { .. } | Constraint::Equal { .. } | Constraint::Collinear { .. }
+            )
+        };
+        let mut cs = s.constraints.clone();
+        let active = |cs: &[Constraint], skip: Option<usize>| -> Vec<Constraint> {
+            cs.iter().enumerate().filter(|(i, c)| Some(*i) != skip && !c.is_driven()).map(|(_, c)| c.clone()).chain(intr.iter().cloned()).collect()
+        };
+        let mut gone = 0;
+        for ci in (0..had.min(cs.len())).rev() {
+            if !relation(&cs[ci]) || !constraint_point_ids(&cs[ci]).iter().all(|p| among.contains(p)) {
+                continue;
+            }
+            let (dof_all, _) = crate::solver::dof(&s.points, &radii, &active(&cs, None));
+            let (dof_without, _) = crate::solver::dof(&s.points, &radii, &active(&cs, Some(ci)));
+            if dof_without == dof_all {
+                cs.remove(ci);
+                gone += 1;
+            }
+        }
+        self.sketches[si].constraints = cs;
+        gone
+    }
     /// If dimension `ci` is redundant, turn it into a reference (driven) dimension. Returns whether it did.
     pub fn auto_driven(&mut self, si: usize, ci: usize) -> bool {
         if !self.dim_redundant(si, ci) {

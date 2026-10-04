@@ -48,7 +48,10 @@ fn run_all(all: Vec<Tie>) {
             let after = s.document().sketches[0].clone();
             // what agrees with what is there already may stay as a reference, when the sketch says so in words
             assert!(after.redundant == 0 || qymcad_acceptance::says_redundant(&mut s), "the sketch is left over-defined ({} redundant) without a word; the status line says {said:?}", after.redundant);
-            let added = said == s.word("sk-constraint-added");
+            // added, or added with the relations it made redundant lifted - the count is the one part that differs
+            let implied = s.word("sk-constraint-added-implied");
+            let lifted = implied.split(':').next().unwrap_or(&implied).to_string();
+            let added = said == s.word("sk-constraint-added") || said.starts_with(&lifted);
             match c.want {
                 Want::Added(holds) => {
                     assert!(added, "the constraint was not added: the status line says {said:?}");

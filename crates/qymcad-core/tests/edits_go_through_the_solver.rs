@@ -268,3 +268,36 @@ fn collinear_keeps_both_lines_whole() {
     assert!(len(a, b) > 1.0 && len(c, d) > 1.0, "a line shrank: the first {:.4} long, the second {:.4}", len(a, b), len(c, d));
     assert!(off(c) < 1e-6 && off(d) < 1e-6, "the second line is off the first: {:.2e}, {:.2e}", off(c), off(d));
 }
+
+/// A RELATION ALREADY HELD IS NOT LAID AGAIN, AND ONE A NEW RELATION IMPLIES IS LIFTED: `independent_of` drops a second
+/// Vertical on a line that has one; `drop_implied_relations` lifts the Vertical of a line that Collinear with a vertical
+/// line makes redundant, and leaves the sketch with nothing redundant.
+#[test]
+fn a_held_relation_is_not_laid_again_and_an_implied_one_is_lifted() {
+    let (mut p, si) = new_sketch();
+    let ends = |p: &Project, e: u64| match p.sketches[si].entities.iter().find(|x| x.id == e).map(|x| &x.kind) {
+        Some(EntityKind::Line { a, b }) => (*a, *b),
+        _ => panic!("a line"),
+    };
+    let l1 = p.add_line_entity(si, 0.0, 0.0, 0.0, 12.0, qymcad_core::feature::Purpose::Real);
+    let l2 = p.add_line_entity(si, 20.0, 0.0, 20.0, 12.0, qymcad_core::feature::Purpose::Real);
+    let ((a, b), (c, d)) = (ends(&p, l1), ends(&p, l2));
+    p.sketches[si].constraints.push(Constraint::Vertical { a, b });
+    p.sketches[si].constraints.push(Constraint::Vertical { a: c, b: d });
+    p.solve_sketch(si);
+
+    let again = p.independent_of(si, vec![Constraint::Vertical { a, b }, Constraint::Vertical { a: c, b: d }]);
+    assert!(again.is_empty(), "a second Vertical on a vertical line was kept: {again:?}");
+
+    let had = p.sketches[si].constraints.len();
+    let new = p.independent_of(si, vec![Constraint::Collinear { a, b, c, d }]);
+    assert_eq!(new.len(), 1, "Collinear constrains the second line onto the first and must be kept");
+    p.sketches[si].constraints.extend(new);
+    p.solve_sketch(si);
+    let among: std::collections::HashSet<u64> = [a, b, c, d].into_iter().collect();
+    let lifted = p.drop_implied_relations(si, had, &among);
+    let vertical = p.sketches[si].constraints.iter().filter(|k| matches!(k, Constraint::Vertical { .. })).count();
+    assert_eq!(lifted, 1, "one Vertical follows from the other and Collinear");
+    assert_eq!(vertical, 1, "one Vertical is left");
+    assert!(p.sketch_redundant_constraints(si).is_empty(), "something is still redundant: {:?}", p.sketch_redundant_constraints(si));
+}

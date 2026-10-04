@@ -204,6 +204,52 @@ mod tests {
         assert!(problems.is_empty(), "{}", problems.join("\n"));
     }
 
+    /// A CONSTRAINT ALREADY HELD IS NOT LAID TWICE, AND ONE A NEW RELATION IMPLIES GOES: Vertical on three lines one of
+    /// which is Vertical already adds two, not a second on that one; Vertical again on all three adds nothing and says
+    /// so; Collinear on the three vertical lines takes away the Vertical it makes redundant - no constraint is left
+    /// redundant at any step.
+    ///
+    /// Reported behaviour (found checking issue #34): a line made Vertical while it was drawn got a second Vertical with
+    /// the rest, and the sketch turned yellow; Collinear on vertical lines did the same.
+    #[test]
+    fn a_constraint_already_held_is_not_laid_twice() {
+        use qymcad_core::model::{Constraint, EntityKind};
+        let (mut app, si) = a_sketch();
+        for (x, lean) in [(0.0, 5.0), (20.0, 9.0), (40.0, 3.0)] {
+            Hand::new(&mut app).sk_tool(1).click2d(x, 0.0).double_click2d(x + lean, 12.0);
+            Hand::new(&mut app).key(egui::Key::Escape);
+        }
+        let lines: Vec<(u8, u64)> = app.project.sketches[si].entities.iter().filter(|e| matches!(e.kind, EntityKind::Line { .. })).map(|e| (1u8, e.id)).collect();
+        let count = |app: &App, vertical: bool| {
+            app.project.sketches[si].constraints.iter().filter(|c| if vertical { matches!(c, Constraint::Vertical { .. }) } else { matches!(c, Constraint::Collinear { .. }) }).count()
+        };
+        let mut problems = Vec::new();
+        assert!(Hand::new(&mut app).select2d(&lines[..1]), "setup: the first line is picked");
+        Hand::new(&mut app).constraint(2);
+        assert_eq!(count(&app, true), 1, "setup: the first line is Vertical");
+
+        assert!(Hand::new(&mut app).select2d(&lines), "setup: the three lines are picked");
+        Hand::new(&mut app).constraint(2);
+        let redundant = app.project.sketch_redundant_constraints(si);
+        if count(&app, true) != 3 || !redundant.is_empty() {
+            problems.push(format!("Vertical on three lines, one Vertical already: {} Vertical, redundant {redundant:?}; status {:?}", count(&app, true), app.status));
+        }
+
+        assert!(Hand::new(&mut app).select2d(&lines), "setup: the three lines are picked again");
+        Hand::new(&mut app).constraint(2);
+        if count(&app, true) != 3 || app.status != crate::i18n::tr("sk-constraint-already") {
+            problems.push(format!("Vertical again on three vertical lines: {} Vertical; status {:?}", count(&app, true), app.status));
+        }
+
+        assert!(Hand::new(&mut app).select2d(&lines), "setup: the three lines are picked for Collinear");
+        Hand::new(&mut app).constraint(7);
+        let redundant = app.project.sketch_redundant_constraints(si);
+        if count(&app, false) != 2 || count(&app, true) != 1 || !redundant.is_empty() {
+            problems.push(format!("Collinear on three vertical lines: {} Collinear, {} Vertical, redundant {redundant:?}; status {:?}", count(&app, false), count(&app, true), app.status));
+        }
+        assert!(problems.is_empty(), "{}", problems.join("\n"));
+    }
+
     /// Esc ENDS A SPLINE, AS ITS HINT SAYS, keeping the nodes that were clicked.
     #[test]
     fn escape_ends_a_spline_as_its_hint_says() {

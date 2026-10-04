@@ -1204,6 +1204,16 @@ pub fn try_constraint_inner(
     if new.is_empty() {
         return false;
     }
+    // WHAT IS HELD ALREADY IS NOT LAID AGAIN: a second Vertical on a line that has one turned both redundant (found
+    // checking issue #34). With nothing left to add, the sketch says so instead of "The constraint is added".
+    let new = project.independent_of(si, new);
+    if new.is_empty() {
+        sel_sk.clear();
+        *status = qymcad_i18n::tr("sk-constraint-already");
+        return true;
+    }
+    // the points of what was selected: the relations among them that the new ones make redundant are lifted below
+    let among: std::collections::HashSet<Id> = pts.iter().copied().chain(lines.iter().flat_map(|&(a, b)| [a, b])).collect();
     let (had, old_pts): (usize, Vec<(f64, f64)>) = (project.sketches[si].constraints.len(), project.sketches[si].points.iter().map(|p| (p.x, p.y)).collect());
     // EQUAL ON TWO CIRCLES THAT EACH CARRY THEIR RADIUS: the second one's radius becomes a reference and follows the
     // first - one radius, not a contradiction. Reported behaviour: the circle tool gives each circle its dimension, and
@@ -1251,7 +1261,14 @@ pub fn try_constraint_inner(
         *status = if shrunk { qymcad_i18n::tr("sk-constraint-shrinks") } else { qymcad_i18n::tr1("sk-constraint-conflict", "r", &qymcad_i18n::num(resid, 2)) };
         return true;
     }
-    *status = if resid < 1e-3 { qymcad_i18n::tr("sk-constraint-added") } else { qymcad_i18n::tr1("sk-constraint-added-resid", "r", &qymcad_i18n::num(resid, 2)) };
+    let lifted = project.drop_implied_relations(si, had, &among);
+    *status = if resid >= 1e-3 {
+        qymcad_i18n::tr1("sk-constraint-added-resid", "r", &qymcad_i18n::num(resid, 2))
+    } else if lifted > 0 {
+        qymcad_i18n::tr1("sk-constraint-added-implied", "n", &lifted.to_string())
+    } else {
+        qymcad_i18n::tr("sk-constraint-added")
+    };
     true
 }
 
