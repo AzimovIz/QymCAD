@@ -57,6 +57,9 @@ By making a contribution to this project, I certify that:
 
 ## Before sending a change
 
+- **History stays a line.** `main` takes a pull request by fast-forward only, so a merge commit is dropped
+  when it is taken. Bring your branch up to date with `git rebase origin/main`, not with a merge of `main`.
+
 - **The run must be green.** `cargo test --workspace`; read cargo's exit code rather than the tail of
   the output.
 - **Code comes with its checks.** What the existing checks do not cover, the pull request covers itself:

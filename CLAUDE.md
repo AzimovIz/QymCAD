@@ -160,14 +160,10 @@ The right panel adds to a created feature; it is not the way to set up a tool.
 
 ## Working
 
-* One branch per task. Inside a branch: a commit per meaningful piece; a branch may be rewritten until it is
-  merged. `main` only grows: merges fast-forward only, zero merge commits; a mistake on `main` is fixed by a
-  new commit, never by rewriting.
+* `main` only grows: merges fast-forward only, zero merge commits; a mistake on `main` is fixed by a new commit,
+  never by rewriting. A branch is rebased onto `main`, not merged with it.
 * A commit message, in English: a conventional subject (`fix(scope): …`), then the body — what it was, why,
   what proves the fix. Dry, facts only, no pronouns, the same style as comments.
-* A trial edit is taken back by reversing the same edit, not `git checkout -- <file>`: that also wipes
-  uncommitted work of your own.
-* Run the GUI only as `HOME=<sandbox> cargo run -p qymcad` — never on a real user's data.
 * Dependency versions are not raised silently. The dependency guard only SHOWS the gap; raising is a separate,
   deliberate decision.
 * Formatting: rustfmt with `rustfmt.toml`; the gate and CI refuse a tree `cargo fmt --check` would change. The
