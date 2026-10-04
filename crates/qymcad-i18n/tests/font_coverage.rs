@@ -80,6 +80,16 @@ fn the_catalogue_holds_words_not_symbols() {
     );
 }
 
+/// THE MAC'S KEY SYMBOLS - Control, Option, Shift, Command - in the one file that writes them.
+///
+/// `key_label_in` in `keys.rs` draws them only under `KeyStyle::MacSymbols`. That style is chosen where the fonts
+/// are installed, and only once the system face holding all four (Apple Symbols) is loaded right after the main
+/// face; without the file the same keys are written in words (`Shift+Cmd+W`). So the font that answers for them
+/// is the one that was meant. Anywhere else they are a raw symbol like any other.
+fn a_mac_key_symbol(file: &std::path::Path, c: char) -> bool {
+    file.ends_with("qymcad-i18n/src/keys.rs") && matches!(c, '\u{2303}' | '\u{2325}' | '\u{21E7}' | '\u{2318}')
+}
+
 /// AND IN THE CODE TOO. The catalogue is not the only place a string reaches the screen from.
 ///
 /// Captions assembled in the code (`format!`, literals in buttons) go past the catalogue, and a ban
@@ -122,7 +132,7 @@ fn the_ui_code_holds_words_not_symbols() {
                 while let Some(a) = rest.find('"') {
                     let after = &rest[a + 1..];
                     let Some(b) = after.find('"') else { break };
-                    for ch in after[..b].chars().filter(|c| banned(*c)) {
+                    for ch in after[..b].chars().filter(|c| banned(*c) && !a_mac_key_symbol(&p, *c)) {
                         bad.push(format!("{n}:{}: \"{ch}\" (U+{:04X})", i + 1, ch as u32));
                     }
                     rest = &after[b + 1..];
