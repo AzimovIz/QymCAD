@@ -1166,7 +1166,7 @@ impl Project {
             }
         }
         if cuts.is_empty() {
-            return false;
+            return self.trim_away_whole(si, eid);
         }
         cuts.push(0.0);
         cuts.push(1.0);
@@ -1507,6 +1507,15 @@ impl Project {
         }
         out
     }
+    /// TRIM THAT LEAVES NOTHING: the click lay on an entity with no crossing inside it - a piece bounded by its own
+    /// ends, or one crossing nothing at all. The whole of it is the piece under the click, so it goes, with what it
+    /// orphans. Reported behaviour (issue #31): such a piece answered "The operation did not apply" and had to be
+    /// deleted by hand, and every piece an earlier trim leaves is one.
+    fn trim_away_whole(&mut self, si: usize, eid: Id) -> bool {
+        self.delete_entities(si, &[eid]);
+        self.solve_sketch(si);
+        true
+    }
     /// Trim a circle or an arc: it is cut at the intersections, the angular span under the click is removed and
     /// the remaining spans become arcs. Lines are handled by `trim_line`. Returns whether it succeeded.
     pub fn trim_curve(&mut self, si: usize, eid: Id, clickx: f64, clicky: f64) -> bool {
@@ -1517,7 +1526,7 @@ impl Project {
         let Some(Round { center_id, cx, cy, r, span }) = round_entity(s, e) else { return false };
         let cuts = self.curve_cut_angles(si, eid, cx, cy, r);
         if cuts.is_empty() {
-            return false;
+            return self.trim_away_whole(si, eid);
         }
         let click_ang = (clicky - cy).atan2(clickx - cx);
         // One click removes only the span under the cursor, between the two nearest cut points, and the rest
@@ -1534,7 +1543,8 @@ impl Project {
                 a.sort_by(|x, y| x.total_cmp(y));
                 a.dedup_by(|x, y| (*x - *y).abs() < 1e-6);
                 if a.len() < 2 {
-                    return false;
+                    // touched at one point at most: there is no span to cut out, so the circle goes
+                    return self.trim_away_whole(si, eid);
                 }
                 let ca = click_ang.rem_euclid(TAU);
                 let n = a.len();
@@ -1558,6 +1568,10 @@ impl Project {
                 ps.dedup_by(|x, y| (*x - *y).abs() < 1e-6);
                 let cp = to_param(click_ang);
                 let ang = |param: f64| if ccw { a0 + param } else { a0 - param };
+                // an arc crossed at its ends only is one window from end to end: nothing of it is left
+                if ps.len() == 2 && cp > 1e-9 && cp < sweep - 1e-9 {
+                    return self.trim_away_whole(si, eid);
+                }
                 for w in ps.windows(2) {
                     if cp > w[0] + 1e-9 && cp < w[1] - 1e-9 {
                         // Remove the window [w0, w1] under the click and keep the pieces before and after it,

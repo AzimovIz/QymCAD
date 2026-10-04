@@ -921,3 +921,141 @@ fn region_inner_contour_is_hole() {
     assert_eq!(p.feature_holes(sid, outer), vec![inner], "the inner contour is a hole of the outer one");
     assert!(p.feature_holes(sid, inner).is_empty(), "the inner contour has no holes of its own");
 }
+
+/// What lies under a point of the sketch: the distance to the nearest line, circle or arc, what it is, and its id.
+fn nearest_geometry(p: &Project, si: usize, x: f64, y: f64) -> (f64, String, u64) {
+    use qymcad_core::model::EntityKind;
+    let sk = &p.sketches[si];
+    let at = |id: u64| sk.points.iter().find(|q| q.id == id).map(|q| (q.x, q.y)).expect("a point of the sketch");
+    let mut best = (f64::MAX, String::from("nothing"), 0);
+    for e in &sk.entities {
+        let (d, what) = match e.kind {
+            EntityKind::Line { a, b } => {
+                let (a, b) = (at(a), at(b));
+                let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+                let t = (((x - a.0) * dx + (y - a.1) * dy) / (dx * dx + dy * dy)).clamp(0.0, 1.0);
+                ((a.0 + dx * t - x).hypot(a.1 + dy * t - y), format!("the line {a:?}-{b:?}"))
+            }
+            EntityKind::Circle { center, r } => {
+                let c = at(center);
+                (((c.0 - x).hypot(c.1 - y) - r).abs(), format!("the circle at {c:?}"))
+            }
+            EntityKind::Arc { center, a, b, ccw } => {
+                let (c, pa, pb) = (at(center), at(a), at(b));
+                let r = (pa.0 - c.0).hypot(pa.1 - c.1);
+                let (a0, a1, ang) = ((pa.1 - c.1).atan2(pa.0 - c.0), (pb.1 - c.1).atan2(pb.0 - c.0), (y - c.1).atan2(x - c.0));
+                let sweep = |from: f64, to: f64| (to - from).rem_euclid(std::f64::consts::TAU);
+                let inside = if ccw { sweep(a0, ang) <= sweep(a0, a1) } else { sweep(ang, a0) <= sweep(a1, a0) };
+                let d = if inside { ((c.0 - x).hypot(c.1 - y) - r).abs() } else { (pa.0 - x).hypot(pa.1 - y).min((pb.0 - x).hypot(pb.1 - y)) };
+                (d, format!("the arc about {c:?} from {pa:?} to {pb:?}"))
+            }
+            _ => continue,
+        };
+        if d < best.0 {
+            best = (d, what, e.id);
+        }
+    }
+    best
+}
+
+/// A sketch to trim, by its name, and the clicks of Trim on it, made one after another.
+struct TrimCase {
+    name: &'static str,
+    draw: fn(&mut Project, usize),
+    clicks: Vec<(f64, f64)>,
+}
+
+fn trim_case(name: &'static str, draw: fn(&mut Project, usize), clicks: Vec<(f64, f64)>) -> TrimCase {
+    TrimCase { name, draw, clicks }
+}
+
+/// EVERY CLICK OF TRIM REMOVES WHAT IS UNDER IT, on the sketches people trim: a line across a rectangle, a cross of
+/// two lines, a grid - clicked one after another, so that the later clicks land on pieces the earlier ones left. A
+/// piece whose crossings all lie at its ends goes whole, and so does a line, a circle or an arc crossing nothing.
+///
+/// Reported behaviour (issue #31): the first click on a long line worked; the next click on what was left of it
+/// said "The operation did not apply" and the piece had to be deleted by hand, since a crossing at an end was not
+/// counted as one.
+#[test]
+fn every_trim_click_removes_what_is_under_it() {
+    use qymcad_core::feature::Purpose::Real;
+    let cases: Vec<TrimCase> = vec![
+        trim_case(
+            "a line across a rectangle",
+            |p, si| {
+                p.add_rect_entity(si, 0.0, 0.0, 40.0, 30.0, Real);
+                p.add_line_entity(si, -10.0, 15.0, 50.0, 15.0, Real);
+            },
+            vec![(-5.0, 15.0), (45.0, 15.0), (20.0, 15.0), (0.0, 5.0)],
+        ),
+        trim_case(
+            "a cross of two lines",
+            |p, si| {
+                p.add_line_entity(si, -20.0, -20.0, 20.0, 20.0, Real);
+                p.add_line_entity(si, -20.0, 20.0, 20.0, -20.0, Real);
+            },
+            vec![(10.0, 10.0), (-10.0, 10.0), (10.0, -10.0), (-10.0, -10.0)],
+        ),
+        trim_case(
+            "a grid of three by three",
+            |p, si| {
+                for k in [0.0, 10.0, 20.0] {
+                    p.add_line_entity(si, -5.0, k, 25.0, k, Real);
+                    p.add_line_entity(si, k, -5.0, k, 25.0, Real);
+                }
+            },
+            vec![(5.0, 10.0), (15.0, 10.0), (10.0, 5.0), (10.0, 22.5), (-2.0, 20.0)],
+        ),
+        trim_case(
+            "a line crossing nothing",
+            |p, si| {
+                p.add_line_entity(si, 0.0, 0.0, 30.0, 0.0, Real);
+            },
+            vec![(15.0, 0.0)],
+        ),
+        trim_case(
+            "a circle crossing nothing",
+            |p, si| {
+                p.add_circle_entity(si, 0.0, 0.0, 10.0, Real);
+            },
+            vec![(10.0, 0.0)],
+        ),
+        trim_case(
+            "an arc whose crossings are its ends",
+            |p, si| {
+                p.add_arc_entity(si, Point2::new(0.0, 0.0), Point2::new(10.0, 0.0), Point2::new(0.0, 10.0), qymcad_core::feature::Winding::Ccw, Real);
+                p.add_line_entity(si, 10.0, -5.0, 10.0, 5.0, Real);
+                p.add_line_entity(si, -5.0, 10.0, 5.0, 10.0, Real);
+            },
+            vec![(10.0 * std::f64::consts::FRAC_1_SQRT_2, 10.0 * std::f64::consts::FRAC_1_SQRT_2)],
+        ),
+        trim_case(
+            "a circle touched at one point",
+            |p, si| {
+                p.add_circle_entity(si, 0.0, 0.0, 10.0, Real);
+                p.add_line_entity(si, 10.0, -5.0, 10.0, 5.0, Real);
+            },
+            vec![(-10.0, 0.0)],
+        ),
+    ];
+    let mut sins = Vec::new();
+    for TrimCase { name, draw, clicks } in cases {
+        let mut p = Project::default();
+        let si = p.new_sketch("t");
+        draw(&mut p, si);
+        for (x, y) in clicks {
+            let (d, what, eid) = nearest_geometry(&p, si, x, y);
+            if d > 1e-6 {
+                sins.push(format!("{name}: setup - nothing under ({x}, {y}) to click, the nearest is {what} {d:.4} away"));
+                break;
+            }
+            let is_line = matches!(p.sketches[si].entities.iter().find(|e| e.id == eid).map(|e| &e.kind), Some(qymcad_core::model::EntityKind::Line { .. }));
+            let ok = if is_line { p.trim_line(si, eid, x, y) } else { p.trim_curve(si, eid, x, y) };
+            let (d, what, _) = nearest_geometry(&p, si, x, y);
+            if !ok || d < 1e-3 {
+                sins.push(format!("{name}: a click at ({x}, {y}) answered {ok} and left {what} {d:.4} from it"));
+            }
+        }
+    }
+    assert!(sins.is_empty(), "a click of Trim left what it was on:\n{}", sins.join("\n"));
+}
