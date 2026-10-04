@@ -1231,7 +1231,8 @@ pub static CORNER: Tool = Tool {
 };
 
 /// The right-angled corner cut with a chamfer of `d`: a line from (d, 0) to (0, d) in place of the corner. What stays:
-/// the two far ends and the two ends of the cut; the box of the whole is untouched.
+/// the two far ends, the two ends of the cut, and the sharp corner itself, unseen, which the dimensions of the chamfer
+/// are measured from; the box of the whole is untouched.
 fn corner_cut(d: f64) -> Outcome {
     // as for the rounding: the line halfway along what is left of it, the corner only for a leg the screen tells apart
     let mut at = if 30.0 - d >= 2.0 { vec![((d + 30.0) / 2.0, 0.0, Under::Line)] } else { Vec::new() }; // a stub of the line under 2 lies within a click of its ends
@@ -1240,7 +1241,7 @@ fn corner_cut(d: f64) -> Outcome {
     }
     let under: &'static [(f64, f64, Under)] = Box::leak(at.into_boxed_slice());
     Outcome::Sketch {
-        points: 4,
+        points: 5,
         lines: 3,
         arcs: 0,
         circles: 0,
@@ -1256,7 +1257,26 @@ fn corner_cut(d: f64) -> Outcome {
     }
 }
 
-/// CORNER_CHAMFER: the same corner cut with a chamfer of 3, the size typed in the field at the corner.
+/// The corner cut with a chamfer of 3 - what every mode makes of the field typed 3 on a square corner, its second value
+/// left as the mode sets it: the second leg as the first, the angle 45 deg.
+const CORNER_CUT_3: Outcome = Outcome::Sketch {
+    points: 5,
+    lines: 3,
+    arcs: 0,
+    circles: 0,
+    ellipses: 0,
+    splines: 0,
+    texts: 0,
+    notes: 0,
+    constraints: None,
+    dof: None,
+    box_of: Some(([0.0, 0.0], [30.0, 30.0])),
+    size_of: None,
+    under: &[(0.75, 0.0, Under::Nothing), (20.0, 0.0, Under::Line), (1.5, 1.5, Under::Line)],
+};
+
+/// CORNER_CHAMFER: the same corner cut with a chamfer of 3, the size typed in the field at the corner; equal legs, two
+/// legs, or a leg and an angle.
 pub static CORNER_CHAMFER: Tool = Tool {
     id: "sketch.corner-chamfer",
     flow: Flow::Drawing(&[(0.0, 0.0)], Finish::LastClick),
@@ -1269,10 +1289,11 @@ pub static CORNER_CHAMFER: Tool = Tool {
     pick_trial: &[],
     wrong_picks: &[],
     words: &[],
-    // a cut longer than the lines it cuts (d > 30) cannot be drawn
+    // a cut longer than the lines it cuts (d > 30) cannot be drawn. The field is found by its caption on the bar: with
+    // two legs or a leg and an angle the bar holds a second field of the same grey words
     fields: &[Field {
-        caption: "g-expr-placeholder",
-        by_placeholder: true,
+        caption: "opt-chamfer-size",
+        by_placeholder: false,
         when: When::After,
         class: Class::Length,
         typical: 3.0,
@@ -1282,22 +1303,12 @@ pub static CORNER_CHAMFER: Tool = Tool {
         negative: false,
         outcome: corner_cut,
     }],
-    modes: &[],
-    result: Outcome::Sketch {
-        points: 4,
-        lines: 3,
-        arcs: 0,
-        circles: 0,
-        ellipses: 0,
-        splines: 0,
-        texts: 0,
-        notes: 0,
-        constraints: None,
-        dof: None,
-        box_of: Some(([0.0, 0.0], [30.0, 30.0])),
-        size_of: None,
-        under: &[(0.75, 0.0, Under::Nothing), (20.0, 0.0, Under::Line), (1.5, 1.5, Under::Line)],
-    },
+    modes: &[&[
+        Mode { word: "cmd-symmetric", clicks: None, outcome: Some(CORNER_CUT_3) },
+        Mode { word: "cmd-two-distances", clicks: None, outcome: Some(CORNER_CUT_3) },
+        Mode { word: "cmd-leg-angle", clicks: None, outcome: Some(CORNER_CUT_3) },
+    ]],
+    result: CORNER_CUT_3,
     node: "Sketch",
     undo: "tool-chamfer",
     undo_steps: 1,
@@ -1309,7 +1320,6 @@ pub static CORNER_CHAMFER: Tool = Tool {
     budget: (10, 2000),
     help: "sketch/16-corner",
     not_applicable: &[
-        (2, "the chamfer has no mode: a click on a corner is the whole of it (the fillet is a button of its own)"),
         (3, "the corner is taken by the click that cuts it, not by a pick before it"),
         (4, "a click away from a corner is answered by the tool itself, in words: see the drawing tools"),
         (7, "the corner is cut by one click: there is nothing drawn between clicks to follow the pointer"),

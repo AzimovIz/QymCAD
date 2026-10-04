@@ -13202,7 +13202,7 @@ pub fn num_or_expr(p: &mut ExprBarCtx, ui: &mut egui::Ui, key: &'static str, cur
     //
     // A tool bar does not change the document — it shows a preview — so the text lives in `bar_exprs`
     // and is read every frame; the rule that editing text is not editing the model holds by itself here.
-    let o = expr_field(ui, p.project, egui::Id::new(("bar_expr", key)), &txt, w, &qymcad_i18n::tr("g-expr-placeholder"));
+    let o = expr_field(ui, p.project, bar_field_id(key), &txt, w, &qymcad_i18n::tr("g-expr-placeholder"));
     // ENTER IN A FIELD OF THE BAR IS THE ENTER THE BAR ASKS FOR: it leaves the field and is marked, so the tool
     // applies at the same press instead of waiting for a second one (see `bar_enter_take`)
     if o.committed && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
@@ -13250,6 +13250,11 @@ pub fn num_or_expr(p: &mut ExprBarCtx, ui: &mut egui::Ui, key: &'static str, cur
             cur
         }
     }
+}
+
+/// The widget of the bar field under `key`: whoever shares its value asks it whether it is being typed in.
+pub fn bar_field_id(key: &'static str) -> egui::Id {
+    egui::Id::new(("bar_expr", key))
 }
 
 /// Where the fields of the tool bars keep which of them hold a value that cannot be taken, and in which frame.

@@ -1503,6 +1503,31 @@ mod tests {
                     }
                     check_all(&mut app, &format!("sketch: {name}"), &mut problems);
                 }
+
+                // A CHAMFER BY A LEG AND AN ANGLE on a corner of its own, clear of the drawing and after
+                // the moves, which take the last line drawn: the mode pressed on the bar,
+                // the corner clicked a hair off the horizontal line, 5 typed, Tab, 30 typed, Enter. The cut ends 5 along
+                // that line from the sharp corner, which stays as the point its dimensions stand on.
+                {
+                    let mut hand = Hand::new(&mut app);
+                    hand.sk_tool(1).look2d((125.0, -25.0)).click2d(140.0, -40.0).click2d(110.0, -40.0).double_click2d(110.0, -10.0);
+                    hand.sk_tool(0).look2d((125.0, -25.0));
+                    let pressed = hand.press_hint(&qymcad_i18n::tr("tb-chamfer-sketch-hint")) && hand.press_word(&qymcad_i18n::tr("cmd-leg-angle"), egui::pos2(400.0, 0.0));
+                    hand.click2d(110.4, -39.9).type_text("5").key(egui::Key::Tab).type_text("30").key(egui::Key::Enter);
+                    let sk = &app.project.sketches[si];
+                    let corner = sk
+                        .points
+                        .iter()
+                        .filter(|q| (q.x - 110.0).hypot(q.y + 40.0) < 1.0)
+                        .min_by(|a, b| (a.x - 110.0).hypot(a.y + 40.0).total_cmp(&(b.x - 110.0).hypot(b.y + 40.0)))
+                        .map(|q| (q.x, q.y));
+                    let cut_at_5 = corner.is_some_and(|c| sk.points.iter().any(|q| ((q.x - c.0).hypot(q.y - c.1) - 5.0).abs() < 1e-6 && (q.y - c.1).abs() < 1.0));
+                    if !pressed || !cut_at_5 {
+                        problems.push(format!("sketch: a chamfer by a leg of 5 at 30 deg did not cut 5 from the corner (mode pressed: {pressed}); status: {}", app.status));
+                    }
+                }
+                qymcad_ui_state::set_click_op(&mut qymcad_ui_state::tools_of!(app), &mut app.viewing.mode_3d, 0);
+                check_all(&mut app, "sketch: a chamfer by a leg and an angle", &mut problems);
             }
 
             // DIMENSIONS: linear, angular, radial. A dimension is not a caption but A CONSTRAINT: it must take

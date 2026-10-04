@@ -552,10 +552,11 @@ pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Conte
             match qymcad_core::expr::eval(text.trim(), &project.param_map()) {
                 Err(e) => Some(qymcad_i18n::error_words::expr_error_text(&e)),
                 Ok(v) if !v.is_finite() || v <= 1e-6 => Some(qymcad_i18n::tr("cmd-value-zero")),
-                Ok(v) if angle && v >= 180.0 => Some(qymcad_i18n::tr("sk-fillet-too-big")),
+                Ok(v) if angle && v.to_radians() >= std::f64::consts::PI => Some(qymcad_i18n::tr("sk-fillet-too-big")),
                 Ok(_) => None,
             }
         };
+        let bar_typed = |key: &'static str| ctx.memory(|m| m.has_focus(qymcad_ui_state::bar_field_id(key)));
         egui::Area::new(egui::Id::new(("cornerinput", si, pid))).fixed_pos(qymcad_ui_state::clamp_popup(at, rect) + egui::vec2(10.0, -10.0)).order(egui::Order::Foreground).show(ctx, |ui| {
             egui::Frame::popup(ui.style()).show(ui, |ui| {
                 ui.horizontal(|ui| {
@@ -571,14 +572,16 @@ pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Conte
                         ui.label(egui::RichText::new(ph::WARNING).color(ui.visuals().warn_fg_color)).on_hover_text(why);
                     }
                     // ONE VALUE IN TWO PLACES: the radius on the bar and the one at the corner. Typed at the corner it is
-                    // the bar's too; while the corner field is not the one being typed in, it shows the bar's. Two fields
+                    // the bar's too; typed on the bar, the corner field shows it. Only while the bar is typed in: the bar
+                    // keeps its own text, and taken at any other time it gave its old value back the moment Tab moved
+                    // from the leg to the second field - a chamfer of 5 x 3 typed at the corner was made 3 x 3. Two fields
                     // apart, a radius typed on the bar was not the one Enter applied at the corner - the corner kept the
                     // radius of the time before.
                     if r0.has_focus() {
                         if let Some(v) = parse_num(cc.project, &buf).filter(|v| *v > 1e-6) {
                             cc.tool_prefs.fillet = v;
                         }
-                    } else if !enter && !r0.lost_focus() && cc.corner.why.is_none() && parse_num(cc.project, &buf).is_none_or(|v| (v - cc.tool_prefs.fillet).abs() > 1e-12) {
+                    } else if bar_typed("sk_fillet") && !enter && !r0.lost_focus() && cc.corner.why.is_none() && parse_num(cc.project, &buf).is_none_or(|v| (v - cc.tool_prefs.fillet).abs() > 1e-12) {
                         // the bar's value is taken only by a field at rest: in the frame of Enter it would put the old radius
                         // over the text being applied, and after a refusal over the text refused
                         buf = qymcad_core::expr::fmt_num(cc.tool_prefs.fillet);
@@ -591,17 +594,10 @@ pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Conte
                     if qymcad_ui_state::bar_enter_take(ui.ctx()) {
                         apply = true;
                     }
-                    if ui.button(ph::CHECK).clicked() {
-                        apply = true;
-                    }
-                    if ui.button(ph::X).clicked() {
-                        cancel = true;
-                    }
-                });
-                // THE SECOND VALUE OF A CHAMFER of two legs or of a leg and an angle, beside the first (issue #35); it is the
-                // bar's too, as the first leg is. Tab goes from one field to the other, Enter in either applies.
-                if chamfer && cc.tool_prefs.chamfer_mode != qymcad_core::feature::ChamferMode::Symmetric {
-                    ui.horizontal(|ui| {
+                    // THE SECOND VALUE OF A CHAMFER of two legs or of a leg and an angle, beside the first and before the
+                    // buttons, so Tab goes from the one field to the other (issue #35); it is the bar's too, as the first
+                    // leg is. Enter in either applies.
+                    if chamfer && cc.tool_prefs.chamfer_mode != qymcad_core::feature::ChamferMode::Symmetric {
                         ui.label(qymcad_i18n::tr(qymcad_ui_state::chamfer_d2_label(cc.tool_prefs.chamfer_mode)));
                         let r2 = qymcad_ui_state::focus_edit(ui, &mut cc.corner.buf2, 64.0, "", false);
                         if let Some(why) = judge2(&*cc.project, &cc.corner.buf2) {
@@ -611,14 +607,20 @@ pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Conte
                             if let Some(v) = parse_num(cc.project, &cc.corner.buf2).filter(|v| *v > 1e-6) {
                                 cc.tool_prefs.chamfer_second = v;
                             }
-                        } else if !enter && !r2.lost_focus() && parse_num(cc.project, &cc.corner.buf2).is_none_or(|v| (v - cc.tool_prefs.chamfer_second).abs() > 1e-12) {
+                        } else if bar_typed("sk_chamfer2") && !enter && !r2.lost_focus() && parse_num(cc.project, &cc.corner.buf2).is_none_or(|v| (v - cc.tool_prefs.chamfer_second).abs() > 1e-12) {
                             cc.corner.buf2 = qymcad_core::expr::fmt_num(cc.tool_prefs.chamfer_second);
                         }
                         if enter && (r2.lost_focus() || r2.has_focus()) {
                             apply = true;
                         }
-                    });
-                }
+                    }
+                    if ui.button(ph::CHECK).clicked() {
+                        apply = true;
+                    }
+                    if ui.button(ph::X).clicked() {
+                        cancel = true;
+                    }
+                });
                 if let Some(why) = cc.corner.why.as_ref() {
                     ui.label(egui::RichText::new(format!("{} {why}", ph::WARNING)).color(ui.visuals().warn_fg_color));
                 }
