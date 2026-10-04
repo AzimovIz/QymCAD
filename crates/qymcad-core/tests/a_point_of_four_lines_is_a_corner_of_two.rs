@@ -136,3 +136,38 @@ fn the_field_is_bounded_by_the_tightest_of_the_corners() {
     let bound = p.corner_limit_near(si, shared, true, 19.0, 19.0).expect("the corner the cursor stands in has a bound");
     assert!(bound > 0.0 && bound <= tightest.unwrap_or(0.0), "the bound of the corner under the cursor ({bound}) does not fit among the corners there");
 }
+
+/// THE CORNER OF ONE NAMED LINE at a point where four meet: the pair is that line and one of the two neighbours of it,
+/// and the cursor says which of them by the sector it stands in.
+#[test]
+fn the_corner_of_a_named_line_is_the_sector_the_cursor_stands_in() {
+    let (p, si, shared) = two_squares_at_one_point();
+    let down = edge_towards(&p, si, shared, (20.0, 0.0));
+    let left = edge_towards(&p, si, shared, (0.0, 20.0));
+    let right = edge_towards(&p, si, shared, (40.0, 20.0));
+    let up = edge_towards(&p, si, shared, (20.0, 40.0));
+    let same = |a: Option<(u64, u64)>, b: (u64, u64)| a.is_some_and(|q| (q.0 == b.0 && q.1 == b.1) || (q.0 == b.1 && q.1 == b.0));
+    // THE NEAR SQUARE is down and to the left of the point, the far one up and to the right: the two sectors of the
+    // line running down are the corners either side of it
+    assert!(same(p.vertex_pair_through(si, shared, down, Some((19.0, 19.0))), (down, left)), "the cursor in the near square did not name the corner on that side of the line");
+    assert!(same(p.vertex_pair_through(si, shared, down, Some((21.0, 21.0))), (down, right)), "the cursor in the far square is nearer the middle of the other sector, so that is the corner it names");
+    // and with no cursor to read, the turn of the circle gives the first of them
+    assert!(same(p.vertex_pair_through(si, shared, down, None), (down, right)), "with no cursor the drawing does not begin at the corner of the line, and the two are not equal");
+    // WHATEVER THE CURSOR, EVERY CORNER IT NAMES IS ONE THE LINE TAKES PART IN
+    for line in [down, left, right, up] {
+        for at in [(19.0, 19.0), (21.0, 21.0), (25.0, 20.0), (20.0, 25.0), (15.0, 20.0), (20.0, 15.0)] {
+            let pair = p.vertex_pair_through(si, shared, line, Some(at)).unwrap_or_else(|| panic!("the cursor at {at:?} named no corner of the line {line}"));
+            assert!(pair.0 == line || pair.1 == line, "the corner named is not one of the line's: {pair:?} against the line {line}");
+            assert_eq!(p.corner_of_pair(si, pair.0, pair.1), Some(shared), "the pair named is not a corner at the point: {pair:?}");
+        }
+    }
+}
+
+/// A LINE THAT DOES NOT REACH THE POINT NAMES NO CORNER THROUGH IT, whatever the cursor says.
+#[test]
+fn a_line_that_does_not_reach_the_point_names_no_corner_through_it() {
+    let (mut p, si, shared) = two_squares_at_one_point();
+    let away = p.add_line_entity(si, 80.0, 80.0, 100.0, 80.0, Purpose::Real);
+    p.regen_sketch(si);
+    assert_eq!(p.vertex_pair_through(si, shared, away, Some((21.0, 21.0))), None, "a line that never touches the point named a corner at it");
+}

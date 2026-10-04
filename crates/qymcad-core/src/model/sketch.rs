@@ -2898,6 +2898,56 @@ self.settle_the_corner_point(si, pc, o1, t1, o2, t2);
         // the two sides bracketing the cursor are a corner unless they lie along one straight line
         self.corner_of_pair(si, pair.0, pair.1).map(|_| pair)
     }
+    /// THE CORNER OF ONE NAMED EDGE AT `pid`, on the side the point `near` stands.
+    ///
+    /// Where several edges meet at one point every pair of them is a corner, and `vertex_pair` lets the cursor say
+    /// which. Where the corner has been named by an edge AND the point together there are fewer corners to say it
+    /// about - only the ones this edge takes part in - and the cursor says which of them by the sector it stands in:
+    /// the two corners of an edge are the two sectors either side of it.
+    ///
+    /// Without a point to read (`near` is `None` - the pointer is not over the sheet, which happens while the value
+    /// is being typed) the neighbour after it stands. The drawing has to begin somewhere, and a corner is as good a
+    /// beginning as any; refusing outright would leave a field open with nothing behind it.
+    pub fn vertex_pair_through(&self, si: usize, pid: Id, eid: Id, near: Option<(f64, f64)>) -> Option<(Id, Id)> {
+        let (pcx, pcy) = self.point_xy(si, pid)?;
+        // every edge at the point with the angle of its direction away from it, in the turn of the circle
+        let mut v: Vec<(Id, f64)> = self
+            .vertex_edges(si, pid)
+            .into_iter()
+            .filter_map(|e| {
+                let (a, b) = self.edge_end_ids(si, e)?;
+                let other = if a == pid { b } else { a };
+                let (ox, oy) = self.point_xy(si, other)?;
+                let (dx, dy) = (ox - pcx, oy - pcy);
+                let l = (dx * dx + dy * dy).sqrt();
+                (l > 1e-9).then_some((e, dy.atan2(dx)))
+            })
+            .collect();
+        if v.len() < 2 {
+            return None; // one edge at the point is not a corner of anything
+        }
+        v.sort_by(|a, b| a.1.total_cmp(&b.1));
+        let at = v.iter().position(|(id, _)| *id == eid)?;
+        let len = v.len();
+        // THE TWO SECTORS THIS EDGE BOUNDS, one on either side of it in the turn of the circle, each measured as the
+        // turn from the edge named so that neither breaks where the angles run out
+        let a0 = v[at].1;
+        let up = { let x = v[(at + 1) % len].1; if x > a0 { x - a0 } else { x + std::f64::consts::TAU - a0 } };
+        let down = { let x = v[(at + len - 1) % len].1; if x < a0 { a0 - x } else { a0 + std::f64::consts::TAU - x } };
+        // THE SECTOR THE CURSOR STANDS IN, and where it stands in neither, the one it is nearer the middle of - the
+        // pointer may be in a sector that belongs to two other edges altogether. The two are equally far apart when
+        // the cursor is opposite the edge named, and the one after it in the turn of the circle stands then.
+        let forward = near.is_none_or(|(nx, ny)| {
+            let mut d = (ny - pcy).atan2(nx - pcx) - a0;
+            if d < 0.0 {
+                d += std::f64::consts::TAU;
+            }
+            (d - up / 2.0).abs() <= (d - (std::f64::consts::TAU - down / 2.0)).abs()
+        });
+        let other = if forward { v[(at + 1) % len].0 } else { v[(at + len - 1) % len].0 };
+        let pair = (eid, other);
+        self.corner_of_pair(si, pair.0, pair.1).map(|_| pair)
+    }
     /// EVERY PAIR OF EDGES THAT COULD BE THE CORNER at `pid`, for the bounds that do not name a pair.
     pub fn vertex_pairs(&self, si: usize, pid: Id) -> Vec<(Id, Id)> {
         let edges = self.vertex_edges(si, pid);

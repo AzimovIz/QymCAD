@@ -531,7 +531,7 @@ pub fn constraint_parts(dc: &qymcad_ui_state::DrawCtx, si: usize, c: &qymcad_cor
 fn corner_pair(cc: &qymcad_ui_state::CornerCtx, ctx: &egui::Context, si: usize, pid: Id, rect: Rect) -> Option<(Id, Id)> {
     let cursor = ctx.input(|i| i.pointer.hover_pos()).filter(|p| rect.contains(*p)).map(|p| qymcad_ui_state::to_world(cc.view, rect, p)).map(|w| (w.x, w.y));
     let cursor = qymcad_ui_state::corner_cursor(cc.project, si, pid, cursor, cc.corner.track_px, cc.view.scale);
-    qymcad_ui_state::corner_pair_now(cc.project, si, pid, cc.corner.pair, cursor)
+    qymcad_ui_state::corner_pair_now(cc.project, si, pid, cc.corner.pair, cc.corner.through, cc.corner.pinned, cursor)
 }
 
 /// THE ARC OF THE PREVIEW AS A LINE ON THE SCREEN, walked from `from` to `to` the short way round.
@@ -752,7 +752,11 @@ pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Conte
                     cc.project.fillet_at_vertex_by(si, pid, qymcad_core::model::FilletSize { by: cc.tool_prefs.fillet_by, value: r }) as usize
                 };
                 if ok_n > 0 {
-                    cc.sel_sk.clear(); // the selection and whatever was waiting for it
+                    // THE SECOND OF THE PAIR STAYS LIT: the window is the last two picks, so the pick after this one
+                    // pairs with it rather than starting over - three lines in a row are two corners in a row. A pick
+                    // that went with the corner (the point it stood on) is not there any more to be lit.
+                    let newest = cc.sel_sk.items.last().copied();
+                    cc.sel_sk.items = newest.filter(|(_, id)| qymcad_ui_state::pick_still_stands(&*cc.project, si, *id)).into_iter().collect();
                     qymcad_ui_state::invalidate(cc.regen);
                     let lost = standing.saturating_sub(if pid == 0 { 0 } else { cc.project.constraints_on_point(si, pid) });
                     *cc.status = if lost > 0 {
@@ -3883,23 +3887,30 @@ pub fn sketch_click_at(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context,
                     // how far the cursor reaches from the point to name one of several corners there, remembered
                     // for as long as the field stands open
                     sk.corner.track_px = qymcad_ui_state::corner_reach(sk.set);
-                    if let Some(pid) = qymcad_pick::nearest_vertex(&sk.pick(), rect, pos, si) {
-                        // named by its POINT: where four lines meet there, the corner is the one the cursor
-                        // stands in, and the field is opened at the point to say which side that was
-                        qymcad_ui_state::open_corner_popup(sk.corner, sk.tool_prefs, si, pid, sk.armed.click_op() == 5, Some(pos), None);
-                        sk.corner.near = Some(qymcad_ui_state::to_world(&*sk.view, rect, pos));
-                    } else if let Some(eid) = qymcad_pick::nearest_line_eid(&sk.pick(), rect, pos, si) {
-                        // A CORNER TAKEN BY ITS TWO LINES: the first line is taken, the second one answers
-                        // whether they share a corner. Where they share none, the first is let go and this one
-                        // stands as the first of the next pair - so a corner can be pointed at with the cursor
-                        // anywhere along the lines, and not only on the point itself.
-                        if let Some(choice) = qymcad_ui_state::corner_line_clicked(&*sk.project, si, eid, sk.sel_sk) {
-                            qymcad_ui_state::open_corner_popup(sk.corner, sk.tool_prefs, si, choice.pid, sk.armed.click_op() == 5, Some(pos), Some(choice.edges));
-                        } else {
-                            *sk.status = qymcad_i18n::tr("sk-click-corner-next");
-                        }
-                    } else {
-                        *sk.status = qymcad_i18n::tr("sk-click-corner");
+                    // A PICK IS A LINE OR A POINT, and WHAT THE WINDOW OF THE PICKS NAMES is what is offered: two
+                    // lines name their corner, a line and a point name the corners that line takes part in, and a
+                    // point alone names every corner at it. Each pick pushes the older one out of the window, so
+                    // the second of a pair is the first of the next and three lines in a row are two corners.
+                    let picked = qymcad_pick::nearest_vertex(&sk.pick(), rect, pos, si).map(|pid| (0, pid)).or_else(|| qymcad_pick::nearest_line_eid(&sk.pick(), rect, pos, si).map(|eid| (1, eid)));
+                    match picked {
+                        Some(item) => match qymcad_ui_state::corner_picked(&*sk.project, si, item, sk.sel_sk) {
+                            Some(choice) => {
+                                qymcad_ui_state::open_corner_popup(sk.corner, sk.tool_prefs, si, choice.pid, sk.armed.click_op() == 5, Some(pos), choice.edges);
+                                // AFTER THE FIELD IS OPENED, which clears the line: the corner named by a line
+                                // and a point together is one of the corners that line takes part in
+                                sk.corner.through = choice.through;
+                                sk.corner.near = Some(qymcad_ui_state::to_world(&*sk.view, rect, pos));
+                            }
+                            None => {
+                                // NO CORNER IN HAND, SO NO FIELD: a pick that leaves the window naming
+                                // nothing takes the field of the corner before it down with it. Reported:
+                                // a third line, not joined to the first two, left the preview of their
+                                // corner standing on the sheet with its field, over a pair that was gone.
+                                sk.corner.clear();
+                                *sk.status = qymcad_i18n::tr("sk-click-corner-next");
+                            }
+                        },
+                        None => *sk.status = qymcad_i18n::tr("sk-click-corner"),
                     }
                 }
             } else if sk.armed.click_op() != 0 {

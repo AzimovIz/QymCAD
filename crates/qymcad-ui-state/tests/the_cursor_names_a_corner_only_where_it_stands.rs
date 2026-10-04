@@ -6,9 +6,12 @@
 //! being typed in the field would be cut at a corner nobody was looking at - and the sheet shows the corner it is
 //! showing, so what Enter cut was not what was on screen.
 //!
-//! The reach is the aim the point itself is caught from, `Grab::Point`, a shade wider - the person who aimed there has
-//! the corner open and must be able to move it - and no wider: what is wanted is a small circle round the point, not
-//! the drawing.
+//! The reach is `Grab::Corner`: thirty-six pixels at the normal precision, three times the aim a point is caught
+//! from and then some. Saying WHICH WAY the corner goes among the several at one point is a coarser act than
+//! catching the point - the pointer names a sector rather than hitting a mark - and at the aim of a point the choice
+//! stopped exactly where the click catches the point, leaving a person who had aimed there with the corner open and
+//! no way to move it. It is still a corner of the drawing and not the sheet: the choice must not follow the pointer
+//! while the radius is being typed.
 use qymcad_core::feature::Purpose;
 use qymcad_core::model::Project;
 use qymcad_ui_state::grab::{grab, Grab};
@@ -32,19 +35,19 @@ fn a_cursor_far_from_the_point_does_not_name_a_corner() {
     let reach = qymcad_ui_state::corner_reach(&Settings::default());
     let beside = (20.0, reach as f64 / 2.0); // half the reach away: inside it
     assert_eq!(qymcad_ui_state::corner_cursor(&p, si, pid, Some(beside), reach, 1.0), Some(beside), "the cursor standing beside the point was not heard: it is the only thing that says which corner is meant");
-    assert_eq!(qymcad_ui_state::corner_cursor(&p, si, pid, Some((20.0 + 40.0, 0.0)), reach, 1.0), None, "a cursor forty units away named a corner: the corner followed the pointer across the sheet");
+    assert_eq!(qymcad_ui_state::corner_cursor(&p, si, pid, Some((20.0 + 80.0, 0.0)), reach, 1.0), None, "a cursor eighty units away named a corner: the corner followed the pointer across the sheet");
     assert_eq!(qymcad_ui_state::corner_cursor(&p, si, pid, None, reach, 1.0), None, "no cursor at all named a corner");
 }
 
-/// THE REACH IS A SMALL CIRCLE ROUND THE POINT, AND A SHADE WIDER THAN THE POINT IS CAUGHT FROM.
+/// THE REACH IS THE THIRTY-SIX PIXELS IT WAS DECIDED TO BE - a circle round the point, and not the sheet - and it is
+/// the aim of the person, so it narrows and widens with the pick precision.
 #[test]
-fn the_reach_is_narrow_and_follows_the_picking() {
+fn the_reach_is_the_aim_it_was_decided_to_be() {
     let mut set = Settings::default();
-    let point = grab(&set, Grab::Point);
     let reach = qymcad_ui_state::corner_reach(&set);
-    assert!(reach > point, "the reach of the cursor is not wider than the aim the point itself is caught from ({reach} against {point}): a person who aimed there has the corner open and cannot move it");
-    assert!(reach < point * 1.5, "the reach of the cursor is not a small circle round the point any more ({reach} against {point}): the corner would follow the pointer across the drawing");
-    // and it is the aim of the person, not a number in place: precise aiming narrows it, coarse widens it
+    assert_eq!(reach, 36.0, "the reach of the cursor at the normal precision is not the thirty-six pixels it was decided to be ({reach})");
+    assert!(reach > 3.0 * grab(&set, Grab::Point), "the reach of the cursor is not three times the aim a point is caught from ({reach} against {})", grab(&set, Grab::Point));
+    assert!(reach < grab(&set, Grab::Snap) * 6.0, "the reach of the cursor is not a circle round the point any more ({reach} pixels): the corner would follow the pointer across the drawing");
     for level in [0u8, 1, 2] {
         set.pick_precision = level;
         assert_eq!(qymcad_ui_state::corner_reach(&set), grab(&set, Grab::Corner), "the reach of the cursor is not the aim of the person at pick precision {level}");
@@ -57,9 +60,9 @@ fn the_reach_is_narrow_and_follows_the_picking() {
 fn the_reach_is_the_same_pixels_at_every_zoom() {
     let (p, si, pid) = a_point_and_its_id();
     let reach = qymcad_ui_state::corner_reach(&Settings::default());
-    // SIXTY UNITS FROM THE POINT: out of reach on a sheet at a pixel to the unit, inside it on a sheet drawn at a
+    // EIGHTY UNITS FROM THE POINT: out of reach on a sheet at a pixel to the unit, inside it on a sheet drawn at a
     // tenth of a pixel to the unit. The reach is a circle on the screen - the same one whatever the zoom.
-    let away = (80.0, 0.0);
-    assert_eq!(qymcad_ui_state::corner_cursor(&p, si, pid, Some(away), reach, 1.0), None, "a cursor sixty pixels away named a corner");
-    assert_eq!(qymcad_ui_state::corner_cursor(&p, si, pid, Some(away), reach, 0.1), Some(away), "the same cursor six pixels away did not name a corner: the reach is a circle on the sheet, not a circle in the drawing");
+    let away = (100.0, 0.0);
+    assert_eq!(qymcad_ui_state::corner_cursor(&p, si, pid, Some(away), reach, 1.0), None, "a cursor eighty pixels away named a corner");
+    assert_eq!(qymcad_ui_state::corner_cursor(&p, si, pid, Some(away), reach, 0.1), Some(away), "the same cursor eight pixels away did not name a corner: the reach is a circle on the sheet, not a circle in the drawing");
 }

@@ -190,6 +190,45 @@ probe! {
 }
 
 probe! {
+    /// A PICK THAT NAMES NO CORNER TAKES THE FIELD DOWN WITH IT. Reported: three lines were clicked in a row, the
+    /// third not joined to the first two, and the preview of the corner of the first two stood on the sheet with its
+    /// field - a corner that was no longer the pair on screen.
+    fn a_pick_that_names_no_corner_leaves_no_field_behind() {
+        let mut s = empty_sketch();
+        draw(&mut s, "tb-line-hint", &[(60.0, 0.0), (0.0, 0.0), (0.0, 60.0)]);
+        draw(&mut s, "tb-line-hint", &[(140.0, 140.0), (120.0, 140.0), (120.0, 160.0)]); // an L far away
+        take(&mut s, "tb-chamfer-sketch-hint");
+        s.click_on_sketch(30.0, 0.0); // the middle of the first line
+        let corner = s.on_sketch(0.0, 30.0);
+        s.click(corner); // the middle of the second: the field of their corner opens
+        let field = field_near(&mut s, corner);
+        assert_eq!(field.kind, Kind::TextField, "the corner of the first two lines did not open its field");
+        s.click_on_sketch(130.0, 140.0); // the middle of the third, which meets neither of them
+        let left = s.widgets().into_iter().filter(|w| w.kind == Kind::TextField && w.rect.top() > 120.0).collect::<Vec<_>>();
+        assert!(left.is_empty(), "the field of the corner before it stood open over a pair that was gone: {left:?}");
+    }
+}
+
+probe! {
+    /// LEAVING THE CORNER MODE LETS GO OF WHAT IT HAD CHOSEN. Reported: the lines it was offered went on standing lit
+    /// with nothing in hand, and the next tool found a selection that was not its own.
+    fn leaving_the_corner_mode_clears_what_it_had_chosen() {
+        let mut s = empty_sketch();
+        draw(&mut s, "tb-line-hint", &[(60.0, 0.0), (0.0, 0.0), (0.0, 60.0)]);
+        pick(&mut s, 30.0, 0.0, false);
+        pick(&mut s, 0.0, 30.0, true); // the two lines of the corner, chosen before the tool
+        take(&mut s, "tb-chamfer-sketch-hint"); // the corner of the two is offered at once, out of the selection
+        let middle = s.canvas().center();
+        let field = field_near(&mut s, middle); // the field of that corner is open
+        assert_eq!(field.kind, Kind::TextField, "the corner of the two chosen lines did not open its field");
+        take(&mut s, "tb-line-hint"); // another tool: leaving the chamfer takes its picks with it
+        take(&mut s, "tb-chamfer-sketch-hint"); // and the chamfer asks for the corner rather than offering an old one
+        let left: Vec<Widget> = s.widgets().into_iter().filter(|w| w.kind == Kind::TextField && w.rect.top() > 120.0).collect();
+        assert!(left.is_empty(), "the mode was taken again and offered the corner of the two lines it had been given before, which the mode that ended had let go of: {left:?}");
+    }
+}
+
+probe! {
     /// THE CHAMFER TAKEN WITH THE TWO LINES ALREADY CHOSEN: the corner is where they meet, and the tool is pressed
     /// afterwards. Reported: the selection stood lit and the tool ignored it, asking for the corner again.
     fn a_chamfer_of_two_lines_already_chosen_is_offered_the_corner_they_share() {
