@@ -88,6 +88,79 @@ mod tests {
         assert!(problems.is_empty(), "{}", problems.join("\n"));
     }
 
+    /// A CONSTRAINT ON SEVERAL SELECTED LINES IS PUT ON EVERY ONE OF THEM: Vertical and Horizontal on each, Parallel,
+    /// Equal and Collinear tying each to the first; one undo takes them all back.
+    ///
+    /// Reported behaviour (issue #34): with three lines selected, Vertical turned one of them and said "The constraint
+    /// is added".
+    #[test]
+    fn a_constraint_goes_on_every_selected_line() {
+        use qymcad_core::model::{Constraint, EntityKind};
+        /// A constraint button, its name, and how many constraints of its kind three selected lines should get.
+        struct Button {
+            code: u8,
+            name: &'static str,
+            want: usize,
+        }
+        let buttons = [
+            Button { code: 2, name: "Vertical", want: 3 },
+            Button { code: 1, name: "Horizontal", want: 3 },
+            Button { code: 3, name: "Parallel", want: 2 },
+            Button { code: 5, name: "Equal", want: 2 },
+            Button { code: 7, name: "Collinear", want: 2 },
+        ];
+        let slanted = |app: &App, si: usize| -> usize {
+            let sk = &app.project.sketches[si];
+            let at = |id: u64| sk.points.iter().find(|p| p.id == id).map(|p| (p.x, p.y)).expect("a point");
+            sk.entities
+                .iter()
+                .filter(|e| match e.kind {
+                    EntityKind::Line { a, b } => (at(a).0 - at(b).0).abs() > 1e-6,
+                    _ => false,
+                })
+                .count()
+        };
+        let mut problems = Vec::new();
+        for Button { code: button, name, want } in buttons {
+            let (mut app, si) = a_sketch();
+            // three slants of their own: lines drawn at one slant are tied Parallel as they are drawn, and then one
+            // Vertical turns them all
+            for (x, lean) in [(0.0, 5.0), (20.0, 9.0), (40.0, 3.0)] {
+                Hand::new(&mut app).sk_tool(1).click2d(x, 0.0).double_click2d(x + lean, 12.0);
+                Hand::new(&mut app).key(egui::Key::Escape);
+            }
+            let lines: Vec<(u8, u64)> = app.project.sketches[si].entities.iter().filter(|e| matches!(e.kind, EntityKind::Line { .. })).map(|e| (1u8, e.id)).collect();
+            assert_eq!(lines.len(), 3, "setup: three lines");
+            assert_eq!(slanted(&app, si), 3, "setup: the three lines are slanted");
+            let ties = app.project.sketches[si].constraints.iter().filter(|c| matches!(c, Constraint::Parallel { .. } | Constraint::Equal { .. } | Constraint::Collinear { .. })).count();
+            assert_eq!(ties, 0, "setup: nothing ties the lines together");
+            let before = app.project.sketches[si].constraints.len();
+            assert!(Hand::new(&mut app).select2d(&lines), "setup: the three lines are picked");
+            Hand::new(&mut app).constraint(button);
+            let added = app.project.sketches[si].constraints.len() - before;
+            let of_kind = app.project.sketches[si].constraints[before..]
+                .iter()
+                .filter(|c| {
+                    matches!(
+                        (button, c),
+                        (2, Constraint::Vertical { .. }) | (1, Constraint::Horizontal { .. }) | (3, Constraint::Parallel { .. }) | (5, Constraint::Equal { .. }) | (7, Constraint::Collinear { .. })
+                    )
+                })
+                .count();
+            if of_kind != want {
+                problems.push(format!("{name} on three lines added {of_kind} of its kind ({added} in all), not {want}; status {:?}", app.status));
+            }
+            if button == 2 && slanted(&app, si) > 0 {
+                problems.push(format!("after Vertical {} of the three lines are not vertical", slanted(&app, si)));
+            }
+            Hand::new(&mut app).undo();
+            if app.project.sketches[si].constraints.len() != before {
+                problems.push(format!("one undo after {name} leaves {} constraints, not {before}", app.project.sketches[si].constraints.len()));
+            }
+        }
+        assert!(problems.is_empty(), "{}", problems.join("\n"));
+    }
+
     /// Esc ENDS A SPLINE, AS ITS HINT SAYS, keeping the nodes that were clicked.
     #[test]
     fn escape_ends_a_spline_as_its_hint_says() {

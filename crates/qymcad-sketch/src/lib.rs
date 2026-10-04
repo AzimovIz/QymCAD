@@ -1118,6 +1118,8 @@ pub fn try_constraint_inner(
     let qymcad_ui_state::Sel::Sketch(si) = sel else { return false };
     let pts = qymcad_ui_state::sel_point_ids(sel_sk);
     let mut lines = qymcad_ui_state::sel_line_pts(project, sel_sk, si);
+    // the lines drawn, before the axes join them: Vertical and Horizontal go on these, an axis already stands so
+    let drawn = lines.clone();
     // coordinate axes picked as lines (kind 3): their straight lines are materialised and used as lines
     let axes: Vec<u64> = sel_sk.items.iter().filter(|(k, _)| *k == 3).map(|(_, id)| *id).collect();
     for w in axes {
@@ -1137,13 +1139,16 @@ pub fn try_constraint_inner(
                 new.push(Constraint::PointOnLine { p: pts[0], a: lines[0].0, b: lines[0].1 });
             }
         }
-        1 if pts.len() >= 2 => new.push(Constraint::Horizontal { a: pts[0], b: pts[1] }),
-        1 if !lines.is_empty() => new.push(Constraint::Horizontal { a: lines[0].0, b: lines[0].1 }),
-        2 if pts.len() >= 2 => new.push(Constraint::Vertical { a: pts[0], b: pts[1] }),
-        2 if !lines.is_empty() => new.push(Constraint::Vertical { a: lines[0].0, b: lines[0].1 }),
-        3 if lines.len() >= 2 => new.push(Constraint::Parallel { a: lines[0].0, b: lines[0].1, c: lines[1].0, d: lines[1].1 }),
+        // EVERY SELECTED LINE GETS IT, not the first alone; with no line selected, every point lines up with the first.
+        // Reported behaviour (issue #34): with three lines selected Vertical turned one of them.
+        1 if !drawn.is_empty() => new.extend(drawn.iter().map(|&(a, b)| Constraint::Horizontal { a, b })),
+        1 if pts.len() >= 2 => new.extend(pts[1..].iter().map(|&b| Constraint::Horizontal { a: pts[0], b })),
+        2 if !drawn.is_empty() => new.extend(drawn.iter().map(|&(a, b)| Constraint::Vertical { a, b })),
+        2 if pts.len() >= 2 => new.extend(pts[1..].iter().map(|&b| Constraint::Vertical { a: pts[0], b })),
+        // between lines: every further line is tied to the first one picked
+        3 if lines.len() >= 2 => new.extend(lines[1..].iter().map(|&(c, d)| Constraint::Parallel { a: lines[0].0, b: lines[0].1, c, d })),
         4 if lines.len() >= 2 => new.push(Constraint::Perpendicular { a: lines[0].0, b: lines[0].1, c: lines[1].0, d: lines[1].1 }),
-        5 if lines.len() >= 2 => new.push(Constraint::Equal { a: lines[0].0, b: lines[0].1, c: lines[1].0, d: lines[1].1 }),
+        5 if lines.len() >= 2 => new.extend(lines[1..].iter().map(|&(c, d)| Constraint::Equal { a: lines[0].0, b: lines[0].1, c, d })),
         5 => {
             // equal radii of two circles
             let cs = qymcad_ui_state::sel_circle_centers(project, sel_sk, si);
@@ -1152,7 +1157,7 @@ pub fn try_constraint_inner(
             }
         }
         6 if !pts.is_empty() => new.extend(pts.iter().map(|p| Constraint::Fixed { p: *p })),
-        7 if lines.len() >= 2 => new.push(Constraint::Collinear { a: lines[0].0, b: lines[0].1, c: lines[1].0, d: lines[1].1 }),
+        7 if lines.len() >= 2 => new.extend(lines[1..].iter().map(|&(c, d)| Constraint::Collinear { a: lines[0].0, b: lines[0].1, c, d })),
         8 => {
             // concentricity is A REAL kind with a glyph of its own, not a fake made of coincident centres
             let centers = qymcad_ui_state::sel_circle_centers(project, sel_sk, si);
