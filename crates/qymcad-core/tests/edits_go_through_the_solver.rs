@@ -241,3 +241,30 @@ fn an_editing_tool_leaves_a_pinned_point_where_it_is() {
     }
     assert!(sins.is_empty(), "edits that carried a pinned point along:\n{}", sins.join("\n"));
 }
+
+/// COLLINEAR KEEPS BOTH LINES WHOLE: the second line comes onto the line of the first, and neither shrinks to a point.
+///
+/// Reported behaviour (found checking issue #34): two lines made collinear came out with the first one shrunk to a point
+/// and the residual 0 - the residual was a cross product not divided by the length, met by a line of no length.
+#[test]
+fn collinear_keeps_both_lines_whole() {
+    let (mut p, si) = new_sketch();
+    let l1 = p.add_line_entity(si, 0.0, 0.0, 5.0, 12.0, qymcad_core::feature::Purpose::Real);
+    let l2 = p.add_line_entity(si, 20.0, 0.0, 29.0, 12.0, qymcad_core::feature::Purpose::Real);
+    let ends = |p: &Project, e: u64| match p.sketches[si].entities.iter().find(|x| x.id == e).map(|x| &x.kind) {
+        Some(EntityKind::Line { a, b }) => (*a, *b),
+        _ => panic!("a line"),
+    };
+    let ((a, b), (c, d)) = (ends(&p, l1), ends(&p, l2));
+    p.sketches[si].constraints.push(Constraint::Collinear { a, b, c, d });
+    let resid = p.solve_sketch(si);
+    let at = |id: u64| p.sketches[si].points.iter().find(|q| q.id == id).map(|q| (q.x, q.y)).expect("a point");
+    let len = |u: u64, v: u64| (at(u).0 - at(v).0).hypot(at(u).1 - at(v).1);
+    let off = |q: u64| {
+        let (pa, pb, pq) = (at(a), at(b), at(q));
+        ((pb.0 - pa.0) * (pq.1 - pa.1) - (pb.1 - pa.1) * (pq.0 - pa.0)).abs() / len(a, b).max(1e-12)
+    };
+    assert!(resid < 1e-6, "the sketch did not solve: residual {resid}");
+    assert!(len(a, b) > 1.0 && len(c, d) > 1.0, "a line shrank: the first {:.4} long, the second {:.4}", len(a, b), len(c, d));
+    assert!(off(c) < 1e-6 && off(d) < 1e-6, "the second line is off the first: {:.2e}, {:.2e}", off(c), off(d));
+}

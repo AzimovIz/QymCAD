@@ -759,13 +759,21 @@ fn con_jac(c: &Constraint, x: &[f64], x0: &[f64], idx: &HashMap<Id, usize>, ridx
             dist_rows(cc, d, -1.0, &mut row);
             out.push(row);
         }
+        // two points on a line, the rows of `PointOnLine` for each end of the second segment - see the residual
         Constraint::Collinear { a, b, c: cc, d } => {
             let ((ax, ay), (bx, by)) = (g(a), g(b));
-            let (ux, uy) = (bx - ax, by - ay);
+            let (dx, dy) = (bx - ax, by - ay);
+            let len = (dx * dx + dy * dy).sqrt().max(1e-9);
             for far in [cc, d] {
-                let (fx, fy) = g(far);
-                let (wx, wy) = (fx - ax, fy - ay);
-                out.push(vec![(vx(a), -wy + uy), (vy(a), -ux + wx), (vx(b), wy), (vy(b), -wx), (vx(far), -uy), (vy(far), ux)]);
+                let (px, py) = g(far);
+                let cross = dx * (py - ay) - dy * (px - ax);
+                let dc = [(vx(far), -dy), (vy(far), dx), (vx(a), -(py - ay) + dy), (vy(a), -dx + (px - ax)), (vx(b), py - ay), (vy(b), -(px - ax))];
+                let dl = [(vx(a), -dx / len), (vy(a), -dy / len), (vx(b), dx / len), (vy(b), dy / len)];
+                let mut row: Vec<(usize, f64)> = dc.iter().map(|&(i, v)| (i, v / len)).collect();
+                for &(i, v) in &dl {
+                    row.push((i, -cross * v / (len * len)));
+                }
+                out.push(row);
             }
         }
         Constraint::Midpoint { p, a, b } => {
@@ -1004,13 +1012,17 @@ fn con_rows(c: &Constraint, x: &[f64], x0: &[f64], idx: &HashMap<Id, usize>, rid
                 let l2 = ((cx - dx).powi(2) + (cy - dy).powi(2)).sqrt();
                 r.push(l1 - l2);
             }
+            // BOTH ENDS OF THE SECOND SEGMENT LIE ON THE LINE OF THE FIRST, each as a distance - the cross product divided by
+            // the length, as `PointOnLine` has it. Undivided, the residual was met by a first segment of no length: two
+            // lines made collinear came out with the first shrunk to a point and the residual 0.
             Constraint::Collinear { a, b, c, d } => {
                 let (ax, ay) = g(a);
                 let (bx, by) = g(b);
-                let (cx, cy) = g(c);
-                let (dx, dy) = g(d);
-                r.push((bx - ax) * (cy - ay) - (by - ay) * (cx - ax));
-                r.push((bx - ax) * (dy - ay) - (by - ay) * (dx - ax));
+                let (ux, uy) = (bx - ax, by - ay);
+                let len = (ux * ux + uy * uy).sqrt().max(1e-9);
+                for (px, py) in [g(c), g(d)] {
+                    r.push((ux * (py - ay) - uy * (px - ax)) / len);
+                }
             }
             Constraint::Midpoint { p, a, b } => {
                 let (px, py) = g(p);

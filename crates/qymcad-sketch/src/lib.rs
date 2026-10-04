@@ -1106,6 +1106,22 @@ pub fn sketch_rotate_popup(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Cont
     }
 }
 
+/// The size of every line and circle of sketch `si`, in the order of its entities: a line's length, a circle's
+/// radius. Nothing for an arc or an ellipse, whose size its points hold.
+fn shape_sizes(project: &Project, si: usize) -> Vec<f64> {
+    use qymcad_core::model::EntityKind;
+    let Some(s) = project.sketches.get(si) else { return Vec::new() };
+    let at = |id: Id| s.points.iter().find(|p| p.id == id).map(|p| (p.x, p.y));
+    s.entities
+        .iter()
+        .filter_map(|e| match e.kind {
+            EntityKind::Line { a, b } => Some(at(a).zip(at(b)).map_or(0.0, |(a, b)| (a.0 - b.0).hypot(a.1 - b.1))),
+            EntityKind::Circle { r, .. } => Some(r),
+            _ => None,
+        })
+        .collect()
+}
+
 pub fn try_constraint_inner(
     project: &mut Project,
     regen: &mut qymcad_ui_state::Rebuilding,
@@ -1207,15 +1223,20 @@ pub fn try_constraint_inner(
             *driven = true;
         }
     }
+    let sizes_before = shape_sizes(project, si);
     project.sketches[si].constraints.extend(new);
     let resid = project.solve_sketch(si);
+    // A CONSTRAINT MET BY SHRINKING A SHAPE TO NOTHING IS NOT MET. Horizontal over Vertical on one line is satisfied
+    // exactly by a line of no length - residual 0 - and both stood green while the line was gone. Reported behaviour
+    // (found checking issue #34): three lines made Vertical, then Horizontal, shrank to points.
+    let shrunk = shape_sizes(project, si).iter().zip(&sizes_before).any(|(after, before)| *before > 1e-6 && *after < 1e-6);
     sel_sk.clear(); // the selection and whatever was waiting for it
     qymcad_ui_state::invalidate(regen);
     // A CONSTRAINT THE SKETCH CANNOT MEET IS NOT KEPT, as a dimension that does not fit is not: parallel on two lines an
     // angle of 45 deg holds apart left both in the sketch, unsolved (residual 0.79), with nothing marked. It is taken
     // back, the points return where they were, and the status line says why. 1e-2 mm is the threshold the dimension
     // editor rolls back at: above the solver's noise, below any real conflict.
-    if resid > 1e-2 {
+    if resid > 1e-2 || shrunk {
         project.sketches[si].constraints.truncate(had);
         for &k in &referenced {
             if let Constraint::Diameter { driven, .. } = &mut project.sketches[si].constraints[k] {
@@ -1227,7 +1248,7 @@ pub fn try_constraint_inner(
             p.y = y;
         }
         project.solve_sketch(si);
-        *status = qymcad_i18n::tr1("sk-constraint-conflict", "r", &qymcad_i18n::num(resid, 2));
+        *status = if shrunk { qymcad_i18n::tr("sk-constraint-shrinks") } else { qymcad_i18n::tr1("sk-constraint-conflict", "r", &qymcad_i18n::num(resid, 2)) };
         return true;
     }
     *status = if resid < 1e-3 { qymcad_i18n::tr("sk-constraint-added") } else { qymcad_i18n::tr1("sk-constraint-added-resid", "r", &qymcad_i18n::num(resid, 2)) };

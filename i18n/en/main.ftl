@@ -1324,6 +1324,7 @@ sk-angle-range-3pt = The angle through three points is more than 0 and less than
 sk-dim-too-large = A dimension of a sketch is no longer than { $max } mm
 sk-dim-gone = The dimension is no longer there
 sk-constraint-conflict = The constraint contradicts the dimensions and constraints of the sketch (residual { $r }) — not added
+sk-constraint-shrinks = The constraint was not added: it would shrink a line or a circle to a point
 sk-constraint-not-for-pick = What is picked does not take this constraint — { $takes }. Pick what it ties
 sk-fix-bar-field = Fix the value in the tool bar first: the shape is not made with it
 sk-text = Text

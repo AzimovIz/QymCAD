@@ -161,6 +161,49 @@ mod tests {
         assert!(problems.is_empty(), "{}", problems.join("\n"));
     }
 
+    /// A CONSTRAINT THAT WOULD SHRINK A LINE TO A POINT IS NOT KEPT: Horizontal on lines already Vertical is met only
+    /// by a line of no length, and the sketch must say so rather than take it - one line, and three at once.
+    ///
+    /// Reported behaviour (found checking issue #34): three lines made Vertical, then Horizontal - the lines shrank to
+    /// points and both constraints stood green.
+    #[test]
+    fn a_constraint_that_shrinks_a_line_to_a_point_is_refused() {
+        use qymcad_core::model::{Constraint, EntityKind};
+        let mut problems = Vec::new();
+        for count in [1usize, 3] {
+            let (mut app, si) = a_sketch();
+            for (x, lean) in [(0.0, 5.0), (20.0, 9.0), (40.0, 3.0)].into_iter().take(count) {
+                Hand::new(&mut app).sk_tool(1).click2d(x, 0.0).double_click2d(x + lean, 12.0);
+                Hand::new(&mut app).key(egui::Key::Escape);
+            }
+            let lines: Vec<(u8, u64)> = app.project.sketches[si].entities.iter().filter(|e| matches!(e.kind, EntityKind::Line { .. })).map(|e| (1u8, e.id)).collect();
+            assert!(Hand::new(&mut app).select2d(&lines), "setup: the lines are picked");
+            Hand::new(&mut app).constraint(2);
+            let vertical = app.project.sketches[si].constraints.iter().filter(|c| matches!(c, Constraint::Vertical { .. })).count();
+            assert_eq!(vertical, count, "setup: every line is Vertical");
+            assert!(Hand::new(&mut app).select2d(&lines), "setup: the lines are picked again");
+            Hand::new(&mut app).constraint(1);
+            let sk = &app.project.sketches[si];
+            let at = |id: u64| sk.points.iter().find(|p| p.id == id).map(|p| (p.x, p.y)).expect("a point");
+            let shortest = sk
+                .entities
+                .iter()
+                .filter_map(|e| match e.kind {
+                    EntityKind::Line { a, b } => Some((at(a).0 - at(b).0).hypot(at(a).1 - at(b).1)),
+                    _ => None,
+                })
+                .fold(f64::MAX, f64::min);
+            let horizontal = sk.constraints.iter().filter(|c| matches!(c, Constraint::Horizontal { .. })).count();
+            if shortest < 1.0 || horizontal != 0 {
+                problems.push(format!("{count} line(s): Horizontal over Vertical left the shortest line {shortest:.3} long and {horizontal} Horizontal in the sketch; status {:?}", app.status));
+            }
+            if app.status == crate::i18n::tr("sk-constraint-added") {
+                problems.push(format!("{count} line(s): the status says the constraint is added"));
+            }
+        }
+        assert!(problems.is_empty(), "{}", problems.join("\n"));
+    }
+
     /// Esc ENDS A SPLINE, AS ITS HINT SAYS, keeping the nodes that were clicked.
     #[test]
     fn escape_ends_a_spline_as_its_hint_says() {
