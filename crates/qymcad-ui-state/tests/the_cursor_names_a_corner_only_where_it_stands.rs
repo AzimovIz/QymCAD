@@ -34,7 +34,11 @@ fn a_cursor_far_from_the_point_does_not_name_a_corner() {
     let (p, si, pid) = a_point_and_its_id();
     let reach = qymcad_ui_state::corner_reach(&Settings::default());
     let beside = (20.0, reach as f64 / 2.0); // half the reach away: inside it
-    assert_eq!(qymcad_ui_state::corner_cursor(&p, si, pid, Some(beside), reach, 1.0), Some(beside), "the cursor standing beside the point was not heard: it is the only thing that says which corner is meant");
+    assert_eq!(
+        qymcad_ui_state::corner_cursor(&p, si, pid, Some(beside), reach, 1.0),
+        Some(beside),
+        "the cursor standing beside the point was not heard: it is the only thing that says which corner is meant"
+    );
     assert_eq!(qymcad_ui_state::corner_cursor(&p, si, pid, Some((20.0 + 80.0, 0.0)), reach, 1.0), None, "a cursor eighty units away named a corner: the corner followed the pointer across the sheet");
     assert_eq!(qymcad_ui_state::corner_cursor(&p, si, pid, None, reach, 1.0), None, "no cursor at all named a corner");
 }
@@ -64,5 +68,9 @@ fn the_reach_is_the_same_pixels_at_every_zoom() {
     // tenth of a pixel to the unit. The reach is a circle on the screen - the same one whatever the zoom.
     let away = (100.0, 0.0);
     assert_eq!(qymcad_ui_state::corner_cursor(&p, si, pid, Some(away), reach, 1.0), None, "a cursor eighty pixels away named a corner");
-    assert_eq!(qymcad_ui_state::corner_cursor(&p, si, pid, Some(away), reach, 0.1), Some(away), "the same cursor eight pixels away did not name a corner: the reach is a circle on the sheet, not a circle in the drawing");
+    assert_eq!(
+        qymcad_ui_state::corner_cursor(&p, si, pid, Some(away), reach, 0.1),
+        Some(away),
+        "the same cursor eight pixels away did not name a corner: the reach is a circle on the sheet, not a circle in the drawing"
+    );
 }

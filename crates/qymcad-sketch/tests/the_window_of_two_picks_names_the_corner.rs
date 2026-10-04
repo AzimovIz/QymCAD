@@ -206,8 +206,7 @@ fn the_corner_the_pointer_named_last_stands_while_it_is_away() {
     assert!(same_pair(alone_away, alone), "the corner of the point changed while the pointer was away: {alone_away:?} against {alone:?}");
     // and a pair that was never a corner at the point is not taken for the one standing
     let at_the_point = p.vertex_edges(si, shared);
-    let stranger = p
-        .sketches[si]
+    let stranger = p.sketches[si]
         .entities
         .iter()
         .find(|e| !at_the_point.contains(&e.id) && matches!(e.kind, qymcad_core::model::EntityKind::Line { .. }))
@@ -290,16 +289,27 @@ fn two_chosen_lines_offer_their_corner_at_once() {
     let choice = qymcad_ui_state::corner_of_selection(&p, si, &mut s).expect("two chosen lines sharing a corner offered none");
     assert_eq!((choice.pid, choice.edges), (corner, Some((a, b))), "the corner the two chosen lines make was not the one offered: {choice:?}");
     assert_eq!(s.items, vec![(1, a), (1, b)], "the pair was dropped: it must stay lit while the value is decided, for a person to see WHICH corner is being rounded");
-    // and a choice that names no corner is dropped rather than left waiting for a radius that could never be taken
+    // and a choice that names no corner is not dropped: it is the SET the mode works on, and the lines in it that
+    // do meet at a corner are cut as if they had been named with Shift while the tool was on
     let mut s = SketchSelection { items: vec![(1, a), (1, c)], ..Default::default() };
     assert_eq!(qymcad_ui_state::corner_of_selection(&p, si, &mut s), None, "a pair with no corner in common offered one");
-    assert!(s.items.is_empty(), "the pair with no corner stayed lit: the tool would wait on something that cannot come");
-    // a third thing beside two lines says nothing about which corner is meant
+    assert_eq!(s.items, vec![(1, a), (1, c)], "the pair with no corner in common was dropped: it is the set, and the tool asks for the corner rather than losing the choice");
+    // a third thing beside two lines says nothing about WHICH corner is meant, but the three of them are still the set
     let mut s = SketchSelection { items: vec![(1, a), (1, b), (1, c)], ..Default::default() };
     assert_eq!(qymcad_ui_state::corner_of_selection(&p, si, &mut s), None, "three lines offered a corner");
-    assert!(s.items.is_empty(), "three lines stayed lit: a corner is two lines, and the third says nothing about which");
+    assert_eq!(s.items, vec![(1, a), (1, b), (1, c)], "three chosen lines were dropped: a contour chosen before the tool is the set the mode cuts");
     // one line alone is the first half of a corner, not a refusal
     let mut s = SketchSelection { items: vec![(1, a)], ..Default::default() };
     assert_eq!(qymcad_ui_state::corner_of_selection(&p, si, &mut s), None, "one line alone offered a corner");
     assert_eq!(s.items, vec![(1, a)], "the first half of a corner was dropped: it is what the next pick answers");
+}
+
+/// THE LINES CHOSEN BEFORE THE TOOL ARE THE SET: the ones among them that meet at a corner are corners of it, exactly
+/// as if they had been named with Shift while the mode was on.
+#[test]
+fn the_lines_chosen_before_the_tool_are_a_set_of_corners() {
+    let (p, si, (a, b, c)) = an_angle_with_a_stranger();
+    let picks = vec![(1, a), (1, b), (1, c)];
+    assert_eq!(qymcad_ui_state::corners_of_picks(&p, si, &picks).len(), 1, "of three chosen lines only the two that meet make a corner");
+    assert_eq!(qymcad_ui_state::corners_of_picks(&p, si, &picks[..2]).len(), 1, "the corner of the first two is the one the field opens on");
 }

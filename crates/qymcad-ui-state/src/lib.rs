@@ -943,6 +943,49 @@ pub struct CornerInput {
     /// the cursor may not move it; a pair the cursor named is the cursor's to move while it is over the point, and
     /// the last one it named stands while it is away.
     pub pinned: bool,
+    /// THE PICKS NAMED WITH SHIFT after the corner in the field, in the order they were named.
+    ///
+    /// One corner is one step of undo, and these are the rest of **the same step**: they are not rounded when they are
+    /// picked — they are shown, and the value in the field belongs to all of them together, cut in one answer on Enter.
+    /// The order is kept because the order decides which lines are paired at a point where more than two of them meet.
+    pub many: Vec<(u8, Id)>,
+    /// THE PICKS SWITCHED OFF, kept rather than thrown away.
+    ///
+    /// A corner that is not wanted now is HIDDEN and not deleted: the lines keep the ends they have, and the pick is
+    /// remembered here so that a click on the same line - or on the point of that corner - brings back that very
+    /// corner rather than asking a person to name it all over again. What the set holds is `many` less this.
+    pub hidden: Vec<(u8, Id)>,
+    /// THE CORNERS ALREADY FIXED - each one with THE TWO LINES THAT MAKE IT, remembered.
+    ///
+    /// **FIXED IS NOT APPLIED.** A fixed corner has not been cut: what is remembered is the direction between which
+    /// lines the corner must be, and that is what stops the next pick from re-aiming it - a corner that is named and
+    /// forgotten would follow whatever line came after it. Several may be fixed at once, and they are drawn apart
+    /// from the newest one so that a person can see which corner a further click can still change.
+    ///
+    /// **A CLICK WITHOUT SHIFT DOES NOT EMPTY THIS.** Such a click says which corner the value in the field is for
+    /// and nothing more - the corners named before it stay named, and the set they were named in stays the set.
+    /// Reported: naming two corners with Shift and then clicking a line to say which corner to type for threw the
+    /// buffer of the ones already named away. What is remembered is remembered until it is applied or refused.
+    pub fixed: Vec<(Id, Id)>,
+    /// THE CORNER NAMED LAST - the one a pick can still move, drawn apart from the fixed ones.
+    ///
+    /// It is kept apart from the corner in the FIELD on purpose: a Shift click names a corner and leaves the field
+    /// where it was, so "what was named last" and "what is being typed" are two corners from the second pick
+    /// onwards. Reading the newest off the field left every new corner the colour of the first one.
+    pub newest: Option<(Id, Id)>,
+    /// THE POINTS OF THE SET READ THROUGH A LINE, and the line each is read through.
+    ///
+    /// A point named on its own has every line through it standing there and does not say which of the corners at
+    /// it is meant - the side the cursor is on says it, and it keeps saying it while the cursor stands there, the
+    /// way the first corner of the tool does, until another point is named. This is that saying, kept with the pick
+    /// so that the drawing can be read again from the picks alone.
+    ///
+    /// **A POINT NAMES A CORNER OF ITS OWN POINT, NOT OF THE WHOLE DRAWING.** The two lines it is read through
+    /// stand at that point and nowhere else: naming a point and then naming a line that arrives at it makes the
+    /// corner between them, not a corner between that line and every line the point happens to touch. And where a
+    /// line named by the hand stands at the point of a corner that was read, the hand has the first word - which of
+    /// the two was named is said by `CornerMade`, which the pairing reads and nothing reads a colour for.
+    pub aimed: Vec<(Id, Id)>,
     pub buf: String,
     /// the second value of a chamfer of two legs or of a leg and an angle, typed beside the first
     pub buf2: String,
@@ -963,6 +1006,30 @@ pub struct CornerInput {
 impl CornerInput {
     pub fn clear(&mut self) {
         *self = Self::default();
+    }
+
+    /// THE SINGLE SELECTION A CLICK WITHOUT SHIFT BEGINS: the field, and everything named with Shift, go; what
+    /// the click names after this is the whole of the selection. A multi-selection is made with Shift held.
+    ///
+    /// The reach of the cursor stays: how far the tool hears the pointer is not what the field is holding, and
+    /// losing it means that a corner of four lines standing on one point can never be named again - the cursor is
+    /// only read while it is within reach of the point, and with no reach it never is.
+    pub fn to_a_single_pick(&mut self) {
+        let reach = self.track_px;
+        *self = Self::default();
+        self.track_px = reach;
+    }
+
+    /// THE FIELD PUT DOWN WITH THE SET KEPT, in one move: what is left is what a person has named with Shift -
+    /// the picks, the ones hidden, the corners fixed, the reading of the points and the corner named last.
+    ///
+    /// **THE TWO GO DOWN TOGETHER AND COME BACK TOGETHER.** The field goes down when the corner in it is put away,
+    /// and that is no reason to empty the set: reported, the chamfers already placed were thrown away with it, and
+    /// the corners that came back were not the ones that had been named - the reading of the points was gone among
+    /// them, so every point let all of its lines into the pairing again.
+    pub fn without_the_field(&mut self) {
+        let set = std::mem::take(self);
+        *self = Self { many: set.many, hidden: set.hidden, fixed: set.fixed, newest: set.newest, aimed: set.aimed, track_px: set.track_px, ..Self::default() };
     }
 }
 
@@ -13088,6 +13155,25 @@ pub struct CornerCtx<'a> {
     pub regen: &'a mut Rebuilding,
     pub status: &'a mut String,
     pub tool_prefs: &'a mut SketchToolPrefs,
+    /// THE SCHEME IN HAND, and where every colour of the preview is read from. See `PopupLooks` for why a colour
+    /// is not kept in the state of the tool.
+    pub scheme: &'a SchemeUi,
+}
+
+/// WHAT THE SIZE POPUPS OF THE SKETCH TOOLS TAKE FROM THE APPLICATION besides the drawing itself: the values the
+/// tools remember between two corners, and the colours of the scheme in hand.
+///
+/// **A COLOUR IS NOT STATE OF A TOOL, AND THAT WAS THE FAULT.** The two colours of a corner preview were kept in
+/// `CornerInput` and written by the one window that had a scheme to hand — so every other way of opening a corner
+/// field left them at the transparent default of a `Color32` and drew nothing at all, and `CornerInput::clear()`
+/// (which every applied corner and every mode change calls) took them away again. Reported: with the corner tool,
+/// the lines of the preview were not drawn at all. The scheme is read where the drawing is done instead, on every
+/// frame, so that every way of opening a field draws alike and a person who changes the scheme sees the change.
+pub struct PopupLooks<'a> {
+    /// THE VALUES THE TOOLS REMEMBER: the radius or the leg that was answered last, and the fillets of the bar.
+    pub tool_prefs: &'a mut SketchToolPrefs,
+    /// THE SCHEME IN HAND — the source of every colour drawn over the sheet.
+    pub scheme: &'a SchemeUi,
 }
 
 /// What the three shape popups touch. All three edit the same thing - the shape being placed - through
@@ -13234,7 +13320,9 @@ pub fn release_armed_sketch_tool(t: &mut Tools) -> Option<&'static str> {
 /// clicking the two lines that meet at it open the same way.
 pub fn open_corner_popup(corner: &mut CornerInput, prefs: &SketchToolPrefs, si: usize, pid: Id, chamfer: bool, pos: Option<Pos2>, pair: Option<(Id, Id)>) {
     corner.at = Some((si, pid, chamfer));
-    corner.pair = pair;
+    // THE PAIR OF A CORNER IS ONE PAIR, whichever of its two lines was named first: the field, the set and what
+    // is remembered of it are compared by it.
+    corner.pair = pair.map(corner_pair_as_one);
     corner.pinned = pair.is_some(); // a pair that was picked is the corner itself; one read off the cursor is not
     corner.through = None; // the corner named by two lines: the caller sets the line afterwards where it named one
     corner.pos = pos;
@@ -13277,15 +13365,10 @@ pub fn corner_where(cc: &CornerCtx, rect: Rect) -> Option<(f64, f64)> {
 pub fn corner_pair_now(project: &Project, si: usize, pid: Id, named: Option<(Id, Id)>, through: Option<Id>, pinned: bool, cursor: Option<(f64, f64)>) -> Option<(Id, Id)> {
     // THE PAIR IN FORCE STANDS WHILE THE CURSOR IS AWAY: it is the corner the field was opened for, and the value in
     // the field belongs to it. `through` has to be in the pair, or the corner would change its own subject.
-    let stands = |pair: Option<(Id, Id)>| {
-        pair.filter(|p| project.corner_of_pair(si, p.0, p.1) == Some(pid) && through.is_none_or(|line| p.0 == line || p.1 == line))
-    };
+    let stands = |pair: Option<(Id, Id)>| pair.filter(|p| project.corner_of_pair(si, p.0, p.1) == Some(pid) && through.is_none_or(|line| p.0 == line || p.1 == line));
     if let Some(line) = through {
         // THE CORNER IS ONE OF THIS LINE'S, so the pair is read off the side the cursor stands on
-        return cursor
-            .and_then(|c| project.vertex_pair_through(si, pid, line, Some(c)))
-            .or_else(|| stands(named))
-            .or_else(|| project.vertex_pair_through(si, pid, line, None));
+        return cursor.and_then(|c| project.vertex_pair_through(si, pid, line, Some(c))).or_else(|| stands(named)).or_else(|| project.vertex_pair_through(si, pid, line, None));
     }
     if pinned {
         return stands(named); // the two lines that were picked: the cursor has no word in it
@@ -13317,33 +13400,30 @@ pub fn corner_cursor(project: &Project, si: usize, pid: Id, cursor: Option<(f64,
 /// THE CORNER A SELECTION ALREADY NAMES: what the fillet or the chamfer is offered the moment it is pressed.
 ///
 /// Two lines that share a corner ARE that corner, and the box opens at once - the lines were chosen before the tool
-/// was taken, so asking for the corner again would be asking what has already been said. Anything else is not a
-/// corner: two lines crossing without a point in common, a third entity beside them, a point where a line should
-/// be. Such a selection is DROPPED rather than kept - a pair of lines that meet nowhere cannot be rounded at any
-/// radius, and leaving them lit would leave the tool waiting on something that will never come. One line alone is
-/// not dropped: it is the first half of a corner, and the click on the second line completes it.
+/// was taken, so asking for the corner again would be asking what has already been said.
+///
+/// **A SELECTION THAT NAMES NO CORNER IS NOT DROPPED.** Anything else - two lines crossing without a point in
+/// common, a third entity beside them, a whole contour of ten lines - is the SET the mode works on: the lines in
+/// it that do meet at a corner are cut as if they had been named with Shift while the tool was on, and a person who
+/// drew a contour, chose it and took the tool meant that contour. The box is opened on the FIRST of the corners that
+/// choice makes (`start_corner_tool`): a click without Shift is a single selection and forgets the choice, so the
+/// tool cannot wait to be told which corner to type for - there would be nothing left to answer. One line alone is
+/// not dropped either: it is the first half of a corner, and the click on the second line completes it.
 pub fn corner_of_selection(project: &Project, si: usize, sel_sk: &mut SketchSelection) -> Option<CornerChoice> {
-    if sel_sk.items.len() < 2 {
+    let items = sel_sk.items.clone();
+    if items.len() < 2 {
         return None;
     }
-    if sel_sk.items.len() > 2 {
-        sel_sk.clear();
+    if items.len() > 2 {
         return None;
     }
-    let lines: Vec<Id> = sel_sk.items.iter().filter(|(k, _)| *k == 1).map(|(_, id)| *id).collect();
+    let lines: Vec<Id> = items.iter().filter(|(k, _)| *k == 1).map(|(_, id)| *id).collect();
     if lines.len() != 2 {
-        sel_sk.clear();
         return None;
     }
     // the pair that shares a corner is kept lit until the value is applied or refused - the corner belongs to those
     // two lines, and a person must see which ones while the number in the box is being decided
-    match project.corner_of_pair(si, lines[0], lines[1]) {
-        Some(pid) => Some(CornerChoice { pid, edges: Some((lines[0], lines[1])), through: None }),
-        None => {
-            sel_sk.clear();
-            None
-        }
-    }
+    project.corner_of_pair(si, lines[0], lines[1]).map(|pid| CornerChoice { pid, edges: Some((lines[0], lines[1])), through: None })
 }
 
 /// A PICK IN HAND - a line (`1`) or a point (`0`) under the cursor - AND WHAT THE WINDOW OF THE PICKS NAMES.
@@ -13380,9 +13460,7 @@ pub fn corner_picked(project: &Project, si: usize, item: (u8, Id), sel_sk: &mut 
     window.push(item);
     let named = match window.as_slice() {
         [(1, a), (1, b)] => project.corner_of_pair(si, *a, *b).map(|pid| CornerChoice { pid, edges: Some((*a, *b)), through: None }),
-        [(1, line), (0, point)] | [(0, point), (1, line)] => {
-            project.vertex_edges(si, *point).contains(line).then_some(CornerChoice { pid: *point, edges: None, through: Some(*line) })
-        }
+        [(1, line), (0, point)] | [(0, point), (1, line)] => project.vertex_edges(si, *point).contains(line).then_some(CornerChoice { pid: *point, edges: None, through: Some(*line) }),
         [(0, point)] => Some(CornerChoice { pid: *point, edges: None, through: None }),
         _ => None,
     };
@@ -13399,6 +13477,187 @@ pub fn corner_picked(project: &Project, si: usize, item: (u8, Id), sel_sk: &mut 
         (0, point) => Some(CornerChoice { pid: point, edges: None, through: None }),
         _ => None,
     }
+}
+
+/// WHETHER A CORNER WAS NAMED BY ITS TWO LINES OR BY A POINT ALONE.
+///
+/// It is a property of the corner and not of its geometry: the same two lines are a corner of the hand where a person
+/// picked both of them, and a corner of a point where only the point was picked and the cursor said which of the
+/// corners there is meant. Nothing reads it off a colour, and it decides nothing by itself — it says where a line
+/// named by the hand stands, and there the lines win.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CornerMade {
+    /// THE TWO LINES WERE NAMED BY THE HAND: they are the corner whatever else stands at their point.
+    Lines,
+    /// THE POINT ALONE NAMED IT, read through a line in the direction of the cursor.
+    Point,
+}
+
+/// A CORNER OF THE SET AND HOW IT WAS NAMED. The pair is the corner itself and is what is cut; the way it was named
+/// is what a further pick is weighed against.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SetCorner {
+    /// THE TWO LINES THAT MAKE IT.
+    pub pair: (Id, Id),
+    /// WHETHER THOSE TWO LINES WERE NAMED BY THE HAND or read off a point on its own.
+    pub made: CornerMade,
+}
+
+/// A CORNER WRITTEN AS ONE PAIR, whichever of its two lines comes first.
+///
+/// WHICH LINE IS NAMED FIRST decides which pair the lines at a point of several make — that is said before this,
+/// by `corners_of_lines`. Which of the two is written down afterwards says nothing at all, and the two must not be
+/// told apart: a corner that is remembered and the same corner found again by the picks are one corner, and while
+/// they were two, the set held that corner twice, drew it twice and cut it twice.
+pub fn corner_pair_as_one(pair: (Id, Id)) -> (Id, Id) {
+    if pair.0 <= pair.1 {
+        pair
+    } else {
+        (pair.1, pair.0)
+    }
+}
+
+/// WHETHER A LINE STANDS AT A POINT, which is how a line named by the hand is found among the lines of a corner a
+/// point named.
+fn line_stands_at(project: &Project, si: usize, line: Id, point: Id) -> bool {
+    project.edge_stands_at(si, line, point)
+}
+
+/// THE CORNERS A SET OF PICKS MAKES: a line picked by itself, or the corner a point picked on its own.
+///
+/// The picks are read as two things rather than one list of lines, and the difference between them is the whole of
+/// the rule:
+///
+/// * **THE LINES A HAND NAMED** make their corners among themselves, in the order they were named — a triangle is
+///   three corners and a point of four lines is two of them taken two at a time. They are free: a line named here
+///   makes a corner wherever it ends.
+/// * **A POINT NAMED ALONE** names one corner, read through the line it is read through with the side the cursor
+///   stands on (`through` and the cursor). Its two lines stand at THAT POINT and nowhere else. Reported: on a
+///   square, naming a point and then naming a line that arrives at that point produced no corner at all, and
+///   naming a fourth line opened two — a point had let all its lines into the pairing, and the line that came
+///   afterwards paired with a neighbour of a line already used. A point names the corner it was read at, and a line
+///   that arrives there joins the line already standing with it.
+///
+/// **WHERE A LINE NAMED BY THE HAND STANDS AT THE POINT OF A CORNER THAT WAS READ, THE HAND WINS**: the lines
+/// standing at the point are paired two at a time with the named ones first, so the corner is built on the lines a
+/// person chose. A point of three or more lines that no chosen line arrives at keeps the corner the cursor read.
+pub fn corners_of_picks_aimed(project: &Project, si: usize, picks: &[(u8, Id)], through: &[(Id, Id)], cursor: Option<(f64, f64)>) -> Vec<SetCorner> {
+    let take = |id: Id, lines: &mut Vec<Id>| {
+        if !lines.contains(&id) {
+            lines.push(id);
+        }
+    };
+    let mut named: Vec<Id> = Vec::new(); // the lines a hand named
+    let mut read: Vec<(Id, Id, Id)> = Vec::new(); // (point, line, line): the corners a point named alone
+    for &(kind, id) in picks {
+        if kind == 1 {
+            take(id, &mut named);
+        } else if let Some(&(point, line)) = through.iter().find(|(p, _)| *p == id) {
+            // THE CORNER OF THIS POINT THAT THIS LINE BOUNDS, the one on the side the cursor stands on
+            if let Some((a, b)) = project.vertex_pair_through(si, point, line, cursor) {
+                let one = (point, a, b);
+                if !read.contains(&one) {
+                    read.push(one);
+                }
+            } else {
+                take(line, &mut named); // nothing could be read at it: the line is all the point named
+            }
+        } else {
+            // THE LINES OF A POINT IN A FIXED ORDER: what `vertex_edges` hands back follows the drawing, and the
+            // order lines are let into the set in is the order they are paired in at a point of several.
+            let mut at = project.vertex_edges(si, id);
+            at.sort_unstable();
+            for e in at {
+                take(e, &mut named);
+            }
+        }
+    }
+    let mut out: Vec<SetCorner> = project.corners_of_lines(si, &named).into_iter().map(|pair| SetCorner { pair: corner_pair_as_one(pair), made: CornerMade::Lines }).collect();
+    for (point, a, b) in read {
+        // THE DRAWING HAS MOVED ON: a pair that is no more a corner of the point it was read at is not offered.
+        if project.corner_of_pair(si, a, b) != Some(point) {
+            continue;
+        }
+        // THE LINES STANDING AT THIS POINT, the ones a hand named first and the two the point was read through
+        // after them: a chosen line takes the first place and the corner is built on it.
+        let mut at: Vec<Id> = named.iter().copied().filter(|&l| line_stands_at(project, si, l, point)).collect();
+        for l in [a, b] {
+            take(l, &mut at);
+        }
+        for two in at.chunks(2) {
+            let [m, n] = two else { continue };
+            let pair = corner_pair_as_one((*m, *n));
+            if project.corner_of_pair(si, pair.0, pair.1) != Some(point) || out.iter().any(|c| c.pair == pair) {
+                continue;
+            }
+            let made = if named.contains(&pair.0) || named.contains(&pair.1) { CornerMade::Lines } else { CornerMade::Point };
+            out.push(SetCorner { pair, made });
+        }
+    }
+    out
+}
+
+/// THE CORNERS THE PICKS MAKE, with no cursor to read a point with: every point lets all its lines in, and they are
+/// paired as they come. Where the picks were named with Shift the reading of a point is in `aimed`, and the set is
+/// read with it.
+pub fn corners_of_picks(project: &Project, si: usize, picks: &[(u8, Id)]) -> Vec<SetCorner> {
+    corners_of_picks_aimed(project, si, picks, &[], None)
+}
+
+/// WHETHER A PICK MAY BE NAMED BESIDE THE ONES ALREADY IN HAND.
+///
+/// A POINT ALREADY WEARING A CORNER OF NAMED LINES MAY NOT BE NAMED AGAIN: that corner was said by the lines, and
+/// naming it by its point would be a second reading of the same place — where a point of four lines stands, the
+/// lines say which corner and the point says only where. Only the lines may be added to a corner that has one.
+pub fn pick_may_join(project: &Project, si: usize, named: &[(u8, Id)], item: (u8, Id)) -> bool {
+    match item {
+        (0, point) => !corners_of_picks(project, si, named).iter().any(|c| project.corner_of_pair(si, c.pair.0, c.pair.1) == Some(point)),
+        // anything else is a line: a line joins the set wherever it stands, and the corners are made of the set afterwards
+        _ => true,
+    }
+}
+
+/// THE LARGEST VALUE EVERY NAMED CORNER TAKES AT ONCE: the smallest of what each of them takes on its own.
+///
+/// One value cuts all the corners of a set together, so it is held by the tightest of them — a value that fits one
+/// corner and overruns the next would leave a half-cut drawing behind. `None` when no corner of the set is known.
+pub fn corners_limit(project: &Project, si: usize, corners: &[SetCorner], chamfer: bool) -> Option<f64> {
+    corners.iter().filter_map(|c| project.corner_limit_of_pair(si, project.corner_of_pair(si, c.pair.0, c.pair.1)?, c.pair, chamfer)).fold(None, |m: Option<f64>, v| Some(m.map_or(v, |m| m.min(v))))
+}
+
+/// THE CORNERS OF A SET, THE FIXED ONES KEEPING THE PAIR THEY WERE NAMED BY.
+///
+/// A fixed corner is taken as it stands: its two lines are not offered to the pairing again, so a line named after it
+/// cannot slide it onto another of the corners at its point. That is the whole of "fixed" - not that it is cut, but
+/// that the next pick leaves it alone. The rest are the pairs the remaining picks make.
+pub fn corners_of_the_set(project: &Project, si: usize, picks: &[(u8, Id)], fixed: &[(Id, Id)], through: &[(Id, Id)], cursor: Option<(f64, f64)>) -> Vec<SetCorner> {
+    // THE FIXED ONES FIRST, as they stand: a corner that was remembered is a corner, and taking it off the list and
+    // putting it back at the head is what makes it the one a further pick cannot move. The rest are the pairs the
+    // picks make - the lines of a fixed corner are still free to make OTHER corners, which is why they are not
+    // taken out of the naming: a triangle keeps its three corners while the first of them is fixed. A remembered
+    // corner is one whose two lines were named, so it stands as a corner of the hand.
+    let mut out: Vec<SetCorner> =
+        fixed.iter().copied().filter(|&(a, b)| project.corner_of_pair(si, a, b).is_some()).map(|pair| SetCorner { pair: corner_pair_as_one(pair), made: CornerMade::Lines }).collect();
+    for c in corners_of_picks_aimed(project, si, picks, through, cursor) {
+        if !out.iter().any(|k| k.pair == c.pair) {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// A LINE STANDING AT A POINT, which is the line a point of the set is read through: the direction a point is
+/// named in is said by a line through it, and there is always one where a point is worth naming.
+pub fn line_through_point(project: &Project, si: usize, point: Id) -> Option<Id> {
+    let mut at = project.vertex_edges(si, point);
+    at.sort_unstable();
+    at.into_iter().next()
+}
+
+/// WHETHER A PICK CARRIES A FIXED CORNER, which a Shift click on it lets go of.
+pub fn carries_a_fixed_corner(fixed: &[(Id, Id)], item: (u8, Id)) -> bool {
+    let (1, eid) = item else { return false };
+    fixed.iter().any(|&(a, b)| a == eid || b == eid)
 }
 
 /// WHETHER THE PICK IS STILL THERE once the corner has been taken off.
@@ -13436,8 +13695,30 @@ pub fn start_corner_tool(bc: &mut BarCtx, op: u8) {
         Sel::Sketch(si) => si,
         _ => return,
     };
+    // WHATEVER STOOD CHOSEN BEFORE THE TOOL WAS TAKEN IS THE SET. The lines in it that meet at a corner are cut as if
+    // they had been named with Shift while the mode was on, and the choice stays lit rather than being asked for
+    // again: a person who drew a contour, chose it and took the tool meant that contour, not two lines under the
+    // pointer.
+    // THE COLOURS OF THE PREVIEW ARE NOT SET HERE: they are read from the scheme where the corner is drawn, every
+    // frame, so that every way of opening a field draws alike and a person who changes the scheme sees it.
+    bc.corner.many = bc.sel_sk.items.clone();
+    // THE LINES CHOSEN BEFORE THE TOOL ARE FIXED FROM THE START: they were named before there was a field to type
+    // into, so nothing about them is still being decided here - they keep the pairs they were chosen for.
+    let corners = corners_of_picks(&*bc.project, si, &bc.corner.many);
+    for c in &corners {
+        if !bc.corner.fixed.contains(&c.pair) {
+            bc.corner.fixed.push(c.pair);
+        }
+    }
     if let Some(choice) = corner_of_selection(&*bc.project, si, bc.sel_sk) {
         open_corner_popup(bc.corner, bc.tool_prefs, si, choice.pid, op == 5, None, choice.edges);
+    } else if let Some(first) = corners.first() {
+        // THE FIELD OPENS ON THE FIRST OF THE CORNERS THE CHOICE MAKES, where there is more than the one pair two
+        // lines name. A click without Shift is a SINGLE SELECTION and forgets the choice altogether - so the tool
+        // cannot wait to be told which corner the value is for: there would be nothing left to answer, and a
+        // contour chosen before the tool could not be rounded at all.
+        let pid = bc.project.corner_of_pair(si, first.pair.0, first.pair.1).unwrap_or(0);
+        open_corner_popup(bc.corner, bc.tool_prefs, si, pid, op == 5, None, Some(first.pair));
     }
 }
 

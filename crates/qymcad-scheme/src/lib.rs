@@ -245,6 +245,12 @@ pub struct Palette {
     pub preview_axis: [u8; 3],
     /// helper geometry inside a preview: a datum, a mirror plane, the grid of copies
     pub preview_datum: [u8; 3],
+    /// THE NEWEST CORNER OF A SET - the one named last, the one a further pick can still re-aim. A corner is the
+    /// newest because it was named last: the state is the fact, and the scheme says what that state looks like.
+    pub preview_corner_new: [u8; 3],
+    /// A CORNER ALREADY FIXED - the pair of lines that makes it is remembered, so the next pick cannot move it.
+    /// Drawn apart from the newest one so that a person can see at a glance what a further click will still change.
+    pub preview_corner_fixed: [u8; 3],
     /// THE MEASURING LINE - ONE FOR THE WHOLE PROGRAM. It used to be amber in 3D and green in a sketch:
     /// one tool, two colours, which is not a design but a disagreement. It was merged into the green one
     /// by decision, so that one colour sets it everywhere.
@@ -491,10 +497,10 @@ readers!(
     dimension_driven, dim_helper, dim_helper_ring, selected, highlight, active, handle, handle_face, snap_point, axis_pick_idle, clip, plate_text, pattern_center, sketch_point, annotation, note,
     hint, hint_action, tree_selected, connector, rollback, select_window, select_cross, rubber_band, snap_marker, snap_intersection, snap_edge, snap_axis, snap_grid, edge_idle, body_face, body_ghost,
     body_clash, add, remove, modify, reference, offset_in, plane_face, plane_fill, plane_idle, plane_normal, datum_point, datum_axis, preview, preview_prim, preview_array, preview_axis,
-    preview_datum, measure, cut_line, gizmo_label, constraint_ok, constraint_selected, constraint_hover, joint_idle, joint_hover, joint_pick_a, joint_pick_b, grounded, contour_idle, contour_hover,
-    contour_profile, ok, ok_soft, underdefined, warning, error, error_mild, confirm, refuse, cam_plunge, cam_rapid, cam_table, cam_table_grid, cam_stock, ghost_target, viewcube_face, viewcube_edge,
-    cam_stock_idle, cam_op1, cam_op2, cam_op3, cam_op4, cam_op5, cam_op6, ui_window, ui_field, ui_stripe, ui_outline, ui_control, ui_control_hover, ui_control_active, ui_accent, ui_text, ui_text_dim,
-    ui_text_strong, ui_link,
+    preview_datum, preview_corner_new, preview_corner_fixed, measure, cut_line, gizmo_label, constraint_ok, constraint_selected, constraint_hover, joint_idle, joint_hover, joint_pick_a, joint_pick_b,
+    grounded, contour_idle, contour_hover, contour_profile, ok, ok_soft, underdefined, warning, error, error_mild, confirm, refuse, cam_plunge, cam_rapid, cam_table, cam_table_grid, cam_stock,
+    ghost_target, viewcube_face, viewcube_edge, cam_stock_idle, cam_op1, cam_op2, cam_op3, cam_op4, cam_op5, cam_op6, ui_window, ui_field, ui_stripe, ui_outline, ui_control, ui_control_hover,
+    ui_control_active, ui_accent, ui_text, ui_text_dim, ui_text_strong, ui_link,
 );
 
 impl Palette {
@@ -639,6 +645,9 @@ pub fn dark() -> Palette {
         preview_array: [120, 210, 235],
         preview_axis: [180, 160, 250],
         preview_datum: [150, 200, 255],
+        // the newest corner says "a pick may still move this one", the fixed one says "this one is remembered"
+        preview_corner_new: [240, 200, 90],
+        preview_corner_fixed: [157, 122, 235],
         measure: [120, 220, 160], // green, both in 3D and in a sketch
         cut_line: [255, 210, 120],
         gizmo_label: [245, 230, 150],

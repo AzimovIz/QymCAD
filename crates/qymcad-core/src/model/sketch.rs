@@ -2322,7 +2322,7 @@ impl Project {
             }
         }
     }
-    /// THE POINT OF A CORNER THAT HAS BEEN TAKEN OFF: it goes with the corner, unless a line still stands on it.
+    /// THE POINT OF A CORNER THAT HAS BEEN TAKEN OFF: it goes with the corner, unless something still stands on it.
     ///
     /// Where four lines met at the point and two of them have just been cut, the other two still stand on it and the
     /// point is their corner: it stays. While a dimension or a constraint is stated about it, a diagonal ends at it or it
@@ -2454,7 +2454,7 @@ impl Project {
         }
         // Virtual corner: the vertex is held on the extensions of both lines, so dimensions to the corner stay
         // valid and the contour stays whole.
-self.settle_the_corner_point(si, pc, o1, t1, o2, t2);
+        self.settle_the_corner_point(si, pc, o1, t1, o2, t2);
         self.regen_sketch(si);
         true
     }
@@ -2774,6 +2774,13 @@ self.settle_the_corner_point(si, pc, o1, t1, o2, t2);
             .map(|e| e.id)
             .collect()
     }
+    /// WHETHER AN EDGE STANDS AT A POINT, which is `vertex_edges` asked the other way round.
+    ///
+    /// Which of the lines of a point were named by a hand and which were let in by the point itself is decided by
+    /// this: a line named by the hand takes its place among the lines of the point it arrives at.
+    pub fn edge_stands_at(&self, si: usize, eid: Id, pid: Id) -> bool {
+        self.edge_end_ids(si, eid).is_some_and(|(x, y)| x == pid || y == pid)
+    }
     /// THE CORNER TWO EDGES SHARE: the point that is an end of both of them, when there is one.
     ///
     /// Two lines crossing without a point in common share no corner. That is the whole question the fillet and the
@@ -2807,6 +2814,54 @@ self.settle_the_corner_point(si, pc, o1, t1, o2, t2);
         let (Some((x1, y1)), Some((x2, y2))) = (dir(self, e1), dir(self, e2)) else { return None };
         // parallel means one straight line: the angle between them is 180 degrees, and there is no corner in it
         ((x1 * y2 - y1 * x2).abs() > 1e-9).then_some(pid)
+    }
+    /// THE CORNERS A NAMED SET OF LINES MAKES: every pair of them that meets, two at a time, in the order they
+    /// were named.
+    ///
+    /// **WHERE TWO OF THEM MEET THERE IS ONE CORNER**, and one pair is that corner — three lines of a triangle make
+    /// three points and so three corners, which is the whole of a closed contour. A line that meets nothing of the
+    /// set makes none: a line named on its own is half of the next corner, waiting for whatever answers it.
+    ///
+    /// **WHERE MORE THAN TWO OF THEM STAND ON ONE POINT** — a cross of four lines, a T-joint — every pair of them is
+    /// a corner of that point, and taking all of them would round one place six times. So they are taken **as they
+    /// were named, two at a time**: the first with the second, the third with the fourth, and a line left over alone
+    /// stands there until another one is named beside it. That is what makes a third line joining a corner two lines
+    /// have already made add nothing, and a fourth beside it make a second corner.
+    ///
+    /// The order is the rule, so it is the order the lines were named in and not the order a map hands them back:
+    /// a set read off a hash would pair them by accident of the hashing, and the same drawing would round different
+    /// corners on a second run.
+    pub fn corners_of_lines(&self, si: usize, lines: &[Id]) -> Vec<(Id, Id)> {
+        // THE LINES AS THEY WERE NAMED, one line named twice being one line: a line standing twice at the same
+        // point would be paired with itself.
+        let mut set: Vec<Id> = Vec::new();
+        for &l in lines {
+            if !set.contains(&l) {
+                set.push(l);
+            }
+        }
+        let here = |me: &Self, p: Id| -> Vec<usize> { (0..set.len()).filter(|&m| me.edge_end_ids(si, set[m]).is_some_and(|(x, y)| x == p || y == p)).collect() };
+        let mut out: Vec<(Id, Id)> = Vec::new();
+        let mut seen: Vec<Id> = Vec::new(); // the points already asked about, so a line asks about each of its ends once
+        for &l in &set {
+            let Some((x, y)) = self.edge_end_ids(si, l) else { continue };
+            for p in [x, y] {
+                if seen.contains(&p) {
+                    continue;
+                }
+                seen.push(p);
+                for two in here(self, p).chunks(2) {
+                    // A PAIR LYING ALONG ONE STRAIGHT LINE SHARES ITS POINT AND MAKES NO ANGLE: it is not a corner,
+                    // and naming it as one would offer a cut where there is nothing to cut.
+                    if let [m, n] = two {
+                        if self.corner_of_pair(si, set[*m], set[*n]).is_some() {
+                            out.push((set[*m], set[*n]));
+                        }
+                    }
+                }
+            }
+        }
+        out
     }
     /// WHAT A CORNER WOULD LOOK LIKE IF THE VALUE WERE APPLIED: the point of the corner, where the two named
     /// edges will be cut, and the arc that will stand between them — a chamfer is a straight cut and has none.
@@ -2932,8 +2987,22 @@ self.settle_the_corner_point(si, pc, o1, t1, o2, t2);
         // THE TWO SECTORS THIS EDGE BOUNDS, one on either side of it in the turn of the circle, each measured as the
         // turn from the edge named so that neither breaks where the angles run out
         let a0 = v[at].1;
-        let up = { let x = v[(at + 1) % len].1; if x > a0 { x - a0 } else { x + std::f64::consts::TAU - a0 } };
-        let down = { let x = v[(at + len - 1) % len].1; if x < a0 { a0 - x } else { a0 + std::f64::consts::TAU - x } };
+        let up = {
+            let x = v[(at + 1) % len].1;
+            if x > a0 {
+                x - a0
+            } else {
+                x + std::f64::consts::TAU - a0
+            }
+        };
+        let down = {
+            let x = v[(at + len - 1) % len].1;
+            if x < a0 {
+                a0 - x
+            } else {
+                a0 + std::f64::consts::TAU - x
+            }
+        };
         // THE SECTOR THE CURSOR STANDS IN, and where it stands in neither, the one it is nearer the middle of - the
         // pointer may be in a sector that belongs to two other edges altogether. The two are equally far apart when
         // the cursor is opposite the edge named, and the one after it in the turn of the circle stands then.
@@ -2960,7 +3029,7 @@ self.settle_the_corner_point(si, pc, o1, t1, o2, t2);
         out
     }
     /// Chamfer the corner at vertex `pid`, where exactly two lines meet. Returns whether it succeeded.
-///
+    ///
     /// THE FIRST LINE is the one `toward` stands nearer to - the side of the corner that was clicked: the first leg is
     /// laid along it, and for a leg and an angle the angle is measured from it. With no point given, the line drawn
     /// first.

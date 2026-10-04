@@ -566,33 +566,125 @@ pub fn corner_arc_points(centre: Pos2, r_px: f32, from: Pos2, to: Pos2) -> Vec<P
 /// cut that will stand between them. Nothing of the sketch is changed — the lines keep the ends they have, and what
 /// is drawn is only where the corner will go. A value too big for the corner is drawn as nothing and said in words
 /// beside the field instead, which is where a person is looking while typing it.
-fn draw_corner_preview(cc: &qymcad_ui_state::CornerCtx, ctx: &egui::Context, rect: Rect, si: usize, pid: Id, pair: Option<(Id, Id)>, chamfer: bool) {
+///
+/// EVERY CORNER IN THE SET IS DRAWN, not only the one the field was opened for: the picks named with Shift are cut by
+/// the same answer, so a person has to see where they are going to go before answering, not only where the one under
+/// the pointer will go.
+fn draw_corner_preview(cc: &qymcad_ui_state::CornerCtx, ctx: &egui::Context, rect: Rect, si: usize, corners: &[(Id, Option<(Id, Id)>, bool)], chamfer: bool) {
     let Ok(v) = qymcad_core::expr::eval(cc.corner.buf.trim(), &cc.project.param_map()) else { return };
     if v <= 1e-6 {
         return;
     }
-    let Some(pair) = pair else { return };
-    let Some(b) = cc.project.corner_blend(si, pid, pair, chamfer, v) else { return };
     let sh = qymcad_ui_state::Sheet { view: *cc.view, rect };
     let at = |p: [f64; 2]| sh.at(qymcad_core::geom::Point2::new(p[0], p[1]));
-    // the accent of the scheme in hand, which is the colour the drawing itself uses for what is not yet made
-    let col = ctx.style_of(egui::Theme::Dark).visuals.selection.bg_fill;
-    // its own layer, clipped to the sheet: the corner belongs to the drawing, not to the panel
-    let layer = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new(("cornerpreview", si, pid)))).with_clip_rect(rect);
-    match b.arc {
-        None => {
-            layer.line_segment([at(b.ends[0]), at(b.ends[1])], egui::Stroke::new(2.0, col));
+    // THE COLOUR OF A CORNER THAT IS FIXED is the accent of the scheme in hand - the colour the drawing itself uses
+    // for what is not yet made; THE NEWEST ONE is amber, so that the corner a further pick can still move is told
+    // from those that are remembered at a glance. Both are read off the state of the corner and off the scheme,
+    // never the reverse, and both are read HERE: keeping them in the state of the tool meant that every way of
+    // opening this field but one drew nothing at all.
+    let (col_fixed, col_new) = (corner_colour(cc.scheme, true), corner_colour(cc.scheme, false));
+    // ITS OWN LAYER, clipped to the sheet: the corners belong to the drawing, not to the panel. ONE LAYER FOR THE
+    // WHOLE SET, so that a set of corners is drawn as the one thing being done rather than as several.
+    let layer = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new(("cornerpreview", si)))).with_clip_rect(rect);
+    for &(pid, pair, fixed) in corners {
+        let Some(pair) = pair else { continue };
+        let Some(b) = cc.project.corner_blend(si, pid, pair, chamfer, v) else { continue };
+        // THE COLOUR IS A CONSEQUENCE OF WHETHER THE CORNER IS FIXED, not a thing of its own: a corner that is
+        // remembered keeps the two lines it was named by and is drawn as such, and the newest one - the only corner
+        // a further pick can still move - is drawn apart from them.
+        let col = if fixed { col_fixed } else { col_new };
+        match b.arc {
+            None => {
+                layer.line_segment([at(b.ends[0]), at(b.ends[1])], egui::Stroke::new(2.0, col));
+            }
+            Some((c, r)) => {
+                // the arc is walked in the sheet's own scale, so it looks the same whatever the zoom
+                let pts = corner_arc_points(at(c), (r * cc.view.scale as f64) as f32, at(b.ends[0]), at(b.ends[1]));
+                layer.add(egui::Shape::line(pts, egui::Stroke::new(2.0, col)));
+            }
         }
-        Some((c, r)) => {
-            // the arc is walked in the sheet's own scale, so it looks the same whatever the zoom
-            let pts = corner_arc_points(at(c), (r * cc.view.scale as f64) as f32, at(b.ends[0]), at(b.ends[1]));
-            layer.add(egui::Shape::line(pts, egui::Stroke::new(2.0, col)));
+        // where the lines will be cut: two small marks, so it is seen that the edges themselves will move
+        for e in b.ends {
+            layer.circle_stroke(at(e), 3.0, egui::Stroke::new(1.4, col));
         }
     }
-    // where the lines will be cut: two small marks, so it is seen that the edges themselves will move
-    for e in b.ends {
-        layer.circle_stroke(at(e), 3.0, egui::Stroke::new(1.4, col));
+}
+
+/// THE COLOUR ONE CORNER OF THE SET IS DRAWN IN, which is a consequence of whether it is fixed and of nothing else.
+///
+/// **THE SCHEME IS READ HERE, ON EVERY FRAME, AND NOT KEPT IN THE STATE OF THE TOOL.** The two colours used to be
+/// written into `CornerInput` by the one window that had a scheme to hand: every other way of opening a corner
+/// field - a click on a shape, a command, a mode change that clears the state - left them at the transparent
+/// default of a `Color32`, and the preview was not drawn at all. Nothing here is a number of a colour.
+pub fn corner_colour(scheme: &qymcad_ui_state::SchemeUi, fixed: bool) -> egui::Color32 {
+    if fixed {
+        scheme.pal.preview_corner_fixed()
+    } else {
+        scheme.pal.preview_corner_new()
     }
+}
+
+/// THE SMALLER OF TWO VALUES, where either may be the one that is not there: `None` says nothing, so it never wins.
+fn tighter(a: Option<f64>, b: Option<f64>) -> Option<f64> {
+    match (a, b) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (a, b) => a.or(b),
+    }
+}
+
+/// THE CORNER THAT WAS NEWEST BECOMES FIXED as soon as another corner is named beside it.
+///
+/// It is remembered with the two lines that make it, so that the pick just made - and every pick after it - leaves it
+/// alone. This is what "the last one turns violet and is fixed" means: it has not been cut, it has been given a
+/// direction to keep, and the yellow one is whatever was named last.
+fn fix_the_newest(sk: &mut qymcad_ui_state::SketchCtx, made: &[qymcad_ui_state::SetCorner], before: &[qymcad_ui_state::SetCorner]) {
+    // WHATEVER WAS NEWEST AND IS NOT THE CORNER JUST NAMED is fixed: it keeps the pair it was named by and every
+    // later pick leaves it alone. The corner in the field may well be one that is already fixed - a Shift click
+    // names a corner without moving the field - which is why the newest is read off what was named, not off it.
+    if let Some(previous) = sk.corner.newest.take() {
+        if Some(previous) != sk.corner.pair && !sk.corner.fixed.contains(&previous) {
+            sk.corner.fixed.push(previous);
+        }
+    }
+    // THE CORNER THIS PICK MADE, and not merely the last of the list: the set is read with the corners read from
+    // points after the ones of the lines, so the last of it is the newest point corner and says nothing about a
+    // line that has just been named. What the pick added is the newest, and the last of that is the one to show.
+    sk.corner.newest = made.iter().filter(|c| !before.iter().any(|k| k.pair == c.pair)).last().map(|c| c.pair).or(sk.corner.pair);
+}
+
+/// THE SET SAID IN WORDS: how many corners one answer will cut, the corner in the field among them.
+fn qymcad_ui_state_count(sk: &qymcad_ui_state::SketchCtx, si: usize) -> String {
+    let project: &qymcad_core::model::Project = &sk.project;
+    let n = qymcad_ui_state::corners_of_the_set(project, si, &picks_of_the_set(sk.corner), &sk.corner.fixed, &sk.corner.aimed, None).len();
+    qymcad_i18n::tr1("sk-corner-set-n", "n", &n.to_string())
+}
+
+/// THE PICKS THE SET HOLDS RIGHT NOW: everything named in it, less what has been switched off.
+///
+/// EVERY PICK OF THE SET IS IN `many`, the two lines that opened the field among the ones named with Shift: one
+/// value cuts them all, so they are read as one list of lines, and the corners are the pairs one list of lines makes.
+/// A pick that is hidden is not in hand and not gone - a click on it brings it back.
+fn picks_of_the_set(corner: &qymcad_ui_state::CornerInput) -> Vec<(u8, Id)> {
+    corner.many.iter().copied().filter(|p| !corner.hidden.contains(p)).collect()
+}
+
+/// WHAT A CLICK ON `item` SWITCHES: a line is its own pick, and a POINT IS THE CORNER IT STANDS ON - every line the
+/// set makes at it, and the point with them. One place to look, so that hiding a corner by its point and hiding it by
+/// one of its lines are the same act and the same way back.
+fn the_picks_of_a_click(corner: &qymcad_ui_state::CornerInput, project: &qymcad_core::model::Project, si: usize, item: (u8, Id)) -> Vec<(u8, Id)> {
+    let (0, point) = item else { return vec![item] };
+    let mut out = vec![item];
+    // EVERYTHING THE SET HAS EVER NAMED, not only what is in hand: a corner that was put away is still a corner of
+    // this set, and a click on its point is how it comes back. Looking only at what is live would find nothing
+    // there and name the corner all over again instead. The picks are read WITH the points that were read in the
+    // direction of the cursor, so a corner named by a point alone is found at its point as well.
+    for c in qymcad_ui_state::corners_of_picks_aimed(project, si, &corner.many, &corner.aimed, None) {
+        if project.corner_of_pair(si, c.pair.0, c.pair.1) == Some(point) {
+            out.push((1, c.pair.0));
+            out.push((1, c.pair.1));
+        }
+    }
+    out
 }
 
 pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Context, rect: Rect) {
@@ -612,20 +704,45 @@ pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Conte
         if let Some(pair) = pair {
             cc.corner.pair = Some(pair);
         }
-        draw_corner_preview(cc, ctx, rect, si, pid, pair, chamfer);
+        // the corners the Shift picks make together with it. Read on every frame, because a corner of the set can be
+        // one line further on or another the moment a pick is added.
+        // A POINT OF THE SET KEEPS ITS DIRECTION WHILE THE CURSOR STANDS THERE, the way the corner in the field does:
+        // it is read through the line it was named with, and the side the cursor is on says which of the corners at
+        // that point is meant. Until another point is named, moving the pointer moves this corner - which is what a
+        // person naming a point is saying when no line of the set arrives at it.
+        let over = ctx.input(|i| i.pointer.hover_pos()).filter(|p| rect.contains(*p)).map(|p| qymcad_ui_state::to_world(cc.view, rect, p)).map(|w| (w.x, w.y));
+        let set: Vec<qymcad_ui_state::SetCorner> = qymcad_ui_state::corners_of_the_set(&*cc.project, si, &picks_of_the_set(cc.corner), &cc.corner.fixed, &cc.corner.aimed, over);
+        // THE NEWEST CORNER FIRST, then those already fixed - the order they are drawn in and the order a reader
+        // reads them in: what this pick can still change, and what it cannot.
+        let mut shown: Vec<(Id, Option<(Id, Id)>, bool)> = pair.map(|p| (pid, Some(p), false)).into_iter().collect();
+        for c in &set {
+            if Some(c.pair) != pair {
+                if let Some(p) = cc.project.corner_of_pair(si, c.pair.0, c.pair.1) {
+                    shown.push((p, Some(c.pair), cc.corner.fixed.contains(&c.pair)));
+                }
+            }
+        }
+        draw_corner_preview(cc, ctx, rect, si, &shown, chamfer);
         let mut buf = std::mem::take(&mut cc.corner.buf);
-        let limit = if pid == 0 {
+        let mut limit = if pid == 0 {
             let sel: std::collections::HashSet<Id> = cc.sel_sk.items.iter().filter(|(k, _)| *k == 1).map(|(_, id)| *id).collect();
             let only = cc.corner.only.clone().or_else(|| (!sel.is_empty()).then_some(sel));
-            // the most is known as a radius; a chord or an arc is checked corner by corner when it is applied
-            if cc.tool_prefs.fillet_by == qymcad_core::model::FilletBy::Radius {
-                cc.project.all_corners_limit(si, only.as_ref())
-            } else {
-                None
-            }
+            cc.project.all_corners_limit(si, only.as_ref())
+        } else if let Some(pair) = pair {
+            cc.project.corner_limit_of_pair(si, pid, pair, chamfer)
         } else {
-            qymcad_ui_state::corner_limit_in(&*cc.project, si, pid, chamfer, cc.tool_prefs.fillet_by)
+            cc.project.corner_limit(si, pid, chamfer)
         };
+        // ONE VALUE CUTS THE WHOLE SET, so it is held by the tightest corner in it — and by what the lines between the
+        // corners spend on themselves, which is what "round every corner of a shape" has always answered. A value that
+        // fits the corner under the pointer and overruns the one beside it would leave a half-cut drawing behind.
+        if !set.is_empty() {
+            let lines: std::collections::HashSet<Id> = set.iter().flat_map(|c| [c.pair.0, c.pair.1]).collect();
+            let of_set = qymcad_ui_state::corners_limit(&*cc.project, si, &set, chamfer);
+            let of_lines = cc.project.all_corners_limit(si, Some(&lines));
+            let both = tighter(of_set, of_lines);
+            limit = tighter(limit, both);
+        }
         let judge = |project: &qymcad_core::model::Project, text: &str| -> Option<String> {
             match qymcad_core::expr::eval(text.trim(), &project.param_map()) {
                 Err(e) => Some(qymcad_i18n::error_words::expr_error_text(&e)),
@@ -731,8 +848,8 @@ pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Conte
             qymcad_ui_state::begin_edit(&mut *cc.edits, &*cc.project, qymcad_i18n::tr(if chamfer { "tool-chamfer" } else { "tool-fillet" }));
             if r > 1e-6 {
                 cc.tool_prefs.fillet = r; // sticky: the next corner offers the same value
-                // WHAT STANDS ON THE CORNER BEFORE THE KNIFE: the point goes with the corner, and a dimension
-                // measured to it cannot be stated without its subject - so it goes too, and it is said aloud.
+                                          // WHAT STANDS ON THE CORNER BEFORE THE KNIFE: the point goes with the corner, and a dimension
+                                          // measured to it cannot be stated without its subject - so it goes too, and it is said aloud.
                 let standing = if pid == 0 { 0 } else { cc.project.constraints_on_point(si, pid) };
                 let ok_n = if pid == 0 {
                     // the set from clicking a shape; failing that the selection; failing that the whole sketch
@@ -1069,11 +1186,25 @@ pub fn place_input_popup(
     corner: &mut qymcad_ui_state::CornerInput,
     place: &mut qymcad_ui_state::Placing,
     sel_sk: &mut qymcad_ui_state::SketchSelection,
-    tool_prefs: &mut qymcad_ui_state::SketchToolPrefs,
+    looks: qymcad_ui_state::PopupLooks,
     ctx: &egui::Context,
     rect: Rect,
 ) {
-    corner_input_popup(&mut qymcad_ui_state::CornerCtx { corner, project: &mut *ed.project, edits: &mut *ed.edits, sel_sk, view: &*ed.view, regen: &mut *ed.regen, status: ed.status, tool_prefs }, ctx, rect);
+    corner_input_popup(
+        &mut qymcad_ui_state::CornerCtx {
+            corner,
+            project: &mut *ed.project,
+            edits: &mut *ed.edits,
+            sel_sk,
+            view: &*ed.view,
+            regen: &mut *ed.regen,
+            status: ed.status,
+            tool_prefs: looks.tool_prefs,
+            scheme: looks.scheme,
+        },
+        ctx,
+        rect,
+    );
     let qymcad_ui_state::Sel::Sketch(si) = *ed.sel else {
         place.clear(); // everything unfinished in the drawing at once (otherwise one of the three is forgotten)
         return;
@@ -3892,24 +4023,162 @@ pub fn sketch_click_at(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context,
                     // point alone names every corner at it. Each pick pushes the older one out of the window, so
                     // the second of a pair is the first of the next and three lines in a row are two corners.
                     let picked = qymcad_pick::nearest_vertex(&sk.pick(), rect, pos, si).map(|pid| (0, pid)).or_else(|| qymcad_pick::nearest_line_eid(&sk.pick(), rect, pos, si).map(|eid| (1, eid)));
+                    // A PICK WITH SHIFT JOINS THE SET ALREADY IN HAND rather than taking the corner away and
+                    // making a new one: the corner in the field stands, this one is let in beside it, and one
+                    // answer cuts them all. Without a field open there is no set to join, and the click goes
+                    // the way it always went.
+                    // THE SET IS STILL THE SET WITH THE FIELD GONE: putting the corner that was in the
+                    // field away takes the box down, not the mode with it, and a Shift click must still
+                    // switch a corner rather than start naming one from nothing.
+                    let joining = ctx.input(|i| i.modifiers.shift) && (sk.corner.at.is_some() || !sk.corner.many.is_empty());
+                    if !joining {
+                        // A CLICK WITHOUT SHIFT IS A SINGLE SELECTION, and it is the only kind of selection
+                        // there is: it says which corner the value in the field is for, and the corners
+                        // named with Shift are forgotten - a multi-selection is made with Shift held, and
+                        // it is one act, begun and left with Shift. Reported: a click without Shift cut the
+                        // whole set instead of the one corner under the pointer, so there was no way to
+                        // take a single corner out of a set without giving the set up altogether.
+                        sk.corner.to_a_single_pick();
+                    }
                     match picked {
-                        Some(item) => match qymcad_ui_state::corner_picked(&*sk.project, si, item, sk.sel_sk) {
-                            Some(choice) => {
-                                qymcad_ui_state::open_corner_popup(sk.corner, sk.tool_prefs, si, choice.pid, sk.armed.click_op() == 5, Some(pos), choice.edges);
-                                // AFTER THE FIELD IS OPENED, which clears the line: the corner named by a line
-                                // and a point together is one of the corners that line takes part in
-                                sk.corner.through = choice.through;
-                                sk.corner.near = Some(qymcad_ui_state::to_world(&*sk.view, rect, pos));
+                        Some(item) if joining => {
+                            // A LINE THAT CARRIES A FIXED CORNER LETS GO OF IT. A corner that is remembered
+                            // is one a person means to come back to, and a shift click on the line that makes
+                            // it is the way back: the corner becomes available for choosing again.
+                            if qymcad_ui_state::carries_a_fixed_corner(&sk.corner.fixed, item) {
+                                sk.corner.fixed.retain(|&(a, b)| a != item.1 && b != item.1);
+                                *sk.status = qymcad_ui_state_count(sk, si);
+                                return;
                             }
-                            None => {
-                                // NO CORNER IN HAND, SO NO FIELD: a pick that leaves the window naming
-                                // nothing takes the field of the corner before it down with it. Reported:
-                                // a third line, not joined to the first two, left the preview of their
-                                // corner standing on the sheet with its field, over a pair that was gone.
-                                sk.corner.clear();
-                                *sk.status = qymcad_i18n::tr("sk-click-corner-next");
+                            // WHAT THE CLICK SWITCHES: a line is itself, a point is the corner it stands on.
+                            // The first two lines are in the set like any other pick, so naming one of them
+                            // switches that corner too - one rule, not one for the first corner and another
+                            // for the rest.
+                            let what = the_picks_of_a_click(sk.corner, &*sk.project, si, item);
+                            // ONLY THE PICKS THAT ARE IN THE SET ARE SWITCHED. A point carries the lines of
+                            // the corner it stands on, and one of them may be in the set while the point is
+                            // not: putting that corner away then means those lines, and putting it back
+                            // means those lines - not the point, which would name the corner all over again
+                            // and every other corner at it besides.
+                            let what: Vec<(u8, Id)> = what.into_iter().filter(|p| sk.corner.many.contains(p)).collect();
+                            let live = what.iter().any(|p| !sk.corner.hidden.contains(p));
+                            let off = what.iter().any(|p| sk.corner.hidden.contains(p));
+                            if live {
+                                // SWITCHED OFF, NOT DELETED: the lines keep the ends they have and the pick
+                                // is remembered, so the same click brings back that very corner - by its
+                                // line or by its point - rather than asking for it all over again.
+                                for p in &what {
+                                    sk.corner.hidden.push(*p);
+                                    sk.sel_sk.items.retain(|q| q != p);
+                                }
+                                let was_in_the_field =
+                                    sk.corner.pair.is_some_and(|p| what.contains(&(1, p.0)) || what.contains(&(1, p.1))) || sk.corner.at.is_some_and(|(_, pid, _)| what.contains(&(0, pid)));
+                                if was_in_the_field {
+                                    // THE CORNER IN THE FIELD WAS ONE OF THEM, so there is nothing left to
+                                    // type a value for and the box goes down. The set stays whole, hidden half
+                                    // and all: the corner was put away, not thrown away.
+                                    sk.corner.without_the_field();
+                                }
+                                *sk.status = qymcad_i18n::tr("sk-corner-set-off");
+                            } else if off {
+                                // THE SAME CLICK AGAIN BRINGS IT BACK - the corner that was put away and
+                                // not another, and the lines that made it are the ones that go back on.
+                                for p in &what {
+                                    sk.corner.hidden.retain(|q| q != p);
+                                    if !sk.corner.many.contains(p) {
+                                        sk.corner.many.push(*p);
+                                    }
+                                    if !sk.sel_sk.items.contains(p) {
+                                        sk.sel_sk.items.push(*p);
+                                    }
+                                }
+                                *sk.status = qymcad_ui_state_count(sk, si);
+                            } else if !qymcad_ui_state::pick_may_join(&*sk.project, si, &picks_of_the_set(sk.corner), item) {
+                                // A POINT THAT WEARS A CORNER OF NOTHING IN HAND IS NOT NAMED: it would be a
+                                // reading of a corner that is not there, and there is nothing to put away
+                                // either. Said rather than done silently, so a click that does nothing is a
+                                // rule and not a corner that went missing.
+                                *sk.status = qymcad_i18n::tr("sk-corner-set-no-point");
+                            } else {
+                                // WHAT THE SET WAS BEFORE THIS PICK, so that the corner this pick makes is
+                                // told from the ones it found: the newest is the corner that was added.
+                                let before = qymcad_ui_state::corners_of_picks_aimed(&*sk.project, si, &picks_of_the_set(sk.corner), &sk.corner.aimed, None);
+                                sk.corner.many.push(item);
+                                // A POINT NOTHING NAMED ARRIVES AT IS READ IN THE DIRECTION OF THE CURSOR,
+                                // the way the first corner of the tool is: the point says where, and the
+                                // side the pointer stands on says which of the corners there.
+                                if let (0, point) = item {
+                                    let already = sk.corner.aimed.iter().any(|(p, _)| *p == point);
+                                    if !already {
+                                        if let Some(line) = qymcad_ui_state::line_through_point(&*sk.project, si, point) {
+                                            sk.corner.aimed.push((point, line));
+                                        }
+                                    }
+                                }
+                                // THE NEWEST CORNER BECOMES FIXED as soon as another one is named: what was
+                                // yellow keeps the two lines it was named by, and this pick cannot move it.
+                                let made = qymcad_ui_state::corners_of_picks_aimed(&*sk.project, si, &picks_of_the_set(sk.corner), &sk.corner.aimed, None);
+                                fix_the_newest(sk, &made, &before);
+                                // THE PICK STANDS LIT WITH THE SET: a person naming the corners of a shape
+                                // has to see WHICH geometry the value in the field will be cut from.
+                                if !sk.sel_sk.items.contains(&item) {
+                                    sk.sel_sk.items.push(item);
+                                }
+                                *sk.status = qymcad_ui_state_count(sk, si);
                             }
-                        },
+                        }
+                        Some(item) => {
+                            let choice = qymcad_ui_state::corner_picked(&*sk.project, si, item, sk.sel_sk);
+                            match choice {
+                                Some(choice) => {
+                                    qymcad_ui_state::open_corner_popup(sk.corner, sk.tool_prefs, si, choice.pid, sk.armed.click_op() == 5, Some(pos), choice.edges);
+                                    // A CLICK WITHOUT SHIFT CHOOSES THE CORNER TO TYPE FOR, and nothing more:
+                                    // what is already fixed stays fixed, and so does the set it was named
+                                    // in. Reported: naming two corners with Shift and then clicking a line
+                                    // to say which corner the value is for emptied the buffer of the ones
+                                    // already named - they lost the pair they had been fixed at, and the
+                                    // set a further pick paired was not the set that had been built. A
+                                    // corner is remembered until it is applied (Enter) or refused (Esc).
+                                    if sk.corner.newest.is_none() {
+                                        sk.corner.newest = choice.edges.map(qymcad_ui_state::corner_pair_as_one);
+                                    }
+                                    // THE PICKS THAT NAMED IT JOIN THE SET: the first two lines are in it like
+                                    // any other pick, so the rule of switching a corner off is one rule.
+                                    for p in sk.sel_sk.items.clone() {
+                                        if !sk.corner.many.contains(&p) {
+                                            sk.corner.many.push(p);
+                                        }
+                                    }
+                                    // A POINT THAT NAMED THE CORNER IS READ IN THE DIRECTION OF THE CURSOR,
+                                    // and it is read as a corner of its own point: the lines standing there
+                                    // are the two of this corner and are not free to pair anywhere else.
+                                    // Without this the first corner of the tool let every line at its point
+                                    // into the pairing and a line named later with Shift paired with a
+                                    // neighbour of a line already used - a fourth corner on a square whose
+                                    // two points and two lines were the whole of what was named.
+                                    if let (0, point) = sk.sel_sk.items.last().copied().unwrap_or(item) {
+                                        if sk.sel_sk.items.iter().filter(|(k, _)| *k == 0).count() == 1 && !sk.corner.aimed.iter().any(|(p, _)| *p == point) {
+                                            let through = choice.through.or_else(|| qymcad_ui_state::line_through_point(&*sk.project, si, point));
+                                            if let Some(line) = through {
+                                                sk.corner.aimed.push((point, line));
+                                            }
+                                        }
+                                    }
+                                    // AFTER THE FIELD IS OPENED, which clears the line: the corner named by a line
+                                    // and a point together is one of the corners that line takes part in
+                                    sk.corner.through = choice.through;
+                                }
+                                None => {
+                                    // NO CORNER IN HAND, SO NO FIELD: a pick that leaves the window naming
+                                    // nothing takes the field of the corner before it down with it. Reported:
+                                    // a third line, not joined to the first two, left the preview of their
+                                    // corner standing on the sheet with its field, over a pair that was gone.
+                                    // The field goes down and nothing is left of it - a click without Shift
+                                    // is a single selection and has already forgotten the set.
+                                    *sk.status = qymcad_i18n::tr("sk-click-corner-next");
+                                }
+                            }
+                        }
                         None => *sk.status = qymcad_i18n::tr("sk-click-corner"),
                     }
                 }

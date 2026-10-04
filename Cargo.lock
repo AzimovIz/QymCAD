@@ -3348,6 +3348,7 @@ dependencies = [
  "qymcad-i18n",
  "qymcad-pick",
  "qymcad-render",
+ "qymcad-scheme",
  "qymcad-ui-state",
 ]
 

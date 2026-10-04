@@ -80,12 +80,7 @@ fn the_ends_of_the_preview_are_the_ends_of_the_fillet() {
     let pid = p.shared_vertex(si, e.0, e.1).expect("the two lines share the corner");
     let b = p.corner_blend(si, pid, e, false, 4.0).expect("a fillet of this corner can be shown");
     assert!(p.fillet_at_pair(si, e, 4.0), "the fillet of the corner did not apply");
-    let arc = p
-        .sketches[si]
-        .entities
-        .iter()
-        .find_map(|x| if let EntityKind::Arc { a, b, .. } = x.kind { Some((a, b)) } else { None })
-        .expect("the fillet is an arc");
+    let arc = p.sketches[si].entities.iter().find_map(|x| if let EntityKind::Arc { a, b, .. } = x.kind { Some((a, b)) } else { None }).expect("the fillet is an arc");
     let xy = |id| p.sketches[si].points.iter().find(|q| q.id == id).map(|q| (q.x, q.y)).expect("the arc stands on points of the sketch");
     let ends = [xy(arc.0), xy(arc.1)];
     for e in b.ends {

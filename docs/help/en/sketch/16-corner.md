@@ -37,9 +37,11 @@ What the window offers:
 After **Enter** the second line of the pair stays lit — it is the first of the next pair. A second click on the same
 line or point takes the choice back.
 
-A click after which the window names nothing takes the field of the corner before it down: there is no sense in
-showing the preview of a corner the selection no longer holds. Leaving the mode — the button, **Esc**, another tool —
-lets go of the selection too, and the lines it had chosen go dark.
+**A click without Shift is a single selection**: it says which corner the value is for, and it forgets everything
+named with **Shift**. A multi-selection is made with **Shift** held — begun with it and left with it. A click after
+which the window names nothing takes the field of the corner before it down as well: there is no sense in showing the
+preview of a corner the selection no longer holds. Leaving the mode — the button, **Esc**, another tool — lets go of
+the selection too, and the lines it had chosen go dark.
 
 **A joint of two pieces of one straight line** (an angle of 180 degrees) is not a corner: the second line becomes the
 first, and the search carries on with the next neighbour of it.
@@ -60,6 +62,60 @@ lines — where they will be cut. The lines themselves are not changed; this is 
 - The corner the cursor named last stays the one in force while the cursor is away: the preview under the value being
   typed does not jump to another corner.
 - Where there is no corner at all (the lines do not meet at an angle), the field says that too.
+
+## Several corners at once (Shift)
+
+With the field already open, **Shift + click** adds a corner to the set rather than starting a new one. The field does
+not reopen and its value does not change: the number typed in it is remembered and applied to the whole set together,
+on one **Enter**, in one step of undo. Every corner of the set is shown — where it will go.
+
+A corner is any pair of named lines that share a point (and a point named on its own names one such corner at itself):
+
+- three lines of a triangle are three corners; four lines of a chain are three corners; two separate pairs are two.
+- A line that meets none of the named ones adds nothing: it is half of the next corner and waits for more. The corner
+  named before it stays on the sheet.
+- **Where more than two lines stand on one point** (a cross, a T-joint) they are taken **two at a time in the order
+  they were named**: the first with the second, the third with the fourth. So a third line joining a corner that two
+  lines have already made adds nothing, and a fourth makes the second corner — with the third.
+- **A point names the corner at itself, and only that one.** A point named with **Shift** is read through the cursor
+  and the side it stands on, the way the first corner of the tool is, and it stays read that way until another point
+  is named. The two lines of such a corner stand **at that point** and nowhere else: a line named afterwards that
+  arrives at the same point makes the corner with the line already standing there, not with any neighbour of it.
+- **Where a named line runs through a point whose corner was only read, the line has the first word.** The corners at
+  a point are taken two at a time with the lines named by the hand first, so the blend is built on them.
+- Every corner carries a property: **whether it was named by lines or by a point**. It is what decides whose word
+  comes first at a point, and nothing in the code is checked by colour.
+- A **Shift click on a point** that already wears a corner of named lines is refused: those lines said that corner, and
+  the point would be a second reading of the same place. Add lines.
+- A **Shift click** on a line already in the set takes it back out, and the line stops standing lit.
+- A **Shift click on the point that named the corner in the field** takes that point and that corner together: the
+  field was opened by it, and naming it again means to have given up the corner, not to have read one place twice.
+  Where the corner was named by **lines**, the refusal stays: that point may not be chosen.
+
+## Lines chosen before the mode
+
+Lines chosen **before** the tool was taken stay chosen and become that same set: the corners they meet at are rounded
+or bevelled as if they had been named with **Shift** while the mode was on.
+
+- If exactly two of them are chosen and they meet, the field opens at once - the corner is already named.
+- If three or more are chosen (or two that meet nowhere), the field opens on the **first** of the corners they make.
+  The tool cannot wait to be told which corner the value is for: a click without Shift is a single selection and
+  forgets the choice, so a contour chosen before the tool could not be answered at all. One value cuts it whole.
+
+## Fixed corners
+
+**A fixed corner is not an applied one.** Nothing is cut: what is remembered is **between which two lines** the corner
+must be, and that is what stops the next pick from re-aiming it.
+
+- The corner named last is yellow. As soon as another one is named beside it, that one becomes **fixed** (violet):
+  its pair of lines is remembered, and every further pick leaves it alone.
+- There may be several fixed corners at once. They are remembered until the value is applied (**Enter**) or refused
+  (**Esc**); a click **without Shift** forgets them with the rest of the set - it begins a single selection anew.
+- A **Shift click on a line that carries a fixed corner** frees it: the corner becomes available for choosing again.
+- Hiding a corner is state too, not deletion: the lines keep the ends they have, the corner is simply out of the set,
+  and the **same** click - on its line or on its point - brings back that very corner.
+- The colour is a consequence of the state, not its source: yellow means "a pick can still move this one", violet
+  means "this one is remembered".
 
 ## What you get
 

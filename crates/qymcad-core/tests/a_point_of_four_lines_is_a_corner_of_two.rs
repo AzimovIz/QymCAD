@@ -93,7 +93,11 @@ fn the_cursor_stands_in_the_corner_it_names() {
 fn a_corner_of_the_shared_point_is_cut_where_the_cursor_stands() {
     let (mut p, si, shared) = two_squares_at_one_point();
     assert!(p.chamfer_at_vertex_near(si, shared, ChamferLegs::equal(5.0), 19.0, 19.0, None), "the chamfer of the corner the cursor stands in did not apply");
-    assert!(has_point(&p, si, 15.0, 20.0) && has_point(&p, si, 20.0, 15.0), "the cut of 5 does not meet the sides of the first square at (15, 20) and (20, 15): the points stand at {:?}", all_points(&p, si));
+    assert!(
+        has_point(&p, si, 15.0, 20.0) && has_point(&p, si, 20.0, 15.0),
+        "the cut of 5 does not meet the sides of the first square at (15, 20) and (20, 15): the points stand at {:?}",
+        all_points(&p, si)
+    );
     // the second square is untouched: only the corner under the cursor is cut
     assert!(has_point(&p, si, 40.0, 20.0) && has_point(&p, si, 20.0, 40.0), "the far square lost its corner as well: four lines through the point made two cuts of one corner");
 }
