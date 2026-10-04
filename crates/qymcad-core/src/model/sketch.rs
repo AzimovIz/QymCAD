@@ -22,6 +22,41 @@ pub struct TextSpec {
     pub font: crate::model::FontRef,
 }
 
+/// THE SIZE OF A SKETCH CHAMFER, as the chamfer of a part is given: how (`ChamferMode`), the first leg - along the first
+/// line - and the second value: the second leg for two legs, the angle from the first line in degrees for a leg and an
+/// angle, nothing for equal legs.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ChamferLegs {
+    pub mode: crate::feature::ChamferMode,
+    pub first: f64,
+    pub second: f64,
+}
+
+impl ChamferLegs {
+    /// Equal legs of `d`.
+    pub fn equal(d: f64) -> Self {
+        ChamferLegs { mode: crate::feature::ChamferMode::Symmetric, first: d, second: 0.0 }
+    }
+
+    /// The two legs along the lines of a corner whose angle is `corner` (radians); `None` where the size cannot be
+    /// laid: a leg of no length, or an angle that with the corner leaves no triangle (law of sines).
+    pub fn along(&self, corner: f64) -> Option<(f64, f64)> {
+        let d1 = self.first;
+        let d2 = match self.mode {
+            crate::feature::ChamferMode::Symmetric => d1,
+            crate::feature::ChamferMode::TwoDist => self.second,
+            crate::feature::ChamferMode::DistAngle => {
+                let a = self.second.to_radians();
+                if a <= 0.0 || a + corner >= std::f64::consts::PI - 1e-9 {
+                    return None;
+                }
+                d1 * a.sin() / (a + corner).sin()
+            }
+        };
+        (d1 > 1e-9 && d2 > 1e-9 && d1.is_finite() && d2.is_finite()).then_some((d1, d2))
+    }
+}
+
 impl Project {
     /// Add a contour and return its stable id.
     pub fn add_contour(&mut self, c: Contour) -> Id {
@@ -2026,7 +2061,7 @@ impl Project {
         }
     }
     /// Chamfer between two segments sharing a vertex, with setback `d`.
-    pub fn chamfer_lines(&mut self, si: usize, e1: Id, e2: Id, d: f64) -> bool {
+    pub fn chamfer_lines(&mut self, si: usize, e1: Id, e2: Id, legs: ChamferLegs) -> bool {
         let (Some((a1, b1)), Some((a2, b2))) = (self.line_ends(si, e1), self.line_ends(si, e2)) else { return false };
         let pc = if a1 == a2 || a1 == b2 {
             a1
@@ -2043,13 +2078,16 @@ impl Project {
         if la < 1e-9 || lb < 1e-9 {
             return false;
         }
+        // the angle of the corner between the two lines
+        let corner = (((ax - px) * (bx - px) + (ay - py) * (by - py)) / (la * lb)).clamp(-1.0, 1.0).acos();
+        let Some((d1, d2)) = legs.along(corner) else { return false };
         // A LEG AS LONG AS ITS LINE, OR LONGER, IS REFUSED: pressed silently to 0.95 of the shorter line it was taken - a leg
         // of 300 on lines of 30 made a chamfer of 28.5 with no word, and so did one of 29.9
-        if d >= la - 1e-9 || d >= lb - 1e-9 {
+        if d1 >= la - 1e-9 || d2 >= lb - 1e-9 {
             return false;
         }
-        let (t1x, t1y) = (px + (ax - px) / la * d, py + (ay - py) / la * d);
-        let (t2x, t2y) = (px + (bx - px) / lb * d, py + (by - py) / lb * d);
+        let (t1x, t1y) = (px + (ax - px) / la * d1, py + (ay - py) / la * d1);
+        let (t2x, t2y) = (px + (bx - px) / lb * d2, py + (by - py) / lb * d2);
         let t1 = self.sketch_point_at(si, t1x, t1y, 1e-9);
         let t2 = self.sketch_point_at(si, t2x, t2y, 1e-9);
         let seg = self.alloc_id();
@@ -2062,11 +2100,22 @@ impl Project {
                 }
             }
             s.entities.push(SketchEntity { id: seg, kind: EntityKind::Line { a: t1, b: t2 }, construction: false });
+            // THE CHAMFER KEEPS ITS SIZE AS DIMENSIONS, measured from the sharp corner, so it can be changed afterwards and
+            // the cut follows: the first leg, then the second leg - equal to the first for equal legs - or the angle from
+            // the first line. Standing on the corner, they keep it as the virtual sharp below.
+            let leg = |a: Id, b: Id, d: f64| Constraint::Distance { a, b, d, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None };
+            s.constraints.push(leg(pc, t1, d1));
+            s.constraints.push(match legs.mode {
+                crate::feature::ChamferMode::Symmetric => Constraint::Equal { a: pc, b: t1, c: pc, d: t2 },
+                crate::feature::ChamferMode::TwoDist => leg(pc, t2, d2),
+                // the angle between the first line, run towards the corner, and the cut: what a drawing of the chamfer gives
+                crate::feature::ChamferMode::DistAngle => Constraint::AngleLines { a: o1, b: t1, c: t1, d: t2, deg: legs.second, expr: String::new(), driven: false, off: 0.0, at: None },
+            });
         }
         // Virtual corner: the vertex is held on the extensions of both lines, so dimensions to the corner stay
         // valid and the contour stays whole.
         self.keep_virtual_corner_lines(si, pc, o1, t1, o2, t2);
-        self.regen_sketch(si);
+        self.solve_sketch(si);
         true
     }
     /// Endpoints of an edge entity (a line or an arc), used to find the shared vertex when filleting.
@@ -2383,7 +2432,11 @@ impl Project {
             .collect()
     }
     /// Chamfer the corner at vertex `pid`, where exactly two lines meet. Returns whether it succeeded.
-    pub fn chamfer_at_vertex(&mut self, si: usize, pid: Id, d: f64) -> bool {
+    ///
+    /// THE FIRST LINE is the one `toward` stands nearer to - the side of the corner that was clicked: the first leg is
+    /// laid along it, and for a leg and an angle the angle is measured from it. With no point given, the line drawn
+    /// first.
+    pub fn chamfer_at_vertex(&mut self, si: usize, pid: Id, legs: ChamferLegs, toward: Option<Point2>) -> bool {
         let edges = self.vertex_edges(si, pid);
         if edges.len() != 2 {
             return false;
@@ -2393,7 +2446,17 @@ impl Project {
         if !both_lines {
             return false;
         }
-        self.chamfer_lines(si, edges[0], edges[1], d)
+        // the line whose direction from the corner leans nearer to the click is the first
+        let lean = |eid: Id| -> f64 {
+            let Some(toward) = toward else { return 0.0 };
+            let (Some((a, b)), Some((px, py))) = (self.line_ends(si, eid), self.point_xy(si, pid)) else { return f64::MAX };
+            let far = if a == pid { b } else { a };
+            let Some((fx, fy)) = self.point_xy(si, far) else { return f64::MAX };
+            let (ux, uy, vx, vy) = (fx - px, fy - py, toward.x - px, toward.y - py);
+            -(ux * vx + uy * vy) / (ux.hypot(uy) * vx.hypot(vy)).max(1e-12)
+        };
+        let (first, second) = if lean(edges[1]) < lean(edges[0]) { (edges[1], edges[0]) } else { (edges[0], edges[1]) };
+        self.chamfer_lines(si, first, second, legs)
     }
     /// Connected shape: every entity reachable from `eid` through shared endpoints — a rectangle from one of
     /// its sides, a chain of lines and arcs. A circle or an ellipse stands alone. Used by "fillet all" followed

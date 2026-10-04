@@ -105,7 +105,7 @@ fn fillet_rounds_corner() {
 #[test]
 fn chamfer_cuts_corner() {
     let (mut p, si, eids) = rect_sketch();
-    let ok = p.chamfer_lines(si, eids[0], eids[1], 2.0);
+    let ok = p.chamfer_lines(si, eids[0], eids[1], qymcad_core::model::ChamferLegs::equal(2.0));
     assert!(ok, "the chamfer must apply");
     let c = &p.contours[p.contour_index(p.sketches[si].contour_ids[0]).unwrap()];
     assert!(c.closed && c.points.len() == 5, "five corners after a chamfer: {}", c.points.len());

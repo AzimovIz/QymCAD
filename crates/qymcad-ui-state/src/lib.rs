@@ -790,9 +790,13 @@ pub struct SketchToolPrefs {
     pub arc_mode: u8,
     pub rect_mode: u8,
     pub circ_mode: u8,
-    /// the corner fillet's radius and the offset's distance
+    /// the corner fillet's radius - the first leg of a chamfer - and the offset's distance
     pub fillet: f64,
     pub offset: f64,
+    /// HOW A CHAMFER IS GIVEN (as the chamfer of a part): equal legs, two legs, or a leg and an angle; and its second
+    /// value - the second leg, or the angle from the first line in degrees
+    pub chamfer_mode: qymcad_core::feature::ChamferMode,
+    pub chamfer_second: f64,
     /// a text in a sketch: its contents, its height, and whether it is an annotation rather than geometry
     pub text: String,
     pub text_h: f64,
@@ -906,7 +910,11 @@ pub struct CornerInput {
     /// where on the canvas the input field stands
     pub pos: Option<Pos2>,
     pub buf: String,
+    /// the second value of a chamfer of two legs or of a leg and an angle, typed beside the first
+    pub buf2: String,
     pub focus: bool,
+    /// where the corner was clicked, on the sheet: the line it stands nearer to is the first of a chamfer
+    pub near: Option<qymcad_core::geom::Point2>,
     /// restrict the corners to this set (rounding THE SELECTED corners rather than all of them)
     pub only: Option<std::collections::HashSet<Id>>,
     /// why the value in the field was refused, said beside it
@@ -12958,7 +12966,7 @@ fn try_modify_in(ed: Editing, sel_sk: &mut SketchSelection, sk_pat: SketchPatter
             }
         }
         5 => {
-            eids.len() >= 2 && ed.project.chamfer_lines(si, eids[0], eids[1], tool_prefs.fillet) && {
+            eids.len() >= 2 && ed.project.chamfer_lines(si, eids[0], eids[1], chamfer_legs(tool_prefs)) && {
                 sel_sk.clear(); // the selection and whatever was waiting for it
                 true
             }
@@ -13347,6 +13355,24 @@ pub fn arr_dir_of(dx: f64, dy: f64, dz: f64) -> (u8, f64) {
     } else {
         (0, dx)
     }
+}
+
+/// THE SIZE OF A SKETCH CHAMFER as the tool holds it: the mode, the first leg (`fillet`) and the second value.
+pub fn chamfer_legs(prefs: &SketchToolPrefs) -> qymcad_core::model::ChamferLegs {
+    qymcad_core::model::ChamferLegs { mode: prefs.chamfer_mode, first: prefs.fillet, second: prefs.chamfer_second }
+}
+
+/// THE CHAMFER'S MODE CHOSEN ON THE BAR, with the second value set to what the new mode means: the angle 45 deg, the
+/// second leg the first one - a number in degrees is no leg, nor a leg an angle.
+pub fn set_chamfer_mode(prefs: &mut SketchToolPrefs, mode: qymcad_core::feature::ChamferMode) {
+    if prefs.chamfer_mode == mode {
+        return;
+    }
+    prefs.chamfer_mode = mode;
+    prefs.chamfer_second = match mode {
+        qymcad_core::feature::ChamferMode::DistAngle => 45.0,
+        _ => prefs.fillet,
+    };
 }
 
 /// The label of a chamfer's second field: its meaning depends on the mode — the second leg, or the angle.

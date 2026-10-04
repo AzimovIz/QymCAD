@@ -37,8 +37,9 @@ fn a_corner_with_its_automatic_constraints_rounds_and_bevels() {
     assert!(p.fillet_at_vertex(si, pc, 3.0), "the corner rounded R3");
     assert_eq!(counts(&p, si), (5, 2, 1), "the far ends, the two points of touching and the centre - the corner gone");
     let (mut p, si, pc) = corner();
-    assert!(p.chamfer_at_vertex(si, pc, 3.0), "the corner bevelled 3");
-    assert_eq!(counts(&p, si), (4, 3, 0), "the far ends and the two legs - the corner gone");
+    assert!(p.chamfer_at_vertex(si, pc, qymcad_core::model::ChamferLegs::equal(3.0), None), "the corner bevelled 3");
+    // the corner stays as the virtual sharp the legs are measured from - a point, no line (issue #35)
+    assert_eq!(counts(&p, si), (5, 3, 0), "the far ends, the two legs and the virtual sharp");
 }
 
 #[test]
@@ -47,9 +48,9 @@ fn a_corner_refuses_what_it_cannot_take() {
     let (r, d) = (p.corner_limit(si, pc, false), p.corner_limit(si, pc, true));
     assert!(r.is_some_and(|r| (r - 30.0).abs() < 1e-9) && d.is_some_and(|d| (d - 30.0).abs() < 1e-9), "a square corner of lines 30 takes up to 30: {r:?} {d:?}");
     let (mut p, si, pc) = corner();
-    assert!(!p.chamfer_at_vertex(si, pc, 300.0), "a leg of 300 on lines of 30 is refused, not cut down");
+    assert!(!p.chamfer_at_vertex(si, pc, qymcad_core::model::ChamferLegs::equal(300.0), None), "a leg of 300 on lines of 30 is refused, not cut down");
     let (mut p, si, pc) = corner();
-    assert!(p.chamfer_at_vertex(si, pc, 29.9), "a leg of 29.9 is taken as it is");
+    assert!(p.chamfer_at_vertex(si, pc, qymcad_core::model::ChamferLegs::equal(29.9), None), "a leg of 29.9 is taken as it is");
     let legs: Vec<(f64, f64)> = p.sketches[si].points.iter().map(|q| (q.x, q.y)).collect();
     assert!(legs.iter().any(|&(x, y)| (x - 29.9).abs() < 1e-6 && y.abs() < 1e-6), "the leg stands at 29.9, not pressed down: {legs:?}");
 }

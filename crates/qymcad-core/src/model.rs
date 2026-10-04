@@ -1838,7 +1838,7 @@ pub use regen::{ArrayAxis, BodyOp, ChamferShape, CombineSpan, ExtrudeSpan, HoleT
 mod tess;
 mod timeline;
 mod sketch;
-pub use sketch::TextSpec;
+pub use sketch::{ChamferLegs, TextSpec};
 pub(crate) mod comp_pattern;
 pub use comp_pattern::{CompPattern, CompPatternKind};
 mod projection;

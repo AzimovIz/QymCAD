@@ -546,6 +546,16 @@ pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Conte
                 Ok(_) => None,
             }
         };
+        // the second value: a leg like the first, or an angle between 0 and 180 deg
+        let angle = cc.tool_prefs.chamfer_mode == qymcad_core::feature::ChamferMode::DistAngle;
+        let judge2 = |project: &qymcad_core::model::Project, text: &str| -> Option<String> {
+            match qymcad_core::expr::eval(text.trim(), &project.param_map()) {
+                Err(e) => Some(qymcad_i18n::error_words::expr_error_text(&e)),
+                Ok(v) if !v.is_finite() || v <= 1e-6 => Some(qymcad_i18n::tr("cmd-value-zero")),
+                Ok(v) if angle && v >= 180.0 => Some(qymcad_i18n::tr("sk-fillet-too-big")),
+                Ok(_) => None,
+            }
+        };
         egui::Area::new(egui::Id::new(("cornerinput", si, pid))).fixed_pos(qymcad_ui_state::clamp_popup(at, rect) + egui::vec2(10.0, -10.0)).order(egui::Order::Foreground).show(ctx, |ui| {
             egui::Frame::popup(ui.style()).show(ui, |ui| {
                 ui.horizontal(|ui| {
@@ -588,13 +598,35 @@ pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Conte
                         cancel = true;
                     }
                 });
+                // THE SECOND VALUE OF A CHAMFER of two legs or of a leg and an angle, beside the first (issue #35); it is the
+                // bar's too, as the first leg is. Tab goes from one field to the other, Enter in either applies.
+                if chamfer && cc.tool_prefs.chamfer_mode != qymcad_core::feature::ChamferMode::Symmetric {
+                    ui.horizontal(|ui| {
+                        ui.label(qymcad_i18n::tr(qymcad_ui_state::chamfer_d2_label(cc.tool_prefs.chamfer_mode)));
+                        let r2 = qymcad_ui_state::focus_edit(ui, &mut cc.corner.buf2, 64.0, "", false);
+                        if let Some(why) = judge2(&*cc.project, &cc.corner.buf2) {
+                            ui.label(egui::RichText::new(ph::WARNING).color(ui.visuals().warn_fg_color)).on_hover_text(why);
+                        }
+                        if r2.has_focus() {
+                            if let Some(v) = parse_num(cc.project, &cc.corner.buf2).filter(|v| *v > 1e-6) {
+                                cc.tool_prefs.chamfer_second = v;
+                            }
+                        } else if !enter && !r2.lost_focus() && parse_num(cc.project, &cc.corner.buf2).is_none_or(|v| (v - cc.tool_prefs.chamfer_second).abs() > 1e-12) {
+                            cc.corner.buf2 = qymcad_core::expr::fmt_num(cc.tool_prefs.chamfer_second);
+                        }
+                        if enter && (r2.lost_focus() || r2.has_focus()) {
+                            apply = true;
+                        }
+                    });
+                }
                 if let Some(why) = cc.corner.why.as_ref() {
                     ui.label(egui::RichText::new(format!("{} {why}", ph::WARNING)).color(ui.visuals().warn_fg_color));
                 }
             });
         });
         cc.corner.buf = buf;
-        let refused = judge(&*cc.project, &cc.corner.buf); // taken as zero, it closed the field and did nothing
+        let second_used = chamfer && cc.tool_prefs.chamfer_mode != qymcad_core::feature::ChamferMode::Symmetric;
+        let refused = judge(&*cc.project, &cc.corner.buf).or_else(|| second_used.then(|| judge2(&*cc.project, &cc.corner.buf2)).flatten()); // taken as zero, it closed the field and did nothing
         if apply && refused.is_some() {
             *cc.status = format!("{} {}", ph::WARNING, refused.clone().unwrap_or_default());
             cc.corner.why = refused;
@@ -614,7 +646,12 @@ pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Conte
                     });
                     cc.project.fillet_all_corners_of(si, r, only.as_ref())
                 } else if chamfer {
-                    cc.project.chamfer_at_vertex(si, pid, r) as usize
+                    let second = parse_num(cc.project, &cc.corner.buf2.clone()).unwrap_or(cc.tool_prefs.chamfer_second);
+                    if second_used {
+                        cc.tool_prefs.chamfer_second = second;
+                    }
+                    let legs = qymcad_core::model::ChamferLegs { mode: cc.tool_prefs.chamfer_mode, first: r, second };
+                    cc.project.chamfer_at_vertex(si, pid, legs, cc.corner.near) as usize
                 } else {
                     cc.project.fillet_at_vertex(si, pid, r) as usize
                 };
@@ -3569,7 +3606,9 @@ pub fn sketch_click_at(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context,
                     if let Some(pid) = qymcad_pick::nearest_vertex(&sk.pick(), rect, pos, si) {
                         sk.corner.at = Some((si, pid, sk.armed.click_op() == 5));
                         sk.corner.pos = Some(pos);
+                        sk.corner.near = Some(qymcad_ui_state::to_world(&*sk.view, rect, pos));
                         sk.corner.buf = qymcad_core::expr::fmt_num(sk.tool_prefs.fillet);
+                        sk.corner.buf2 = qymcad_core::expr::fmt_num(sk.tool_prefs.chamfer_second);
                         sk.corner.focus = true;
                     } else {
                         *sk.status = qymcad_i18n::tr("sk-click-corner");

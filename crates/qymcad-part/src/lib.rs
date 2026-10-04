@@ -6279,6 +6279,36 @@ pub fn wb_toolbar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
     });
 }
 
+/// HOW A SKETCH CHAMFER IS GIVEN, on the bar of the chamfer: equal legs, two legs, or a leg and an angle - the words of
+/// the chamfer of a part - and, for the last two, the second value beside the first leg. Reported (issue #35): the
+/// sketch chamfer took one distance only, and a chamfer of 5 x 3 or of 5 at 30 deg had to be built by hand.
+fn chamfer_mode_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
+    use qymcad_core::feature::ChamferMode;
+    ui.separator();
+    for (mode, word) in [(ChamferMode::Symmetric, "cmd-symmetric"), (ChamferMode::TwoDist, "cmd-two-distances"), (ChamferMode::DistAngle, "cmd-leg-angle")] {
+        if ui.selectable_label(bc.tool_prefs.chamfer_mode == mode, qymcad_i18n::tr(word)).clicked() {
+            qymcad_ui_state::set_chamfer_mode(bc.tool_prefs, mode);
+        }
+    }
+    if bc.tool_prefs.chamfer_mode != ChamferMode::Symmetric {
+        let angle = bc.tool_prefs.chamfer_mode == ChamferMode::DistAngle;
+        ui.label(qymcad_i18n::tr(qymcad_ui_state::chamfer_d2_label(bc.tool_prefs.chamfer_mode)));
+        bc.tool_prefs.chamfer_second = qymcad_ui_state::num_or_expr(
+            &mut qymcad_ui_state::ExprBarCtx { bar_exprs: &mut *bc.bar_exprs, project: &*bc.project, scheme: &*bc.scheme },
+            ui,
+            "sk_chamfer2",
+            bc.tool_prefs.chamfer_second,
+            qymcad_ui_state::NumFormat {
+                lo: 0.01,
+                hi: if angle { 179.99 } else { 10000.0 },
+                integer: false,
+                suffix: &qymcad_i18n::tr(if angle { "unit-deg-suffix" } else { "unit-mm-suffix" }),
+                nonzero: false,
+            },
+        );
+    }
+}
+
 pub fn tool_options_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
     if qymcad_ui_state::edit_si(&*bc.project, &*bc.sketch_ses).is_none() {
         return;
@@ -6498,6 +6528,9 @@ pub fn tool_options_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
                     bc.tool_prefs.fillet,
                     qymcad_ui_state::NumFormat { lo: 0.01, hi: corner_hi, integer: false, suffix: &qymcad_i18n::tr("unit-mm-suffix"), nonzero: false },
                 );
+                if bc.armed.click_op() == 5 {
+                    chamfer_mode_bar(bc, ui);
+                }
             }
             if bc.armed.click_op() == 6 {
                 // WHAT IS TAKEN: one edge under the cursor, or the whole outline of the sketch's host face
@@ -6599,6 +6632,9 @@ pub fn tool_options_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
                         bc.tool_prefs.fillet,
                         qymcad_ui_state::NumFormat { lo: 0.01, hi: 10000.0, integer: false, suffix: &qymcad_i18n::tr("unit-mm-suffix"), nonzero: false },
                     );
+                    if bc.armed.modify() == 2 {
+                        chamfer_mode_bar(bc, ui);
+                    }
                 }
                 3 => {
                     ui.label(qymcad_i18n::tr("opt-distance"));

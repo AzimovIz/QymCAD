@@ -72,7 +72,7 @@ fn solve_full_iter_inner(points: &mut [SketchPoint], radii: &mut [RadiusVar], co
     // polygon, drift anywhere. Second, a polish without that pull, started from the solution just found: the
     // constraints are driven to machine precision, and there is nowhere left to travel in the null space
     // because the start already sits in the right place.
-    let mut best = solve_lm(points, radii, constraints, drag, max_iter, 1e-3, 1e-3);
+    let mut best = solve_lm(points, radii, constraints, drag, max_iter, Pull::SETTLE);
     // The polish runs only if the system is solvable. For a contradictory sketch the solution is a
     // least-squares compromise, and there is a whole set of such compromises: the polish would wander across
     // it, and re-solving would shift the geometry — the property test for a sketch drifting between solves
@@ -83,8 +83,23 @@ fn solve_full_iter_inner(points: &mut [SketchPoint], radii: &mut [RadiusVar], co
     // stage exceeds any fixed threshold on its own, the polish never started, and a dimension landed with a
     // 2e-4 error. Same lesson as the thresholds for dimension conflicts.
     let span = points.iter().fold(0.0_f64, |m, p| m.max(p.x.abs()).max(p.y.abs())).max(1.0);
+    // The arms of angle dimensions are held at their old lengths only to make an arm turn rather than stretch;
+    // where the other constraints force an arm to a new length, that hold fights them and the first stage stops
+    // at a compromise. A chamfer by a leg and an angle, its angle changed from 30 to 45 deg, must lengthen its
+    // cut from 5.77 to 7.07 and stopped at a residual of 0.057. Solved again from there without the hold, and
+    // taken only if that solves the sketch, so a contradictory one keeps the compromise it had.
+    if drag.is_none() && best >= 1e-4 * span {
+        let mut trial: Vec<SketchPoint> = points.to_vec();
+        let mut trial_radii: Vec<RadiusVar> = radii.to_vec();
+        let r = solve_lm(&mut trial, &mut trial_radii, constraints, drag, max_iter, Pull { hold_arms: false, ..Pull::SETTLE });
+        if r < 1e-4 * span {
+            best = r;
+            points.copy_from_slice(&trial);
+            radii.copy_from_slice(&trial_radii);
+        }
+    }
     if best < 1e-4 * span {
-        best = solve_lm(points, radii, constraints, drag, 40, 1e-9, 0.0).min(best);
+        best = solve_lm(points, radii, constraints, drag, 40, Pull::POLISH).min(best);
     }
     const SOLVED: f64 = 1e-4; // below this the system counts as solved and there is nothing left to try
     if drag.is_some() || best <= SOLVED {
@@ -100,7 +115,7 @@ fn solve_full_iter_inner(points: &mut [SketchPoint], radii: &mut [RadiusVar], co
         } else {
             trial[ib].y = 2.0 * trial[ia].y - trial[ib].y;
         }
-        let r = solve_lm(&mut trial, &mut trial_radii, constraints, drag, max_iter, 1e-3, 1e-3);
+        let r = solve_lm(&mut trial, &mut trial_radii, constraints, drag, max_iter, Pull::SETTLE);
         if r < best - 1e-9 {
             best = r;
             points.copy_from_slice(&trial);
@@ -111,6 +126,23 @@ fn solve_full_iter_inner(points: &mut [SketchPoint], radii: &mut [RadiusVar], co
         }
     }
     best
+}
+
+/// The pulls of one Levenberg-Marquardt run towards the state it started from: `reg` towards the old coordinates,
+/// `hold_arms` - the arms of angle dimensions kept at their old lengths - and the starting damping `lambda0`.
+#[derive(Clone, Copy)]
+struct Pull {
+    reg: f64,
+    lambda0: f64,
+    hold_arms: bool,
+}
+
+impl Pull {
+    /// The first stage: the solution nearest to how the sketch looks now.
+    const SETTLE: Pull = Pull { reg: 1e-3, lambda0: 1e-3, hold_arms: true };
+    /// The polish of a solved sketch to machine precision. It starts on a solution, so there is no turn left to
+    /// choose, and an arm held at a length 1e-6 off its solved one kept a residual of 1.9e-6.
+    const POLISH: Pull = Pull { reg: 1e-9, lambda0: 0.0, hold_arms: false };
 }
 
 /// Axis (horizontal or vertical) dimensions that the current geometry does not satisfy — the candidates for a
@@ -158,7 +190,8 @@ fn violated_axis_dims(points: &[SketchPoint], constraints: &[Constraint], limit:
 // THE INDEX IS THE MEANING: `a[i][i]` is the DIAGONAL of the normal matrix. An iterator over rows would
 // still have to index the column, and the damping would stop being visibly a diagonal one.
 #[allow(clippy::needless_range_loop)]
-fn solve_lm(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, max_iter: usize, w_reg: f64, lambda0: f64) -> f64 {
+fn solve_lm(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, max_iter: usize, pull: Pull) -> f64 {
+    let Pull { reg: w_reg, lambda0, hold_arms } = pull;
     if points.is_empty() {
         return 0.0;
     }
@@ -240,7 +273,9 @@ fn solve_lm(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[
     // reach zero), so the arm rotates instead of stretching. The weight is above the positional regularisation,
     // which is what selects rotation, and far below `Distance` constraints, so explicit lengths still win.
     let w_len = 1e-1_f64;
-    let angle_arms: Vec<(usize, usize, f64)> = {
+    let angle_arms: Vec<(usize, usize, f64)> = if !hold_arms {
+        Vec::new()
+    } else {
         // arms whose length is already set by a `Distance` dimension are left alone: the dimension holds them
         // and there is nothing to interfere with
         let dimensioned: std::collections::HashSet<(Id, Id)> = cons
