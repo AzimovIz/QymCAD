@@ -619,11 +619,12 @@ mod tests {
         }
     }
 
-    /// THE CENTRE OF A ROW ICON drawn on the line of the extrude row.
-    fn icon_on_row(shapes: &[egui::Shape], glyph: &str, what: &str) -> Option<egui::Pos2> {
-        let row = text_rect(shapes, what)?;
+    /// THE CENTRE OF A ROW ICON drawn within the height of a row: from the top of its description to the bottom of the
+    /// last line under it. The grid centres every cell in the row's height, so while the window waits for a key the
+    /// icons stand halfway down the waiting line, not on the line of the description.
+    fn icon_on_row(shapes: &[egui::Shape], glyph: &str, cell: egui::Rect) -> Option<egui::Pos2> {
         shapes.iter().find_map(|s| match s {
-            egui::Shape::Text(t) if t.galley.text() == glyph && t.pos.x > row.min.x && (t.pos.y + t.galley.size().y * 0.5 - row.center().y).abs() < 6.0 => Some(t.pos + t.galley.size() * 0.5),
+            egui::Shape::Text(t) if t.galley.text() == glyph && t.pos.x > cell.min.x && cell.y_range().contains(t.pos.y + t.galley.size().y * 0.5) => Some(t.pos + t.galley.size() * 0.5),
             _ => None,
         })
     }
@@ -637,8 +638,9 @@ mod tests {
         let what = w.wait_for_extrude_key("E");
         let waiting = crate::i18n::tr1("hotkeys-waiting", "what", &what);
         let shapes = w.frame(Vec::new());
-        assert!(text_rect(&shapes, &waiting).is_some(), "the click on the key did not make the window wait");
-        let x = icon_on_row(&shapes, egui_phosphor::regular::X, &what).expect("the X of the extrude row is drawn");
+        let line = text_rect(&shapes, &waiting).expect("the click on the key did not make the window wait");
+        let row = text_rect(&shapes, &what).expect("the extrude row is drawn");
+        let x = icon_on_row(&shapes, egui_phosphor::regular::X, row.union(line)).expect("the X of the extrude row is drawn");
         w.click(x);
         let shapes = w.frame(Vec::new());
         assert_eq!(qymcad_ui_state::hotkey_key(&w.app.set, "part.extrude"), "", "the click on X left the key in place");
@@ -647,8 +649,9 @@ mod tests {
         let unbound = crate::i18n::tr("hotkeys-unbound");
         w.wait_for_extrude_key(&unbound);
         let shapes = w.frame(Vec::new());
-        assert!(text_rect(&shapes, &waiting).is_some(), "the click on the unbound key did not make the window wait");
-        let reset = icon_on_row(&shapes, egui_phosphor::regular::ARROW_COUNTER_CLOCKWISE, &what).expect("the reset of the extrude row is drawn");
+        let line = text_rect(&shapes, &waiting).expect("the click on the unbound key did not make the window wait");
+        let row = text_rect(&shapes, &what).expect("the extrude row is drawn");
+        let reset = icon_on_row(&shapes, egui_phosphor::regular::ARROW_COUNTER_CLOCKWISE, row.union(line)).expect("the reset of the extrude row is drawn");
         w.click(reset);
         let shapes = w.frame(Vec::new());
         assert_eq!(qymcad_ui_state::hotkey_key(&w.app.set, "part.extrude"), "E", "the click on reset did not put the factory key back");
@@ -667,10 +670,8 @@ mod tests {
         let holder = super::super::hotkeys::hotkey_what(HOTKEYS.iter().find(|r| r.action == "part.fillet").expect("the fillet row"));
         let question = text_rect(&shapes, &crate::i18n::tr2("hotkeys-taken", "key", &qymcad_ui_state::key_label("F"), "what", &holder)).expect("the clash question is not drawn");
         let row = text_rect(&shapes, &what).expect("the extrude row is drawn");
-        let choices: Vec<egui::Rect> = ["hotkeys-swap", "hotkeys-take", "hotkeys-cancel"]
-            .iter()
-            .map(|k| text_rect(&shapes, &crate::i18n::tr(k)).unwrap_or_else(|| panic!("the choice {k} is not drawn")))
-            .collect();
+        let choices: Vec<egui::Rect> =
+            ["hotkeys-swap", "hotkeys-take", "hotkeys-cancel"].iter().map(|k| text_rect(&shapes, &crate::i18n::tr(k)).unwrap_or_else(|| panic!("the choice {k} is not drawn"))).collect();
         for (k, c) in ["hotkeys-swap", "hotkeys-take", "hotkeys-cancel"].iter().zip(&choices) {
             assert!(c.min.y >= question.max.y - 0.5, "the choice {k} at {c:?} stands beside the question {question:?}, not under it");
             assert!((c.center().y - choices[0].center().y).abs() < 1.0, "the choice {k} at {c:?} is not on the line of Swap {:?}", choices[0]);

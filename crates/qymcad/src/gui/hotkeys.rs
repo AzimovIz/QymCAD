@@ -82,9 +82,8 @@ pub(crate) fn hotkeys_window(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Conte
                     let side = ui.spacing().interact_size.y;
                     // the right margin keeps the text clear of the clear icon drawn over the field's right end, and is
                     // kept while the field is empty too, so the text does not move when the icon appears
-                    let edit = egui::TextEdit::singleline(&mut wc.hotkeys.filter)
-                        .hint_text(crate::i18n::tr("hotkeys-filter-hint"))
-                        .margin(egui::Margin { left: 4, right: 4 + side as i8, top: 2, bottom: 2 });
+                    let edit =
+                        egui::TextEdit::singleline(&mut wc.hotkeys.filter).hint_text(crate::i18n::tr("hotkeys-filter-hint")).margin(egui::Margin { left: 4, right: 4 + side as i8, top: 2, bottom: 2 });
                     let resp = ui.add_sized([field, side], edit);
                     filter_clear(ui, &resp, &mut wc.hotkeys.filter);
                     ui.label(ph::MAGNIFYING_GLASS);
@@ -110,12 +109,14 @@ pub(crate) fn hotkeys_window(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Conte
                             // lines under the description are stacked by an explicit `vertical`. Inside the row's own
                             // cell rather than a grid row of their own: an extra row shifted every row below it, and
                             // the grid sized each row from the height the previous frame had at that index.
-                            ui.scope(|ui| {
+                            // The `vertical` is the cell itself, not wrapped in a `scope`: a scope takes the whole cell
+                            // at the previous frame's row height in the grid's centred layout, and a row that had just
+                            // lost its waiting line stood 24 pt tall for one frame instead of 18, every row below 6 pt
+                            // low.
+                            ui.vertical(|ui| {
                                 ui.set_width(cols.what);
-                                ui.vertical(|ui| {
-                                    ui.add(egui::Label::new(hotkey_what(r)).wrap());
-                                    row_status(wc, ui, r.action);
-                                });
+                                ui.add(egui::Label::new(hotkey_what(r)).wrap());
+                                row_status(wc, ui, r.action);
                             });
                             row_tools(wc, ui, r);
                             ui.end_row();
