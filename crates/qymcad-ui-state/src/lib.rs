@@ -11791,6 +11791,8 @@ pub fn note_editor(annot: &mut AnnotEdit, inline: &mut InlineEdit, project: &mut
 /// where the string, the height and the font are named - and keeping it after the edit is applied is not:
 /// the work is finished and nothing is waiting to be placed.
 pub fn end_text_edit(tc: &mut TextCtx) {
+    // the string of the label edited is not offered to the next label (found checking issue #32)
+    tc.text.clear();
     tc.inline.clear();
     tc.annot.text = None;
     tc.annot.text_focus = false;

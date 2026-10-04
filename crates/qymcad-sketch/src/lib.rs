@@ -2783,6 +2783,7 @@ pub fn sketch_tool_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, 
                 sk.project.add_note(si, w.x, w.y, sk.tool_prefs.text.clone());
                 *sk.status = qymcad_i18n::tr("sk-note-added");
                 *sk.armed = qymcad_ui_state::Armed::None; // placed once, as a label is
+                sk.tool_prefs.text.clear();
             }
         }
         11 if sk.tool_prefs.text.trim().is_empty() => {
@@ -2827,8 +2828,11 @@ pub fn sketch_tool_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, 
                 sk.view.initialized = false;
                 *sk.status = qymcad_i18n::tr1("sk-text-placed", "n", &n.to_string());
                 // A LABEL IS PLACED ONCE: the tool is put down, as in the CAD programs people know. Kept in hand it laid
-                // a copy of the label on every stray click until Esc (found checking issue #32).
+                // a copy of the label on every stray click until Esc (found checking issue #32). Its string goes too: the
+                // tool taken again offered it, and a click placed the same label once more; the height and the font
+                // stay as they were set.
                 *sk.armed = qymcad_ui_state::Armed::None;
+                sk.tool_prefs.text.clear();
             } else if !qymcad_ui_state::any_font_at_all(&mut *sk.font_cache) {
                 *sk.status = qymcad_i18n::tr("sk-font-not-found");
             } else if !qymcad_ui_state::font_can_write(&mut *sk.font_cache, &font, &sk.tool_prefs.text) {

@@ -343,6 +343,31 @@ mod tests {
         assert!(after_one == 1 && in_hand != 11 && after_two == 1, "one label placed: {after_one}; the tool in hand after it: {in_hand}; labels after a second click: {after_two}");
     }
 
+    /// TAKEN UP AGAIN, THE TEXT TOOL OFFERS AN EMPTY STRING: the label placed or the one edited is not offered once more;
+    /// the height and the font stay as they were set.
+    ///
+    /// Reported behaviour (found checking issue #32): with the tool taken again, the string typed for the last label
+    /// stood in the field, and a click placed the same label again.
+    #[test]
+    fn the_text_tool_taken_again_offers_an_empty_string() {
+        let (mut app, si) = a_sketch();
+        Hand::new(&mut app).sk_text("CAD", 10.0).click2d(0.0, 0.0);
+        Hand::new(&mut app).sk_tool(11);
+        let after_placing = (app.tool_prefs.text.clone(), app.tool_prefs.text_h);
+        Hand::new(&mut app).key(egui::Key::Escape);
+        let g = app.project.sketches[si].texts[0].glyphs[0][0];
+        Hand::new(&mut app).sk_edit_text((g.x, g.y), "CADX", 10.0);
+        Hand::new(&mut app).sk_tool(11);
+        let after_editing = app.tool_prefs.text.clone();
+        assert!(
+            after_placing.0.is_empty() && (after_placing.1 - 10.0).abs() < 1e-9 && after_editing.is_empty(),
+            "taken again after placing, the field holds {:?} (height {}); after an edit, {:?}",
+            after_placing.0,
+            after_placing.1,
+            after_editing
+        );
+    }
+
     /// WHILE A LABEL IS EDITED, NO NEW ONE FOLLOWS THE POINTER: the text tool shows where a click would put a label when it
     /// is taken to write one, and not when a double click opened an existing label for editing.
     ///
@@ -354,7 +379,8 @@ mod tests {
         let away = (60.0, -40.0);
         let (mut app, _si, on) = a_text();
         let ink = app.scheme.pal.sketch_line();
-        Hand::new(&mut app).sk_tool(11);
+        // the tool taken up again offers an empty string: a new one is typed, as for the next label
+        Hand::new(&mut app).sk_text("QYM", 10.0);
         let writing = Hand::new(&mut app).strokes_near2d(away, ink);
         assert!(writing > 0, "GUARD: the text tool taken to write shows no label at the pointer, so the check below would see nothing");
         Hand::new(&mut app).key(egui::Key::Escape);
