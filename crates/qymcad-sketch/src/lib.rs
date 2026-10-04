@@ -561,7 +561,7 @@ pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Conte
             egui::Frame::popup(ui.style()).show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(if chamfer {
-                        qymcad_i18n::tr("cmd-leg")
+                        qymcad_i18n::tr(qymcad_ui_state::chamfer_d1_label(cc.tool_prefs.chamfer_mode))
                     } else if pid == 0 {
                         qymcad_i18n::tr("sk-r-all-corners")
                     } else {

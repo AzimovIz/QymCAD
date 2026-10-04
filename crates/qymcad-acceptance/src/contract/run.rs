@@ -340,7 +340,8 @@ fn field_of(s: &mut Session, f: &Field) -> qymcad::Widget {
 fn field_if_there(s: &mut Session, f: &Field) -> Option<qymcad::Widget> {
     let caption = s.word(f.caption);
     if f.by_placeholder {
-        s.widgets().into_iter().find(|w| w.placeholder == caption)
+        // the first in reading order, as `type_into_field` types into it
+        s.widgets().into_iter().filter(|w| w.placeholder == caption).min_by(|a, b| (a.rect.min.y, a.rect.min.x).partial_cmp(&(b.rect.min.y, b.rect.min.x)).unwrap_or(std::cmp::Ordering::Equal))
     } else {
         let inputs = s.widgets();
         let _ = &inputs;
@@ -348,11 +349,12 @@ fn field_if_there(s: &mut Session, f: &Field) -> Option<qymcad::Widget> {
     }
 }
 
-/// Type `text` into the field `f`, over what it holds: found by its caption, or by the grey words it shows.
+/// Type `text` into the field `f`, over what it holds: found by its caption, or by the grey words it shows - the first
+/// field showing them in reading order, where a bar holds two (a chamfer by two legs: its first leg).
 pub(crate) fn type_into_field(s: &mut Session, f: &Field, text: &str) {
     let caption = s.word(f.caption);
     if f.by_placeholder {
-        s.fill_hinted(&caption, text);
+        s.fill_first_hinted(&caption, text);
     } else {
         s.fill(&caption, text);
     }

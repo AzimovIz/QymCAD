@@ -1289,11 +1289,12 @@ pub static CORNER_CHAMFER: Tool = Tool {
     pick_trial: &[],
     wrong_picks: &[],
     words: &[],
-    // a cut longer than the lines it cuts (d > 30) cannot be drawn. The field is found by its caption on the bar: with
-    // two legs or a leg and an angle the bar holds a second field of the same grey words
+    // a cut longer than the lines it cuts (d > 30) cannot be drawn. The field is the first on the bar showing the grey
+    // words: its caption changes with the mode (size, first leg, length), and with two values the bar holds a second
+    // field of the same grey words after it
     fields: &[Field {
-        caption: "opt-chamfer-size",
-        by_placeholder: false,
+        caption: "g-expr-placeholder",
+        by_placeholder: true,
         when: When::After,
         class: Class::Length,
         typical: 3.0,

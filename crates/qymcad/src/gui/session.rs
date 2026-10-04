@@ -988,6 +988,26 @@ impl Session {
         }
     }
 
+    /// FILL THE FIRST FIELD, in reading order, THAT SHOWS `placeholder` in grey with `text`, over what it holds: the
+    /// first value of a bar that holds two fields of the same grey words - the size of a chamfer and its second leg.
+    ///
+    /// # Panics
+    /// When no field shows it.
+    pub fn fill_first_hinted(&mut self, placeholder: &str, text: &str) -> &mut Self {
+        self.settle();
+        let first = self
+            .win
+            .widgets
+            .iter()
+            .filter(|w| w.kind == Kind::TextField && w.placeholder == placeholder)
+            .min_by(|a, b| (a.rect.min.y, a.rect.min.x).partial_cmp(&(b.rect.min.y, b.rect.min.x)).unwrap_or(std::cmp::Ordering::Equal))
+            .cloned();
+        match first {
+            Some(one) => self.click(one.rect.center()).chord(Modifiers::COMMAND, Key::A).type_over(text),
+            None => panic!("no field shows {placeholder:?}"),
+        }
+    }
+
     /// TICK OR UNTICK THE CHECKBOX whose words are `label`.
     ///
     /// # Panics

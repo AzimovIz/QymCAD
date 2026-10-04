@@ -148,6 +148,12 @@ impl<'a> Hand<'a> {
         true
     }
 
+    /// IS `word` WRITTEN ANYWHERE in the window, the next frame drawn.
+    pub fn shows(&mut self, word: &str) -> bool {
+        self.frame(Vec::new());
+        self.win.drawn.iter().any(|(t, _)| t == word)
+    }
+
     /// PRESS WHERE `word` IS WRITTEN - the one nearest to `near` when the frame wrote it in several places.
     /// Answers whether the word was on screen.
     pub fn press_word(&mut self, word: &str, near: egui::Pos2) -> bool {

@@ -6518,7 +6518,7 @@ pub fn tool_options_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
             ui.label(egui::RichText::new(qymcad_i18n::tr("opt-dim-hint")).weak());
         } else if bc.armed.click_op() != 0 {
             if bc.armed.click_op() == 4 || bc.armed.click_op() == 5 {
-                ui.label(if bc.armed.click_op() == 4 { qymcad_i18n::tr("opt-radius") } else { qymcad_i18n::tr("opt-chamfer-size") });
+                ui.label(qymcad_i18n::tr(if bc.armed.click_op() == 4 { "opt-radius" } else { qymcad_ui_state::chamfer_d1_label(bc.tool_prefs.chamfer_mode) }));
                 // with a corner clicked, the most it takes; short of it, the largest the field ever takes
                 let corner_hi = bc.corner.at.and_then(|(si, pid, ch)| (pid != 0).then(|| bc.project.corner_limit(si, pid, ch)).flatten()).map_or(10000.0, |l| l * (1.0 - 1e-9));
                 bc.tool_prefs.fillet = qymcad_ui_state::num_or_expr(
@@ -6624,7 +6624,7 @@ pub fn tool_options_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
         } else {
             match bc.armed.modify() {
                 1 | 2 => {
-                    ui.label(if bc.armed.modify() == 1 { qymcad_i18n::tr("opt-radius") } else { qymcad_i18n::tr("opt-chamfer-size") });
+                    ui.label(qymcad_i18n::tr(if bc.armed.modify() == 1 { "opt-radius" } else { qymcad_ui_state::chamfer_d1_label(bc.tool_prefs.chamfer_mode) }));
                     bc.tool_prefs.fillet = qymcad_ui_state::num_or_expr(
                         &mut qymcad_ui_state::ExprBarCtx { bar_exprs: &mut *bc.bar_exprs, project: &*bc.project, scheme: &*bc.scheme },
                         ui,

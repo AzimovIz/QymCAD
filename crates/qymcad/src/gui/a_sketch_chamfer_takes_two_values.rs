@@ -49,6 +49,33 @@ mod tests {
         (legs(&app, si, corner), app.status.clone())
     }
 
+    /// The captions of the chamfer's fields, on the bar and at the corner, say what each field holds in the mode chosen.
+    #[test]
+    fn the_fields_of_a_chamfer_are_named_after_its_mode() {
+        let mut sins = Vec::new();
+        for (mode, captions) in [("cmd-symmetric", ["opt-chamfer-size", ""]), ("cmd-two-distances", ["cmd-leg1", "cmd-leg2"]), ("cmd-leg-angle", ["cmd-chamfer-length", "cmd-angle-deg"])] {
+            let mut app = App::default();
+            let si = app.create_sketch_on(SketchPlane::default());
+            app.chosen.sel = Sel::Sketch(si);
+            Hand::new(&mut app).sk_tool(1).click2d(30.0, 0.0).click2d(0.0, 0.0).double_click2d(0.0, 30.0);
+            let mut hand = Hand::new(&mut app);
+            hand.sk_tool(0);
+            assert!(hand.press_hint(&qymcad_i18n::tr("tb-chamfer-sketch-hint")), "no sketch chamfer button");
+            assert!(hand.press_word(&qymcad_i18n::tr(mode), egui::pos2(400.0, 0.0)), "no {mode} on the bar");
+            for place in ["the bar", "the corner"] {
+                if place == "the corner" {
+                    hand.click2d(0.4, 0.1);
+                }
+                for caption in captions.iter().filter(|c| !c.is_empty()) {
+                    if !hand.shows(&qymcad_i18n::tr(caption)) {
+                        sins.push(format!("{mode}: {place} does not show the caption {caption:?}"));
+                    }
+                }
+            }
+        }
+        assert!(sins.is_empty(), "{}", sins.join("\n"));
+    }
+
     fn about(got: Option<(f64, f64)>, want: (f64, f64)) -> bool {
         got.is_some_and(|(x, y)| (x - want.0).abs() < 1e-6 && (y - want.1).abs() < 1e-6)
     }

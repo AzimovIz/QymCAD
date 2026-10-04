@@ -13380,6 +13380,17 @@ pub fn set_chamfer_mode(prefs: &mut SketchToolPrefs, mode: qymcad_core::feature:
     };
 }
 
+/// The label of a chamfer's first field: the size of an equal chamfer, the first of two legs, or the length along the
+/// line the angle is measured from.
+pub fn chamfer_d1_label(mode: qymcad_core::feature::ChamferMode) -> &'static str {
+    use qymcad_core::feature::ChamferMode;
+    match mode {
+        ChamferMode::Symmetric => "opt-chamfer-size",
+        ChamferMode::TwoDist => "cmd-leg1",
+        ChamferMode::DistAngle => "cmd-chamfer-length",
+    }
+}
+
 /// The label of a chamfer's second field: its meaning depends on the mode — the second leg, or the angle.
 pub fn chamfer_d2_label(mode: qymcad_core::feature::ChamferMode) -> &'static str {
     use qymcad_core::feature::ChamferMode;
