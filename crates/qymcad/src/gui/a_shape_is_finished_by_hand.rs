@@ -293,6 +293,107 @@ mod tests {
         assert!(problems.is_empty(), "{}", problems.join("\n"));
     }
 
+    /// The place, the angle and the box of the glyphs of the texts of a sketch.
+    fn text_boxes(app: &App, si: usize) -> Vec<TextBox> {
+        app.project.sketches[si]
+            .texts
+            .iter()
+            .map(|t| {
+                let pts: Vec<_> = t.glyphs.iter().flatten().collect();
+                TextBox {
+                    at: (t.x, t.y),
+                    angle: t.angle,
+                    lo: (pts.iter().map(|p| p.x).fold(f64::MAX, f64::min), pts.iter().map(|p| p.y).fold(f64::MAX, f64::min)),
+                    hi: (pts.iter().map(|p| p.x).fold(f64::MIN, f64::max), pts.iter().map(|p| p.y).fold(f64::MIN, f64::max)),
+                }
+            })
+            .collect()
+    }
+
+    /// Where a text stands, its angle, and the corners of the box round its glyphs.
+    #[derive(Debug, Clone, Copy)]
+    struct TextBox {
+        at: (f64, f64),
+        angle: f64,
+        lo: (f64, f64),
+        hi: (f64, f64),
+    }
+
+    /// A sketch with the text `CAD`, 10 high, placed at the origin; the point of a stroke of its first letter.
+    fn a_text() -> (App, usize, (f64, f64)) {
+        let (mut app, si) = a_sketch();
+        Hand::new(&mut app).sk_text("CAD", 10.0).click2d(0.0, 0.0).key(egui::Key::Escape);
+        let g = app.project.sketches[si].texts[0].glyphs[0][0];
+        (app, si, (g.x, g.y))
+    }
+
+    /// A TEXT IS TURNED, MOVED AND COPIED BY THE TOOLS, alone and together with a line, and stays turned after its string
+    /// is edited; the outlines a profile is taken from turn with it.
+    ///
+    /// Reported behaviour (issue #32): with Rotate in hand a click on a text did not pick it, and the status kept asking
+    /// to click an entity; Move did the same. A text could be dragged by hand only, and stood level always.
+    #[test]
+    fn a_text_is_turned_moved_and_copied_by_the_tools() {
+        let near = |a: (f64, f64), b: (f64, f64)| (a.0 - b.0).abs() < 0.05 && (a.1 - b.1).abs() < 0.05;
+        let mut problems = Vec::new();
+
+        // turned by 90 deg about the origin: the box of the glyphs turns with it
+        let (mut app, si, on) = a_text();
+        let level = text_boxes(&app, si)[0];
+        Hand::new(&mut app).sk_rotate(on, (0.0, 0.0), 90.0);
+        let turned = text_boxes(&app, si)[0];
+        let want_lo = (-level.hi.1, level.lo.0);
+        let want_hi = (-level.lo.1, level.hi.0);
+        if (turned.angle - 90.0).abs() > 1e-6 || !near(turned.lo, want_lo) || !near(turned.hi, want_hi) {
+            problems.push(format!("Rotate by 90: {level:?} became {turned:?}, the box should be {want_lo:?}-{want_hi:?}; status {:?}", app.status));
+        }
+        // the outlines of the profile turned too: the contours of the sketch lie in the turned box
+        let contours: Vec<_> = app.project.sketches[si].contour_ids.iter().filter_map(|c| app.project.contour_index(*c)).flat_map(|ci| app.project.contours[ci].points.clone()).collect();
+        let cx = contours.iter().map(|p| p.x).fold(f64::MIN, f64::max);
+        if contours.is_empty() || cx > turned.hi.0 + 0.05 {
+            problems.push(format!("the outlines of the profile did not turn: they reach x = {cx:.2}, the text {turned:?}"));
+        }
+        // its string edited afterwards: it stays turned
+        let mid = ((turned.lo.0 + turned.hi.0) / 2.0, (turned.lo.1 + turned.hi.1) / 2.0);
+        let g = app.project.sketches[si].texts[0].glyphs[0][0];
+        Hand::new(&mut app).sk_edit_text((g.x, g.y), "CADX", 10.0);
+        let edited = text_boxes(&app, si)[0];
+        if app.project.sketches[si].texts[0].text != "CADX" || (edited.angle - 90.0).abs() > 1e-6 || edited.hi.1 - edited.lo.1 < edited.hi.0 - edited.lo.0 {
+            problems.push(format!("edited after the turn: {:?} {edited:?} - a turned text stands taller than wide (the middle was {mid:?})", app.project.sketches[si].texts[0].text));
+        }
+
+        // moved
+        let (mut app, si, on) = a_text();
+        let before = text_boxes(&app, si)[0];
+        Hand::new(&mut app).sk_move(1, on, (0.0, 0.0), (10.0, 10.0));
+        let after = text_boxes(&app, si)[0];
+        if !near(after.at, (10.0, 10.0)) || !near(after.lo, (before.lo.0 + 10.0, before.lo.1 + 10.0)) {
+            problems.push(format!("Move by (10, 10): {before:?} became {after:?}; status {:?}", app.status));
+        }
+
+        // copied
+        let (mut app, si, on) = a_text();
+        Hand::new(&mut app).sk_move(2, on, (0.0, 0.0), (0.0, 20.0));
+        let all = text_boxes(&app, si);
+        if all.len() != 2 || !all.iter().any(|t| near(t.at, (0.0, 20.0))) || !all.iter().any(|t| near(t.at, (0.0, 0.0))) {
+            problems.push(format!("Copy to (0, 20): the texts stand at {:?}; status {:?}", all.iter().map(|t| t.at).collect::<Vec<_>>(), app.status));
+        }
+
+        // a text and a line turned together: a slanted line, which drawing ties to nothing
+        let (mut app, si, on) = a_text();
+        Hand::new(&mut app).sk_tool(1).click2d(0.0, -10.0).double_click2d(15.0, -18.0);
+        Hand::new(&mut app).key(egui::Key::Escape);
+        Hand::new(&mut app).sk_tool(0).click2d(on.0, on.1).shift_click2d(7.5, -14.0);
+        Hand::new(&mut app).sk_rotate_selected((0.0, 0.0), 90.0);
+        let text = text_boxes(&app, si)[0];
+        let pts: Vec<(f64, f64)> = app.project.sketches[si].points.iter().map(|p| (p.x, p.y)).collect();
+        let turned_line = [(10.0, 0.0), (18.0, 15.0)].iter().all(|q| pts.iter().any(|p| near(*p, *q)));
+        if (text.angle - 90.0).abs() > 1e-6 || !turned_line {
+            problems.push(format!("a text and a line turned by 90: the text {text:?}, the points {pts:?}; status {:?}", app.status));
+        }
+        assert!(problems.is_empty(), "{}", problems.join("\n"));
+    }
+
     /// Esc ENDS A SPLINE, AS ITS HINT SAYS, keeping the nodes that were clicked.
     #[test]
     fn escape_ends_a_spline_as_its_hint_says() {

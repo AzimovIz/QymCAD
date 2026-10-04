@@ -1444,7 +1444,8 @@ mod tests {
         {
             let (mut app, si) = empty_sketch();
             let font = app.font_cache.for_tool(&mut app.tool_prefs.font).map(|(f, _)| f).unwrap_or_default();
-            let glyphs = qymcad_ui_state::bake_text_glyphs(&mut app.font_cache, &font, -34.0, -8.0, 22.0, "QYM CAD");
+            let glyphs =
+                qymcad_ui_state::bake_text_glyphs(&mut app.font_cache, &font, qymcad_ui_state::GlyphPlace { at: qymcad_core::geom::Point2::new(-34.0, -8.0), height: 22.0, angle: 0.0 }, "QYM CAD");
             assert!(!glyphs.is_empty(), "the glyphs did not bake - the shot would be empty");
             app.project.add_sketch_text(
                 si,

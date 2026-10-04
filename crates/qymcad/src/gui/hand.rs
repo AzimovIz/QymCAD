@@ -519,6 +519,24 @@ impl<'a> Hand<'a> {
         })
     }
 
+    /// SHIFT AND A CLICK on the sketch: what is under the pointer joins the selection, as a person adds to one. The
+    /// window closes after it.
+    pub fn shift_click2d(&mut self, x: f64, y: f64) -> &mut Self {
+        self.press_at2d(egui::Modifiers::SHIFT, (x, y));
+        self.close_window()
+    }
+
+    /// TURN WHAT IS SELECTED ALREADY by `deg` about `centre`: the tool taken with the selection standing, the click that
+    /// sets the centre, the angle typed into the popup and Enter.
+    pub fn sk_rotate_selected(&mut self, centre: (f64, f64), deg: f64) -> &mut Self {
+        self.sk_move_tool(3);
+        self.mouse2d(centre.0, centre.1);
+        self.frame(Vec::new());
+        self.type_text(&format!("{deg}"));
+        self.key(egui::Key::Enter);
+        self.close_window()
+    }
+
     /// MOVE (op 1) OR COPY (op 2) THE SHAPE lying under `on`, from `from` to `to` - the tool, then its three
     /// clicks, in the order a person makes them and through the whole frame of the window.
     pub fn sk_move(&mut self, op: u8, on: (f64, f64), from: (f64, f64), to: (f64, f64)) -> &mut Self {

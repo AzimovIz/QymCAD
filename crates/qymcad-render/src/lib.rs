@@ -2322,6 +2322,18 @@ pub fn draw_clip_pending(pn: &Painting, painter: &egui::Painter, rect: Rect) {
     }
 }
 
+/// The glyphs of the selected texts, carried by `f`: the ghost of a text being moved or turned.
+fn draw_texts_xform(pn: &Painting, painter: &egui::Painter, rect: Rect, si: usize, f: &dyn Fn(f64, f64) -> (f64, f64), stroke: Stroke) {
+    let sh = qymcad_ui_state::Sheet { view: pn.view, rect };
+    let Some(s) = pn.project.sketches.get(si) else { return };
+    for ti in qymcad_ui_state::sel_text_indices(pn.project, pn.sel_sk, si) {
+        for glyph in &s.texts[ti].glyphs {
+            let pts: Vec<egui::Pos2> = glyph.iter().map(|p| f(p.x, p.y)).map(|(x, y)| sh.at(Point2::new(x, y))).collect();
+            painter.add(egui::Shape::closed_line(pts, stroke));
+        }
+    }
+}
+
 pub fn draw_move_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
     let sh = qymcad_ui_state::Sheet { view: pn.view, rect };
     if pn.armed.move_op() == 0 {
@@ -2341,6 +2353,7 @@ pub fn draw_move_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
         for id in pn.sel_sk.items.iter().filter(|(k, _)| *k == 1).map(|(_, id)| *id) {
             draw_entity_xform(&PickCtx { project: pn.project, set: pn.set, view: &pn.view }, painter, rect, si, id, &f, stroke);
         }
+        draw_texts_xform(pn, painter, rect, si, &f, stroke);
         let c = sh.at(base);
         painter.circle_filled(c, 4.0, col); // the centre of rotation
         painter.circle_stroke(c, 9.0, Stroke::new(0.8, col));
@@ -2355,6 +2368,7 @@ pub fn draw_move_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
         let _ = k;
         draw_entity_xform(&PickCtx { project: pn.project, set: pn.set, view: &pn.view }, painter, rect, si, id, &f, stroke);
     }
+    draw_texts_xform(pn, painter, rect, si, &f, stroke);
     painter.circle_filled(sh.at(base), 3.0, col);
     painter.line_segment([sh.at(base), sh.at(cur)], Stroke::new(0.8, col));
 }

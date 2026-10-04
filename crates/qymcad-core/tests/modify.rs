@@ -1059,3 +1059,24 @@ fn every_trim_click_removes_what_is_under_it() {
     }
     assert!(sins.is_empty(), "a click of Trim left what it was on:\n{}", sins.join("\n"));
 }
+
+/// A TEXT TURNS AND COPIES WITHOUT A FONT: `rotate_sketch_text` carries its place round the centre, adds to its angle
+/// and turns its baked glyphs; `copy_sketch_text` lays a second one, shifted, with the same string and angle.
+#[test]
+fn a_text_turns_and_copies_without_a_font() {
+    use qymcad_core::model::TextSpec;
+    let mut p = Project::default();
+    let si = p.new_sketch("t");
+    let glyphs = vec![vec![Point2::new(1.0, 0.0), Point2::new(5.0, 0.0), Point2::new(5.0, 7.0), Point2::new(1.0, 7.0)]];
+    let spec = TextSpec { at: Point2::new(0.0, 0.0), height: 7.0, angle: 0.0, text: "I".into(), glyphs, font: Default::default() };
+    p.add_sketch_text(si, spec, qymcad_core::feature::Purpose::Real);
+    p.rotate_sketch_text(si, 0, 10.0, 0.0, 90.0);
+    let t = &p.sketches[si].texts[0];
+    let near = |a: (f64, f64), b: (f64, f64)| (a.0 - b.0).abs() < 1e-9 && (a.1 - b.1).abs() < 1e-9;
+    assert!(near((t.x, t.y), (10.0, -10.0)) && (t.angle - 90.0).abs() < 1e-9, "the place goes round (10, 0) and the angle grows: {:?}", (t.x, t.y, t.angle));
+    assert!(near((t.glyphs[0][0].x, t.glyphs[0][0].y), (10.0, -9.0)), "a glyph point goes round with it: {:?}", t.glyphs[0][0]);
+    let copy = p.copy_sketch_text(si, 0, 0.0, 20.0).expect("a copy");
+    let c = p.sketches[si].texts.iter().find(|x| x.id == copy).expect("the copy is in the sketch");
+    assert!(near((c.x, c.y), (10.0, 10.0)) && (c.angle - 90.0).abs() < 1e-9 && c.text == "I", "the copy is shifted and keeps the rest: {:?}", (c.x, c.y, c.angle));
+    assert_eq!(p.sketches[si].texts.len(), 2, "the original stays");
+}

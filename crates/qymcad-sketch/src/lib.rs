@@ -1015,7 +1015,8 @@ pub fn sketch_rotate_popup(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Cont
     let qymcad_ui_state::Sel::Sketch(si) = *sk.sel else { return };
     let Some(base) = sk.tool.move_base else { return };
     let eids: Vec<Id> = sk.sel_sk.items.iter().filter(|(k, _)| *k == 1).map(|(_, id)| *id).collect();
-    if eids.is_empty() {
+    let texts = qymcad_ui_state::sel_text_indices(&*sk.project, &*sk.sel_sk, si);
+    if eids.is_empty() && texts.is_empty() {
         return;
     }
     let rot = &mut *sk.rot;
@@ -1082,7 +1083,12 @@ pub fn sketch_rotate_popup(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Cont
                     (base.x + dx * cs - dy * sn, base.y + dx * sn + dy * cs)
                 })
                 .collect();
-            sk.project.rotate_entities(si, &eids, base.x, base.y, v);
+            if !eids.is_empty() {
+                sk.project.rotate_entities(si, &eids, base.x, base.y, v);
+            }
+            for &ti in &texts {
+                sk.project.rotate_sketch_text(si, ti, base.x, base.y, v);
+            }
             let after = at(sk.project);
             let mean = |a: &[(f64, f64)], b: &[(f64, f64)]| -> f64 {
                 if a.len() != b.len() || a.is_empty() {
@@ -1963,7 +1969,16 @@ pub fn sketch_select_click(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos:
         sk.annot.text = Some(ti);
         sk.annot.note = None;
         sk.gsel.constraint = None;
-        sk.sel_sk.clear(); // the selection and whatever was waiting for it
+        // THE TEXT JOINS THE SELECTION, so the move tools take it - alone, or with Shift beside the geometry already
+        // picked (issue #32)
+        if !additive {
+            sk.sel_sk.clear(); // the selection and whatever was waiting for it
+        }
+        if let Some(id) = sk.project.sketches.get(si).and_then(|s| s.texts.get(ti)).map(|t| t.id) {
+            if !sk.sel_sk.items.contains(&(qymcad_ui_state::SEL_TEXT, id)) {
+                sk.sel_sk.items.push((qymcad_ui_state::SEL_TEXT, id));
+            }
+        }
         *sk.status = qymcad_i18n::tr("sk-text-selected");
         return;
     }
@@ -2798,7 +2813,7 @@ pub fn sketch_tool_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, 
             // has in hand, which after a reopen is the system font: the label changes typeface with nobody
             // asked and nobody told.
             let font = sk.font_cache.for_tool(&mut sk.tool_prefs.font).map(|(f, _)| f).unwrap_or_default();
-            let glyphs = qymcad_ui_state::bake_text_glyphs(&mut *sk.font_cache, &font, w.x, w.y, sk.tool_prefs.text_h, &sk.tool_prefs.text.clone());
+            let glyphs = qymcad_ui_state::bake_text_glyphs(&mut *sk.font_cache, &font, qymcad_ui_state::GlyphPlace { at: w, height: sk.tool_prefs.text_h, angle: 0.0 }, &sk.tool_prefs.text.clone());
             let n = glyphs.len();
             if n > 0 {
                 let id = sk.project.add_sketch_text(
@@ -3668,10 +3683,11 @@ pub fn sketch_click_at(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context,
                 let qymcad_ui_state::Sel::Sketch(si) = *sk.sel else { return }; // the selection may have changed between frames - do not crash
                 let w = snap_world(sk, rect, pos);
                 let eids: Vec<Id> = sk.sel_sk.items.iter().filter(|(k, _)| *k == 1).map(|(_, id)| *id).collect();
-                if eids.is_empty() {
+                let texts = qymcad_ui_state::sel_text_indices(&*sk.project, &*sk.sel_sk, si);
+                if eids.is_empty() && texts.is_empty() {
                     let shift = ctx.input(|i| i.modifiers.shift);
                     sketch_select_click(sk, rect, pos, shift);
-                    if !sk.sel_sk.items.iter().any(|(k, _)| *k == 1) {
+                    if !sk.sel_sk.items.iter().any(|(k, _)| *k == 1 || *k == qymcad_ui_state::SEL_TEXT) {
                         *sk.status = qymcad_i18n::tr("sk-click-for-move");
                     } else {
                         *sk.status = qymcad_i18n::tr("sk-click-base-point");
@@ -3695,9 +3711,11 @@ pub fn sketch_click_at(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context,
                     // undo named after the tool. A change left for the frame to notice is called "Edit".
                     qymcad_ui_state::begin_edit(&mut *sk.edits, &*sk.project, qymcad_i18n::tr(if sk.armed.move_op() == 2 { "tool-copy" } else { "tool-move" }));
                     if sk.armed.move_op() == 2 {
-                        let ids = sk.project.copy_entities(si, &eids, dx, dy);
+                        let ids = if eids.is_empty() { Vec::new() } else { sk.project.copy_entities(si, &eids, dx, dy) };
+                        let text_ids: Vec<Id> = texts.iter().filter_map(|&ti| sk.project.copy_sketch_text(si, ti, dx, dy)).collect();
                         sk.project.solve_sketch(si);
-                        sk.sel_sk.items = ids.into_iter().map(|id| (1u8, id)).collect(); // select the copies
+                        // select the copies
+                        sk.sel_sk.items = ids.into_iter().map(|id| (1u8, id)).chain(text_ids.into_iter().map(|id| (qymcad_ui_state::SEL_TEXT, id))).collect();
                         *sk.status = qymcad_i18n::tr("sk-copied");
                     } else {
                         // WHERE IT WAS ASKED TO GO, and where the constraints let it go.
@@ -3714,7 +3732,12 @@ pub fn sketch_click_at(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context,
                         // forget it; what is left here is telling the person that the drawing did
                         // not go where it was asked.
                         let before = qymcad_ui_state::entities_centroid(&*sk.project, si, &eids);
-                        sk.project.move_entities(si, &eids, dx, dy);
+                        if !eids.is_empty() {
+                            sk.project.move_entities(si, &eids, dx, dy);
+                        }
+                        for &ti in &texts {
+                            sk.project.move_sketch_text(si, ti, dx, dy);
+                        }
                         let after = qymcad_ui_state::entities_centroid(&*sk.project, si, &eids);
                         let asked = (dx * dx + dy * dy).sqrt();
                         let went = match (before, after) {

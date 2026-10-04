@@ -1647,6 +1647,17 @@ pub struct FeatOptions {
     pub rot_deg: f64,
 }
 
+/// THE KIND OF A TEXT in the sketch selection (`SketchSelection::items`), beside a point (0), an entity (1) and an axis
+/// (3): a text kept by its id, so the move tools take it, alone or with lines. Reported behaviour (issue #32): a text was
+/// picked apart from the selection, and Move and Rotate never saw it.
+pub const SEL_TEXT: u8 = 4;
+
+/// The indices of the texts selected in sketch `si`, in the order they were picked.
+pub fn sel_text_indices(project: &Project, sel_sk: &SketchSelection, si: usize) -> Vec<usize> {
+    let Some(s) = project.sketches.get(si) else { return Vec::new() };
+    sel_sk.items.iter().filter(|(k, _)| *k == SEL_TEXT).filter_map(|(_, id)| s.texts.iter().position(|t| t.id == *id)).collect()
+}
+
 /// THE SKETCH SELECTION AND THE DEFERRED ACTION ON IT.
 ///
 /// "What is selected" and "what to do once enough has been gathered" are one state: a constraint or an editing
@@ -11353,7 +11364,7 @@ pub fn text_popups(mut ed: Editing, font_cache: &mut FontCache, tc: &mut TextCtx
                     vec![egui::epaint::text::InsertFontFamily { family: egui::FontFamily::Proportional, priority: egui::epaint::text::FontPriority::Lowest }],
                 ));
             }
-            let glyphs = bake_text_glyphs(font_cache, &font, 0.0, 0.0, tc.tool_text_height, tc.text);
+            let glyphs = bake_text_glyphs(font_cache, &font, GlyphPlace { at: Point2::new(0.0, 0.0), height: tc.tool_text_height, angle: 0.0 }, tc.text);
             tc.tool.text_ghost = Some((tc.text.clone(), tc.tool_text_height, tc.font.clone(), glyphs));
         }
     }
@@ -11369,7 +11380,7 @@ pub fn text_popups(mut ed: Editing, font_cache: &mut FontCache, tc: &mut TextCtx
                 let at = ed.project.sketches[si].texts.get(ti).map(|t| (t.x, t.y, t.angle));
                 if let Some((x, y, angle)) = at {
                     let (txt, h) = (tc.annot.text_buf.clone(), tc.annot.text_h);
-                    let glyphs = bake_text_glyphs(font_cache, &f, x, y, h, &txt);
+                    let glyphs = bake_text_glyphs(font_cache, &f, GlyphPlace { at: Point2::new(x, y), height: h, angle }, &txt);
                     ed.project.set_sketch_text(si, ti, qymcad_core::model::TextSpec { at: Point2::new(x, y), height: h, angle, text: txt, glyphs, font: f });
                     invalidate(ed.regen);
                 }
@@ -11900,9 +11911,25 @@ pub fn move_body_at(rc: &mut RebuildCtx, mi: usize, mat: [f64; 12]) {
 
 /// In-place editing of a note's text (a double click).
 /// Bake the glyph polylines of a text through the active font (world coordinates, baseline point x, y).
-pub fn bake_text_glyphs(font_cache: &mut FontCache, font: &qymcad_core::model::FontRef, x: f64, y: f64, height: f64, text: &str) -> Vec<Vec<Point2>> {
+/// WHERE A TEXT'S GLYPHS ARE LAID: the point the line of text starts at, the height of its letters, and the angle it is
+/// turned by, in degrees.
+#[derive(Clone, Copy, Debug)]
+pub struct GlyphPlace {
+    pub at: Point2,
+    pub height: f64,
+    pub angle: f64,
+}
+
+/// The glyphs of `text` in `font`, laid at `place`. TURNED BY ITS ANGLE: baked level, a turned text edited went back to
+/// standing level (found with issue #32).
+pub fn bake_text_glyphs(font_cache: &mut FontCache, font: &qymcad_core::model::FontRef, place: GlyphPlace, text: &str) -> Vec<Vec<Point2>> {
     let Some(bytes) = font_cache.bytes(font) else { return Vec::new() };
-    qymcad_core::text::text_outline_contours(&bytes, font.index, text, height, x, y).into_iter().map(|c| c.points).collect()
+    let GlyphPlace { at, height, angle } = place;
+    let (sn, cs) = angle.to_radians().sin_cos();
+    qymcad_core::text::text_outline_contours(&bytes, font.index, text, height, at.x, at.y)
+        .into_iter()
+        .map(|c| c.points.into_iter().map(|p| Point2::new(at.x + (p.x - at.x) * cs - (p.y - at.y) * sn, at.y + (p.x - at.x) * sn + (p.y - at.y) * cs)).collect())
+        .collect()
 }
 
 /// The popup for editing a text object: the string plus the height. On apply the glyphs are re-baked and updated.
@@ -12000,7 +12027,7 @@ pub fn text_obj_editor(ed: Editing, font_cache: &mut FontCache, tc: &mut TextCtx
         // is and the person is told why, rather than being handed a different typeface silently.
         match font_cache.bytes(&font) {
             Some(_) => {
-                let glyphs = bake_text_glyphs(font_cache, &font, x, y, h, &txt);
+                let glyphs = bake_text_glyphs(font_cache, &font, GlyphPlace { at: Point2::new(x, y), height: h, angle }, &txt);
                 ed.project.set_sketch_text(si, ti, qymcad_core::model::TextSpec { at: qymcad_core::geom::Point2::new(x, y), height: h, angle, text: txt, glyphs, font });
                 invalidate(ed.regen);
             }

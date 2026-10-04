@@ -553,6 +553,37 @@ impl Project {
         }
         self.regen_sketch(si);
     }
+    /// TURN TEXT `ti` by `deg` about (cx, cy): its place goes round the centre, its angle grows by `deg`, and its baked
+    /// glyphs turn with it - no font is needed, as for a move. Reported behaviour (issue #32): the Rotate tool did not
+    /// take a text, and a text stood level always.
+    pub fn rotate_sketch_text(&mut self, si: usize, ti: usize, cx: f64, cy: f64, deg: f64) {
+        let (sn, cs) = deg.to_radians().sin_cos();
+        let turn = |x: f64, y: f64| (cx + (x - cx) * cs - (y - cy) * sn, cy + (x - cx) * sn + (y - cy) * cs);
+        if let Some(t) = self.sketches.get_mut(si).and_then(|s| s.texts.get_mut(ti)) {
+            (t.x, t.y) = turn(t.x, t.y);
+            t.angle += deg;
+            for p in t.glyphs.iter_mut().flatten() {
+                (p.x, p.y) = turn(p.x, p.y);
+            }
+        }
+        self.regen_sketch(si);
+    }
+    /// COPY TEXT `ti` shifted by (dx, dy): the same string, height, angle and font, the glyphs shifted with it. Returns
+    /// the id of the copy.
+    pub fn copy_sketch_text(&mut self, si: usize, ti: usize, dx: f64, dy: f64) -> Option<Id> {
+        let mut copy = self.sketches.get(si)?.texts.get(ti)?.clone();
+        copy.id = self.alloc_id();
+        copy.x += dx;
+        copy.y += dy;
+        for p in copy.glyphs.iter_mut().flatten() {
+            p.x += dx;
+            p.y += dy;
+        }
+        let id = copy.id;
+        self.sketches[si].texts.push(copy);
+        self.regen_sketch(si);
+        Some(id)
+    }
     /// Delete text `ti` from a sketch.
     pub fn delete_sketch_text(&mut self, si: usize, ti: usize) {
         if let Some(s) = self.sketches.get_mut(si) {
