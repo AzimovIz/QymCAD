@@ -477,4 +477,144 @@ mod tests {
             assert_eq!(capture_outcome(&app.set, "part", "part.extrude", key, mods), Capture::Pending, "{key:?} alone was judged as a chord");
         }
     }
+
+    /// THE WINDOW DRIVEN THROUGH WHOLE FRAMES, in English, on a screen of a fixed size.
+    struct Frames {
+        app: App,
+        ctx: egui::Context,
+        time: f64,
+        lang: String,
+    }
+
+    impl Frames {
+        fn open() -> Self {
+            let lang = qymcad_i18n::language();
+            qymcad_i18n::set_language("en");
+            let mut app = App::default();
+            app.win.open(crate::gui::WinKind::Hotkeys);
+            let ctx = egui::Context::default();
+            super::super::install_fonts(&ctx);
+            let mut w = Frames { app, ctx, time: 0.0, lang };
+            for _ in 0..10 {
+                w.frame(Vec::new()); // the window fades in and the grid learns its columns
+            }
+            w
+        }
+
+        fn frame(&mut self, events: Vec<egui::Event>) -> Vec<egui::Shape> {
+            self.time += 1.0 / 60.0;
+            let screen = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(1400.0, 900.0));
+            let input = egui::RawInput { screen_rect: Some(screen), time: Some(self.time), events, ..Default::default() };
+            let app = &mut self.app;
+            let out = self.ctx.run_ui(input, |ui| app.hotkeys_window(ui.ctx()));
+            let mut shapes = Vec::new();
+            out.shapes.into_iter().for_each(|c| flat_shape(c.shape, &mut shapes));
+            shapes
+        }
+
+        fn click(&mut self, at: egui::Pos2) {
+            self.frame(vec![egui::Event::PointerMoved(at)]);
+            let press = |pressed| egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
+            self.frame(vec![press(true)]);
+            self.frame(vec![press(false)]);
+        }
+
+        /// A frame in which the key goes down.
+        fn key_down(&mut self, key: Key, modifiers: Modifiers) -> Vec<egui::Shape> {
+            self.frame(vec![egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers }])
+        }
+
+        /// A frame in which the key comes up.
+        fn key_up(&mut self, key: Key) -> Vec<egui::Shape> {
+            self.frame(vec![egui::Event::Key { key, physical_key: None, pressed: false, repeat: false, modifiers: Modifiers::NONE }])
+        }
+
+        /// A click on the key button of the extrude row, so the window waits for its key; the row's description.
+        fn wait_for_extrude_key(&mut self) -> String {
+            let what = super::super::hotkeys::hotkey_what(HOTKEYS.iter().find(|r| r.action == "part.extrude").expect("the extrude row"));
+            let shapes = self.frame(Vec::new());
+            let row = text_rect(&shapes, &what).expect("the extrude row is drawn");
+            let key = shapes
+                .iter()
+                .find_map(|s| match s {
+                    egui::Shape::Text(t) if t.galley.text() == "E" && t.pos.x < row.min.x && (t.pos.y + t.galley.size().y * 0.5 - row.center().y).abs() < 6.0 => Some(t.pos + t.galley.size() * 0.5),
+                    _ => None,
+                })
+                .expect("the key button of the extrude row is drawn");
+            self.click(key);
+            what
+        }
+    }
+
+    impl Drop for Frames {
+        fn drop(&mut self) {
+            qymcad_i18n::set_language(&self.lang);
+        }
+    }
+
+    fn flat_shape(s: egui::Shape, out: &mut Vec<egui::Shape>) {
+        match s {
+            egui::Shape::Vec(v) => v.into_iter().for_each(|s| flat_shape(s, out)),
+            s => out.push(s),
+        }
+    }
+
+    fn text_rect(shapes: &[egui::Shape], text: &str) -> Option<egui::Rect> {
+        shapes.iter().find_map(|s| match s {
+            egui::Shape::Text(t) if t.galley.text() == text => Some(egui::Rect::from_min_size(t.pos, t.galley.size())),
+            _ => None,
+        })
+    }
+
+    /// WHY A PRESS WAS REFUSED STANDS UNDER THE WAITING LINE, and holding a modifier refuses nothing yet.
+    ///
+    /// Reported behaviour: the refusal stood in a column of its own beside the waiting line, and it showed as soon
+    /// as Cmd went down, before the letter. A grid cell lays its content out left to right, and egui reports the
+    /// modifier key itself as a press. Driven by a click on the key and key presses through whole frames.
+    #[test]
+    fn the_refusal_stands_under_the_waiting_line() {
+        let mut w = Frames::open();
+        let what = w.wait_for_extrude_key();
+        let waiting = crate::i18n::tr1("hotkeys-waiting", "what", &what);
+        let refused = crate::i18n::tr("hotkeys-reserved");
+        for (key, mods) in [(Key::SuperLeft, Modifiers::MAC_CMD), (Key::ControlLeft, Modifiers::COMMAND)] {
+            w.key_down(key, mods);
+            let shapes = w.frame(Vec::new());
+            assert!(text_rect(&shapes, &waiting).is_some(), "{key:?} going down ended the waiting");
+            assert!(text_rect(&shapes, &refused).is_none(), "{key:?} held alone already says the key is refused");
+            w.key_up(key);
+        }
+        w.key_down(Key::Z, Modifiers::COMMAND); // undo: the system's
+        w.key_up(Key::Z);
+        let shapes = w.frame(Vec::new());
+        let line = text_rect(&shapes, &waiting).expect("the waiting line is gone after a refused press");
+        let why = text_rect(&shapes, &refused).expect("the refusal of Ctrl+Z is not drawn");
+        assert!(why.min.y >= line.max.y - 0.5, "the refusal {why:?} does not stand under the waiting line {line:?}");
+        assert!((why.min.x - line.min.x).abs() < 1.0, "the refusal starts at x {} and the waiting line at {}: a column of its own", why.min.x, line.min.x);
+    }
+
+    /// THE ROWS GO BACK TO THEIR PLACES ONCE A KEY IS ASSIGNED.
+    ///
+    /// Reported behaviour: after a key was changed, empty bands stood between the rows below it. The lines under
+    /// the row were a grid row of their own; when they went, every row below moved up one index, and the grid laid
+    /// each out in the height the previous frame had at that index.
+    #[test]
+    fn the_rows_below_stay_in_place_after_a_key_is_assigned() {
+        let mut w = Frames::open();
+        let rows: Vec<_> = HOTKEYS.iter().filter(|r| r.area == "part").collect();
+        let at = rows.iter().position(|r| r.action == "part.extrude").expect("the extrude row");
+        let next = super::super::hotkeys::hotkey_what(rows.get(at + 1).expect("a row under the extrusion"));
+        let before = text_rect(&w.frame(Vec::new()), &next).expect("the row under the extrusion is drawn").min.y;
+        w.wait_for_extrude_key();
+        w.key_down(Key::W, Modifiers::NONE);
+        assert_eq!(qymcad_ui_state::hotkey_key(&w.app.set, "part.extrude"), "W", "the press did not assign W");
+        let mut after = vec![w.key_up(Key::W)];
+        for _ in 0..3 {
+            after.push(w.frame(Vec::new()));
+        }
+        for (i, shapes) in after.iter().enumerate() {
+            let y = text_rect(shapes, &next).expect("the row under the extrusion is drawn").min.y;
+            assert!((y - before).abs() < 0.5, "frame {i} after the key was assigned: the row under it stands at {y}, it stood at {before}");
+        }
+    }
 }

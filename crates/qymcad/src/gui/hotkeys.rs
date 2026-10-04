@@ -101,13 +101,19 @@ pub(crate) fn hotkeys_window(wc: &mut qymcad_ui_state::WinCtx, ctx: &egui::Conte
                     egui::Grid::new(format!("hk_{area}")).num_columns(3).min_col_width(0.0).spacing([GRID_GAP, 4.0]).striped(true).show(ui, |ui| {
                         for r in rows {
                             key_cell(wc, ui, r, cols.key);
+                            // A GRID CELL LAYS ITS CONTENT OUT LEFT TO RIGHT (the grid lives in a `horizontal`), so the
+                            // lines under the description are stacked by an explicit `vertical`. Inside the row's own
+                            // cell rather than a grid row of their own: an extra row shifted every row below it, and
+                            // the grid sized each row from the height the previous frame had at that index.
                             ui.scope(|ui| {
                                 ui.set_width(cols.what);
-                                ui.add(egui::Label::new(hotkey_what(r)).wrap());
+                                ui.vertical(|ui| {
+                                    ui.add(egui::Label::new(hotkey_what(r)).wrap());
+                                    row_status(wc, ui, r.action);
+                                });
                             });
                             row_tools(wc, ui, r);
                             ui.end_row();
-                            row_status(wc, ui, r.action, cols.what);
                         }
                     });
                     ui.add_space(10.0);
@@ -203,46 +209,41 @@ fn columns(set: &qymcad_ui_state::Settings, ui: &egui::Ui, table: f32) -> Column
 /// The narrowest key button: a single letter still gets a target worth aiming at.
 const KEY_W: f32 = 110.0;
 
-/// UNDER THE ROW BEING REASSIGNED: what the window waits for, why a press was refused, which key clashes. Shown
-/// where the person looks - the key they just pressed - and not at the top of a table they may have scrolled far
-/// down. Wrapped inside the description column, so a long message never widens the table.
-fn row_status(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui, action: &str, width: f32) {
+/// UNDER THE DESCRIPTION OF THE ROW BEING REASSIGNED: what the window waits for, why a press was refused (under
+/// the waiting line), which key clashes. Shown where the person looks - the key they just pressed - and not at the
+/// top of a table they may have scrolled far down. Wrapped inside the description column, so a long message never
+/// widens the table.
+fn row_status(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui, action: &str) {
     let clash = wc.hotkeys.clash.clone().filter(|c| c.action == action);
     let waiting = wc.hotkeys.action.as_deref() == Some(action);
     if clash.is_none() && !waiting {
         return;
     }
-    ui.label("");
-    ui.scope(|ui| {
-        ui.set_width(width);
-        if let Some(clash) = clash {
-            let old = qymcad_ui_state::key_label(&qymcad_ui_state::hotkey_key(wc.set, &clash.action));
-            let holder = what_of(clash.holder);
-            ui.horizontal_wrapped(|ui| {
-                ui.label(egui::RichText::new(ph::WARNING).color(wc.scheme.pal.warning()));
-                ui.add(egui::Label::new(crate::i18n::tr2("hotkeys-taken", "key", &qymcad_ui_state::key_label(&clash.chord), "what", &holder)).wrap());
-                let swap = ui.add_enabled(!old.is_empty(), egui::Button::new(crate::i18n::tr("hotkeys-swap")));
-                if swap.on_hover_text(crate::i18n::tr2("hotkeys-swap-tip", "what", &holder, "key", &old)).clicked() {
-                    qymcad_ui_state::resolve_hotkey_clash(wc.set, &clash, qymcad_ui_state::ClashChoice::Swap);
-                    wc.hotkeys.clash = None;
-                }
-                if ui.button(crate::i18n::tr("hotkeys-take")).on_hover_text(crate::i18n::tr1("hotkeys-take-tip", "what", &holder)).clicked() {
-                    qymcad_ui_state::resolve_hotkey_clash(wc.set, &clash, qymcad_ui_state::ClashChoice::Unbind);
-                    wc.hotkeys.clash = None;
-                }
-                if ui.button(crate::i18n::tr("hotkeys-cancel")).clicked() {
-                    wc.hotkeys.clash = None;
-                }
-            });
-        } else {
-            ui.add(egui::Label::new(egui::RichText::new(crate::i18n::tr1("hotkeys-waiting", "what", &what_of(action))).color(wc.scheme.pal.ui_accent())).wrap());
-            if !wc.hotkeys.note.is_empty() {
-                ui.add(egui::Label::new(egui::RichText::new(&wc.hotkeys.note).color(wc.scheme.pal.error_mild()).small()).wrap());
+    if let Some(clash) = clash {
+        let old = qymcad_ui_state::key_label(&qymcad_ui_state::hotkey_key(wc.set, &clash.action));
+        let holder = what_of(clash.holder);
+        ui.horizontal_wrapped(|ui| {
+            ui.label(egui::RichText::new(ph::WARNING).color(wc.scheme.pal.warning()));
+            ui.add(egui::Label::new(crate::i18n::tr2("hotkeys-taken", "key", &qymcad_ui_state::key_label(&clash.chord), "what", &holder)).wrap());
+            let swap = ui.add_enabled(!old.is_empty(), egui::Button::new(crate::i18n::tr("hotkeys-swap")));
+            if swap.on_hover_text(crate::i18n::tr2("hotkeys-swap-tip", "what", &holder, "key", &old)).clicked() {
+                qymcad_ui_state::resolve_hotkey_clash(wc.set, &clash, qymcad_ui_state::ClashChoice::Swap);
+                wc.hotkeys.clash = None;
             }
+            if ui.button(crate::i18n::tr("hotkeys-take")).on_hover_text(crate::i18n::tr1("hotkeys-take-tip", "what", &holder)).clicked() {
+                qymcad_ui_state::resolve_hotkey_clash(wc.set, &clash, qymcad_ui_state::ClashChoice::Unbind);
+                wc.hotkeys.clash = None;
+            }
+            if ui.button(crate::i18n::tr("hotkeys-cancel")).clicked() {
+                wc.hotkeys.clash = None;
+            }
+        });
+    } else {
+        ui.add(egui::Label::new(egui::RichText::new(crate::i18n::tr1("hotkeys-waiting", "what", &what_of(action))).color(wc.scheme.pal.ui_accent())).wrap());
+        if !wc.hotkeys.note.is_empty() {
+            ui.add(egui::Label::new(egui::RichText::new(&wc.hotkeys.note).color(wc.scheme.pal.error_mild()).small()).wrap());
         }
-    });
-    ui.label("");
-    ui.end_row();
+    }
 }
 
 /// The caption of a section, and the way back to the factory keys of that section alone.
