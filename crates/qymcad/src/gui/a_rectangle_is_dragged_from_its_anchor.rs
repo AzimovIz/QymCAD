@@ -1,10 +1,9 @@
-//! A RECTANGLE DRAGGED BY HAND CHANGES ITS SIZE FROM WHERE IT WAS DRAWN, in real frames of the window: drawn by its
-//! corners, the corner it was drawn from stays when another corner is dragged, and the corner across from it stays
-//! when that corner itself is dragged; drawn from its centre, the centre stays under a dragged corner, and a dragged
-//! centre carries the whole rectangle.
+//! A RECTANGLE DRAGGED BY A CORNER STRETCHES FROM THE CORNER ACROSS, in real frames of the window: the corner across
+//! stays and the dragged corner goes where the pointer took it, so both the width and the height change; drawn from its
+//! centre, the centre stays under a dragged corner, and a dragged centre carries the whole rectangle.
 //!
 //! Reported behaviour (issue #56): on a rectangle drawn from a corner, dragging a corner next to that corner moved it
-//! too, and dragging the corner it was drawn from moved every other corner.
+//! too; with that corner held, a neighbour dragged changed one size only.
 #[cfg(test)]
 mod tests {
     use super::super::hand::Hand;
@@ -42,32 +41,24 @@ mod tests {
     }
 
     #[test]
-    fn a_dragged_rectangle_holds_where_it_was_drawn_from() {
+    fn a_dragged_corner_stretches_the_rectangle_from_the_corner_across() {
         let mut sins = Vec::new();
-        // drawn by its corners from (0, 0): a corner next to it, and the corner across, dragged - (0, 0) stays
-        for (from, to) in [((40.0, 0.0), (48.0, -6.0)), ((0.0, 30.0), (-6.0, 38.0)), ((40.0, 30.0), (48.0, 38.0))] {
-            let (mut app, si) = a_rectangle("opt-rect-2corners", [(0.0, 0.0), (40.0, 30.0)]);
-            let anchor = id_at(&app, si, (0.0, 0.0));
+        // drawn from the top left corner (10, 40), as reported, clear of the origin a corner would be glued to; every
+        // corner dragged outwards, the one drawn from too
+        let corners = [(10.0, 10.0), (50.0, 10.0), (50.0, 40.0), (10.0, 40.0)];
+        for k in 0..4 {
+            let (from, across) = (corners[k], corners[(k + 2) % 4]);
+            let to = (from.0 + if from.0 > 30.0 { 8.0 } else { -8.0 }, from.1 + if from.1 > 25.0 { 6.0 } else { -6.0 });
+            let (mut app, si) = a_rectangle("opt-rect-2corners", [(10.0, 40.0), (50.0, 10.0)]);
+            let (dragged, held) = (id_at(&app, si, from), id_at(&app, si, across));
             Hand::new(&mut app).drag2d(from, to);
-            if let Some(why) = stayed(&app, si, anchor, (0.0, 0.0)) {
-                sins.push(format!("drawn from (0, 0), the corner {from:?} dragged: the corner drawn from {why}"));
+            if let Some(why) = stayed(&app, si, held, across) {
+                sins.push(format!("the corner {from:?} dragged: the corner across {why}"));
             }
-        }
-        // drawn from the top left corner (0, 30), as reported: its neighbours and the corner across dragged - (0, 30) stays
-        for (from, to) in [((40.0, 30.0), (48.0, 38.0)), ((0.0, 0.0), (-6.0, -8.0)), ((40.0, 0.0), (48.0, -6.0))] {
-            let (mut app, si) = a_rectangle("opt-rect-2corners", [(0.0, 30.0), (40.0, 0.0)]);
-            let anchor = id_at(&app, si, (0.0, 30.0));
-            Hand::new(&mut app).drag2d(from, to);
-            if let Some(why) = stayed(&app, si, anchor, (0.0, 30.0)) {
-                sins.push(format!("drawn from (0, 30), the corner {from:?} dragged: the corner drawn from {why}"));
+            let now = point_near(&app, si, dragged);
+            if (now.0 - to.0).hypot(now.1 - to.1) > 0.5 {
+                sins.push(format!("the corner {from:?} dragged to {to:?} stands at {now:?}: not both sizes changed"));
             }
-        }
-        // the corner drawn from dragged itself: the corner across from it stays
-        let (mut app, si) = a_rectangle("opt-rect-2corners", [(0.0, 0.0), (40.0, 30.0)]);
-        let across = id_at(&app, si, (40.0, 30.0));
-        Hand::new(&mut app).drag2d((0.0, 0.0), (-6.0, -8.0));
-        if let Some(why) = stayed(&app, si, across, (40.0, 30.0)) {
-            sins.push(format!("drawn from (0, 0), that corner dragged: the corner across {why}"));
         }
         // drawn from its centre (20, 15): a corner dragged - the centre stays
         let (mut app, si) = a_rectangle("opt-rect-centre", [(20.0, 15.0), (40.0, 30.0)]);

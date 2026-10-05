@@ -114,18 +114,21 @@ fn same_rect_constraint(own: &Constraint, c: &Constraint) -> bool {
     }
 }
 
-/// WHAT A SOLVE HOLDS OF RECTANGLE `r` so that its size changes from where it was drawn, `dragged` being the point
-/// under the hand: its anchor - the centre, or the corner it was drawn from - or, when that corner is the one dragged,
-/// the corner across from it, so that pulling it stretches the rectangle rather than carries it. Nothing when the
-/// centre is dragged: the rectangle goes with it.
+/// WHAT A SOLVE HOLDS OF RECTANGLE `r` so that its size changes from where it should, `dragged` being the point under
+/// the hand. A dragged corner stretches the rectangle from the corner across from it - a corner shares a side with each
+/// neighbour, so with a neighbour held it could only slide along that side, one size at a time. A rectangle drawn from
+/// its centre holds the centre under a dragged corner. Not dragged, its anchor is held: the centre, or the corner it was
+/// drawn from, so that a width or a height typed grows it from there. Nothing when the centre is dragged: the rectangle
+/// goes with it.
 fn held_for_size(r: &crate::model::SketchRect, dragged: Option<Id>) -> Option<Id> {
     if dragged == Some(r.centre) {
         return None;
     }
-    match r.anchor {
-        crate::model::RectAnchor::Centre => Some(r.centre),
-        crate::model::RectAnchor::Corner(c) if dragged == Some(c) => r.corners.iter().position(|k| *k == c).map(|k| r.corners[(k + 2) % 4]),
-        crate::model::RectAnchor::Corner(c) => Some(c),
+    let corner_dragged = dragged.and_then(|d| r.corners.iter().position(|k| *k == d));
+    match (r.anchor, corner_dragged) {
+        (crate::model::RectAnchor::Centre, _) => Some(r.centre),
+        (crate::model::RectAnchor::Corner(_), Some(k)) => Some(r.corners[(k + 2) % 4]),
+        (crate::model::RectAnchor::Corner(c), None) => Some(c),
     }
 }
 

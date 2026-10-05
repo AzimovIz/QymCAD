@@ -188,22 +188,24 @@ fn a_rectangle_grows_from_where_it_was_drawn() {
     assert!(sins.is_empty(), "{}", sins.join("\n"));
 }
 
-/// THE CORNER DRAWN FROM STAYS UNDER A DRAGGED NEIGHBOUR, as the window drags - frame by frame on the fast path, then
-/// solved in full on release - on a rectangle drawn from its top left corner (reported, issue #56).
+/// A DRAGGED CORNER STRETCHES THE RECTANGLE FROM THE CORNER ACROSS, as the window drags - frame by frame on the fast
+/// path, then solved in full on release: the corner across stays and the dragged one reaches the pointer, both sizes
+/// changing (reported, issue #56: with the corner drawn from held, a neighbour dragged changed one size only).
 #[test]
-fn the_corner_drawn_from_stays_under_a_dragged_neighbour() {
+fn a_dragged_corner_stretches_from_the_corner_across() {
     let mut p = Project::default();
     p.new_document();
     let si = p.new_sketch("S");
     p.add_rect_entity(si, 0.0, 30.0, 40.0, 0.0, Purpose::Real);
     p.solve_sketch(si);
     let id = |p: &Project, x: f64, y: f64| p.sketches[si].points.iter().find(|q| (q.x - x).hypot(q.y - y) < 1e-9).map(|q| q.id).expect("a corner");
-    let (anchor, neighbour) = (id(&p, 0.0, 30.0), id(&p, 40.0, 30.0));
+    let (dragged, across) = (id(&p, 40.0, 30.0), id(&p, 0.0, 0.0));
     for k in 1..=10 {
         let t = k as f64 / 10.0;
-        p.solve_sketch_drag_fast(si, Some((neighbour, 40.0 + 8.0 * t, 30.0 + 8.0 * t)));
+        p.solve_sketch_drag_fast(si, Some((dragged, 40.0 + 8.0 * t, 30.0 + 8.0 * t)));
     }
     p.solve_sketch(si);
-    let a = xy(&p, si, anchor);
-    assert!((a.0).hypot(a.1 - 30.0) < 1e-6, "the corner drawn from went from (0, 30) to {a:?}");
+    let (a, d) = (xy(&p, si, across), xy(&p, si, dragged));
+    assert!(a.0.hypot(a.1) < 1e-6, "the corner across went from (0, 0) to {a:?}");
+    assert!((d.0 - 48.0).hypot(d.1 - 38.0) < 1e-3, "the dragged corner stands at {d:?}, not at (48, 38)");
 }
