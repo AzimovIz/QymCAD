@@ -1379,12 +1379,69 @@ mod tests {
             {
                 let count = |a: &App| a.project.sketches[si].entities.len() + a.project.sketches[si].points.len();
                 let before = count(&app);
-                crate::gui::fillet_all_corners(&mut app.tools.corner, &mut app.tools.picking, app.chosen.sel, &app.tools.sel_sk, &mut app.status, &app.tool_prefs);
+                crate::gui::fillet_all_corners(&app.project, &mut app.tools.corner, &mut app.tools.picking, app.chosen.sel, &app.tools.sel_sk, &mut app.status, &app.tool_prefs);
                 app.project.regen_sketch(si);
                 if count(&app) == before && app.status.trim().is_empty() {
                     problems.push("sketch: \"round every corner\" silently did nothing".into());
                 }
                 check_all(&mut app, "sketch: rounding every corner", &mut problems);
+                // A SET OF CORNERS, NOT ONE: a person points at three lines of the contour with Shift and one
+                // value cuts every corner they make. The same set is cut by the chamfer and by the fillet - what
+                // differs is only what each of them leaves behind.
+                for (n, (key, tool, arcs_left)) in [("tb-fillet-sketch-hint", "the fillet", true), ("tb-chamfer-sketch-hint", "the chamfer", false)].into_iter().enumerate() {
+                    // THREE LINES OF THE CONTOUR AS THEY STAND, and a place on each that a click would pick as a
+                    // LINE: a point of the drawing, a caption or a glyph takes a click before the geometry does,
+                    // and a click on one of those would answer it and not the line.
+                    let before = |a: &App| {
+                        let sk = &a.project.sketches[si];
+                        (
+                            sk.entities.iter().filter(|e| matches!(e.kind, qymcad_core::model::EntityKind::Line { .. })).count(),
+                            sk.entities.iter().filter(|e| matches!(e.kind, qymcad_core::model::EntityKind::Arc { .. })).count(),
+                        )
+                    };
+                    // A CONTOUR OF THE HAND'S OWN, drawn a long way from everything else on the sheet, because the
+                    // lines of the drawing above stand under the glyphs of the constraints put on them, and a click
+                    // on a glyph answers the constraint and not the line.
+                    let off = 200.0 * n as f64; // the contour of the second tool stands clear of the first
+                    let legs: [[(f64, f64); 2]; 3] = [[(100.0, 100.0), (160.0, 100.0)], [(160.0, 100.0), (130.0, 150.0)], [(130.0, 150.0), (100.0, 100.0)]];
+                    for leg in legs {
+                        let mut hand = Hand::new(&mut app);
+                        hand.sk_tool(0); // THE BUTTON OF A TOOL IN HAND PUTS IT DOWN, so the second leg needs it put down first
+                        hand.sk_tool(1);
+                        for (x, y) in leg {
+                            hand.click2d(x + off, y);
+                        }
+                    }
+                    // THE THREE LEGS JUST DRAWN, which are the last three lines of the sketch. Their ends move a
+                    // little under the solver, so they are taken by their place in the drawing rather than by their
+                    // coordinates - and the drawing above is left where it was.
+                    let lines: Vec<u64> = app.project.sketches[si].entities.iter().rev().filter(|e| matches!(e.kind, qymcad_core::model::EntityKind::Line { .. })).take(3).map(|e| e.id).collect();
+                    let (lines0, arcs0) = before(&app);
+                    let named: Vec<(u8, u64)> = lines.iter().map(|&id| (1u8, id)).collect();
+                    app.status.clear(); // so that what is said afterwards is said about THIS action
+                    let mut hand = Hand::new(&mut app);
+                    if lines.len() < 3 || !hand.sk_corner_set(key, &named, 3.0) {
+                        problems.push(format!("sketch: {tool} found no place to click on the lines of the contour"));
+                    } else {
+                        let (lines1, arcs1) = before(&app);
+                        // THREE LINES THAT MEET MAKE THREE CORNERS, AND ONE ANSWER CUTS ALL OF THEM. The fillet rounds
+                        // each corner in the lines themselves and leaves an arc at each; the chamfer lays a straight
+                        // line across each corner and leaves none, so it is the lines that grow by three.
+                        let (want_arcs, want_lines) = if arcs_left { (arcs0 + 3, lines0) } else { (arcs0, lines0 + 3) };
+                        if (lines1, arcs1) != (want_lines, want_arcs) {
+                            problems.push(format!(
+                                "sketch: three lines were named and {tool} 3 left {lines1} lines and {arcs1} arcs, where {want_lines} and {want_arcs} were the ones it owes; status {:?}",
+                                app.status
+                            ));
+                        }
+                        // ONE STEP OF UNDO FOR THE WHOLE SET: a person naming three corners meant one act.
+                        let step = app.disk.edits.undo.last().map(|s| s.name.clone());
+                        if step.as_deref() != Some(crate::i18n::tr(if arcs_left { "tool-fillet" } else { "tool-chamfer" }).as_str()) {
+                            problems.push(format!("sketch: {tool} left the step of undo {step:?}"));
+                        }
+                    }
+                    check_all(&mut app, &format!("sketch: {tool} over a set of corners"), &mut problems);
+                }
 
                 let ops: [(u8, &str, (f64, f64)); 4] = [(5, "chamfer", (30.0, 0.0)), (1, "trim", (40.0, 0.0)), (2, "extend", (30.0, 7.0)), (3, "break", (50.0, 7.0))];
                 for (op, name, (x, y)) in ops {

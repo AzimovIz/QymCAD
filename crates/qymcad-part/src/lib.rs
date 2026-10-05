@@ -5983,7 +5983,7 @@ pub fn wb_toolbar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
                     if qymcad_ui_state::icon_tool(ui, ph::BOUNDING_BOX, &qymcad_i18n::tr("tb-fillet-all-hint"), fillet_all_held) {
                         qymcad_ui_state::exit_draw_tools(&mut qymcad_ui_state::tools_in!(bc));
                         if !fillet_all_held {
-                            qymcad_ui_state::fillet_all_corners(&mut *bc.corner, &mut *bc.picking, *bc.sel, &*bc.sel_sk, &mut *bc.status, &*bc.tool_prefs);
+                            qymcad_ui_state::fillet_all_corners(&*bc.project, &mut *bc.corner, &mut *bc.picking, *bc.sel, &*bc.sel_sk, &mut *bc.status, &*bc.tool_prefs);
                         }
                     }
                     if qymcad_render::sym_button(ui, qymcad_ui_state::Gly::Offset, &qymcad_i18n::tr("tb-offset-hint"), bc.sel_sk.modify == Some(qymcad_ui_state::EditTool::Offset)) {

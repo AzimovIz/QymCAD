@@ -623,6 +623,44 @@ impl<'a> Hand<'a> {
         self.close_window()
     }
 
+    /// NAME A SET OF CORNERS AND CUT THEM ALL WITH ONE ANSWER: the corner tool by its button, then a click with
+    /// Shift on each of the lines, then the value typed into the field that stands up at the first corner, and
+    /// Enter - every one of it a key or a click in a whole frame of the window.
+    ///
+    /// `lines` are `(1, id)` items of the sketch. A place to click is found for each of them BEFORE the first click
+    /// and looked up again before every one of the next, because the field stands where the first corner was named
+    /// and its buttons take a click before a line does. Answers whether a place was found for all of them: a hand
+    /// that cannot reach the third line must not have taken the tool either, since it would be standing over half
+    /// a contour.
+    pub fn sk_corner_set(&mut self, key: &str, lines: &[(u8, u64)], value: f64) -> bool {
+        let places = self.places_on2d(lines);
+        let all: Vec<(f64, f64)> = places.iter().flatten().copied().collect();
+        let n = all.len().max(1) as f64;
+        self.sk_tool(0); // the canvas is in view and the sketch is the selection, whatever was in hand
+        self.look2d(all.iter().fold((0.0, 0.0), |(sx, sy), (x, y)| (sx + x / n, sy + y / n)));
+        self.in_view2d(&all);
+        if !lines.iter().zip(&places).all(|(item, places)| places.iter().any(|p| self.picks2d(*p) == Some(*item))) {
+            self.close_window();
+            return false;
+        }
+        self.press_hint_or_fail(key);
+        for (item, places) in lines.iter().zip(&places) {
+            // THE FIELD OF THE CORNER ALREADY NAMED STANDS WHERE IT WAS NAMED, and a click on its buttons answers
+            // the field rather than joining the set - so the place is looked up again now, not only before the tool
+            // was taken. The line goes in the set or the hand does not go on.
+            let Some(spot) = places.iter().copied().find(|p| self.picks2d(*p) == Some(*item)) else {
+                self.close_window();
+                return false;
+            };
+            self.press_at2d(egui::Modifiers::SHIFT, spot);
+        }
+        self.frame(Vec::new()); // the field takes the focus
+        self.type_text(&format!("{value}"));
+        self.key(egui::Key::Enter);
+        self.close_window();
+        true
+    }
+
     /// A LEFTOVER SELECTION IS DROPPED WITH Esc before a shape is picked, as a person drops it: the move tool
     /// works on what is already selected, and with something selected its first click would set the base point
     /// rather than pick.

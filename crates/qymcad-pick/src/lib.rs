@@ -126,6 +126,35 @@ pub fn nearest_vertex(pick: &PickCtx, rect: Rect, pos: Pos2, si: usize) -> Optio
     nearest_sketch_point(pick, rect, pos, si)
 }
 
+/// THE SAME POINT, WITH A WIDER REACH: the zone in which a click names a corner at that point rather than a line.
+///
+/// The reach of a pick of a point is right for PICKING a point and wrong for CONFIRMING a corner - a person aims
+/// at a point rather than at a spot inside a disc a shade wider than the dot, so the corner tools ask for the
+/// zone and the picks keep their own tolerance. One door: the rule about the frame of reference (the anchor and
+/// the guides are never handed out, and the origin yields to the person's own point in the same place) belongs
+/// to the point, not to the tolerance, so it is read from `nearest_sketch_point` rather than written out again.
+pub fn nearest_point_within(pick: &PickCtx, rect: Rect, pos: Pos2, si: usize, reach: f32) -> Option<Id> {
+    let s = pick.project.sketches.get(si)?;
+    let sh = qymcad_ui_state::Sheet { view: *pick.view, rect };
+    let is = |sys: Id, id: Id| sys != 0 && sys == id;
+    let mut best: Option<(f32, Id)> = None;
+    let mut best_origin: Option<(f32, Id)> = None;
+    for p in &s.points {
+        if is(s.frame, p.id) || s.axis_pts.iter().any(|g| is(*g, p.id)) {
+            continue; // the anchor and the guides are the frame, not the drawing
+        }
+        let d = sh.at(Point2::new(p.x, p.y)).distance(pos);
+        if d > reach {
+            continue;
+        }
+        let slot = if is(s.origin, p.id) { &mut best_origin } else { &mut best };
+        if slot.is_none_or(|(bd, _)| d < bd) {
+            *slot = Some((d, p.id));
+        }
+    }
+    best.or(best_origin).map(|(_, id)| id)
+}
+
 /// The nearest line entity -> the Id of the entity (for trimming).
 pub fn nearest_line_eid(pick: &PickCtx, rect: Rect, pos: Pos2, si: usize) -> Option<Id> {
     let sh = qymcad_ui_state::Sheet { view: *pick.view, rect };

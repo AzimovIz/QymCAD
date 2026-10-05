@@ -199,9 +199,9 @@ probe! {
         let mut s = empty_sketch();
         draw(&mut s, "tb-line-hint", &[(60.0, 0.0), (0.0, 0.0), (0.0, 60.0)]);
         take(&mut s, "tb-chamfer-sketch-hint");
-        s.click_on_sketch(30.0, 0.0); // the middle of the first line: not a point of the drawing at all
+        pick_shift(&mut s, 30.0, 0.0); // the middle of the first line: not a point of the drawing at all
+        pick_shift(&mut s, 0.0, 30.0); // and the middle of the second: the corner is where the two meet
         let second = s.on_sketch(0.0, 30.0);
-        s.click(second); // and the middle of the second: the corner is where the two meet
         let field = field_near(&mut s, second);
         fill_widget(&mut s, &field, "5");
         s.key(Key::Enter);
@@ -211,55 +211,37 @@ probe! {
 }
 
 probe! {
-    /// A PICK THAT NAMES NO CORNER TAKES THE FIELD DOWN WITH IT. Reported: three lines were clicked in a row, the
-    /// third not joined to the first two, and the preview of the corner of the first two stood on the sheet with its
-    /// field - a corner that was no longer the pair on screen.
-    fn a_pick_that_names_no_corner_leaves_no_field_behind() {
-        let mut s = empty_sketch();
-        draw(&mut s, "tb-line-hint", &[(60.0, 0.0), (0.0, 0.0), (0.0, 60.0)]);
-        draw(&mut s, "tb-line-hint", &[(140.0, 140.0), (120.0, 140.0), (120.0, 160.0)]); // an L far away
-        take(&mut s, "tb-chamfer-sketch-hint");
-        s.click_on_sketch(30.0, 0.0); // the middle of the first line
-        let corner = s.on_sketch(0.0, 30.0);
-        s.click(corner); // the middle of the second: the field of their corner opens
-        let field = field_near(&mut s, corner);
-        assert_eq!(field.kind, Kind::TextField, "the corner of the first two lines did not open its field");
-        s.click_on_sketch(130.0, 140.0); // the middle of the third, which meets neither of them
-        let left = s.widgets().into_iter().filter(|w| w.kind == Kind::TextField && w.rect.top() > 120.0).collect::<Vec<_>>();
-        assert!(left.is_empty(), "the field of the corner before it stood open over a pair that was gone: {left:?}");
-    }
-}
-
-probe! {
     /// LEAVING THE CORNER MODE LETS GO OF WHAT IT HAD CHOSEN. Reported: the lines it was offered went on standing lit
     /// with nothing in hand, and the next tool found a selection that was not its own.
     fn leaving_the_corner_mode_clears_what_it_had_chosen() {
         let mut s = empty_sketch();
         draw(&mut s, "tb-line-hint", &[(60.0, 0.0), (0.0, 0.0), (0.0, 60.0)]);
-        pick(&mut s, 30.0, 0.0, false);
-        pick(&mut s, 0.0, 30.0, true); // the two lines of the corner, chosen before the tool
-        take(&mut s, "tb-chamfer-sketch-hint"); // the corner of the two is offered at once, out of the selection
-        let middle = s.canvas().center();
-        let field = field_near(&mut s, middle); // the field of that corner is open
-        assert_eq!(field.kind, Kind::TextField, "the corner of the two chosen lines did not open its field");
+        take(&mut s, "tb-chamfer-sketch-hint");
+        pick_shift(&mut s, 30.0, 0.0); // the first line of the corner
+        pick_shift(&mut s, 0.0, 30.0); // and the second: the field of their corner opens
+        let corner_at = s.on_sketch(0.0, 30.0);
+        assert_eq!(field_near(&mut s, corner_at).kind, Kind::TextField, "the corner of the two chosen lines did not open its field");
         take(&mut s, "tb-line-hint"); // another tool: leaving the chamfer takes its picks with it
-        take(&mut s, "tb-chamfer-sketch-hint"); // and the chamfer asks for the corner rather than offering an old one
+        take(&mut s, "tb-chamfer-sketch-hint"); // and the chamfer waits for a corner rather than offering an old one
         let left: Vec<Widget> = s.widgets().into_iter().filter(|w| w.kind == Kind::TextField && w.rect.top() > 120.0).collect();
-        assert!(left.is_empty(), "the mode was taken again and offered the corner of the two lines it had been given before, which the mode that ended had let go of: {left:?}");
+        assert!(left.is_empty(), "the mode was taken again and stood with the field of the two lines the mode that ended had let go of: {left:?}");
     }
 }
 
 probe! {
-    /// THE CHAMFER TAKEN WITH THE TWO LINES ALREADY CHOSEN: the corner is where they meet, and the tool is pressed
-    /// afterwards. Reported: the selection stood lit and the tool ignored it, asking for the corner again.
+    /// THE CHAMFER TAKEN WITH THE TWO LINES ALREADY CHOSEN: the corner is where they meet, and the field opens at the
+    /// first click without asking for the lines again. Reported: the selection stood lit and the tool ignored it,
+    /// asking for the corner again.
     fn a_chamfer_of_two_lines_already_chosen_is_offered_the_corner_they_share() {
         let mut s = empty_sketch();
         draw(&mut s, "tb-line-hint", &[(60.0, 0.0), (0.0, 0.0), (0.0, 60.0)]);
         pick(&mut s, 30.0, 0.0, false);
         pick(&mut s, 0.0, 30.0, true); // the two lines of the corner, chosen before the tool
         take(&mut s, "tb-chamfer-sketch-hint");
-        let middle = s.canvas().center();
-        let field = field_near(&mut s, middle);
+        let empty = s.on_sketch(200.0, -200.0);
+        s.click(empty); // a click on nothing opens the field and leaves the two lines as the set
+        let field = field_near(&mut s, empty);
+        assert_eq!(field.kind, Kind::TextField, "the chamfer of the two lines chosen before it opened no field: {}", s.status());
         fill_widget(&mut s, &field, "5");
         s.key(Key::Enter);
         assert!(counts(&mut s).0 == 3, "the corner of the two chosen lines did not become a line across: {:?}", counts(&mut s));
@@ -290,10 +272,10 @@ probe! {
         draw(&mut s, "tb-line-hint", &[(60.0, 0.0), (0.0, 0.0), (0.0, 60.0)]);
         draw(&mut s, "tb-line-hint", &[(150.0, 0.0), (120.0, 0.0), (120.0, 30.0)]); // a second angle, far away
         take(&mut s, "tb-fillet-sketch-hint");
-        s.click_on_sketch(30.0, 0.0); // the first arm of the near angle
-        s.click_on_sketch(135.0, 0.0); // an arm of the far angle: no corner in common with the first
+        pick_shift(&mut s, 30.0, 0.0); // the first arm of the near angle
+        pick_shift(&mut s, 135.0, 0.0); // an arm of the far angle: no corner in common with the first
+        pick_shift(&mut s, 120.0, 15.0); // the other arm of the far angle, the neighbour of the one now chosen
         let third = s.on_sketch(120.0, 15.0);
-        s.click(third); // the other arm of the far angle, the neighbour of the one now chosen
         let field = field_near(&mut s, third);
         fill_widget(&mut s, &field, "5");
         s.key(Key::Enter);
@@ -310,9 +292,9 @@ probe! {
         draw(&mut s, "tb-rect-hint", &[(0.0, 0.0), (20.0, 20.0)]);
         draw(&mut s, "tb-rect-hint", &[(20.0, 20.0), (40.0, 40.0)]); // sharing the point (20, 20) and nothing else
         take(&mut s, "tb-chamfer-sketch-hint");
-        s.click_on_sketch(20.0, 10.0); // the right side of the near square
-        let second = s.on_sketch(10.0, 20.0); // and its top side: the corner they meet at
-        s.click(second);
+        pick_shift(&mut s, 20.0, 10.0); // the right side of the near square
+        pick_shift(&mut s, 10.0, 20.0); // and its top side: the corner they meet at
+        let second = s.on_sketch(10.0, 20.0);
         let field = field_near(&mut s, second);
         fill_widget(&mut s, &field, "5");
         s.key(Key::Enter);
@@ -331,10 +313,10 @@ probe! {
         line(&mut s, (20.0, 0.0), (40.0, 0.0)); // the same straight line in two pieces
         line(&mut s, (40.0, 0.0), (40.0, 30.0));
         take(&mut s, "tb-fillet-sketch-hint");
-        s.click_on_sketch(10.0, 0.0); // the first half
-        s.click_on_sketch(30.0, 0.0); // the second: 180 degrees is no corner, so it stands as the first of the next pair
+        pick_shift(&mut s, 10.0, 0.0); // the first half
+        pick_shift(&mut s, 30.0, 0.0); // the second: 180 degrees is no corner, so it stands as the first of the next pair
+        pick_shift(&mut s, 40.0, 15.0); // its neighbour: here there IS a corner
         let third = s.on_sketch(40.0, 15.0);
-        s.click(third); // its neighbour: here there IS a corner
         let field = field_near(&mut s, third);
         fill_widget(&mut s, &field, "5");
         s.key(Key::Enter);
@@ -535,228 +517,536 @@ probe! {
 }
 
 probe! {
-    /// SHIFT JOINS THE SET: three lines of a triangle named with Shift are three corners, cut by one answer.
-    /// Reported: a shape whose corners were all wanted had to be rounded one corner at a time, each one its own value
-    /// typed into a field that opened over a different corner every time.
-    fn three_lines_named_with_shift_are_three_corners_cut_together() {
+    /// A CONTOUR OF CHOSEN LINES IS CUT BY ONE ANSWER. The corner is not something one points at: it is what the
+    /// chosen lines make, so three lines of a triangle with Shift are three corners, and one value and one Enter cut
+    /// all of them. Reported: a shape whose corners were all wanted had to be rounded one corner at a time, each one
+    /// its own value typed into a field that opened over a different corner every time.
+    fn a_contour_of_chosen_lines_is_cut_by_one_answer() {
         let mut s = empty_sketch();
         line(&mut s, (0.0, 0.0), (60.0, 0.0));
         line(&mut s, (60.0, 0.0), (30.0, 50.0));
         line(&mut s, (30.0, 50.0), (0.0, 0.0)); // a closed contour of three lines
         assert_eq!(counts(&mut s).0, 3, "setup: the triangle is not three lines: {:?}", counts(&mut s));
         take(&mut s, "tb-chamfer-sketch-hint");
-        s.click_on_sketch(30.0, 0.0); // the middle of the first line
-        let corner = s.on_sketch(45.0, 25.0); // the middle of the second: the field of their corner opens
-        s.click(corner);
-        let field = field_near(&mut s, corner);
-        pick_shift(&mut s, 15.0, 25.0); // and with Shift the middle of the third, which closes the contour
+        pick_shift(&mut s, 30.0, 0.0); // the middle of the first line
+        pick_shift(&mut s, 45.0, 25.0); // and of the second: a corner stands
+        pick_shift(&mut s, 15.0, 25.0); // and of the third, which closes the contour
         assert!(s.status().contains('3'), "the set was said to hold {:?} corners, not the three the contour makes", s.status());
+        let at = s.on_sketch(30.0, 0.0);
+        let field = field_near(&mut s, at);
         fill_widget(&mut s, &field, "5");
         s.key(Key::Enter);
-        assert!(counts(&mut s).0 == 6, "the three corners of the triangle were not cut by one answer: {:?}", counts(&mut s));
+        assert_eq!(counts(&mut s).0, 6, "the three corners of the triangle were not cut by one answer: {:?}", counts(&mut s));
     }
 }
 
 probe! {
-    /// FOUR LINES ON ONE POINT ARE TAKEN TWO AT A TIME AS THEY WERE NAMED: the third joins a corner two lines have
-    /// already made and makes none of its own, and the fourth makes the second corner - with the third, not with the
-    /// first. Reported: every pair of the four was a corner there, so naming a shape round a cross cut places nobody
-    /// had asked for.
-    fn the_third_line_of_a_cross_adds_no_corner_and_the_fourth_makes_the_second() {
+    /// FOUR LINES ON ONE POINT ARE TAKEN TWO AT A TIME, IN THE ORDER THEY WERE CHOSEN: the third waits, and the
+    /// fourth makes the second corner - with the third, not with the first. Reported: every pair of the four was a
+    /// corner there, so naming a shape round a cross cut places nobody had asked for.
+    fn the_lines_of_a_cross_are_paired_two_at_a_time_in_the_order_they_were_chosen() {
         let mut s = empty_sketch();
-        let middle = cross_of_four_lines(&mut s); // four spokes on the point (0, 0)
-        assert_eq!(counts(&mut s).0, 4, "setup: the four spokes are not four lines: {:?}", counts(&mut s));
-        take(&mut s, "tb-chamfer-sketch-hint");
-        s.click_on_sketch(middle[0].0, middle[0].1); // the first spoke: it is half of a corner and waits
-        let corner = s.on_sketch(middle[1].0, middle[1].1); // and the second: their corner at (0, 0) opens its field
-        s.click(corner);
-        let field = field_near(&mut s, corner);
-        pick_shift(&mut s, middle[2].0, middle[2].1); // a third spoke on that point
-        assert!(s.status().contains('1'), "a third line made a corner of its own, beside the one the first two made: {:?}", s.status());
-        pick_shift(&mut s, middle[3].0, middle[3].1); // and the fourth, which makes the second corner with the third
-        assert!(s.status().contains('2'), "the fourth line did not make the second corner: {:?}", s.status());
-        fill_widget(&mut s, &field, "5");
-        s.key(Key::Enter);
-        assert!(counts(&mut s).0 == 6, "four lines with two corners cut should be six, and the point was cut more than twice: {:?}", counts(&mut s));
+        let mid = cross_of_four_lines(&mut s);
+        take(&mut s, "tb-fillet-sketch-hint");
+        pick_shift(&mut s, mid[0].0, mid[0].1);
+        assert!(!s.status().contains('1'), "one chosen line of the cross made a corner of itself: {:?}", s.status());
+        pick_shift(&mut s, mid[1].0, mid[1].1);
+        assert!(s.status().contains('1'), "the second chosen line did not make the first corner: {:?}", s.status());
+        pick_shift(&mut s, mid[2].0, mid[2].1);
+        assert!(s.status().contains('1'), "a third line on that point made a corner of its own: {:?}", s.status());
+        pick_shift(&mut s, mid[3].0, mid[3].1);
+        assert!(s.status().contains('2'), "the fourth line did not make the second corner, with the third: {:?}", s.status());
     }
 }
 
 probe! {
-    /// A LINE NAMED WITH SHIFT THAT MEETS NOTHING OF THE SET STANDS THERE AND WAITS: it is half of the next corner,
-    /// and the corner named before it does not go off the sheet. Reported: the preview of the first corner was taken
-    /// down by a line a person had only meant to put in the set.
-    fn a_line_named_with_shift_that_meets_nothing_waits_and_keeps_the_corner_standing() {
+    /// A LINE CHOSEN WITH SHIFT THAT MEETS NOTHING OF THE SET WAITS THERE: it is half of the next corner, and the
+    /// corners already standing do not go off the sheet. Reported: the preview of the first corner was taken down by a
+    /// line a person had only meant to put in the set.
+    fn a_line_that_meets_nothing_of_the_set_waits_and_keeps_the_corners_standing() {
         let mut s = empty_sketch();
-        line(&mut s, (60.0, 0.0), (0.0, 0.0));
-        line(&mut s, (0.0, 0.0), (0.0, 60.0));
-        line(&mut s, (140.0, 140.0), (120.0, 140.0)); // an L far away
-        line(&mut s, (120.0, 140.0), (120.0, 160.0));
-        take(&mut s, "tb-chamfer-sketch-hint");
-        s.click_on_sketch(30.0, 0.0); // the middle of the first line
-        let corner = s.on_sketch(0.0, 30.0); // and of the second: the field of their corner opens
-        s.click(corner);
-        let field = field_near(&mut s, corner);
-        assert_eq!(field.kind, Kind::TextField, "the corner of the first two lines did not open its field");
-        pick_shift(&mut s, 130.0, 140.0); // with Shift the middle of a line that meets neither of them
-        let still = s.widgets().into_iter().filter(|w| w.kind == Kind::TextField && w.rect.top() > 120.0).collect::<Vec<_>>();
-        assert_eq!(still.len(), 1, "the field of the corner went off the sheet when a line was put in the set beside it: {still:?}");
-        fill_widget(&mut s, &field, "5");
-        s.key(Key::Enter);
-        assert!(counts(&mut s).0 == 5, "the one corner that was named was not cut, or a corner was cut where no lines met: {:?}", counts(&mut s));
+        line(&mut s, (0.0, 0.0), (40.0, 0.0));
+        line(&mut s, (0.0, 0.0), (0.0, 40.0));
+        line(&mut s, (130.0, 140.0), (200.0, 140.0)); // and a line that meets neither of them
+        take(&mut s, "tb-fillet-sketch-hint");
+        pick_shift(&mut s, 20.0, 0.0); // the middle of the first line
+        pick_shift(&mut s, 0.0, 20.0); // and of the second: a corner stands at their meeting
+        assert!(s.status().contains('1'), "two lines that meet did not make a corner: {:?}", s.status());
+        pick_shift(&mut s, 165.0, 140.0); // and a line that meets nothing: it waits
+        let at = s.on_sketch(20.0, 0.0);
+        assert_eq!(field_near(&mut s, at).kind, Kind::TextField, "the field of the corner went off the sheet when a line that meets nothing was chosen: {}", s.status());
+        assert!(s.status().contains('1'), "a line that meets nothing of the set made a corner of its own: {:?}", s.status());
     }
 }
 
 probe! {
-    /// THE POINT OF A CORNER SWITCHES THAT CORNER OFF, AND THE SAME POINT BRINGS IT BACK. The corner was said by
-    /// its lines, and a point naming it again would be a second reading of the same place - so the click does not
-    /// read it, it puts it away: the lines keep their ends, and a click on the same point brings that very corner
-    /// back rather than asking for a new one.
-    fn a_point_wearing_a_named_corner_switches_it_off_and_back_with_shift() {
+    /// A CLICK AT A POINT WITH SHIFT PUTS THE CORNER STANDING THERE AWAY, AND THE SAME CLICK BRINGS IT BACK. A corner
+    /// was said by its lines, and a point naming it again would be a second reading of the same place - so the click
+    /// puts it away rather than reading it: the lines keep their ends, and the same click brings that very corner
+    /// back. Without Shift the click is a single selection, and what it leaves is that point alone.
+    fn a_click_at_a_point_puts_the_corner_away_and_the_same_click_brings_it_back() {
         let mut s = empty_sketch();
-        cross_of_four_lines(&mut s);
-        take(&mut s, "tb-chamfer-sketch-hint");
-        s.click_on_sketch(1500.0, 0.0); // the first spoke
-        let corner = s.on_sketch(0.0, 1500.0); // and the second: their corner at (0, 0) opens its field
-        s.click(corner);
-        assert_eq!(field_near(&mut s, corner).kind, Kind::TextField, "the two spokes did not name their corner");
-        pick_shift(&mut s, 0.0, 0.0); // with Shift the point where those two lines already made their corner
-        assert!(s.status().contains("out of the set"), "the point of a corner already named by its lines did not put that corner away: {:?}", s.status());
-        assert!(counts(&mut s).0 == 4, "the four lines were changed by putting a corner away: {:?}", counts(&mut s));
-        pick_shift(&mut s, 0.0, 0.0); // and the same point again brings that very corner back
-        assert!(s.status().contains('1'), "the corner that was put away did not come back on the same click: {:?}", s.status());
-        // THE BOX WENT DOWN WITH THE CORNER - there was nothing left to type for - so it is opened again on the
-        // two lines, and one answer cuts the corner that came back and no other
-        s.click_on_sketch(1500.0, 0.0);
-        let corner = s.on_sketch(0.0, 1500.0);
-        s.click(corner);
-        let field = field_near(&mut s, corner);
-        fill_widget(&mut s, &field, "5");
-        s.key(Key::Enter);
-        assert!(counts(&mut s).0 == 5, "four lines with the one corner of them cut should be five, and the point was cut twice over: {:?}", counts(&mut s));
+        line(&mut s, (0.0, 0.0), (40.0, 0.0));
+        line(&mut s, (0.0, 0.0), (0.0, 40.0));
+        take(&mut s, "tb-fillet-sketch-hint");
+        pick_shift(&mut s, 20.0, 0.0);
+        pick_shift(&mut s, 0.0, 20.0);
+        assert!(s.status().contains('1'), "setup: two lines that meet did not make a corner: {:?}", s.status());
+        let at = s.on_sketch(0.0, 0.0);
+        s.click_with(at, PointerButton::Primary, Modifiers::SHIFT); // AT THE POINT: the corner is put away, not deleted
+        assert!(!s.status().contains('1'), "the corner stood on after the click that put it away: {:?}", s.status());
+        s.click_with(at, PointerButton::Primary, Modifiers::SHIFT); // AND THE SAME CLICK BRINGS IT BACK
+        assert!(s.status().contains('1'), "the same click at the point did not bring the corner back: {:?}", s.status());
     }
 }
 
 probe! {
-    /// THE LINES CHOSEN BEFORE THE TOOL ARE THE SET THEY WOULD HAVE BEEN WITH SHIFT, AND THE FIELD OPENS ON THE
-    /// FIRST OF THEIR CORNERS. Reported: taking the chamfer with a contour selected dropped the selection, and the
-    /// corners of that contour had to be named one by one again. So the choice is the set from the moment the tool
-    /// is taken - and the tool cannot wait to be told which corner to type for, because a click without Shift is a
-    /// single selection and forgets the choice: one answer cuts the whole contour.
-    fn the_lines_chosen_before_the_tool_are_cut_as_the_set() {
+    /// A POINT THAT NAMED A CORNER OF ITS OWN IS TAKEN AWAY BY THE SAME CLICK WITH SHIFT. Reported: naming a point
+    /// again could only add a second reading of the same place, so a corner could be named but never un-named once it
+    /// was there. Without Shift the same click is a single selection: the set is that point alone.
+    fn a_click_at_a_point_takes_away_the_corner_named_there() {
+        let mut s = empty_sketch();
+        line(&mut s, (0.0, 0.0), (60.0, 0.0));
+        line(&mut s, (60.0, 0.0), (30.0, 50.0));
+        take(&mut s, "tb-fillet-sketch-hint");
+        pick_shift(&mut s, 30.0, 0.0); // ONE CHOSEN LINE: no corner stands at either end of it
+        let free = s.on_sketch(60.0, 0.0); // where this line meets the other
+        s.click_with(free, PointerButton::Primary, Modifiers::SHIFT); // A CORNER NAMED AT THE POINT, of the two lines
+        assert!(s.status().contains('1'), "setup: the corner named at the point is not in the set: {:?}", s.status());
+        // THE SAME CLICK WITH SHIFT TAKES IT AWAY AGAIN: a second reading of the same place is not a second corner.
+        s.click_with(free, PointerButton::Primary, Modifiers::SHIFT);
+        assert!(!s.status().contains('1'), "a corner named at a point outlived the click that should take it away: {:?}", s.status());
+    }
+}
+
+probe! {
+    /// A CORNER OF THE LINES TAKES THE PLACE OF ONE NAMED AT A POINT, AND A CORNER NAMED AT A POINT DIES WITH ONE OF
+    /// ITS LINES. Two corners at one point would be one place read twice, and a corner named at a point is a corner
+    /// of the two lines that stand there - so letting one of them go takes it.
+    fn a_corner_named_at_a_point_gives_way_to_the_lines_and_to_their_going() {
+        let mut s = empty_sketch();
+        line(&mut s, (0.0, 0.0), (60.0, 0.0));
+        line(&mut s, (60.0, 0.0), (30.0, 50.0));
+        take(&mut s, "tb-fillet-sketch-hint");
+        pick_shift(&mut s, 30.0, 0.0); // ONE CHOSEN LINE: no corner stands at either end of it
+        let at = s.on_sketch(60.0, 0.0);
+        s.click_with(at, PointerButton::Primary, Modifiers::SHIFT); // A CORNER IS NAMED AT THE POINT where this line meets the other
+        let field = field_near(&mut s, at);
+        assert_eq!(field.kind, Kind::TextField, "the corner named at the point did not stand in hand: {}", s.status());
+        // AND NOW THE SECOND LINE IS CHOSEN: it arrives at the same point and takes the place of the named one.
+        pick_shift(&mut s, 45.0, 25.0);
+        assert!(!s.status().contains('2'), "a corner of the lines and a corner named at a point both stand at one place: {:?}", s.status());
+    }
+}
+
+probe! {
+    /// ANY LEFT CLICK WITHOUT SHIFT IS A SINGLE SELECTION, AND A MULTI-SELECTION IS MADE WITH SHIFT. Reported: after
+    /// two lines had been chosen with Shift, a click without Shift on a line of its own cut the whole set with it, and
+    /// there was no way to take one line out of a set without giving the set up altogether. So the plain click is the
+    /// single one, and the set is begun and left with Shift held.
+    fn a_click_without_shift_chooses_one_line_and_leaves_the_set() {
         let mut s = empty_sketch();
         line(&mut s, (0.0, 0.0), (60.0, 0.0));
         line(&mut s, (60.0, 0.0), (30.0, 50.0));
         line(&mut s, (30.0, 50.0), (0.0, 0.0)); // a closed contour of three lines
-        pick(&mut s, 30.0, 0.0, false);
-        pick(&mut s, 45.0, 25.0, true);
-        pick(&mut s, 15.0, 25.0, true); // all three lines, chosen before the tool
-        take(&mut s, "tb-chamfer-sketch-hint");
-        let boxes: Vec<Widget> = s.widgets().into_iter().filter(|w| w.kind == Kind::TextField && w.rect.top() > 120.0).collect();
-        assert_eq!(boxes.len(), 1, "the tool was taken with a contour chosen and opened no field to type the value in: {boxes:?}");
-        fill_widget(&mut s, &boxes[0], "5");
-        s.key(Key::Enter);
-        assert_eq!(counts(&mut s).0, 6, "the three lines chosen before the tool made one corner instead of three: {:?}", counts(&mut s));
+        take(&mut s, "tb-fillet-sketch-hint");
+        pick_shift(&mut s, 30.0, 0.0);
+        pick_shift(&mut s, 45.0, 25.0);
+        assert!(s.status().contains('1'), "setup: two lines that meet did not make a corner: {:?}", s.status());
+        // A CLICK WITHOUT SHIFT ON A THIRD LINE: only that line is chosen from here, and the set is that line's corners.
+        s.click_on_sketch(15.0, 25.0);
+        assert!(!s.status().contains('1'), "a click without Shift kept the corners the set had: {:?}", s.status());
+        // THE TWO LINES OF ONE CORNER CHOSEN AGAIN, and the corner they make:
+        s.click_on_sketch(30.0, 0.0); // a click without Shift: this line alone
+        pick_shift(&mut s, 45.0, 25.0); // and with Shift the second joins it
+        assert!(s.status().contains('1'), "setup: the two lines chosen make their corner again: {:?}", s.status());
+        // AND A CLICK WITHOUT SHIFT ON EMPTY SPACE LEAVES THE LINES CHOSEN AND SPEAKS ABOUT THE MODE ALONE.
+        let empty = s.on_sketch(200.0, -200.0);
+        s.click(empty);
+        assert!(s.status().contains('1'), "a click on nothing at all took the chosen lines away: {:?}", s.status());
     }
 }
 
 probe! {
-    /// A POINT THAT NAMED THE CORNER IN THE FIELD IS TAKEN BACK WITH IT, SHIFT IN HAND. Reported: naming a point
-    /// again could only add a second reading of the same place, so the corner could be named but never un-named
-    /// once the field was open.
-    fn a_point_that_named_the_corner_is_taken_back_by_shift() {
+    /// A THIRD CHOSEN LINE AT A STRAIGHT JOINT IS REFUSED, WITH THE POINT NAMED. Two lines along one straight line
+    /// make no corner - there is nothing to cut there - and the corners at a point are taken two at a time, so the
+    /// third would have to be cut against that joint. The line is not taken and the reason is said.
+    fn a_third_line_at_a_straight_joint_is_refused_and_the_point_is_named() {
         let mut s = empty_sketch();
-        line(&mut s, (60.0, 0.0), (0.0, 0.0));
-        line(&mut s, (0.0, 0.0), (0.0, 60.0));
-        take(&mut s, "tb-chamfer-sketch-hint");
-        let corner = s.on_sketch(0.0, 0.0);
-        s.click(corner); // the point at the corner: it names the corner by itself and its field opens
-        assert_eq!(field_near(&mut s, corner).kind, Kind::TextField, "the point did not name its corner");
-        pick_shift(&mut s, 0.0, 0.0); // and the very same point with Shift: the corner and the choice go together
-        let left = s.widgets().into_iter().filter(|w| w.kind == Kind::TextField && w.rect.top() > 120.0).collect::<Vec<_>>();
-        assert!(left.is_empty(), "the corner stood on with its field after the point that named it was named again: {left:?}");
-        assert!(counts(&mut s).0 == 2, "something was cut although no corner was left in hand: {:?}", counts(&mut s));
+        line(&mut s, (0.0, 0.0), (20.0, 0.0)); // two segments of one straight line
+        line(&mut s, (20.0, 0.0), (40.0, 0.0));
+        line(&mut s, (20.0, 0.0), (20.0, 20.0)); // and a third arriving at the point they share
+        take(&mut s, "tb-fillet-sketch-hint");
+        pick_shift(&mut s, 10.0, 0.0);
+        pick_shift(&mut s, 30.0, 0.0);
+        assert!(!s.status().contains('1'), "two lines along one straight line made a corner: {:?}", s.status());
+        // THE THIRD ONE: not taken, and the point named.
+        pick_shift(&mut s, 20.0, 10.0);
+        assert!(s.status().contains("20"), "the third line at the straight joint was taken without a word: {:?}", s.status());
     }
 }
 
 probe! {
-    /// TWO POINTS NAMED ALONG A CONTOUR, AND THEN THE LINES. Reported, with Shift held throughout: the first point
-    /// named a corner, the second point round the contour named another, naming the line that touches the second
-    /// point made no corner at all, and naming the line that touches the first line named made one - but not the
-    /// corner between those two lines, and a fourth corner was cut that nobody had asked for. A point had let all
-    /// of its lines into the pairing, so the line that came afterwards had a neighbour among lines already used.
-    /// A point names the corner it was read at; a line named afterwards joins the line already standing with it.
-    fn two_points_of_a_square_and_then_its_lines_are_three_corners() {
+    /// THE LINES CHOSEN BEFORE THE TOOL ARE THE SET THEY WOULD HAVE BEEN WITH SHIFT, AND THE FIELD OPENS FOR THE
+    /// WHOLE SET AT THE FIRST CLICK. Reported: taking the chamfer with a contour selected dropped the selection, and
+    /// the corners of that contour had to be named one by one again. The field is not up before something is pointed
+    /// at - a box lying over the drawing takes the clicks meant for the drawing - but what it holds is the contour.
+    fn the_lines_chosen_before_the_tool_are_cut_as_the_set() {
         let mut s = empty_sketch();
-        let a = ((0.0, 0.0), (2000.0, 0.0));
-        let b = ((2000.0, 0.0), (2000.0, 2000.0));
-        let c = ((2000.0, 2000.0), (0.0, 2000.0));
-        let d = ((0.0, 2000.0), (0.0, 0.0)); // a square, drawn a long way out so that no pick lands on the field
-        line(&mut s, a.0, a.1);
-        line(&mut s, b.0, b.1);
-        line(&mut s, c.0, c.1);
-        line(&mut s, d.0, d.1);
+        line(&mut s, (0.0, 0.0), (60.0, 0.0));
+        line(&mut s, (60.0, 0.0), (60.0, 40.0));
+        line(&mut s, (60.0, 40.0), (0.0, 40.0));
+        line(&mut s, (0.0, 40.0), (0.0, 0.0)); // a closed contour of four lines
         assert_eq!(counts(&mut s).0, 4, "setup: the square is not four lines: {:?}", counts(&mut s));
+        pick(&mut s, 30.0, 0.0, false);
+        pick(&mut s, 60.0, 20.0, true);
+        pick(&mut s, 30.0, 40.0, true);
+        pick(&mut s, 0.0, 20.0, true); // and the whole contour chosen, the last three with Shift
         take(&mut s, "tb-chamfer-sketch-hint");
-        let first = s.on_sketch(0.0, 0.0);
-        s.click(first); // the first corner of the square: its field opens
-        let field = field_near(&mut s, first);
-        pick_shift(&mut s, 2000.0, 0.0); // and with Shift the second corner, round the contour
-        assert!(s.status().contains('2'), "two points of a square named two corners: {:?}", s.status());
-        pick_shift(&mut s, 2000.0, 1000.0); // a line that touches the second point: it is one of the lines there already
-        assert!(s.status().contains('2'), "naming a line of a corner already in the set made a corner of its own: {:?}", s.status());
-        pick_shift(&mut s, 1000.0, 2000.0); // and the line that touches the first line named: the corner between them
-        assert!(s.status().contains('3'), "the two lines named by the hand did not make their corner, or a fourth corner was made: {:?}", s.status());
-        fill_widget(&mut s, &field, "200");
+        // THE FIELD IS NOT UP YET - nothing has been pointed at - AND NO FIELD LIES OVER THE CONTOUR, which is what
+        // a box standing in the middle of the sheet does to the clicks meant for its own lines.
+        let before_click: Vec<Widget> = s.widgets().into_iter().filter(|w| w.kind == Kind::TextField && w.rect.top() > 120.0).collect();
+        assert!(before_click.is_empty(), "the chamfer stood with a field over the contour before anything was pointed at: {before_click:?}");
+        let empty = s.on_sketch(200.0, -200.0);
+        s.click(empty); // the first click opens the field and leaves the four chosen lines as the set
+        let field = field_near(&mut s, empty);
+        assert_eq!(field.kind, Kind::TextField, "the chamfer of a contour chosen before the tool opened no field: {}", s.status());
+        fill_widget(&mut s, &field, "5");
         s.key(Key::Enter);
-        assert_eq!(counts(&mut s).0, 7, "four lines with three corners cut should be seven: {:?}", counts(&mut s));
+        assert_eq!(counts(&mut s).0, 8, "the four corners of the chosen contour were not cut by one answer: {:?}", counts(&mut s));
     }
 }
 
 probe! {
-    /// A CORNER A POINT NAMED, AND THE LINES NAMED AFTERWARDS. Reported: a chamfer named by a point where three or
-    /// more lines meet stayed on the pair the cursor had read, and when lines were named later and ran through that
-    /// point, the chamfer was not built on them. The lines a person chose have the first word at the point where a
-    /// corner was only read - which is said of the corner (`CornerMade`) and not by the colour drawn over it.
-    fn the_lines_named_after_a_point_are_the_corner_where_they_run_through_it() {
+    /// THE SAME SET IS CUT BY A CHAMFER AND BY A FILLET: what the chosen lines make is the set either way, and one
+    /// answer cuts all of it. The two tools differ in what they leave behind - a straight cut or an arc - and in
+    /// nothing else about the set.
+    fn the_same_set_is_cut_by_the_chamfer_and_by_the_fillet() {
+        // THE CHAMFER
         let mut s = empty_sketch();
-        let middle = cross_of_four_lines(&mut s); // four spokes on the point (0, 0)
+        line(&mut s, (0.0, 0.0), (60.0, 0.0));
+        line(&mut s, (60.0, 0.0), (30.0, 50.0));
+        line(&mut s, (30.0, 50.0), (0.0, 0.0));
         take(&mut s, "tb-chamfer-sketch-hint");
-        let origin = s.on_sketch(0.0, 0.0);
-        pick_shift(&mut s, 0.0, 0.0); // the point four lines meet at: one corner of them is named and its field opens
-        let field = field_near(&mut s, origin);
-        assert_eq!(field.kind, Kind::TextField, "the point did not name a corner of the four lines standing at it");
-        pick_shift(&mut s, middle[2].0, middle[2].1); // and then two of those lines, named on the side away from the field
-        pick_shift(&mut s, middle[3].0, middle[3].1);
-        assert!(s.status().contains('2'), "the two lines named did not make their corner at the point they run through, or the corner the point named was counted twice: {:?}", s.status());
-        fill_widget(&mut s, &field, "300");
+        pick_shift(&mut s, 30.0, 0.0);
+        pick_shift(&mut s, 45.0, 25.0);
+        pick_shift(&mut s, 15.0, 25.0);
+        let at = s.on_sketch(30.0, 0.0);
+        let f = field_near(&mut s, at);
+        fill_widget(&mut s, &f, "5");
         s.key(Key::Enter);
-        assert_eq!(counts(&mut s).0, 6, "four lines with two corners cut should be six: {:?}", counts(&mut s));
+        let chamfered = counts(&mut s);
+        assert_eq!(chamfered.0, 6, "the chamfer did not cut the three corners of the contour: {:?}", chamfered);
+        assert_eq!(chamfered.1, 0, "a chamfer left an arc behind: {:?}", chamfered);
+
+        // AND THE FILLET, ON THE SAME CONTOUR
+        let mut t = empty_sketch();
+        line(&mut t, (0.0, 0.0), (60.0, 0.0));
+        line(&mut t, (60.0, 0.0), (30.0, 50.0));
+        line(&mut t, (30.0, 50.0), (0.0, 0.0));
+        take(&mut t, "tb-fillet-sketch-hint");
+        pick_shift(&mut t, 30.0, 0.0);
+        pick_shift(&mut t, 45.0, 25.0);
+        pick_shift(&mut t, 15.0, 25.0);
+        let at = t.on_sketch(30.0, 0.0);
+        let f = field_near(&mut t, at);
+        fill_widget(&mut t, &f, "5");
+        t.key(Key::Enter);
+        let filleted = counts(&mut t);
+        // THREE ARCS BETWEEN THE SAME THREE LINES: the fillet takes the corner away without adding a line of its
+        // own, where the chamfer lays a straight one across it - and that is the whole difference between the two.
+        assert_eq!(filleted.0, 3, "the fillet did not cut the three corners of the contour: {:?}", filleted);
+        assert_eq!(filleted.1, 3, "a fillet of three corners left not three arcs behind: {:?}", filleted);
     }
 }
 
 probe! {
-    /// A CLICK WITHOUT SHIFT IS A SINGLE SELECTION, AND A MULTI-SELECTION IS MADE WITH SHIFT. Reported: after two
-    /// corners had been named with Shift, a click without Shift on a corner of its own cut the whole set with it,
-    /// and there was no way to take one corner out of a set. So the plain click is the single one: it says which
-    /// corner the value is for, and what was named with Shift is forgotten - the set is begun and left with Shift.
-    fn a_click_without_shift_cuts_the_one_corner_and_forgets_the_set() {
+    /// THE WHOLE SET IS ONE STEP OF UNDO. A person naming three corners of a shape meant one act, and undo taking
+    /// back one corner of it would leave the drawing in a state nobody had asked for.
+    fn the_whole_set_is_one_step_of_undo() {
         let mut s = empty_sketch();
-        line(&mut s, (0.0, 0.0), (2000.0, 0.0));
-        line(&mut s, (2000.0, 0.0), (2000.0, 2000.0));
-        line(&mut s, (2000.0, 2000.0), (0.0, 2000.0));
-        line(&mut s, (0.0, 2000.0), (0.0, 0.0)); // a square, drawn a long way out so that no pick lands on the field
-        line(&mut s, (1400.0, 1400.0), (1800.0, 1400.0)); // and inside it an L of its own, whose corner is named
-        line(&mut s, (1400.0, 1400.0), (1400.0, 1800.0)); // by a plain click at the end
+        line(&mut s, (0.0, 0.0), (60.0, 0.0));
+        line(&mut s, (60.0, 0.0), (30.0, 50.0));
+        line(&mut s, (30.0, 50.0), (0.0, 0.0));
         take(&mut s, "tb-chamfer-sketch-hint");
-        pick_shift(&mut s, 0.0, 0.0); // the first point of the square: its corner and its field
-        pick_shift(&mut s, 2000.0, 0.0); // and with Shift the second, round the contour
-        assert!(s.status().contains('2'), "two points of a square named two corners: {:?}", s.status());
-        let alone = s.on_sketch(1400.0, 1400.0);
-        s.click(alone); // A CLICK WITHOUT SHIFT: one corner, and the set is forgotten
-        let field = field_near(&mut s, alone);
-        fill_widget(&mut s, &field, "200");
+        pick_shift(&mut s, 30.0, 0.0);
+        pick_shift(&mut s, 45.0, 25.0);
+        pick_shift(&mut s, 15.0, 25.0);
+        let at = s.on_sketch(30.0, 0.0);
+        let f = field_near(&mut s, at);
+        fill_widget(&mut s, &f, "5");
         s.key(Key::Enter);
-        // six lines with ONE corner cut: the two points of the square named with Shift were not cut with it
-        assert_eq!(counts(&mut s).0, 7, "a click without Shift cut the corners named with Shift along with its own: {:?}", counts(&mut s));
+        assert_eq!(counts(&mut s).0, 6, "setup: the three corners of the contour were not cut: {:?}", counts(&mut s));
+        let step = s.document().undo.last().cloned().expect("the step that cut the set");
+        // THE EDIT MENU, named at the head of the menu bar: the left bar names its groups with the same word.
+        let named = |line: String| line.replace("{ $what }", &step).replace("{$what}", &step);
+        let bar = qymcad::pos2(50.0, 11.0);
+        s.press_word_near(&s.word("menu-edit"), bar);
+        s.press_word(&named(s.word("menu-undo-named")));
+        assert_eq!(counts(&mut s).0, 3, "one undo of the whole set took back only part of it: {:?}", counts(&mut s));
+    }
+}
+
+probe! {
+    /// ESC CANCELS THE WHOLE SET, and nothing of it is cut: the lines keep the ends they have.
+    fn esc_cancels_the_whole_set_and_nothing_is_cut() {
+        let mut s = empty_sketch();
+        line(&mut s, (0.0, 0.0), (60.0, 0.0));
+        line(&mut s, (60.0, 0.0), (30.0, 50.0));
+        line(&mut s, (30.0, 50.0), (0.0, 0.0));
+        take(&mut s, "tb-chamfer-sketch-hint");
+        pick_shift(&mut s, 30.0, 0.0);
+        pick_shift(&mut s, 45.0, 25.0);
+        pick_shift(&mut s, 15.0, 25.0);
+        let at = s.on_sketch(30.0, 0.0);
+        let f = field_near(&mut s, at);
+        fill_widget(&mut s, &f, "5");
+        s.key(Key::Escape);
+        assert_eq!(counts(&mut s).0, 3, "Esc cut the set instead of cancelling it: {:?}", counts(&mut s));
+    }
+}
+
+probe! {
+    /// A CORNER PUT AWAY STAYS PUT AWAY, whatever else changes in the selection afterwards. Reported: a corner that a
+    /// person had put away came back by itself the moment another line was chosen, and there was no way to keep it out.
+    fn a_corner_put_away_stays_put_away() {
+        let mut s = empty_sketch();
+        line(&mut s, (0.0, 0.0), (60.0, 0.0));
+        line(&mut s, (60.0, 0.0), (30.0, 50.0));
+        line(&mut s, (30.0, 50.0), (0.0, 0.0)); // a closed contour, three corners
+        take(&mut s, "tb-fillet-sketch-hint");
+        pick_shift(&mut s, 30.0, 0.0);
+        pick_shift(&mut s, 45.0, 25.0);
+        pick_shift(&mut s, 15.0, 25.0);
+        assert!(s.status().contains('3'), "setup: the contour of three lines is not three corners: {:?}", s.status());
+        let at = s.on_sketch(60.0, 0.0); // THE POINT where the first two lines meet, so the click is at a point
+        s.click_with(at, PointerButton::Primary, Modifiers::SHIFT); // ONE CORNER PUT AWAY
+        assert!(s.status().contains('2'), "the click at the point did not put one corner away: {:?}", s.status());
+        // AND THE SELECTION IS READ AGAIN WITH THE LINES UNCHANGED: the corner put away is remembered, so reading
+        // the set afresh does not make it a second time.
+        pick_shift(&mut s, 15.0, 25.0); // the third line let go
+        pick_shift(&mut s, 15.0, 25.0); // and chosen again
+        assert!(!s.status().contains('3'), "a corner that was put away came back by itself: {:?}", s.status());
+    }
+}
+
+probe! {
+    /// A CLICK ON A POINT WITHOUT SHIFT IS A SINGLE SELECTION OF A POINT, THE SAME AS A CLICK ON A LINE IS OF A
+    /// LINE, AND WHAT IT POINTS AT IS ALL THAT IS LEFT. Reported: a click that landed on a line threw the whole set
+    /// away, and a click that landed on a point beside one kept it, so what a click did depended on a few pixels of
+    /// aim and the two rules could not both be remembered.
+    fn a_click_on_a_point_without_shift_leaves_that_point_alone() {
+        let mut s = empty_sketch();
+        line(&mut s, (0.0, 0.0), (60.0, 0.0));
+        line(&mut s, (60.0, 0.0), (30.0, 50.0));
+        line(&mut s, (30.0, 50.0), (0.0, 0.0)); // a contour of three lines
+        take(&mut s, "tb-fillet-sketch-hint");
+        pick_shift(&mut s, 30.0, 0.0); // the first line
+        pick_shift(&mut s, 15.0, 25.0); // and the third: a corner stands where they meet at (0, 0)
+        assert!(s.status().contains('1'), "setup: two lines that meet did not make a corner: {:?}", s.status());
+        // THE POINT WHERE THE FIRST LINE MEETS THE SECOND, which is free: the second line is not in the set.
+        let at = s.on_sketch(60.0, 0.0);
+        s.click(at);
+        assert!(s.status().contains('1'), "the click on the point left the set at another number of corners: {:?}", s.status());
+        // AND ONE ENTER CUTS THAT ONE CORNER: the corner of the two chosen lines is not cut with it.
+        let field = field_near(&mut s, at);
+        fill_widget(&mut s, &field, "5");
+        s.key(Key::Enter);
+        assert_eq!(counts(&mut s).1, 1, "one answer did not cut the one corner that was left: {:?}", counts(&mut s));
+        // AND THE CORNER OF THE TWO CHOSEN LINES IS STILL SHARP: the click on the point left that corner behind, and
+        // the answer that cut the one that was left did not carry it along.
+        assert!(stands_at(&mut s, (0.0, 0.0)), "the corner of the two chosen lines was cut by the same answer: the ends stand at {:?}", s.document().sketches[0].places);
+    }
+}
+
+probe! {
+    /// A POINT ALREADY IN THE SET, CLICKED AGAIN WITHOUT SHIFT, EMPTIES THE SET, AND THE BOX GOES WITH IT: it is the one
+    /// thing to let go of, a set of nothing is not left standing as though it were an answer, and a box with nothing
+    /// to cut in it is not drawn.
+    fn a_chosen_point_clicked_again_without_shift_empties_the_set() {
+        let mut s = empty_sketch();
+        line(&mut s, (0.0, 0.0), (60.0, 0.0));
+        line(&mut s, (60.0, 0.0), (30.0, 50.0));
+        take(&mut s, "tb-fillet-sketch-hint");
+        pick_shift(&mut s, 30.0, 0.0); // one chosen line: no corner stands at either end of it
+        let at = s.on_sketch(60.0, 0.0); // where this line meets the other
+        s.click_with(at, PointerButton::Primary, Modifiers::SHIFT); // a corner named at that point
+        assert!(s.status().contains('1'), "setup: the corner named at the point is not in the set: {:?}", s.status());
+        s.click(at); // THE SAME POINT WITHOUT SHIFT: the whole set goes
+        assert!(!s.status().contains('1'), "a set of nothing is standing as though it were an answer: {:?}", s.status());
+        // AND THE BOX WENT WITH IT: a box with nothing to cut in it is not drawn, so there is nothing to type a
+        // value into, and nothing that could be cut.
+        let left: Vec<Widget> = s.widgets().into_iter().filter(|w| w.kind == Kind::TextField && w.rect.top() > 120.0).collect();
+        assert!(left.is_empty(), "a box stood with nothing to cut in it: {left:?}");
+        assert_eq!(counts(&mut s).0, 2, "an empty set was cut anyway: {:?}", counts(&mut s));
+    }
+}
+
+probe! {
+    /// THE FIELD IS NOT UP UNTIL SOMETHING IS POINTED AT. It used to stand in the middle of the canvas, which is
+    /// where the drawing is: a Shift+click on a line that ran under the box was taken by the box, and a set could not
+    /// be built out of a part whose lines pass through the middle of the sheet.
+    fn the_field_of_the_corner_is_not_up_before_the_first_click() {
+        let mut s = empty_sketch();
+        line(&mut s, (0.0, 0.0), (60.0, 0.0));
+        line(&mut s, (60.0, 0.0), (30.0, 50.0));
+        take(&mut s, "tb-fillet-sketch-hint");
+        let up: Vec<Widget> = s.widgets().into_iter().filter(|w| w.kind == Kind::TextField && w.rect.top() > 120.0).collect();
+        assert!(up.is_empty(), "the corner field stood over the drawing before anything was pointed at: {up:?}");
+        // THE FIRST LINE IS HALF A CORNER: it is chosen, and there is still nothing to cut, so there is still no box.
+        let half = s.on_sketch(30.0, 0.0);
+        pick_shift(&mut s, 30.0, 0.0);
+        let still: Vec<Widget> = s.widgets().into_iter().filter(|w| w.kind == Kind::TextField && w.rect.top() > 120.0).collect();
+        assert!(still.is_empty(), "a box stood over the drawing with a half-corner in it: {still:?}");
+        // AND THE SECOND LINE UNDER WHERE THE BOX WOULD HAVE STOOD IS STILL TAKEN: it did not come down on the sheet.
+        pick_shift(&mut s, 45.0, 25.0);
+        assert!(s.status().contains('1'), "the second Shift+click was taken by the box, not by the line: {:?}", s.status());
+        assert_eq!(field_near(&mut s, half).kind, Kind::TextField, "the corner that is in the set opened no field to type its value in: {}", s.status());
+    }
+}
+
+/// How many pixels of the screen are of the colour `want`, to a shade.
+fn pixels_of(s: &mut Session, want: [u8; 3]) -> usize {
+    let p = s.snapshot();
+    (0..p.width * p.height)
+        .filter(|&i| {
+            let px = &p.rgba[i * 4..i * 4 + 3];
+            (0..3).all(|k| (px[k] as i32 - want[k] as i32).abs() <= 6)
+        })
+        .count()
+}
+
+/// THE AMBER AND VIOLET OF THE SCHEME, which are what tells a corner in the set from a corner the cursor is only
+/// pointing at.
+const PREVIEW_NEW: [u8; 3] = [240, 200, 90];
+const PREVIEW_FIXED: [u8; 3] = [157, 122, 235];
+
+probe! {
+    /// THE CORNERS IN THE SET ARE DRAWN, AND SO IS THE ONE THE CURSOR IS POINTING AT BUT HAS NOT NAMED - the first in
+    /// the accent colour of the scheme, the second in amber. Reported: no preview was drawn at all, neither colour,
+    /// whatever the radius was - the field had already taken the value out of the tool by the time the preview read
+    /// it, so the read found nothing and there was nothing to draw.
+    fn the_corners_of_the_set_are_drawn_and_the_one_under_the_cursor_too() {
+        let mut s = empty_sketch();
+        line(&mut s, (0.0, 0.0), (60.0, 0.0));
+        line(&mut s, (60.0, 0.0), (30.0, 50.0));
+        take(&mut s, "tb-fillet-sketch-hint");
+        pick_shift(&mut s, 30.0, 0.0);
+        pick_shift(&mut s, 45.0, 25.0);
+        assert!(s.status().contains('1'), "setup: two lines that meet did not make a corner: {:?}", s.status());
+        let violet = pixels_of(&mut s, PREVIEW_FIXED);
+        assert!(violet > 40, "the corner of the set is not drawn in the colour of the set: {violet} pixels of it");
+        // THE CURSOR OVER A POINT THAT IS NOT IN THE SET: the amber preview of the corner a click there would name.
+        let hover = s.on_sketch(60.0, 0.0);
+        s.move_to(hover);
+        let amber = pixels_of(&mut s, PREVIEW_NEW);
+        assert!(amber > 40, "the corner under the cursor is not drawn in the colour of a new one: {amber} pixels of it");
+    }
+}
+
+probe! {
+    /// THE AMBER CORNER IS DRAWN BEFORE ANYTHING IS CHOSEN, with no field in sight. The preview belongs to the sheet
+    /// and not to the box, and it used to be drawn from inside the box - so the one corner a person could not see
+    /// before naming it was the first one, and seeing it first is the whole of what the amber is for.
+    fn the_first_corner_is_shown_in_amber_before_anything_is_chosen() {
+        let mut s = empty_sketch();
+        line(&mut s, (0.0, 0.0), (60.0, 0.0));
+        line(&mut s, (60.0, 0.0), (30.0, 50.0));
+        take(&mut s, "tb-fillet-sketch-hint");
+        // NO FIELD IS UP: nothing has been pointed at, so there is nothing to type a value into.
+        let up: Vec<Widget> = s.widgets().into_iter().filter(|w| w.kind == Kind::TextField && w.rect.top() > 120.0).collect();
+        assert!(up.is_empty(), "setup: a field stood before anything was pointed at: {up:?}");
+        let before = pixels_of(&mut s, PREVIEW_NEW);
+        let at = s.on_sketch(60.0, 0.0);
+        s.move_to(at);
+        let after = pixels_of(&mut s, PREVIEW_NEW);
+        assert!(after > before + 40, "the corner under the cursor is not drawn before anything is chosen: {before} pixels of amber before, {after} with the cursor on it");
+    }
+}
+
+probe! {
+    /// A CLICK ON EMPTY SHEET CHANGES NOTHING AND SAYS NOTHING. It used to answer the click with a complaint that
+    /// there was no line or point under it, which is the one thing a person who clicked empty sheet knows, written
+    /// over the status line of a tool that was working.
+    fn a_click_on_empty_sheet_is_not_answered() {
+        let mut s = empty_sketch();
+        line(&mut s, (0.0, 0.0), (60.0, 0.0));
+        take(&mut s, "tb-fillet-sketch-hint");
+        let first = s.on_sketch(30.0, 0.0);
+        s.click_with(first, PointerButton::Primary, Modifiers::SHIFT); // the field opens and the line is chosen
+        let said = s.status();
+        let empty = s.on_sketch(200.0, -200.0);
+        s.click(empty);
+        assert_eq!(s.status(), said, "a click on empty sheet was answered: it said {:?}", s.status());
+        // AND THE SET IS AS IT WAS: a click that named nothing is not a command to forget the drawing.
+        let again = s.on_sketch(30.0, 0.0);
+        s.click_with(again, PointerButton::Primary, Modifiers::SHIFT);
+        assert_eq!(s.status(), said, "the line chosen before it did not answer after the click on empty sheet: {:?}", s.status());
+    }
+}
+
+probe! {
+    /// NO CORNER IN THE SET, NO BOX. The box is the value for the set, and where there is no corner there is nothing
+    /// the value is for: a box standing over the drawing with a number in it invites a number to be typed for a set
+    /// that does not exist. So it goes the moment the set empties, and it comes with the corner that fills it.
+    fn the_box_is_not_standing_while_the_set_is_empty() {
+        let mut s = empty_sketch();
+        line(&mut s, (0.0, 0.0), (60.0, 0.0));
+        line(&mut s, (60.0, 0.0), (30.0, 50.0));
+        line(&mut s, (30.0, 50.0), (0.0, 0.0)); // a contour of three lines
+        take(&mut s, "tb-fillet-sketch-hint");
+        let boxes = |s: &mut Session| -> Vec<Widget> { s.widgets().into_iter().filter(|w| w.kind == Kind::TextField && w.rect.top() > 120.0).collect() };
+        // THE FIRST LINE: HALF A CORNER, AND NOTHING TO CUT, SO NOTHING TO TYPE INTO.
+        pick_shift(&mut s, 30.0, 0.0);
+        assert!(boxes(&mut s).is_empty(), "a box stood over the drawing for one chosen line: {:?}", boxes(&mut s));
+        // THE SECOND LINE MAKES THE CORNER, AND WITH IT THE BOX.
+        pick_shift(&mut s, 45.0, 25.0);
+        assert_eq!(boxes(&mut s).len(), 1, "the corner in the set opened no box to type its value in: {}", s.status());
+        // AND THE THIRD, WHICH MAKES TWO MORE CORNERS, LEAVES THE ONE BOX: one value cuts them all.
+        pick_shift(&mut s, 15.0, 25.0);
+        assert!(s.status().contains('3'), "setup: the contour of three lines is not three corners: {:?}", s.status());
+        assert_eq!(boxes(&mut s).len(), 1, "each corner of the set brought a box of its own: {:?}", boxes(&mut s));
+    }
+}
+
+probe! {
+    /// NOTHING OF A CORNER IS DRAWN WITH ANOTHER TOOL IN HAND. The amber corner is what a click would name, and it
+    /// belongs to the fillet and to the chamfer alone: the drawing tool rests its cursor over the corner of every
+    /// line it passes, and rounding that corner there belongs to nobody.
+    ///
+    /// THE TWO ARE COUNTED IN ONE SESSION on the same pixel, so the difference is the corner and not the panel it
+    /// is counted against - the amber of the button is on the sheet whatever tool is in hand.
+    fn no_corner_is_drawn_while_another_tool_is_in_hand() {
+        let mut s = empty_sketch();
+        line(&mut s, (0.0, 0.0), (60.0, 0.0));
+        line(&mut s, (60.0, 0.0), (30.0, 50.0));
+        let at = s.on_sketch(60.0, 0.0); // the corner the two lines make
+        take(&mut s, "tb-fillet-sketch-hint");
+        s.move_to(at);
+        let rounding = pixels_of(&mut s, PREVIEW_NEW);
+        take(&mut s, "tb-line-hint"); // the drawing tool, whose cursor passes over that corner
+        s.move_to(at);
+        let drawing = pixels_of(&mut s, PREVIEW_NEW);
+        assert!(rounding > drawing + 40, "the corner under the cursor is not drawn while the fillet is in hand: {rounding} pixels of amber against {drawing} with the line tool in hand");
+    }
+}
+
+probe! {
+    /// THE VALUE IS TYPED STRAIGHT AWAY, with no click on the field first. Naming three corners is one act and the
+    /// answer that cuts them is the next one: egui gives the caret up to a click anywhere else, so the field lost it
+    /// with the second Shift click, and a person had to go and find the box before typing - the one answer that cuts
+    /// them all was the one act that could not be done in a row.
+    fn the_value_of_the_set_is_typed_without_a_click_on_the_field() {
+        let mut s = empty_sketch();
+        line(&mut s, (0.0, 0.0), (60.0, 0.0));
+        line(&mut s, (60.0, 0.0), (30.0, 50.0));
+        line(&mut s, (30.0, 50.0), (0.0, 0.0));
+        take(&mut s, "tb-chamfer-sketch-hint");
+        pick_shift(&mut s, 30.0, 0.0);
+        pick_shift(&mut s, 45.0, 25.0);
+        pick_shift(&mut s, 15.0, 25.0);
+        s.type_text("5"); // into whatever holds the keyboard, which is what a person types into
+        s.key(qymcad::Key::Enter);
+        assert_eq!(counts(&mut s).0, 6, "the value typed after naming the set cut nothing: {:?} ({})", counts(&mut s), s.status());
     }
 }

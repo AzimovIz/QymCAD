@@ -2025,7 +2025,8 @@ impl Project {
         self.solve_sketch(si); // the edit ends at the solver, not at a rebuild: `regen_sketch` recomputes the contours and checks no constraint
         true
     }
-    pub(super) fn point_xy(&self, si: usize, id: Id) -> Option<(f64, f64)> {
+    /// WHERE A POINT STANDS in the drawing, or `None` where the sketch has no such point.
+    pub fn point_xy(&self, si: usize, id: Id) -> Option<(f64, f64)> {
         let s = self.sketches.get(si)?;
         s.points.iter().find(|p| p.id == id).map(|p| (p.x, p.y))
     }
@@ -2778,6 +2779,11 @@ impl Project {
     ///
     /// Which of the lines of a point were named by a hand and which were let in by the point itself is decided by
     /// this: a line named by the hand takes its place among the lines of the point it arrives at.
+    /// THE TWO POINTS AN EDGE STANDS ON, which is what the pairing of the chosen lines walks along.
+    pub fn edge_ends(&self, si: usize, eid: Id) -> Option<(Id, Id)> {
+        self.edge_end_ids(si, eid)
+    }
+
     pub fn edge_stands_at(&self, si: usize, eid: Id, pid: Id) -> bool {
         self.edge_end_ids(si, eid).is_some_and(|(x, y)| x == pid || y == pid)
     }

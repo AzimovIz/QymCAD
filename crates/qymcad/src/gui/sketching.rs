@@ -472,15 +472,7 @@ impl App {
         qymcad_ui_state::note_editor(&mut self.tools.annot, &mut self.tools.inline, &mut self.project, self.chosen.sel, self.viewing.view, ctx, rect); // editing the text of a note
         let asks = qymcad_ui_state::text_popups(qymcad_ui_state::editing_of!(self), &mut self.font_cache, &mut qymcad_ui_state::text_ctx_of!(self), ctx, rect); // the label editor and the list of fonts
         self.do_bar_asks(asks, ctx);
-        place_input_popup(
-            qymcad_ui_state::editing_of!(self),
-            &mut self.tools.corner,
-            &mut self.tools.place,
-            &mut self.tools.sel_sk,
-            qymcad_ui_state::PopupLooks { tool_prefs: &mut self.tool_prefs, scheme: &self.scheme },
-            ctx,
-            rect,
-        ); // typing the sizes right after a shape is built
+        place_input_popup(qymcad_ui_state::editing_of!(self), qymcad_ui_state::popup_tools!(self), qymcad_ui_state::popup_looks!(self), ctx, rect); // typing the sizes right after a shape is built
         sketch_rotate_popup(&mut self.sketch_ctx(), ctx, rect); // the rotation angle at the centre
     }
 }
