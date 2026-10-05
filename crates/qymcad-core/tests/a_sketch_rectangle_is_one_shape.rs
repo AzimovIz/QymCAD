@@ -232,3 +232,74 @@ fn a_rectangle_dragged_by_its_centre_goes_as_a_whole() {
     }
     assert!(sins.is_empty(), "{}", sins.join("\n"));
 }
+
+/// AN ANGLE DIMENSION ON A SIDE TAKES THE TURN OF THE RECTANGLE: laid at 20 deg against a fixed line and set to 35, it
+/// turns the rectangle, which stays square; deleted, the rectangle holds its turn again where it stands, and a dragged
+/// corner does not turn it.
+#[test]
+fn an_angle_dimension_on_a_side_turns_the_rectangle() {
+    let (mut p, si) = drawn(0);
+    // a fixed line from (0, 0) at -20 deg, the angle measured between it and the first side, both run from their meeting
+    let a = p.add_line_entity(si, 0.0, 0.0, 30.0, -30.0 * 20f64.to_radians().tan(), Purpose::Real);
+    let line = match p.sketches[si].entities.iter().find(|e| e.id == a).map(|e| e.kind) {
+        Some(EntityKind::Line { a, b }) => (a, b),
+        _ => panic!("a line"),
+    };
+    p.sketches[si].constraints.extend([Constraint::Fixed { p: line.0 }, Constraint::Fixed { p: line.1 }]);
+    let r = p.sketches[si].rects[0].clone();
+    let dim = Constraint::AngleLines { a: line.0, b: line.1, c: r.corners[0], d: r.corners[1], deg: 20.0, expr: String::new(), driven: false, off: 0.0, at: None };
+    p.give_rect_turn_to(si, &dim);
+    p.sketches[si].constraints.push(dim);
+    p.solve_sketch(si);
+    let ci = p.sketches[si].constraints.len() - 1;
+    if let Constraint::AngleLines { deg, .. } = &mut p.sketches[si].constraints[ci] {
+        *deg = 35.0;
+    }
+    let resid = p.solve_sketch(si);
+    let s = shape(&p, si);
+    let mut sins = Vec::new();
+    if resid > 1e-6 || (s.turn - 15.0).abs() > 1e-4 || s.off_square.abs() > 1e-6 {
+        sins.push(format!("the angle set to 35 deg against a line at -20: the rectangle stands at {:.4} deg, off square {:.2e}, residual {resid:e}", s.turn, s.off_square));
+    }
+    if p.sketches[si].constraints.iter().any(|c| matches!(c, Constraint::Orientation { .. })) {
+        sins.push("the rectangle still holds a turn of its own beside the angle".to_string());
+    }
+    // deleted: the turn is held again where it stands
+    assert!(p.delete_sketch_constraint(si, ci));
+    let held = p.sketches[si].constraints.iter().filter(|c| matches!(c, Constraint::Orientation { .. })).count();
+    let before = shape(&p, si).turn;
+    let corner = p.sketches[si].rects[0].corners[2];
+    let (x, y) = xy(&p, si, corner);
+    p.solve_sketch_drag(si, Some((corner, x + 5.0, y - 9.0)));
+    p.solve_sketch(si);
+    let after = shape(&p, si).turn;
+    if held != 4 || (after - before).abs() > 1e-6 {
+        sins.push(format!("the angle deleted: {held} turns held, a dragged corner turned the rectangle from {before:.4} to {after:.4} deg"));
+    }
+    assert!(sins.is_empty(), "{}", sins.join("\n"));
+}
+
+/// ONE OF A RECTANGLE'S OWN CONSTRAINTS DELETED BREAKS IT: its centre deleted by its midpoint, the record, the centre and
+/// the rest of its own constraints go.
+#[test]
+fn a_rectangle_losing_a_constraint_of_its_own_is_four_plain_lines() {
+    let (mut p, si) = drawn(1);
+    let centre = p.sketches[si].rects[0].centre;
+    let ci = p.sketches[si].constraints.iter().position(|c| matches!(c, Constraint::Midpoint { .. })).expect("the centre's midpoint");
+    assert!(p.delete_sketch_constraint(si, ci));
+    let s = &p.sketches[si];
+    let mut sins = Vec::new();
+    if !s.rects.is_empty() {
+        sins.push("the rectangle record stayed".to_string());
+    }
+    if s.points.iter().any(|q| q.id == centre) || s.entities.iter().any(|e| e.construction) {
+        sins.push("the centre or a diagonal stayed".to_string());
+    }
+    if let Some(c) = s.constraints.iter().find(|c| matches!(c, Constraint::Orientation { .. } | Constraint::Parallel { .. } | Constraint::Perpendicular { .. })) {
+        sins.push(format!("a constraint of the rectangle stayed: {c:?}"));
+    }
+    if s.entities.iter().filter(|e| !e.construction).count() != 4 {
+        sins.push("the four sides did not stay".to_string());
+    }
+    assert!(sins.is_empty(), "{}", sins.join("\n"));
+}

@@ -4262,6 +4262,7 @@ pub fn make_between_dim(sk: &mut qymcad_ui_state::SketchCtx, si: usize, r1: qymc
         }
     };
     if let Some(c) = c {
+        sk.project.give_rect_turn_to(si, &c); // an angle on a side of a rectangle turns it
         sk.project.sketches[si].constraints.push(c);
         let ci = sk.project.sketches[si].constraints.len() - 1;
         let (redundant, conflict) = qymcad_ui_state::finish_dim(&mut *sk.project, &mut *sk.regen, si, ci);

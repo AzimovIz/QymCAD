@@ -103,6 +103,22 @@ impl FilletSize {
     }
 }
 
+/// THE CONSTRAINTS A RECTANGLE IS HELD BY WHEN AN ANGLE DIMENSION ON ITS SIDE TAKES ITS TURN: opposite sides parallel
+/// and the first two square - its shape without a turn of its own.
+pub(crate) fn rect_free_constraints(c0: Id, c1: Id, c2: Id, c3: Id) -> [Constraint; 3] {
+    [
+        Constraint::Parallel { a: c0, b: c1, c: c3, d: c2 },
+        Constraint::Parallel { a: c0, b: c3, c: c1, d: c2 },
+        Constraint::Perpendicular { a: c0, b: c1, c: c0, d: c3 },
+    ]
+}
+
+/// Is `c` one of the constraints rectangle `r` holds itself by, held by its turns or by its shape alone?
+fn is_rect_own(r: &crate::model::SketchRect, c: &Constraint) -> bool {
+    let [c0, c1, c2, c3] = r.corners;
+    rect_own_constraints(c0, c1, c2, c3, r.centre, 0.0).iter().chain(rect_free_constraints(c0, c1, c2, c3).iter()).any(|o| same_rect_constraint(o, c))
+}
+
 /// Is `c` the constraint `own` a rectangle holds itself by - the same kind on the same points, whatever the turn held?
 fn same_rect_constraint(own: &Constraint, c: &Constraint) -> bool {
     match (own, c) {
@@ -1019,6 +1035,62 @@ impl Project {
         }
         self.regen_sketch(si);
     }
+    /// AN ANGLE DIMENSION ON A SIDE OF A RECTANGLE TAKES ITS TURN: called with the dimension before it is laid. The turns
+    /// the rectangle holds itself by go, and its shape is held by parallel and square sides, so the dimension turns it -
+    /// both held, the rectangle would be held twice over and the dimension refused.
+    pub fn give_rect_turn_to(&mut self, si: usize, dim: &Constraint) {
+        let Constraint::AngleLines { a, b, c, d, .. } = *dim else { return };
+        let Some(s) = self.sketches.get_mut(si) else { return };
+        let side_of = |s: &crate::model::Sketch, r: &crate::model::SketchRect, x: Id, y: Id| {
+            r.sides.iter().any(|e| matches!(s.entities.iter().find(|q| q.id == *e).map(|q| q.kind), Some(EntityKind::Line { a, b }) if (a == x && b == y) || (a == y && b == x)))
+        };
+        let turned: Vec<crate::model::SketchRect> = s.rects.iter().filter(|r| side_of(s, r, a, b) || side_of(s, r, c, d)).cloned().collect();
+        for r in turned {
+            let held_by_turns = s.constraints.iter().any(|k| matches!(k, Constraint::Orientation { a, .. } if r.corners.contains(a)));
+            if !held_by_turns {
+                continue;
+            }
+            s.constraints.retain(|k| !(matches!(k, Constraint::Orientation { .. }) && is_rect_own(&r, k)));
+            let [c0, c1, c2, c3] = r.corners;
+            s.constraints.extend(rect_free_constraints(c0, c1, c2, c3));
+        }
+    }
+    /// AFTER A CONSTRAINT IS DELETED, the rectangles it was part of: one of a rectangle's own constraints deleted breaks
+    /// it - the record, its centre, its diagonals and the rest of its own constraints go, four plain lines are left; an
+    /// angle dimension that held a rectangle's turn deleted gives the turn back to the rectangle, at the turn it stands
+    /// at, so a dragged corner does not turn it.
+    fn settle_rects_after(&mut self, si: usize, removed: &Constraint) {
+        let Some(s) = self.sketches.get_mut(si) else { return };
+        let broken: Vec<crate::model::SketchRect> = s.rects.iter().filter(|r| is_rect_own(r, removed)).cloned().collect();
+        for r in &broken {
+            s.rects.retain(|k| k.id != r.id);
+            s.constraints.retain(|k| !is_rect_own(r, k));
+        }
+        let diagonals: Vec<Id> = broken.iter().flat_map(|r| r.diagonals.into_iter().flatten()).collect();
+        let free: Vec<crate::model::SketchRect> = s
+            .rects
+            .iter()
+            .filter(|r| !s.constraints.iter().any(|k| matches!(k, Constraint::Orientation { a, .. } if r.corners.contains(a))))
+            .filter(|r| !s.constraints.iter().any(|k| matches!(k, Constraint::AngleLines { a, b, c, d, .. } if [a, b, c, d].iter().filter(|p| r.corners.contains(p)).count() >= 2)))
+            .cloned()
+            .collect();
+        for r in free {
+            let at = |id: Id| s.points.iter().find(|q| q.id == id).map(|q| (q.x, q.y));
+            let (Some(p0), Some(p1)) = (at(r.corners[0]), at(r.corners[1])) else { continue };
+            let deg = (p1.1 - p0.1).atan2(p1.0 - p0.0).to_degrees();
+            let [c0, c1, c2, c3] = r.corners;
+            s.constraints.retain(|k| !(matches!(k, Constraint::Parallel { .. } | Constraint::Perpendicular { .. }) && is_rect_own(&r, k)));
+            s.constraints.extend(rect_own_constraints(c0, c1, c2, c3, r.centre, deg).into_iter().filter(|k| matches!(k, Constraint::Orientation { .. })));
+        }
+        let centres: Vec<Id> = broken.iter().map(|r| r.centre).collect();
+        if !diagonals.is_empty() {
+            self.delete_entities(si, &diagonals);
+        }
+        if let Some(s) = self.sketches.get_mut(si) {
+            let used: std::collections::HashSet<Id> = s.constraints.iter().flat_map(constraint_point_ids).collect();
+            s.points.retain(|q| !centres.contains(&q.id) || used.contains(&q.id));
+        }
+    }
     /// Delete constraint `ci` of a sketch. For a midpoint constraint the orphaned midpoint is pruned as well
     /// (nothing else uses it and it is not a system point), so no debris is left behind. The sketch is then
     /// re-solved.
@@ -1029,7 +1101,8 @@ impl Project {
                 return false;
             }
             let removed = s.constraints.remove(ci);
-            if let Constraint::Midpoint { p, .. } = removed {
+            if let Constraint::Midpoint { p, .. } = &removed {
+                let p = *p;
                 let used_ent = s.entities.iter().any(|e| match e.kind {
                     EntityKind::Line { a, b } => a == p || b == p,
                     EntityKind::Arc { center, a, b, .. } => center == p || a == p || b == p,
@@ -1042,6 +1115,7 @@ impl Project {
                     s.points.retain(|q| q.id != p); // The orphaned midpoint is removed.
                 }
             }
+            self.settle_rects_after(si, &removed);
         }
         self.solve_sketch(si);
         true
