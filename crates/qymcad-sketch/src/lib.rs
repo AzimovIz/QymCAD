@@ -620,7 +620,8 @@ fn draw_corner_preview(cc: &qymcad_ui_state::CornerCtx, ctx: &egui::Context, rec
     let (col_fixed, col_new) = (corner_colour(cc.scheme, true), corner_colour(cc.scheme, false));
     // ITS OWN LAYER, clipped to the sheet: the corners belong to the drawing, not to the panel. ONE LAYER FOR THE
     // WHOLE SET, so that a set of corners is drawn as the one thing being done rather than as several.
-    let layer = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new(("cornerpreview", si)))).with_clip_rect(rect);
+    // UNDER THE BOXES: the box of the value is a window over the sheet, and a preview drawn over it ran across its field
+    let layer = ctx.layer_painter(egui::LayerId::new(egui::Order::Middle, egui::Id::new(("cornerpreview", si)))).with_clip_rect(rect);
     for &Shown { point: pid, pair, in_set } in corners {
         let Some(pair) = pair else { continue };
         let Some(b) = cc.project.corner_blend(si, pid, pair, chamfer, v) else { continue };
@@ -726,6 +727,31 @@ fn value_for_preview(cc: &qymcad_ui_state::CornerCtx) -> f64 {
     parse_num(cc.project, &cc.corner.buf).unwrap_or(cc.tool_prefs.fillet)
 }
 
+/// WHERE THE BOX OF THE SET STANDS: beside its first corner, on the outside of it - away from the middle of the cut
+/// towards the corner and on past it by `CORNER_BOX_GAP` - and growing that way, so the corner, the two ends the lines
+/// are cut at and the arc between them stay in sight. It stood on the place clicked, which is on the corner or on one
+/// of its lines: measured on a rectangle 40 x 30, the box covered the corner, both cut ends and the middle of the arc.
+fn corner_box_place(cc: &qymcad_ui_state::CornerCtx, rect: Rect, si: usize, first: Option<(Id, (Id, Id))>, chamfer: bool) -> Option<(Pos2, egui::Align2)> {
+    let (pid, pair) = first?;
+    // a value too big for the corner draws no preview, and the side of the corner is the same at any value
+    let v = value_for_preview(cc);
+    let b = cc.project.corner_blend(si, pid, pair, chamfer, v).or_else(|| cc.project.corner_blend(si, pid, pair, chamfer, CORNER_BOX_PROBE))?;
+    let sh = qymcad_ui_state::Sheet { view: *cc.view, rect };
+    let at = |p: [f64; 2]| sh.at(qymcad_core::geom::Point2::new(p[0], p[1]));
+    let corner = at(b.vertex);
+    let out = corner - at([(b.ends[0][0] + b.ends[1][0]) / 2.0, (b.ends[0][1] + b.ends[1][1]) / 2.0]);
+    let out = if out.length() > 1e-3 { out.normalized() } else { egui::vec2(1.0, -1.0).normalized() };
+    let x = if out.x >= 0.0 { egui::Align::Min } else { egui::Align::Max };
+    let y = if out.y >= 0.0 { egui::Align::Min } else { egui::Align::Max };
+    Some((corner + out * CORNER_BOX_GAP, egui::Align2([x, y])))
+}
+
+/// How far the box of the corner tools stands off the corner, in pixels.
+const CORNER_BOX_GAP: f32 = 16.0;
+
+/// The size a corner is read at for the side the box stands on, where the value typed draws no preview, in mm.
+const CORNER_BOX_PROBE: f64 = 1e-3;
+
 pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Context, rect: Rect) {
     // THE PREVIEW IS DRAWN FIRST, AND ALWAYS: it belongs to the sheet and not to the field, and a person deciding
     // where to click cannot see it if the field has to be open before it appears.
@@ -788,7 +814,8 @@ pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Conte
     // typed has their eyes on the field, not on a warning mark they have to find first.
     let mut said: Option<String> = None;
     let bar_typed = |key: &'static str| ctx.memory(|m| m.has_focus(qymcad_ui_state::bar_field_id(key)));
-    egui::Area::new(egui::Id::new(("cornerinput", si, pid))).fixed_pos(qymcad_ui_state::clamp_popup(at, rect) + egui::vec2(10.0, -10.0)).order(egui::Order::Foreground).show(ctx, |ui| {
+    let (at, pivot) = corner_box_place(cc, rect, si, standing.first().copied(), chamfer).unwrap_or((qymcad_ui_state::clamp_popup(at, rect) + egui::vec2(10.0, -10.0), egui::Align2::LEFT_TOP));
+    egui::Area::new(egui::Id::new(("cornerinput", si, pid))).fixed_pos(at).pivot(pivot).constrain_to(rect).order(egui::Order::Foreground).show(ctx, |ui| {
         egui::Frame::popup(ui.style()).show(ui, |ui| {
             ui.horizontal(|ui| {
                 // "R of every corner" is the field of FILLET ALL, and of nothing else: it is the one that rounds a

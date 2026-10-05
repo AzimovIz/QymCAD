@@ -345,7 +345,17 @@ impl<'a> Hand<'a> {
         }
     }
 
+    /// WHERE THE BOX OF THE CORNER TOOLS STANDS on screen, as the last frame laid it out; `None` while it is not up.
+    pub fn corner_box(&self) -> Option<egui::Rect> {
+        let si = qymcad_ui_state::edit_si(&self.app.project, &self.app.sketch_ses)?;
+        self.win.ctx.memory(|m| m.area_rect(egui::Id::new(("cornerinput", si, qymcad_ui_state::CORNER_SET))))
+    }
+
     /// Where a place of the sketch stands on screen, on the canvas as the last frame laid it out.
+    pub fn on_screen2d(&self, place: (f64, f64)) -> egui::Pos2 {
+        self.screen2d(place)
+    }
+
     fn screen2d(&self, (x, y): (f64, f64)) -> egui::Pos2 {
         (qymcad_ui_state::Sheet { view: self.app.viewing.view, rect: self.app.viewing.view_rect }).at(qymcad_core::geom::Point2::new(x, y))
     }
