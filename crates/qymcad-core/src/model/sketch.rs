@@ -2456,7 +2456,9 @@ impl Project {
         // Virtual corner: the vertex is held on the extensions of both lines, so dimensions to the corner stay
         // valid and the contour stays whole.
         self.settle_the_corner_point(si, pc, o1, t1, o2, t2);
-        self.regen_sketch(si);
+        // SOLVED, not only drawn: the legs and the angle are laid as dimensions above, and a chamfer of two legs or of a
+        // leg and an angle stands by them only once the sketch is solved
+        self.solve_sketch(si);
         true
     }
     /// Endpoints of an edge entity (a line or an arc), used to find the shared vertex when filleting.
@@ -2841,8 +2843,11 @@ impl Project {
         // THE LINES AS THEY WERE NAMED, one line named twice being one line: a line standing twice at the same
         // point would be paired with itself.
         let mut set: Vec<Id> = Vec::new();
+        // a construction line is no side of a corner - the diagonal of a rectangle ends at its corners - so a picked one
+        // takes no part in the pairing
+        let construction = |me: &Self, l: Id| me.sketches.get(si).is_some_and(|s| s.entities.iter().any(|e| e.id == l && e.construction));
         for &l in lines {
-            if !set.contains(&l) {
+            if !set.contains(&l) && !construction(self, l) {
                 set.push(l);
             }
         }
