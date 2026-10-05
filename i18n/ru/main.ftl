@@ -2117,6 +2117,7 @@ ent-circle = Окружность
 ent-ellipse = Эллипс
 ent-named = { $what } { $n }
 con-vertical = Вертикаль
+con-rect-turn = Поворот прямоугольника
 con-coincident = Совпадение
 con-parallel = Параллельно
 con-perpendicular = Перпендикуляр

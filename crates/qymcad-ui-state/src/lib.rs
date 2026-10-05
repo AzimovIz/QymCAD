@@ -12525,6 +12525,8 @@ pub fn constraint_label(c: &qymcad_core::model::Constraint) -> String {
         C::Fixed { .. } => qymcad_i18n::tr("con-fixed"),
         C::Horizontal { .. } => qymcad_i18n::tr("con-horizontal"),
         C::Vertical { .. } => qymcad_i18n::tr("con-vertical"),
+        // never listed, but named where a conflict has to name what holds the rectangle
+        C::Orientation { .. } => qymcad_i18n::tr("con-rect-turn"),
         C::Coincident { .. } => qymcad_i18n::tr("con-coincident"),
         C::Distance { d, driven, expr, .. } => dim("con-name-distance", value(qymcad_i18n::num(*d, 1), expr), *driven),
         C::Parallel { .. } => qymcad_i18n::tr("con-parallel"),

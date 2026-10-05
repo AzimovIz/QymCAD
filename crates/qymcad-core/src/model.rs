@@ -561,6 +561,9 @@ pub struct Sketch {
     /// Editable patterns: a source, the layout parameters and the ids of the derived copies.
     #[serde(default)]
     pub patterns: Vec<SketchPattern>,
+    /// The rectangles kept as one shape: their sides, corners, centre and construction diagonals, see `SketchRect`.
+    #[serde(default)]
+    pub rects: Vec<SketchRect>,
     /// Projections of body geometry (driven entities that reference their source).
     #[serde(default)]
     pub projections: Vec<SketchProjection>,
@@ -809,6 +812,35 @@ pub enum PatternKind {
     },
 }
 
+/// A SKETCH RECTANGLE KEPT AS ONE SHAPE: four sides each held at its turn (`Constraint::Orientation`: the first and the
+/// third at the turn of the rectangle, the second and the fourth square to them), and a centre on the middle of its
+/// diagonal - drawn as two construction diagonals for a rectangle drawn from its centre. It stays a rectangle until it
+/// is broken - a side deleted - and then the record, the centre and the diagonals go and four plain lines are left.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SketchRect {
+    pub id: Id,
+    /// The corners in order round the rectangle.
+    pub corners: [Id; 4],
+    /// The sides: corner k to corner k + 1.
+    pub sides: [Id; 4],
+    pub centre: Id,
+    /// The construction diagonals of a rectangle drawn from its centre: corner 0 to 2, corner 1 to 3. A rectangle drawn
+    /// by its corners has none - its centre is held on the middle without them - as the diagonals would split every
+    /// line crossing it for Trim (a construction line is a boundary).
+    pub diagonals: Option<[Id; 2]>,
+    /// What a width or a height changed grows the rectangle from.
+    pub anchor: RectAnchor,
+}
+
+/// What stays put when the width or the height of a rectangle changes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RectAnchor {
+    /// The corner it was drawn from (a point id).
+    Corner(Id),
+    /// Its centre: a rectangle drawn from the centre grows about it.
+    Centre,
+}
+
 /// An editable sketch pattern: source entities plus layout parameters produce derived instances.
 ///
 /// The instance ids are stored so that editing the parameters can recreate them. Instances are real
@@ -882,6 +914,11 @@ pub enum Constraint {
     Horizontal { a: Id, b: Id },
     /// Vertical: points `a` and `b` share the same vertical (equal x).
     Vertical { a: Id, b: Id },
+    /// THE TURN OF A SKETCH RECTANGLE: the side from `a` to `b` stands at `deg` degrees to the X axis. The rectangle
+    /// holds it itself and it is never drawn nor typed: a corner dragged changes the size and leaves the turn, the
+    /// Rotate tool changes `deg`, and an angle dimension a person puts on a side takes its place. Without it a
+    /// rectangle held by parallel and perpendicular sides turned under a dragged corner.
+    Orientation { a: Id, b: Id, deg: f64 },
     /// Points `a` and `b` coincide.
     Coincident { a: Id, b: Id },
     /// Dimension: the distance between `a` and `b` equals `d`. `off` is the offset of the dimension line
@@ -1065,7 +1102,7 @@ impl Constraint {
         use Constraint::*;
         match *self {
             Fixed { p } => vec![p],
-            Horizontal { a, b } | Vertical { a, b } | Coincident { a, b } | Distance { a, b, .. } => vec![a, b],
+            Horizontal { a, b } | Vertical { a, b } | Orientation { a, b, .. } | Coincident { a, b } | Distance { a, b, .. } => vec![a, b],
             Parallel { a, b, c, d } | Perpendicular { a, b, c, d } | Equal { a, b, c, d } | Collinear { a, b, c, d } | AngleLines { a, b, c, d, .. } => vec![a, b, c, d],
             Angle { a, b, c, .. } | Midpoint { p: a, a: b, b: c } | PointOnLine { p: a, a: b, b: c } | DistancePL { p: a, a: b, b: c, .. } | ArcLength { c: a, a: b, b: c, .. } => vec![a, b, c],
             Tangent { a, b, c, .. } => vec![a, b, c],
@@ -1554,7 +1591,7 @@ fn constraint_uses_line(c: &Constraint, lines: &[(Id, Id)]) -> bool {
 pub fn constraint_point_ids(c: &Constraint) -> Vec<Id> {
     match *c {
         Constraint::Fixed { p } => vec![p],
-        Constraint::Horizontal { a, b } | Constraint::Vertical { a, b } | Constraint::Coincident { a, b } | Constraint::Distance { a, b, .. } => vec![a, b],
+        Constraint::Horizontal { a, b } | Constraint::Vertical { a, b } | Constraint::Orientation { a, b, .. } | Constraint::Coincident { a, b } | Constraint::Distance { a, b, .. } => vec![a, b],
         Constraint::Parallel { a, b, c, d } | Constraint::Perpendicular { a, b, c, d } | Constraint::Equal { a, b, c, d } | Constraint::Collinear { a, b, c, d } => vec![a, b, c, d],
         Constraint::Angle { a, b, c, .. } => vec![a, b, c],
         Constraint::Midpoint { p, a, b } => vec![p, a, b],
@@ -1627,7 +1664,7 @@ fn remap_constraint_point(c: &mut Constraint, from: Id, to: Id) {
     };
     match c {
         Constraint::Fixed { p } => fix(p),
-        Constraint::Horizontal { a, b } | Constraint::Vertical { a, b } | Constraint::Coincident { a, b } | Constraint::Distance { a, b, .. } => {
+        Constraint::Horizontal { a, b } | Constraint::Vertical { a, b } | Constraint::Orientation { a, b, .. } | Constraint::Coincident { a, b } | Constraint::Distance { a, b, .. } => {
             fix(a);
             fix(b);
         }
@@ -4713,7 +4750,7 @@ fn remap_point_id(s: &mut Sketch, from: Id, to: Id) {
     for c in &mut s.constraints {
         match c {
             Constraint::Fixed { p } => r(p),
-            Constraint::Horizontal { a, b } | Constraint::Vertical { a, b } | Constraint::Coincident { a, b } | Constraint::Distance { a, b, .. } => {
+            Constraint::Horizontal { a, b } | Constraint::Vertical { a, b } | Constraint::Orientation { a, b, .. } | Constraint::Coincident { a, b } | Constraint::Distance { a, b, .. } => {
                 r(a);
                 r(b);
             }

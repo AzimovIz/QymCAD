@@ -2117,6 +2117,7 @@ ent-circle = Circle
 ent-ellipse = Ellipse
 ent-named = { $what } { $n }
 con-vertical = Vertical
+con-rect-turn = The turn of the rectangle
 con-coincident = Coincident
 con-parallel = Parallel
 con-perpendicular = Perpendicular

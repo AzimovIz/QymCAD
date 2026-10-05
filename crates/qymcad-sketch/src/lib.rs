@@ -133,6 +133,9 @@ pub fn sketch_props(pr: &mut qymcad_ui_state::PropsCtx, ui: &mut egui::Ui, si: u
                 if is_sys(c) {
                     continue; // a system `Fixed` on the origin or an axis is not shown
                 }
+                if matches!(c, Constraint::Orientation { .. }) {
+                    continue; // the turn of a rectangle is the rectangle's own: it is turned by Rotate, not listed
+                }
                 let is_sel = cur_sel == Some(ci);
                 // is it a dimension? (consistent redundancy among dimensions is harmless and gets no warning)
                 let is_dim = matches!(
@@ -827,9 +830,9 @@ pub fn rect_input_popup(pl: &mut qymcad_ui_state::PlaceCtx, ctx: &egui::Context,
                     pl.place.set(qymcad_ui_state::PlacingShape::Rect { a: fixed, b: nb, ids: nids });
                 }
                 Anchor::Center { at: center } => {
-                    let (na, nb) = (Point2::new(center.x - nw / 2.0, center.y - nh / 2.0), Point2::new(center.x + nw / 2.0, center.y + nh / 2.0));
+                    let nb = Point2::new(center.x + nw / 2.0, center.y + nh / 2.0);
                     pl.project.delete_entities(si, &ids);
-                    let nids = pl.project.add_rect_entity(si, na.x, na.y, nb.x, nb.y, qymcad_core::feature::Purpose::Real);
+                    let nids = pl.project.add_rect_from_centre(si, center, nb, qymcad_core::feature::Purpose::Real);
                     pl.place.set(qymcad_ui_state::PlacingShape::RectCenter { center, corner: nb, ids: nids });
                 }
             }
@@ -2676,10 +2679,9 @@ pub fn sketch_tool_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, 
                 // corners keep the first corner. A rotated rectangle (three points) offers no typing.
                 match sk.tool_prefs.rect_mode {
                     1 => {
-                        // centre plus a corner: the opposite corner is its mirror through the centre
+                        // centre plus a corner: the opposite corner is its mirror through the centre, and the rectangle keeps the centre
                         let (c, cr) = (sk.tool.pts[0], sk.tool.pts[1]);
-                        let a = Point2::new(2.0 * c.x - cr.x, 2.0 * c.y - cr.y);
-                        let ids = sk.project.add_rect_entity(si, a.x, a.y, cr.x, cr.y, qymcad_core::feature::Purpose::of(con));
+                        let ids = sk.project.add_rect_from_centre(si, c, cr, qymcad_core::feature::Purpose::of(con));
                         sk.tool.pts.clear();
                         qymcad_ui_state::invalidate(&mut *sk.regen);
                         if !con {
