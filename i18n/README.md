@@ -33,9 +33,13 @@ full of holes.
   ```bash
   python3 tools/i18n.py --stub de
   ```
-- **Verify that all keys are translated and no dead keys exist:**
+- **Verify that all keys are translated:**
   ```bash
   python3 tools/i18n.py --check
+  ```
+- **Verify that no dead keys exist in the catalogue:**
+  ```bash
+  cargo test -p qymcad --lib gui::i18n_use_tests::no_dead_keys_in_the_catalogue
   ```
 
 ## The voice: a program names things, it does not chat

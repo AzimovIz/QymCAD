@@ -1090,21 +1090,97 @@ fn dynamic_catalogue_keys() -> Vec<String> {
     keys
 }
 
-/// Collect all word tokens across source, resource, help, and data files in the workspace.
+/// Strip single-line (`//`) and multi-line (`/* ... */`) comments while preserving string literals.
+fn strip_comments(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    let mut block_depth = 0usize;
+
+    while let Some(c) = chars.next() {
+        if block_depth > 0 {
+            if c == '/' && chars.peek() == Some(&'*') {
+                chars.next();
+                block_depth += 1;
+            } else if c == '*' && chars.peek() == Some(&'/') {
+                chars.next();
+                block_depth -= 1;
+            } else if c == '\n' {
+                out.push('\n');
+            }
+        } else if c == '/' && chars.peek() == Some(&'/') {
+            for next_c in chars.by_ref() {
+                if next_c == '\n' {
+                    out.push('\n');
+                    break;
+                }
+            }
+        } else if c == '/' && chars.peek() == Some(&'*') {
+            chars.next();
+            block_depth = 1;
+        } else if c == '"' {
+            out.push(c);
+            while let Some(sc) = chars.next() {
+                out.push(sc);
+                if sc == '\\' {
+                    if let Some(esc) = chars.next() {
+                        out.push(esc);
+                    }
+                } else if sc == '"' {
+                    break;
+                }
+            }
+        } else if c == 'r' && (chars.peek() == Some(&'"') || chars.peek() == Some(&'#')) {
+            out.push(c);
+            let mut hashes = 0usize;
+            while chars.peek() == Some(&'#') {
+                chars.next();
+                hashes += 1;
+                out.push('#');
+            }
+            if chars.peek() == Some(&'"') {
+                chars.next();
+                out.push('"');
+                while let Some(rc) = chars.next() {
+                    out.push(rc);
+                    if rc == '"' {
+                        let mut match_hashes = 0usize;
+                        while match_hashes < hashes && chars.peek() == Some(&'#') {
+                            chars.next();
+                            out.push('#');
+                            match_hashes += 1;
+                        }
+                        if match_hashes == hashes {
+                            break;
+                        }
+                    }
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// Collect all word tokens across the crates and the embedded resources in the program.
 ///
-/// An add-on workbench, dynamic module, help article, or embedded resource may reference
-/// catalogue keys outside the core CAD crates. We collect all code and data across the repository
-/// (excluding the translation catalogue itself and build artifacts) to verify key usage.
+/// Symlinks are skipped so that local external checkouts or symlinked trees do not affect
+/// the test. Comments are stripped so that a mere mention in a comment does not keep an otherwise
+/// dead key alive.
 fn source_and_data_tokens() -> std::collections::HashSet<String> {
     let crates_dir = qymcad_i18n::ratchet::crates_root();
-    let repo = crates_dir.parent().expect("repository root").to_path_buf();
+    let library_dir = crates_dir.parent().expect("repository root").join("library/parts");
     let mut tokens = std::collections::HashSet::new();
-    let mut stack = vec![repo];
+    let mut stack = vec![crates_dir, library_dir];
     while let Some(dir) = stack.pop() {
         let Ok(rd) = std::fs::read_dir(&dir) else { continue };
         for e in rd.flatten() {
             let p = e.path();
-            if p.is_dir() {
+            let Ok(meta) = std::fs::symlink_metadata(&p) else { continue };
+            if meta.file_type().is_symlink() {
+                continue;
+            }
+            if meta.is_dir() {
                 if let Some(name) = p.file_name().and_then(|n| n.to_str()) {
                     if name.starts_with('.') || name == "target" || name == "i18n" {
                         continue;
@@ -1113,18 +1189,17 @@ fn source_and_data_tokens() -> std::collections::HashSet<String> {
                 stack.push(p);
                 continue;
             }
-            if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
-                if matches!(
-                    ext,
-                    "png" | "jpg" | "jpeg" | "gif" | "ico" | "icns" | "ttf" | "woff" | "woff2" | "lock" | "step" | "stp" | "igs" | "zip" | "tar" | "gz" | "bin" | "exe" | "so" | "dll" | "ftl"
-                ) {
-                    continue;
-                }
-            }
-            if let Ok(s) = std::fs::read_to_string(&p) {
-                for token in s.split(|c: char| !c.is_ascii_alphanumeric() && c != '-' && c != '_') {
-                    if !token.is_empty() {
-                        tokens.insert(token.to_string());
+            if meta.is_file() {
+                if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
+                    if matches!(ext, "rs" | "ron" | "toml" | "qpart") {
+                        if let Ok(s) = std::fs::read_to_string(&p) {
+                            let clean = strip_comments(&s);
+                            for token in clean.split(|c: char| !c.is_ascii_alphanumeric() && c != '-' && c != '_') {
+                                if !token.is_empty() {
+                                    tokens.insert(token.to_string());
+                                }
+                            }
+                        }
                     }
                 }
             }

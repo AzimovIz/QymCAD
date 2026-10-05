@@ -9,8 +9,7 @@ Usage:
     tools/i18n.py <lang>           List missing keys for a specific language with English reference
     tools/i18n.py --stub <lang>    Append missing translation stubs to i18n/<lang>/*.ftl
     tools/i18n.py --export <lang>  Print missing translation stubs to stdout
-    tools/i18n.py --check [lang]   Exit with code 1 if any keys are missing or orphaned (for CI/hooks)
-    tools/i18n.py --dead           Check for orphaned keys in the reference catalogue
+    tools/i18n.py --check [lang]   Exit with code 1 if any keys are missing or extra (for CI/hooks)
 """
 import argparse
 import os
@@ -26,6 +25,16 @@ if hasattr(signal, "SIGPIPE"):
 ROOT = Path(__file__).resolve().parent.parent
 I18N_DIR = ROOT / "i18n"
 REFERENCE_LANG = "en"
+
+# BCP-47 tag format (e.g. de, uk, zh-CN, pt-BR)
+LANG_CODE_RE = re.compile(r"^[a-z]{2,3}(-[A-Z]{2})?$")
+
+
+def validate_lang_code(lang: str) -> None:
+    """Validate that language code matches standard BCP-47 tag format to prevent path traversal."""
+    if not LANG_CODE_RE.match(lang):
+        print(red(f"Error: invalid language code '{lang}'. Expected format like 'de', 'uk', or 'zh-CN'."), file=sys.stderr)
+        sys.exit(1)
 
 # Support colored output if running in a terminal
 USE_COLOR = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
@@ -132,12 +141,12 @@ def load_language(lang_code: str) -> dict:
 
 
 def all_languages() -> list:
-    """List all available language codes in i18n/."""
+    """List all available language codes in i18n/ matching BCP-47 pattern."""
     if not I18N_DIR.is_dir():
         return []
     langs = []
     for d in sorted(I18N_DIR.iterdir()):
-        if d.is_dir() and not d.name.startswith("."):
+        if d.is_dir() and not d.name.startswith(".") and LANG_CODE_RE.match(d.name):
             langs.append(d.name)
     return langs
 
@@ -306,59 +315,6 @@ def inspect_language(ref_files: dict, lang: str, as_stubs: bool = False, append_
     return len(missing_keys) + len(extra_keys)
 
 
-def check_dead_keys() -> int:
-    """Check for orphaned keys in English catalogue not used anywhere in workspace."""
-    print(f"\nChecking for dead keys across workspace...")
-    crates_dir = ROOT / "crates"
-    repo_files = []
-    skip_exts = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".icns", ".ttf", ".woff",
-                 ".woff2", ".lock", ".step", ".stp", ".igs", ".zip", ".tar", ".gz",
-                 ".bin", ".exe", ".so", ".dll", ".ftl"}
-
-    tokens = set()
-    for root, dirs, files in os.walk(ROOT):
-        # Skip git, target, i18n
-        dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("target", "i18n")]
-        for f in files:
-            p = Path(root) / f
-            if p.suffix.lower() in skip_exts:
-                continue
-            try:
-                content = p.read_text(encoding="utf-8", errors="ignore")
-                for word in re.split(r"[^a-zA-Z0-9_-]+", content):
-                    if word:
-                        tokens.add(word)
-            except Exception:
-                pass
-
-    ref_files = load_language(REFERENCE_LANG)
-    all_ref_keys = set()
-    for entries in ref_files.values():
-        all_ref_keys.update(entries.keys())
-
-    # Dynamic keys
-    dynamic_prefixes = (
-        "scheme-group-", "scheme-color-", "scheme-", "name-", "error-op-failed-",
-        "error-kernel-required-", "panel-", "settings-mouse-", "help-section-",
-        "hotkeys-area-", "wb-", "j-fault-",
-    )
-    dead = []
-    for k in sorted(all_ref_keys):
-        if any(k.startswith(p) for p in dynamic_prefixes) or k.endswith("-hint") or k.endswith("-n"):
-            continue
-        if k not in tokens:
-            dead.append(k)
-
-    if dead:
-        print(red(f"Found {len(dead)} dead/orphaned keys in reference catalogue:"))
-        for k in dead:
-            print(f"  • {red(k)}")
-        return 1
-    else:
-        print(green(f"Clean! All catalogue keys are referenced in code or dynamic families.\n"))
-        return 0
-
-
 def main():
     try:
         parser = argparse.ArgumentParser(
@@ -370,12 +326,8 @@ def main():
         parser.add_argument("--stub", metavar="LANG", help="Append missing translation stubs to i18n/<lang>/*.ftl")
         parser.add_argument("--export", metavar="LANG", help="Print missing translation stubs for <lang> to stdout")
         parser.add_argument("--check", nargs="?", const="ALL", default=None, help="Check that language(s) are 100%% complete")
-        parser.add_argument("--dead", action="store_true", help="Check for dead keys in the catalogue")
 
         args = parser.parse_args()
-
-        if args.dead:
-            sys.exit(check_dead_keys())
 
         ref_files = load_language(REFERENCE_LANG)
         if not ref_files:
@@ -384,11 +336,13 @@ def main():
 
         # 1. Stub generation mode
         if args.stub:
+            validate_lang_code(args.stub)
             inspect_language(ref_files, args.stub, append_to_files=True)
             sys.exit(0)
 
         # 2. Export stubs to stdout
         if args.export:
+            validate_lang_code(args.export)
             inspect_language(ref_files, args.export, as_stubs=True)
             sys.exit(0)
 
@@ -403,11 +357,13 @@ def main():
                     total_issues += issues
                 sys.exit(1 if total_issues > 0 else 0)
             else:
+                validate_lang_code(target_lang)
                 issues = inspect_language(ref_files, target_lang)
                 sys.exit(1 if issues > 0 else 0)
 
         # 4. Specific language inspection
         if args.lang:
+            validate_lang_code(args.lang)
             inspect_language(ref_files, args.lang)
             sys.exit(0)
 
@@ -420,3 +376,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
