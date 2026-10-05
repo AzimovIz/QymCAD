@@ -230,26 +230,8 @@ impl App {
         }
         // the cursor with snapping (it refreshes the snap hint for the marker)
         self.cursor = resp.hover_pos().map(|p| snap_world(&mut self.sketch_ctx(), rect, p));
-        // the pre-select highlight: what is under the cursor - only while the sketch is in selection mode
-        self.chosen.hover.sketch = None;
-        if let (Sel::Sketch(si), Some(hp)) = (self.chosen.sel, resp.hover_pos()) {
-            if qymcad_ui_state::edit_si(&self.project, &self.sketch_ses) == Some(si)
-                && self.tools.armed.draw_kind() == 0
-                && self.tools.armed.dim_kind() == 0
-                && !resp.dragged()
-                && self.tools.drag.pt().is_none()
-                && self.tools.drag.mov().is_none()
-            {
-                self.chosen.hover.sketch = sketch_hit(&self.pick_ctx(), rect, hp, si);
-                // the constraint glyph under the cursor is highlighted, without wiping the hover coming
-                // from the list of constraints
-                if self.chosen.hover.sketch.is_none() {
-                    if let Some(gc) = constraint_glyph_at(&mut self.sketch_ctx(), rect, hp, si) {
-                        self.chosen.hover.constraint = Some(gc);
-                    }
-                }
-            }
-        }
+        let lit = qymcad_sketch::pre_select(&mut self.sketch_ctx(), rect, resp.hover_pos(), resp.dragged());
+        (self.chosen.hover.sketch, self.chosen.hover.constraint) = (lit.sketch, lit.constraint.or(self.chosen.hover.constraint));
         update_placing_dim(&mut self.sketch_ctx(), rect); // the dimension follows the cursor until it is placed
         if resp.hover_pos().is_none() {
             self.snap_hint = None;

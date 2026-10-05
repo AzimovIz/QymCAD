@@ -352,6 +352,14 @@ impl<'a> Hand<'a> {
 
     /// The hand comes over a place and rests there a second - the pause between two gestures of a person - with
     /// two frames of hover, the second being the one the snap reads.
+    /// THE HAND COMES OVER A POINT OF THE SKETCH AND RESTS there, pressing nothing: what stands lit under it is what
+    /// a click would take.
+    pub fn hover2d(&mut self, x: f64, y: f64) -> &mut Self {
+        self.in_view2d(&[(x, y)]);
+        self.rest_over2d((x, y));
+        self
+    }
+
     fn rest_over2d(&mut self, place: (f64, f64)) -> egui::Pos2 {
         let at = self.screen2d(place);
         self.win.clock += 1.0;

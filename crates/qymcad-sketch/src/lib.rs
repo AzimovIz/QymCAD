@@ -405,6 +405,30 @@ const HALF_TURN_DEG: f64 = 180.0;
 /// The longest length a dimension of a sketch takes, in mm - the same bound the fields of the tool bars keep.
 pub const MAX_SKETCH_LENGTH: f64 = 10000.0;
 
+/// WHAT STANDS LIT UNDER THE CURSOR BEFORE A CLICK: the geometry, or else the glyph of a constraint.
+pub struct PreSelect {
+    pub sketch: Option<(u8, Id)>,
+    pub constraint: Option<usize>,
+}
+
+/// THE PRE-SELECT HIGHLIGHT, only while the sketch being edited is in selection mode - no drawing or dimension tool in
+/// hand and nothing being dragged. With the fillet or the chamfer in hand a construction line is not lit: it is no side
+/// of a corner, and a line lit under the cursor says that a click takes it.
+pub fn pre_select(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, hover: Option<Pos2>, dragged: bool) -> PreSelect {
+    let none = PreSelect { sketch: None, constraint: None };
+    let (qymcad_ui_state::Sel::Sketch(si), Some(hp)) = (*sk.sel, hover) else { return none };
+    let still = !dragged && sk.drag.pt().is_none() && sk.drag.mov().is_none();
+    if qymcad_ui_state::edit_si(sk.project, sk.sketch_ses) != Some(si) || sk.armed.draw_kind() != 0 || sk.armed.dim_kind() != 0 || !still {
+        return none;
+    }
+    let corner_tool = matches!(sk.armed.click_op(), 4 | 5);
+    let construction = |id: Id| sk.project.sketches.get(si).is_some_and(|s| s.entities.iter().any(|e| e.id == id && e.construction));
+    let sketch = sketch_hit(&sk.pick(), rect, hp, si).filter(|&(k, id)| !(corner_tool && k == 1 && construction(id)));
+    // the glyph of a constraint is lit only where no geometry is
+    let constraint = if sketch.is_none() { constraint_glyph_at(sk, rect, hp, si) } else { None };
+    PreSelect { sketch, constraint }
+}
+
 /// What is under the cursor in a sketch: (kind, Id). 0 is a point, 1 an entity (a line, an arc, a
 /// circle), 2 a primitive (a contour). Ordinary geometry takes priority over construction geometry.
 pub fn sketch_hit(pick: &qymcad_ui_state::PickCtx, rect: Rect, pos: Pos2, si: usize) -> Option<(u8, Id)> {

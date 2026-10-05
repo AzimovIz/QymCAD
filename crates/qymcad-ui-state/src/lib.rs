@@ -13520,7 +13520,8 @@ impl CornerSet {
         self.hidden.retain(|&(a, b)| selected.contains(&a) && selected.contains(&b) && project.corner_of_pair(si, a, b).is_some());
         // EVERY POINT WHERE CHOSEN LINES STAND, and the lines standing there in the order they were chosen.
         let mut at: Vec<(Id, Vec<Id>)> = Vec::new();
-        for &line in selected {
+        // a construction line chosen before the tool was taken makes no corner either
+        for &line in selected.iter().filter(|&&l| !line_is_construction(project, si, l)) {
             let Some((x, y)) = project.edge_ends(si, line) else { continue };
             for p in [x, y] {
                 match at.iter_mut().find(|(q, _)| *q == p) {
@@ -13708,6 +13709,12 @@ pub fn corner_click(project: &Project, si: usize, corner: &mut CornerInput, sel_
     // THE CLICK THAT OPENS THE FIELD GROWS THE SET RATHER THAN SINGLING IT OUT: there was no set in hand to single
     // out, and the lines standing chosen are the start of one.
     let grow = shift || !was_open;
+    // A CONSTRUCTION LINE IS NO SIDE OF A CORNER - the diagonal of a rectangle ends at its corners, and a cut between it
+    // and a side cuts the drawing against a line that is not part of it - so a click on one is a click on nothing.
+    let over = match over {
+        CornerOver::Line(eid) if line_is_construction(project, si, eid) => CornerOver::Nothing,
+        other => other,
+    };
     let act = match over {
         // A CLICK AT A POINT. WITH SHIFT it is about that point alone, as it always was. WITHOUT SHIFT it is a
         // single selection, the same as a click on a line, so everything chosen before is let go of first - and
@@ -13769,6 +13776,11 @@ pub fn corner_click(project: &Project, si: usize, corner: &mut CornerInput, sel_
     let after: Vec<Id> = sel_sk.items.iter().filter(|(k, _)| *k == 1).map(|(_, id)| *id).collect();
     corner.set.follow_from(project, si, &before, &after);
     act
+}
+
+/// WHETHER `eid` IS A CONSTRUCTION LINE of the sketch: no side of a corner the fillet or the chamfer cuts.
+fn line_is_construction(project: &Project, si: usize, eid: Id) -> bool {
+    project.sketches.get(si).is_some_and(|s| s.entities.iter().any(|e| e.id == eid && e.construction))
 }
 
 /// THE POINT AT WHICH A LINE MUST NOT BE ADDED TO THE SELECTION, which is the point where two chosen lines stand
