@@ -1278,7 +1278,10 @@ pub static CORNER: Tool = Tool {
 /// The right-angled corner cut with a chamfer of `d`: a line from (d, 0) to (0, d) in place of the corner. What stays:
 /// the two far ends, the two ends of the cut, and the sharp corner itself, unseen, which the dimensions of the chamfer
 /// are measured from; the box of the whole is untouched.
-fn corner_cut(d: f64) -> Outcome {
+fn corner_cut(cut: f64) -> Outcome {
+    // the field of the symmetric chamfer, the mode the tool is taken in, is the length of the cut: on a square corner each
+    // leg is cut / sqrt(2)
+    let d = cut / std::f64::consts::SQRT_2;
     // as for the rounding: the line halfway along what is left of it, the corner only for a leg the screen tells apart
     let mut at = if 30.0 - d >= 2.0 { vec![((d + 30.0) / 2.0, 0.0, Under::Line)] } else { Vec::new() }; // a stub of the line under 2 lies within a click of its ends
     if d >= 1.0 {
@@ -1302,8 +1305,25 @@ fn corner_cut(d: f64) -> Outcome {
     }
 }
 
-/// The corner cut with a chamfer of 3 - what every mode makes of the field typed 3 on a square corner, its second value
-/// left as the mode sets it: the second leg as the first, the angle 45 deg.
+/// The corner cut with a symmetric chamfer of 3: the cut is 3 long, each leg 3 / sqrt(2) = 2.1213 on a square corner.
+const CORNER_SYMMETRIC_3: Outcome = Outcome::Sketch {
+    points: 5,
+    lines: 3,
+    arcs: 0,
+    circles: 0,
+    ellipses: 0,
+    splines: 0,
+    texts: 0,
+    notes: 0,
+    constraints: None,
+    dof: None,
+    box_of: Some(([0.0, 0.0], [30.0, 30.0])),
+    size_of: None,
+    under: &[(0.53, 0.0, Under::Nothing), (20.0, 0.0, Under::Line), (1.06, 1.06, Under::Line)],
+};
+
+/// The corner cut with a chamfer of 3 by two legs or by a leg and an angle, its second value left as the mode sets it:
+/// the second leg as the first, the angle 45 deg - legs of 3 either way.
 const CORNER_CUT_3: Outcome = Outcome::Sketch {
     points: 5,
     lines: 3,
@@ -1320,8 +1340,8 @@ const CORNER_CUT_3: Outcome = Outcome::Sketch {
     under: &[(0.75, 0.0, Under::Nothing), (20.0, 0.0, Under::Line), (1.5, 1.5, Under::Line)],
 };
 
-/// CORNER_CHAMFER: the same corner cut with a chamfer of 3, the size typed in the field at the corner; equal legs, two
-/// legs, or a leg and an angle.
+/// CORNER_CHAMFER: the same corner cut with a chamfer of 3, the size typed in the field at the corner; a symmetric cut of
+/// that length, two legs, or a leg and an angle.
 pub static CORNER_CHAMFER: Tool = Tool {
     id: "sketch.corner-chamfer",
     flow: Flow::Drawing(&[(0.0, 0.0)], Finish::LastClick),
@@ -1334,7 +1354,7 @@ pub static CORNER_CHAMFER: Tool = Tool {
     pick_trial: &[],
     wrong_picks: &[],
     words: &[],
-    // a cut longer than the lines it cuts (d > 30) cannot be drawn. The field is the first on the bar showing the grey
+    // a cut whose legs are as long as the lines it cuts cannot be drawn: 29.9 is short of it in every mode. The field is the first on the bar showing the grey
     // words: its caption changes with the mode (size, first leg, length), and with two values the bar holds a second
     // field of the same grey words after it
     fields: &[Field {
@@ -1350,11 +1370,11 @@ pub static CORNER_CHAMFER: Tool = Tool {
         outcome: corner_cut,
     }],
     modes: &[&[
-        Mode { word: "cmd-symmetric", clicks: None, outcome: Some(CORNER_CUT_3) },
+        Mode { word: "cmd-symmetric", clicks: None, outcome: Some(CORNER_SYMMETRIC_3) },
         Mode { word: "cmd-two-distances", clicks: None, outcome: Some(CORNER_CUT_3) },
         Mode { word: "cmd-leg-angle", clicks: None, outcome: Some(CORNER_CUT_3) },
     ]],
-    result: CORNER_CUT_3,
+    result: CORNER_SYMMETRIC_3,
     node: "Sketch",
     undo: "tool-chamfer",
     undo_steps: 1,

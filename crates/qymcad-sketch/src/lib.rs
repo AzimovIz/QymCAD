@@ -741,7 +741,10 @@ fn value_for_preview(cc: &qymcad_ui_state::CornerCtx) -> f64 {
 /// towards the corner and on past it by `CORNER_BOX_GAP` - and growing that way, so the corner, the two ends the lines
 /// are cut at and the arc between them stay in sight. It stood on the place clicked, which is on the corner or on one
 /// of its lines: measured on a rectangle 40 x 30, the box covered the corner, both cut ends and the middle of the arc.
-fn corner_box_place(cc: &qymcad_ui_state::CornerCtx, rect: Rect, si: usize, first: Option<(Id, (Id, Id))>, chamfer: bool) -> Option<(Pos2, egui::Align2)> {
+///
+/// The corner of the box nearest the corner is placed by the size the box had the frame before (`size`). An area given
+/// a pivot instead is measured on its first frame and drawn on none: the box did not show at all in the frame it opened.
+fn corner_box_place(cc: &qymcad_ui_state::CornerCtx, rect: Rect, si: usize, first: Option<(Id, (Id, Id))>, chamfer: bool, size: egui::Vec2) -> Option<Pos2> {
     let (pid, pair) = first?;
     // a value too big for the corner draws no preview, and the side of the corner is the same at any value
     let v = value_for_preview(cc);
@@ -751,10 +754,18 @@ fn corner_box_place(cc: &qymcad_ui_state::CornerCtx, rect: Rect, si: usize, firs
     let corner = at(b.vertex);
     let out = corner - at([(b.ends[0][0] + b.ends[1][0]) / 2.0, (b.ends[0][1] + b.ends[1][1]) / 2.0]);
     let out = if out.length() > 1e-3 { out.normalized() } else { egui::vec2(1.0, -1.0).normalized() };
-    let x = if out.x >= 0.0 { egui::Align::Min } else { egui::Align::Max };
-    let y = if out.y >= 0.0 { egui::Align::Min } else { egui::Align::Max };
-    Some((corner + out * CORNER_BOX_GAP, egui::Align2([x, y])))
+    let near = corner + out * CORNER_BOX_GAP;
+    // OUTWARD WHERE THERE IS ROOM, and across the corner's other side where there is not: a box at the top of the sheet
+    // stood under the bar and read as a field of it
+    let side = |grow: f32, at: f32, len: f32, lo: f32, hi: f32| if (grow >= 0.0 && at + len <= hi) || (grow < 0.0 && at - len < lo) { at } else { at - len };
+    let left = side(out.x, near.x, size.x, rect.left(), rect.right());
+    let top = side(out.y, near.y, size.y, rect.top(), rect.bottom());
+    Some(egui::pos2(left.clamp(rect.left(), (rect.right() - size.x).max(rect.left())), top.clamp(rect.top(), (rect.bottom() - size.y).max(rect.top()))))
 }
+
+/// The size of the box of the corner tools on the frame it first opens, before egui has measured it, in points: one row
+/// of a label, a field and two buttons, and the line that counts the set.
+const CORNER_BOX_GUESS: egui::Vec2 = egui::vec2(320.0, 56.0);
 
 /// How far the box of the corner tools stands off the corner, in pixels.
 const CORNER_BOX_GAP: f32 = 16.0;
@@ -824,8 +835,10 @@ pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Conte
     // typed has their eyes on the field, not on a warning mark they have to find first.
     let mut said: Option<String> = None;
     let bar_typed = |key: &'static str| ctx.memory(|m| m.has_focus(qymcad_ui_state::bar_field_id(key)));
-    let (at, pivot) = corner_box_place(cc, rect, si, standing.first().copied(), chamfer).unwrap_or((qymcad_ui_state::clamp_popup(at, rect) + egui::vec2(10.0, -10.0), egui::Align2::LEFT_TOP));
-    egui::Area::new(egui::Id::new(("cornerinput", si, pid))).fixed_pos(at).pivot(pivot).constrain_to(rect).order(egui::Order::Foreground).show(ctx, |ui| {
+    let area = egui::Id::new(("cornerinput", si, pid));
+    let size = ctx.memory(|m| m.area_rect(area)).map_or(CORNER_BOX_GUESS, |r| r.size());
+    let at = corner_box_place(cc, rect, si, standing.first().copied(), chamfer, size).unwrap_or_else(|| qymcad_ui_state::clamp_popup(at, rect) + egui::vec2(10.0, -10.0));
+    egui::Area::new(area).fixed_pos(at).order(egui::Order::Foreground).show(ctx, |ui| {
         egui::Frame::popup(ui.style()).show(ui, |ui| {
             ui.horizontal(|ui| {
                 // "R of every corner" is the field of FILLET ALL, and of nothing else: it is the one that rounds a

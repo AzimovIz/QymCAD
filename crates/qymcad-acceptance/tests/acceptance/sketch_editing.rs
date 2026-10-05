@@ -28,10 +28,18 @@ fn bar_fields(s: &mut Session) -> Vec<Widget> {
     fields
 }
 
-/// THE LITTLE BOX THAT POPPED UP BY THE GESTURE: the field nearest to `at` - the radius at a corner, the angle at the
-/// centre of a turn - told apart from the fields of the bar, which stand far away at the top.
+/// THE FIELDS STANDING ON THE SHEET - the little boxes a gesture puts up - told apart from the fields of the bar and of
+/// the panels by where they stand: on the sheet, not beside it. Told apart by height, a box put up beside a corner near
+/// the top of the sheet was taken for a field of the bar.
+fn sheet_fields(s: &mut Session) -> Vec<Widget> {
+    let sheet = s.canvas();
+    s.widgets().into_iter().filter(|w| w.kind == Kind::TextField && sheet.contains(w.rect.center())).collect()
+}
+
+/// THE LITTLE BOX THAT POPPED UP BY THE GESTURE: the field on the sheet nearest to `at` - the radius at a corner, the
+/// angle at the centre of a turn.
 fn field_near(s: &mut Session, at: qymcad::Pos2) -> Widget {
-    let fields: Vec<Widget> = s.widgets().into_iter().filter(|w| w.kind == Kind::TextField && w.rect.top() > 120.0).collect();
+    let fields: Vec<Widget> = sheet_fields(s);
     fields
         .iter()
         .min_by(|a, b| a.rect.center().distance(at).total_cmp(&b.rect.center().distance(at)))
@@ -177,8 +185,9 @@ probe! {
 }
 
 probe! {
-    /// CHAMFER A CORNER: the corner of two lines becomes a third line across it.
-    fn chamfer_cuts_a_corner_with_the_leg_typed() {
+    /// CHAMFER A CORNER: the corner of two lines becomes a third line across it, as long as the size typed - a cut of 5
+    /// on a square corner stands 5 / sqrt(2) along each line.
+    fn chamfer_cuts_a_corner_with_the_size_typed() {
         let mut s = empty_sketch();
         draw(&mut s, "tb-line-hint", &[(30.0, 0.0), (0.0, 0.0), (0.0, 30.0)]);
         take(&mut s, "tb-chamfer-sketch-hint");
@@ -188,7 +197,8 @@ probe! {
         fill_widget(&mut s, &field, "5");
         s.key(Key::Enter);
         assert!(counts(&mut s).0 == 3, "the corner did not become a line across: {:?}", counts(&mut s));
-        assert!(stands_at(&mut s, (5.0, 0.0)) && stands_at(&mut s, (0.0, 5.0)), "the cut of 5 does not meet the lines at (5, 0) and (0, 5): the ends stand at {:?}", s.document().sketches[0].places);
+        let leg = 5.0 / std::f64::consts::SQRT_2;
+        assert!(stands_at(&mut s, (leg, 0.0)) && stands_at(&mut s, (0.0, leg)), "the cut of 5 does not meet the lines at {leg:.4} from the corner: the ends stand at {:?}", s.document().sketches[0].places);
     }
 }
 
@@ -206,7 +216,8 @@ probe! {
         fill_widget(&mut s, &field, "5");
         s.key(Key::Enter);
         assert!(counts(&mut s).0 == 3, "the two lines did not cut the corner between them: {:?}", counts(&mut s));
-        assert!(stands_at(&mut s, (5.0, 0.0)) && stands_at(&mut s, (0.0, 5.0)), "the cut of 5 does not meet the lines at (5, 0) and (0, 5): the ends stand at {:?}", s.document().sketches[0].places);
+        let leg = 5.0 / std::f64::consts::SQRT_2; // a cut of 5 on a square corner
+        assert!(stands_at(&mut s, (leg, 0.0)) && stands_at(&mut s, (0.0, leg)), "the cut of 5 does not meet the lines at {leg:.4} from the corner: the ends stand at {:?}", s.document().sketches[0].places);
     }
 }
 
@@ -223,7 +234,7 @@ probe! {
         assert_eq!(field_near(&mut s, corner_at).kind, Kind::TextField, "the corner of the two chosen lines did not open its field");
         take(&mut s, "tb-line-hint"); // another tool: leaving the chamfer takes its picks with it
         take(&mut s, "tb-chamfer-sketch-hint"); // and the chamfer waits for a corner rather than offering an old one
-        let left: Vec<Widget> = s.widgets().into_iter().filter(|w| w.kind == Kind::TextField && w.rect.top() > 120.0).collect();
+        let left: Vec<Widget> = sheet_fields(&mut s);
         assert!(left.is_empty(), "the mode was taken again and stood with the field of the two lines the mode that ended had let go of: {left:?}");
     }
 }
@@ -245,7 +256,8 @@ probe! {
         fill_widget(&mut s, &field, "5");
         s.key(Key::Enter);
         assert!(counts(&mut s).0 == 3, "the corner of the two chosen lines did not become a line across: {:?}", counts(&mut s));
-        assert!(stands_at(&mut s, (5.0, 0.0)) && stands_at(&mut s, (0.0, 5.0)), "the cut of 5 does not meet the lines at (5, 0) and (0, 5): the ends stand at {:?}", s.document().sketches[0].places);
+        let leg = 5.0 / std::f64::consts::SQRT_2; // a cut of 5 on a square corner
+        assert!(stands_at(&mut s, (leg, 0.0)) && stands_at(&mut s, (0.0, leg)), "the cut of 5 does not meet the lines at {leg:.4} from the corner: the ends stand at {:?}", s.document().sketches[0].places);
     }
 }
 
@@ -258,7 +270,7 @@ probe! {
         pick(&mut s, 10.0, 0.0, false);
         pick(&mut s, 30.0, 15.0, true);
         take(&mut s, "tb-chamfer-sketch-hint");
-        let boxes: Vec<_> = s.widgets().into_iter().filter(|w| w.kind == Kind::TextField && w.rect.top() > 120.0).collect();
+        let boxes: Vec<_> = sheet_fields(&mut s);
         assert!(boxes.is_empty(), "two lines with no corner in common opened the box anyway: {boxes:?}");
         assert!(counts(&mut s).0 == 2, "nothing was cut: {:?}", counts(&mut s));
     }
@@ -299,7 +311,8 @@ probe! {
         fill_widget(&mut s, &field, "5");
         s.key(Key::Enter);
         assert!(counts(&mut s).0 == 9, "the corner of the shared point was not cut: {:?}", counts(&mut s));
-        assert!(stands_at(&mut s, (20.0, 15.0)) && stands_at(&mut s, (15.0, 20.0)), "the cut of 5 does not meet the sides of the near square at (20, 15) and (15, 20): the ends stand at {:?}", s.document().sketches[0].places);
+        let leg = 5.0 / std::f64::consts::SQRT_2; // a cut of 5 on a square corner
+        assert!(stands_at(&mut s, (20.0, 20.0 - leg)) && stands_at(&mut s, (20.0 - leg, 20.0)), "the cut of 5 does not meet the sides of the near square at {leg:.4} from the corner: the ends stand at {:?}", s.document().sketches[0].places);
         assert!(!stands_at(&mut s, (25.0, 20.0)) && !stands_at(&mut s, (20.0, 25.0)), "the far square lost its corner as well: four lines through one point made two cuts of one corner");
     }
 }
@@ -705,7 +718,7 @@ probe! {
         take(&mut s, "tb-chamfer-sketch-hint");
         // THE FIELD IS NOT UP YET - nothing has been pointed at - AND NO FIELD LIES OVER THE CONTOUR, which is what
         // a box standing in the middle of the sheet does to the clicks meant for its own lines.
-        let before_click: Vec<Widget> = s.widgets().into_iter().filter(|w| w.kind == Kind::TextField && w.rect.top() > 120.0).collect();
+        let before_click: Vec<Widget> = sheet_fields(&mut s);
         assert!(before_click.is_empty(), "the chamfer stood with a field over the contour before anything was pointed at: {before_click:?}");
         let empty = s.on_sketch(200.0, -200.0);
         s.click(empty); // the first click opens the field and leaves the four chosen lines as the set
@@ -876,7 +889,7 @@ probe! {
         assert!(!s.status().contains('1'), "a set of nothing is standing as though it were an answer: {:?}", s.status());
         // AND THE BOX WENT WITH IT: a box with nothing to cut in it is not drawn, so there is nothing to type a
         // value into, and nothing that could be cut.
-        let left: Vec<Widget> = s.widgets().into_iter().filter(|w| w.kind == Kind::TextField && w.rect.top() > 120.0).collect();
+        let left: Vec<Widget> = sheet_fields(&mut s);
         assert!(left.is_empty(), "a box stood with nothing to cut in it: {left:?}");
         assert_eq!(counts(&mut s).0, 2, "an empty set was cut anyway: {:?}", counts(&mut s));
     }
@@ -891,12 +904,12 @@ probe! {
         line(&mut s, (0.0, 0.0), (60.0, 0.0));
         line(&mut s, (60.0, 0.0), (30.0, 50.0));
         take(&mut s, "tb-fillet-sketch-hint");
-        let up: Vec<Widget> = s.widgets().into_iter().filter(|w| w.kind == Kind::TextField && w.rect.top() > 120.0).collect();
+        let up: Vec<Widget> = sheet_fields(&mut s);
         assert!(up.is_empty(), "the corner field stood over the drawing before anything was pointed at: {up:?}");
         // THE FIRST LINE IS HALF A CORNER: it is chosen, and there is still nothing to cut, so there is still no box.
         let half = s.on_sketch(30.0, 0.0);
         pick_shift(&mut s, 30.0, 0.0);
-        let still: Vec<Widget> = s.widgets().into_iter().filter(|w| w.kind == Kind::TextField && w.rect.top() > 120.0).collect();
+        let still: Vec<Widget> = sheet_fields(&mut s);
         assert!(still.is_empty(), "a box stood over the drawing with a half-corner in it: {still:?}");
         // AND THE SECOND LINE UNDER WHERE THE BOX WOULD HAVE STOOD IS STILL TAKEN: it did not come down on the sheet.
         pick_shift(&mut s, 45.0, 25.0);
@@ -954,7 +967,7 @@ probe! {
         line(&mut s, (60.0, 0.0), (30.0, 50.0));
         take(&mut s, "tb-fillet-sketch-hint");
         // NO FIELD IS UP: nothing has been pointed at, so there is nothing to type a value into.
-        let up: Vec<Widget> = s.widgets().into_iter().filter(|w| w.kind == Kind::TextField && w.rect.top() > 120.0).collect();
+        let up: Vec<Widget> = sheet_fields(&mut s);
         assert!(up.is_empty(), "setup: a field stood before anything was pointed at: {up:?}");
         let before = pixels_of(&mut s, PREVIEW_NEW);
         let at = s.on_sketch(60.0, 0.0);
@@ -995,7 +1008,7 @@ probe! {
         line(&mut s, (60.0, 0.0), (30.0, 50.0));
         line(&mut s, (30.0, 50.0), (0.0, 0.0)); // a contour of three lines
         take(&mut s, "tb-fillet-sketch-hint");
-        let boxes = |s: &mut Session| -> Vec<Widget> { s.widgets().into_iter().filter(|w| w.kind == Kind::TextField && w.rect.top() > 120.0).collect() };
+        let boxes = |s: &mut Session| -> Vec<Widget> { sheet_fields(s) };
         // THE FIRST LINE: HALF A CORNER, AND NOTHING TO CUT, SO NOTHING TO TYPE INTO.
         pick_shift(&mut s, 30.0, 0.0);
         assert!(boxes(&mut s).is_empty(), "a box stood over the drawing for one chosen line: {:?}", boxes(&mut s));
