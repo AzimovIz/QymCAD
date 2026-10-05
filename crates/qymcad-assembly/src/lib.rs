@@ -82,7 +82,19 @@ pub fn joint_slot_drag(ui: &mut egui::Ui, jj: &mut qymcad_core::feature::Joint, 
         *typed.borrow_mut() = if t.parse::<f64>().is_ok() { String::new() } else { t };
         Some(v)
     };
-    let r = ui.add(egui::DragValue::new(&mut v).speed(speed).suffix(suffix).custom_parser(parser));
+    // THE FIELD IS AS WIDE AS THE WIDEST NUMBER IT SHOWS, not as its text of the moment: a run passes angles with
+    // decimals, and a field 40 px wide at "99" and 52 px at "100.12" jumped every frame, pushing the rest of the line
+    // sideways. The decimals are fixed at two: egui picks them by the pixel size of the screen (three for a travel on
+    // a 1x screen, two on a 2x one), and a width reserved for one count would not hold the other. Four digits before
+    // the point cover a travel up to 9999 mm; a larger number widens the field as before.
+    let widest = egui::WidgetText::from(format!("-8888.88{suffix}")).into_galley(ui, Some(egui::TextWrapMode::Extend), f32::INFINITY, ui.style().drag_value_text_style.clone());
+    let width = widest.size().x + 2.0 * ui.spacing().button_padding.x;
+    let r = ui
+        .scope(|ui| {
+            ui.spacing_mut().interact_size.x = ui.spacing().interact_size.x.max(width);
+            ui.add(egui::DragValue::new(&mut v).speed(speed).max_decimals(2).suffix(suffix).custom_parser(parser))
+        })
+        .inner;
     // where the typing or the drag begins and ends is where its step of undo opens and closes (`joint_values_step`):
     // the field writes the value while it is being typed, before it reports a change
     if r.gained_focus() || r.drag_started() {

@@ -7,7 +7,7 @@
 //!
 //! The window follows the view, not the motion it causes itself.
 #[cfg(test)]
-mod tests {
+pub(in crate::gui) mod tests {
     use super::super::hand::Hand;
     use super::super::App;
     use qymcad_core::feature::JointKind;
@@ -33,7 +33,7 @@ mod tests {
     }
 
     /// Where the glyph of mate `jid` stands on screen, the next frame drawn.
-    fn glyph(hand: &mut Hand, jid: Id) -> Option<egui::Pos2> {
+    pub(in crate::gui) fn glyph(hand: &mut Hand, jid: Id) -> Option<egui::Pos2> {
         hand.frame(Vec::new());
         let rect = hand.app.viewing.view_rect;
         qymcad_assembly::joint_glyphs(&mut hand.app.joint_ctx(), rect).into_iter().find(|(id, _, _)| *id == jid).map(|(_, at, _)| at)
@@ -41,7 +41,7 @@ mod tests {
 
     /// TWO BOXES, ONE FIXED, A CYLINDRICAL MATE CLICKED CORNER TO CORNER, AND ITS WINDOW OPENED by a double click on
     /// the glyph. Answers the mate and where its glyph stood when the window was opened.
-    fn a_cylindrical_mate_with_its_window_open(hand: &mut Hand) -> (Id, egui::Pos2) {
+    pub(in crate::gui) fn a_cylindrical_mate_with_its_window_open(hand: &mut Hand) -> (Id, egui::Pos2) {
         let before: Vec<Id> = hand.app.project.bodies.iter().map(|b| b.id).collect();
         super::super::joint_flow::tests::add_part_at(hand.app, 0.0);
         super::super::joint_flow::tests::add_part_at(hand.app, 60.0);
@@ -63,7 +63,7 @@ mod tests {
     }
 
     /// How far apart the farthest two places of a list lie, in points.
-    fn spread(places: &[egui::Pos2]) -> f32 {
+    pub(in crate::gui) fn spread(places: &[egui::Pos2]) -> f32 {
         places.iter().flat_map(|a| places.iter().map(move |b| a.distance(*b))).fold(0.0, f32::max)
     }
 
