@@ -209,3 +209,26 @@ fn a_dragged_corner_stretches_from_the_corner_across() {
     assert!(a.0.hypot(a.1) < 1e-6, "the corner across went from (0, 0) to {a:?}");
     assert!((d.0 - 48.0).hypot(d.1 - 38.0) < 1e-3, "the dragged corner stands at {d:?}, not at (48, 38)");
 }
+
+/// A RECTANGLE DRAGGED BY ITS CENTRE GOES WITH IT AS A WHOLE, frame by frame as the window drags, in either way it was
+/// drawn (reported, issue #56: it could not be dragged by its centre).
+#[test]
+fn a_rectangle_dragged_by_its_centre_goes_as_a_whole() {
+    let mut sins = Vec::new();
+    for way in [0, 1] {
+        let (mut p, si) = drawn(way);
+        let r = p.sketches[si].rects[0].clone();
+        let before: Vec<(f64, f64)> = r.corners.iter().map(|c| xy(&p, si, *c)).collect();
+        let m = xy(&p, si, r.centre);
+        for k in 1..=10 {
+            let t = k as f64 / 10.0;
+            p.solve_sketch_drag_fast(si, Some((r.centre, m.0 + 12.0 * t, m.1 + 6.0 * t)));
+        }
+        p.solve_sketch(si);
+        let after: Vec<(f64, f64)> = r.corners.iter().map(|c| xy(&p, si, *c)).collect();
+        if before.iter().zip(&after).any(|(b, a)| (a.0 - b.0 - 12.0).hypot(a.1 - b.1 - 6.0) > 1e-6) {
+            sins.push(format!("way {way}: the centre dragged by (12, 6) moved the corners {before:?} -> {after:?}"));
+        }
+    }
+    assert!(sins.is_empty(), "{}", sins.join("\n"));
+}

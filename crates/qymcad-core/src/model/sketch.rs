@@ -2931,6 +2931,22 @@ impl Project {
                 (q.x, q.y) = (m.at.x, m.at.y);
             }
         }
+        // A RECTANGLE DRAGGED BY ITS CENTRE GOES WITH IT AS A WHOLE, as a circle goes with its centre: its corners are
+        // carried by the move of the centre before the solve. Left where they stood, the drag pulled the centre alone,
+        // the middle of the diagonal pulled it back by the two corners on it, and the rectangle hardly moved.
+        if let Some((d, tx, ty)) = drag {
+            let carried: Vec<Id> = s.rects.iter().filter(|r| r.centre == d).flat_map(|r| r.corners).collect();
+            if let Some((cx, cy)) = s.points.iter().find(|q| q.id == d).map(|q| (q.x, q.y)) {
+                if !carried.is_empty() {
+                    let held = s.held_points();
+                    let (dx, dy) = (tx - cx, ty - cy);
+                    for q in s.points.iter_mut().filter(|q| (carried.contains(&q.id) || q.id == d) && !held.contains(&q.id)) {
+                        q.x += dx;
+                        q.y += dy;
+                    }
+                }
+            }
+        }
         // Reference (driven) dimensions do not constrain the geometry and are excluded from the solver, while
         // the arc intrinsics (endpoints on the circle of radius R) are always active.
         let mut active: Vec<Constraint> = s.constraints.iter().filter(|c| !c.is_driven()).cloned().collect();

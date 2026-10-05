@@ -3088,6 +3088,16 @@ pub fn sketch_drag_start(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Contex
                             _ => {}
                         }
                     }
+                    // THE CENTRE OF A RECTANGLE IS DRAGGED, and the rectangle goes with it as a circle goes with its centre: it
+                    // stands on the middle of the diagonal, and was refused with the materialised midpoints above - the
+                    // rectangle could not be taken by its centre. A centre pinned stays refused.
+                    let pinned: std::collections::HashSet<Id> =
+                        sk.project.sketches[si].constraints.iter().filter_map(|c| if let qymcad_core::model::Constraint::Fixed { p } = c { Some(*p) } else { None }).collect();
+                    for r in &sk.project.sketches[si].rects {
+                        if !pinned.contains(&r.centre) {
+                            arc_pts.remove(&r.centre);
+                        }
+                    }
                     // DRIVEN POINTS (projections of the geometry of a body) are not dragged: their
                     // position is set by the part, and a projection dragged by hand would snap back
                     // at the very first rebuild, silently undoing the work.
@@ -3958,8 +3968,21 @@ pub fn snap_world(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, screen: Pos2)
     // A POINT BEING DRAGGED DOES NOT SNAP TO ITSELF. Its own place, and whatever stands on it (a coincident end, the
     // vertex of the contour drawn through it), is a vertex within reach until the hand is 9 px away: a point led
     // at 3 px a frame stuck, moved in jerks and was let go short - measured, 1 mm short of a 7 mm drag.
-    let dragged = sk.drag.pt().and_then(|(dsi, pi)| sk.project.sketches.get(dsi)?.points.get(pi).map(|q| Point2::new(q.x, q.y)));
-    let own = |p: Point2| dragged.is_some_and(|q| (p.x - q.x).abs() < 1e-9 && (p.y - q.y).abs() < 1e-9);
+    //
+    // NOR TO WHAT GOES WITH IT: the corners of a rectangle dragged by its centre, and every line ending at a point that
+    // moves. They stand where the drag was a frame ago, and the middle of the rectangle's own diagonal - its centre
+    // a frame back - caught the centre: a rectangle led 12 mm by its centre came 10.7.
+    let moving: Vec<Point2> = sk
+        .drag
+        .pt()
+        .and_then(|(dsi, pi)| {
+            let s = sk.project.sketches.get(dsi)?;
+            let q = s.points.get(pi)?;
+            let at = |id: Id| s.points.iter().find(|p| p.id == id).map(|p| Point2::new(p.x, p.y));
+            Some(std::iter::once(Point2::new(q.x, q.y)).chain(s.rects.iter().filter(|r| r.centre == q.id).flat_map(|r| r.corners.into_iter().filter_map(at))).collect())
+        })
+        .unwrap_or_default();
+    let own = |p: Point2| moving.iter().any(|q| (p.x - q.x).abs() < 1e-9 && (p.y - q.y).abs() < 1e-9);
     if let Some(asi) = qymcad_ui_state::edit_si(&*sk.project, &*sk.sketch_ses) {
         if let Some(s) = sk.project.sketches.get(asi) {
             for sp in &s.points {
@@ -4020,9 +4043,10 @@ pub fn snap_world(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, screen: Pos2)
     let mut cand: Option<(f32, Point2, u8)> = None;
     if let Some(si) = qymcad_ui_state::edit_si(&*sk.project, &*sk.sketch_ses) {
         let qymcad_ui_state::ActiveEdges { lines, circles: circs } = qymcad_ui_state::active_edges(&sk.draw(), si);
-        // the segments of the projected outlines of the reference body, used for INTERSECTIONS with the
-        // sketch lines and for points on an edge. That is how the intersection of a construction line with
-        // a face or the outline of a part becomes snappable.
+        let lines: Vec<(Point2, Point2)> = lines.into_iter().filter(|(a, b)| !own(*a) && !own(*b)).collect(); // what moves with the drag is no target
+                                                                                                              // the segments of the projected outlines of the reference body, used for INTERSECTIONS with the
+                                                                                                              // sketch lines and for points on an edge. That is how the intersection of a construction line with
+                                                                                                              // a face or the outline of a part becomes snappable.
         let ref_segs: Vec<(Point2, Point2)> = ref_edges.iter().flat_map(|poly| poly.windows(2).map(|s| (s[0], s[1]))).collect();
         // the priority: a midpoint (3) over an intersection (5) over a point on an edge (6)
         // 1) the midpoints of segments (SKETCH lines only - the midpoints of a tessellated outline are noise)

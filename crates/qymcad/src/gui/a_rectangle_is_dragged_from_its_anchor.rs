@@ -70,6 +70,23 @@ mod tests {
         assert!(sins.is_empty(), "{}", sins.join("\n"));
     }
 
+    /// A RECTANGLE DRAGGED BY ITS CENTRE GOES WITH IT AS A WHOLE, as a circle goes with its centre, in either way it
+    /// was drawn. Reported (issue #56): the centre could not be dragged, the rectangle stayed where it was.
+    #[test]
+    fn a_rectangle_dragged_by_its_centre_goes_as_a_whole() {
+        let mut sins = Vec::new();
+        for (mode, clicks) in [("opt-rect-2corners", [(10.0, 10.0), (50.0, 40.0)]), ("opt-rect-centre", [(30.0, 25.0), (50.0, 40.0)])] {
+            let (mut app, si) = a_rectangle(mode, clicks);
+            let before: Vec<(f64, f64)> = app.project.sketches[si].rects[0].corners.iter().map(|c| point_near(&app, si, *c)).collect();
+            Hand::new(&mut app).drag2d((30.0, 25.0), (42.0, 31.0));
+            let after: Vec<(f64, f64)> = app.project.sketches[si].rects[0].corners.iter().map(|c| point_near(&app, si, *c)).collect();
+            if before.iter().zip(&after).any(|(b, a)| (a.0 - b.0 - 12.0).hypot(a.1 - b.1 - 6.0) > 0.5) {
+                sins.push(format!("{mode}: the centre dragged by (12, 6) moved the corners {before:?} -> {after:?}"));
+            }
+        }
+        assert!(sins.is_empty(), "{}", sins.join("\n"));
+    }
+
     /// ROTATE TAKES THE WHOLE RECTANGLE: a click on one side, the centre, 30 deg - all four sides turn and the
     /// rectangle stays square. Reported (issue #56): only the side clicked was taken.
     #[test]
