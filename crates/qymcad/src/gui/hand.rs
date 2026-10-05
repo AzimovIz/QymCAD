@@ -125,6 +125,16 @@ impl<'a> Hand<'a> {
         self.frame(vec![button(false)]);
     }
 
+    /// DOUBLE-CLICK A POINT OF THE SCREEN: the hand rests over it, then presses and releases twice, each in a frame
+    /// of its own - four sixtieths of a second, well inside the time egui allows a double click.
+    pub fn double_click_screen(&mut self, at: egui::Pos2) -> &mut Self {
+        self.win.clock += 1.0;
+        self.press_screen(at);
+        let button = |pressed| egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
+        self.frame(vec![button(true)]);
+        self.frame(vec![button(false)])
+    }
+
     /// PRESS THE TICK BEFORE `word` - the checkbox standing on the line of the words holding `word` nearest to
     /// `near`, the last one to the left of them, as the tick of a heading or a row of the tree stands. Answers whether
     /// such a tick was on screen.

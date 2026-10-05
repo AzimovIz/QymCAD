@@ -3957,6 +3957,7 @@ mod a_tangent_is_made_by_hand;
 mod a_relation_is_made_by_hand;
 mod a_joint_can_hold_what_it_finds;
 mod a_mechanism_can_be_watched_moving;
+mod the_mate_window_stands_still_while_it_runs;
 mod a_connector_stands_on_its_own;
 mod the_gizmo_pulls_where_it_points;
 mod an_anchor_belongs_to_the_part_under_the_cursor;
