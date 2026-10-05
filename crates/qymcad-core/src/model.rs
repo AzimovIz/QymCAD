@@ -1838,7 +1838,7 @@ pub use regen::{ArrayAxis, BodyOp, ChamferShape, CombineSpan, ExtrudeSpan, HoleT
 mod tess;
 mod timeline;
 mod sketch;
-pub use sketch::{ChamferLegs, TextSpec};
+pub use sketch::{ChamferLegs, FilletBy, FilletSize, TextSpec};
 pub(crate) mod comp_pattern;
 pub use comp_pattern::{CompPattern, CompPatternKind};
 mod projection;
@@ -2035,6 +2035,71 @@ impl Project {
     }
 
     pub fn fillet_at_vertex(&mut self, si: usize, pid: Id, r: f64) -> bool {
+        self.fillet_at_vertex_by(si, pid, FilletSize::radius(r))
+    }
+
+    /// HOW FAR THE ARC OF A FILLET TURNS on the corner at `pid`: pi minus the angle between its two edges, each taken
+    /// from the corner to its far end (exact for lines, the chord of an arc for an arc). `None` without a corner of two
+    /// edges.
+    pub fn corner_sweep(&self, si: usize, pid: Id) -> Option<f64> {
+        let edges = self.vertex_edges(si, pid);
+        if edges.len() != 2 {
+            return None;
+        }
+        let (pcx, pcy) = self.point_xy(si, pid)?;
+        let mut dirs = Vec::new();
+        for e in edges {
+            let (a, b) = self.edge_end_ids(si, e)?;
+            let (ox, oy) = self.point_xy(si, if a == pid { b } else { a })?;
+            let l = (ox - pcx).hypot(oy - pcy);
+            if l < 1e-9 {
+                return None;
+            }
+            dirs.push(((ox - pcx) / l, (oy - pcy) / l));
+        }
+        let corner = (dirs[0].0 * dirs[1].0 + dirs[0].1 * dirs[1].1).clamp(-1.0, 1.0).acos();
+        Some(std::f64::consts::PI - corner)
+    }
+
+    /// FILLET THE CORNER AT `pid` WITH A SIZE GIVEN BY ITS RADIUS, ITS CHORD OR ITS ARC LENGTH. The radius the size
+    /// makes on this corner is laid, and the fillet keeps the size as it was given: a chord as the distance between
+    /// the two points of touching, an arc length as the length of the arc - so a dimension changed afterwards moves the
+    /// fillet. A chord or an arc the corner cannot take is refused, where a radius is pressed to the corner as before.
+    pub fn fillet_at_vertex_by(&mut self, si: usize, pid: Id, size: FilletSize) -> bool {
+        let r = match size.by {
+            FilletBy::Radius => size.value,
+            _ => {
+                let Some(r) = self.corner_sweep(si, pid).and_then(|sweep| size.radius_on(sweep)) else { return false };
+                if self.corner_limit(si, pid, false).is_some_and(|l| r >= l * (1.0 - 1e-9)) {
+                    return false;
+                }
+                r
+            }
+        };
+        if !self.fillet_round(si, pid, r) {
+            return false;
+        }
+        if size.by != FilletBy::Radius {
+            self.give_fillet_its_size(si, size);
+        }
+        true
+    }
+
+    /// THE LAST FILLET LAID KEEPS ITS SIZE AS IT WAS GIVEN: its radius dimension is put in place of a distance between
+    /// the two points of touching (a chord) or of an arc length dimension, and the sketch is solved.
+    fn give_fillet_its_size(&mut self, si: usize, size: FilletSize) {
+        let Some(s) = self.sketches.get(si) else { return };
+        let Some(last) = s.entities.iter().filter(|e| matches!(e.kind, EntityKind::Arc { .. })).max_by_key(|e| e.id).copied() else { return };
+        let EntityKind::Arc { center: centre, a, b, ccw } = last.kind else { return };
+        let Some(ci) = self.fillet_radius_constraint(si, last.id) else { return };
+        self.sketches[si].constraints[ci] = match size.by {
+            FilletBy::Chord => Constraint::Distance { a, b, d: size.value, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None },
+            _ => Constraint::ArcLength { c: centre, a, b, ccw, len: size.value, off: 0.0, expr: String::new(), driven: false },
+        };
+        self.solve_sketch(si);
+    }
+
+    fn fillet_round(&mut self, si: usize, pid: Id, r: f64) -> bool {
         let edges = self.vertex_edges(si, pid);
         if edges.len() != 2 {
             return false;

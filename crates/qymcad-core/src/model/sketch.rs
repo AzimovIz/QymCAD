@@ -57,6 +57,52 @@ impl ChamferLegs {
     }
 }
 
+/// HOW A SKETCH FILLET IS GIVEN: by its radius, by its chord - the straight distance between the two points where it
+/// meets the lines - or by the length of its arc.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum FilletBy {
+    #[default]
+    Radius,
+    Chord,
+    ArcLength,
+}
+
+/// THE SIZE OF A SKETCH FILLET: how it is given and the value in that way.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FilletSize {
+    pub by: FilletBy,
+    pub value: f64,
+}
+
+impl FilletSize {
+    /// A fillet of radius `r`.
+    pub fn radius(r: f64) -> Self {
+        FilletSize { by: FilletBy::Radius, value: r }
+    }
+
+    /// The radius of the fillet on a corner whose arc turns through `sweep` (radians, pi minus the angle between the
+    /// lines): the chord is 2 r sin(sweep / 2), the arc r sweep. On a square corner a chord of 5 is a radius of 3.54,
+    /// an arc of 5 a radius of 3.18. `None` for a value of no length or a corner with no turn.
+    pub fn radius_on(&self, sweep: f64) -> Option<f64> {
+        let r = match self.by {
+            FilletBy::Radius => self.value,
+            FilletBy::Chord => self.value / (2.0 * (sweep / 2.0).sin()),
+            FilletBy::ArcLength => self.value / sweep,
+        };
+        (self.value > 1e-9 && sweep > 1e-6 && r.is_finite() && r > 1e-9).then_some(r)
+    }
+
+    /// The value in this way of a fillet of radius `r` on a corner whose arc turns through `sweep`: the inverse of
+    /// `radius_on`, for the largest value a corner takes.
+    pub fn of_radius(by: FilletBy, r: f64, sweep: f64) -> f64 {
+        match by {
+            FilletBy::Radius => r,
+            FilletBy::Chord => 2.0 * r * (sweep / 2.0).sin(),
+            FilletBy::ArcLength => r * sweep,
+        }
+    }
+}
+
 impl Project {
     /// Add a contour and return its stable id.
     pub fn add_contour(&mut self, c: Contour) -> Id {
@@ -2492,6 +2538,11 @@ impl Project {
     /// Fillet the corners of the selected geometry: a corner is taken only when both of its edges are in
     /// `only` (`None` means the whole sketch). "Fillet all" with a shape selected fillets that shape alone.
     pub fn fillet_all_corners_of(&mut self, si: usize, r: f64, only: Option<&std::collections::HashSet<Id>>) -> usize {
+        self.fillet_all_corners_by(si, FilletSize::radius(r), only)
+    }
+    /// The same with a size given by a radius, a chord or an arc length: every corner gets the radius the size makes on
+    /// it, and keeps the size as it was given (see `fillet_at_vertex_by`).
+    pub fn fillet_all_corners_by(&mut self, si: usize, size: FilletSize, only: Option<&std::collections::HashSet<Id>>) -> usize {
         let corners: Vec<Id> = {
             let Some(s) = self.sketches.get(si) else { return 0 };
             let mut count: std::collections::HashMap<Id, usize> = std::collections::HashMap::new();
@@ -2514,7 +2565,7 @@ impl Project {
         let mut done = 0;
         for pid in corners {
             // Is the vertex still intact, with two edges still meeting there?
-            if self.sketches.get(si).is_some_and(|s| s.points.iter().any(|q| q.id == pid)) && self.vertex_edges(si, pid).len() == 2 && self.fillet_at_vertex(si, pid, r) {
+            if self.sketches.get(si).is_some_and(|s| s.points.iter().any(|q| q.id == pid)) && self.vertex_edges(si, pid).len() == 2 && self.fillet_at_vertex_by(si, pid, size) {
                 done += 1;
             }
         }
