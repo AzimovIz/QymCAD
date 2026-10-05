@@ -1194,9 +1194,21 @@ impl Project {
     fn movable_of(&self, si: usize, eids: &[Id]) -> Vec<Id> {
         let held = self.sketches.get(si).map(|s| s.held_points()).unwrap_or_default();
         let mut pts = self.entity_point_ids(si, eids);
+        // A RECTANGLE TAKEN BY ALL ITS SIDES MOVES AS ONE SHAPE, with what its corners became: rounded or cut, a corner
+        // is a virtual sharp no side ends at, and the arc or the cut between two sides is a piece of the same contour.
+        // Left behind, the sharps and the arcs held the sides by their tangencies and dimensions, and Rotate of a
+        // rectangle 45 x 35 rounded R3 all round was refused as held.
+        let taken: Vec<crate::model::SketchRect> = self.sketches.get(si).map(|s| s.rects.iter().filter(|r| r.sides.iter().all(|e| eids.contains(e))).cloned().collect()).unwrap_or_default();
+        for r in &taken {
+            pts.extend(r.corners);
+            let contour: Vec<Id> = self.connected_entities(si, r.sides[0]).into_iter().collect();
+            pts.extend(self.entity_point_ids(si, &contour));
+        }
         // A RECTANGLE MOVES AS ONE SHAPE: with all its corners its centre goes too. Left behind, the centre held the
         // middle of the diagonal back, and a rectangle moved by 5 came out moved by 4.
         pts.extend(self.whole_rects(si, &pts).iter().map(|r| r.centre));
+        pts.sort_unstable();
+        pts.dedup();
         pts.into_iter().filter(|id| !held.contains(id)).collect()
     }
     /// The rectangles of sketch `si` whose four corners are all among `pts`.
@@ -1240,12 +1252,13 @@ impl Project {
         let (sn, cs) = (deg.to_radians().sin(), deg.to_radians().cos());
         let pts = self.movable_of(si, eids);
         // THE ROTATE TOOL TURNS A RECTANGLE: the turn it holds itself by goes round with it. Kept, it pulled the
-        // rectangle back to where it stood.
-        let turned: Vec<Id> = self.whole_rects(si, &pts).iter().flat_map(|r| r.corners).collect();
+        // rectangle back to where it stood. It is the turn of every side whose two points go round - on the corners, or
+        // on the points of touching a rounded corner carried it to, where a turn kept at 0 deg pulled a rectangle 45 x 35
+        // rounded R3 back to the axes and flipped its arcs outward.
         if let Some(s) = self.sketches.get_mut(si) {
             for c in s.constraints.iter_mut() {
                 if let Constraint::Orientation { a, b, deg: held } = c {
-                    if turned.contains(a) && turned.contains(b) {
+                    if pts.contains(a) && pts.contains(b) {
                         *held += deg;
                     }
                 }
