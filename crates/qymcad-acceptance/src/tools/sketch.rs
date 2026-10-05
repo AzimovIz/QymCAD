@@ -1164,6 +1164,60 @@ fn corner_rounded(r: f64) -> Outcome {
     }
 }
 
+/// The square corner rounded by a fillet of radius `r`, as `corner_rounded` gives it, for a size other than a radius:
+/// a chord of 3 is a radius of 3 / sqrt 2 = 2.1213, an arc of 3 a radius of 6 / pi = 1.9099. The line halfway along
+/// what is left of it and the arc r - r / sqrt 2 out on the diagonal; the gap at half the radius along the line is not
+/// looked for: the arc of a radius of 2.1 passes 0.25 from it, within a click.
+const ROUNDED_BY_CHORD_3: Outcome = Outcome::Sketch {
+    points: 5,
+    lines: 2,
+    arcs: 1,
+    circles: 0,
+    ellipses: 0,
+    splines: 0,
+    texts: 0,
+    notes: 0,
+    constraints: None,
+    dof: None,
+    box_of: Some(([0.0, 0.0], [30.0, 30.0])),
+    size_of: None,
+    under: &[(16.0607, 0.0, Under::Line), (0.6213, 0.6213, Under::Arc)],
+};
+
+/// See `ROUNDED_BY_CHORD_3`: an arc of 3, a radius of 1.9099.
+const ROUNDED_BY_ARC_3: Outcome = Outcome::Sketch {
+    points: 5,
+    lines: 2,
+    arcs: 1,
+    circles: 0,
+    ellipses: 0,
+    splines: 0,
+    texts: 0,
+    notes: 0,
+    constraints: None,
+    dof: None,
+    box_of: Some(([0.0, 0.0], [30.0, 30.0])),
+    size_of: None,
+    under: &[(15.9549, 0.0, Under::Line), (0.5594, 0.5594, Under::Arc)],
+};
+
+/// The corner rounded with a radius of 3, the result of the tool as the bar opens.
+const ROUNDED_BY_RADIUS_3: Outcome = Outcome::Sketch {
+    points: 5,
+    lines: 2,
+    arcs: 1,
+    circles: 0,
+    ellipses: 0,
+    splines: 0,
+    texts: 0,
+    notes: 0,
+    constraints: None,
+    dof: None,
+    size_of: None,
+    box_of: Some(([0.0, 0.0], [30.0, 30.0])),
+    under: &[(1.5, 0.0, Under::Nothing), (20.0, 0.0, Under::Line), (0.8787, 0.8787, Under::Arc)],
+};
+
 /// CORNER: the corner of the two lines rounded with the radius the bar holds, a click on the corner itself.
 pub static CORNER: Tool = Tool {
     id: "sketch.corner",
@@ -1192,22 +1246,12 @@ pub static CORNER: Tool = Tool {
         negative: false,
         outcome: corner_rounded,
     }],
-    modes: &[],
-    result: Outcome::Sketch {
-        points: 5,
-        lines: 2,
-        arcs: 1,
-        circles: 0,
-        ellipses: 0,
-        splines: 0,
-        texts: 0,
-        notes: 0,
-        constraints: None,
-        dof: None,
-        size_of: None,
-        box_of: Some(([0.0, 0.0], [30.0, 30.0])),
-        under: &[(1.5, 0.0, Under::Nothing), (20.0, 0.0, Under::Line), (0.8787, 0.8787, Under::Arc)],
-    },
+    modes: &[&[
+        Mode { word: "opt-radius", clicks: None, outcome: Some(ROUNDED_BY_RADIUS_3) },
+        Mode { word: "opt-fillet-chord", clicks: None, outcome: Some(ROUNDED_BY_CHORD_3) },
+        Mode { word: "opt-fillet-arc-length", clicks: None, outcome: Some(ROUNDED_BY_ARC_3) },
+    ]],
+    result: ROUNDED_BY_RADIUS_3,
     node: "Sketch",
     undo: "tool-fillet",
     undo_steps: 1,
@@ -1219,7 +1263,6 @@ pub static CORNER: Tool = Tool {
     budget: (10, 2000),
     help: "sketch/16-corner",
     not_applicable: &[
-        (2, "the fillet has no mode: a click on a corner is the whole of it (the chamfer is a button of its own)"),
         (3, "the corner is taken by the click that rounds it, not by a pick before it"),
         (4, "a click away from a corner is answered by the tool itself, in words: see the drawing tools"),
         (7, "the corner is rounded by one click: there is nothing drawn between clicks to follow the pointer"),

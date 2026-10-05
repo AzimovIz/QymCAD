@@ -2087,7 +2087,7 @@ impl Project {
 
     /// THE LAST FILLET LAID KEEPS ITS SIZE AS IT WAS GIVEN: its radius dimension is put in place of a distance between
     /// the two points of touching (a chord) or of an arc length dimension, and the sketch is solved.
-    fn give_fillet_its_size(&mut self, si: usize, size: FilletSize) {
+    pub(super) fn give_fillet_its_size(&mut self, si: usize, size: FilletSize) {
         let Some(s) = self.sketches.get(si) else { return };
         let Some(last) = s.entities.iter().filter(|e| matches!(e.kind, EntityKind::Arc { .. })).max_by_key(|e| e.id).copied() else { return };
         let EntityKind::Arc { center: centre, a, b, ccw } = last.kind else { return };

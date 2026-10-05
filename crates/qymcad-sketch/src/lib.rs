@@ -534,9 +534,14 @@ pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Conte
         let limit = if pid == 0 {
             let sel: std::collections::HashSet<Id> = cc.sel_sk.items.iter().filter(|(k, _)| *k == 1).map(|(_, id)| *id).collect();
             let only = cc.corner.only.clone().or_else(|| (!sel.is_empty()).then_some(sel));
-            cc.project.all_corners_limit(si, only.as_ref())
+            // the most is known as a radius; a chord or an arc is checked corner by corner when it is applied
+            if cc.tool_prefs.fillet_by == qymcad_core::model::FilletBy::Radius {
+                cc.project.all_corners_limit(si, only.as_ref())
+            } else {
+                None
+            }
         } else {
-            cc.project.corner_limit(si, pid, chamfer)
+            qymcad_ui_state::corner_limit_in(&*cc.project, si, pid, chamfer, cc.tool_prefs.fillet_by)
         };
         let judge = |project: &qymcad_core::model::Project, text: &str| -> Option<String> {
             match qymcad_core::expr::eval(text.trim(), &project.param_map()) {
@@ -562,10 +567,10 @@ pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Conte
                 ui.horizontal(|ui| {
                     ui.label(if chamfer {
                         qymcad_i18n::tr(qymcad_ui_state::chamfer_d1_label(cc.tool_prefs.chamfer_mode))
-                    } else if pid == 0 {
+                    } else if pid == 0 && cc.tool_prefs.fillet_by == qymcad_core::model::FilletBy::Radius {
                         qymcad_i18n::tr("sk-r-all-corners")
                     } else {
-                        qymcad_i18n::tr("sk-radius")
+                        qymcad_i18n::tr(qymcad_ui_state::fillet_label(cc.tool_prefs.fillet_by))
                     });
                     let r0 = qymcad_ui_state::focus_edit(ui, &mut buf, 64.0, "", want_focus);
                     if let Some(why) = judge(&*cc.project, &buf) {
@@ -646,7 +651,7 @@ pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Conte
                         let sel: std::collections::HashSet<Id> = cc.sel_sk.items.iter().filter(|(k, _)| *k == 1).map(|(_, id)| *id).collect();
                         (!sel.is_empty()).then_some(sel)
                     });
-                    cc.project.fillet_all_corners_of(si, r, only.as_ref())
+                    cc.project.fillet_all_corners_by(si, qymcad_core::model::FilletSize { by: cc.tool_prefs.fillet_by, value: r }, only.as_ref())
                 } else if chamfer {
                     let second = parse_num(cc.project, &cc.corner.buf2.clone()).unwrap_or(cc.tool_prefs.chamfer_second);
                     if second_used {
@@ -655,7 +660,7 @@ pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Conte
                     let legs = qymcad_core::model::ChamferLegs { mode: cc.tool_prefs.chamfer_mode, first: r, second };
                     cc.project.chamfer_at_vertex(si, pid, legs, cc.corner.near) as usize
                 } else {
-                    cc.project.fillet_at_vertex(si, pid, r) as usize
+                    cc.project.fillet_at_vertex_by(si, pid, qymcad_core::model::FilletSize { by: cc.tool_prefs.fillet_by, value: r }) as usize
                 };
                 if ok_n > 0 {
                     cc.sel_sk.clear(); // the selection and whatever was waiting for it

@@ -94,6 +94,15 @@ fn a_fillet_by_its_radius_its_chord_or_its_arc_length() {
         }
     }
 
+    // two picked lines rounded by an arc of 5, as the editing tool does it
+    let (mut p, si, _) = corner();
+    let lines: Vec<u64> = p.sketches[si].entities.iter().map(|e| e.id).collect();
+    if !p.fillet_lines_by(si, lines[0], lines[1], FilletSize { by: FilletBy::ArcLength, value: 5.0 }) {
+        sins.push("two picked lines by an arc of 5 refused".to_string());
+    } else if !measure(&p, si).is_some_and(|m| near(m.arc, 5.0) && near(m.radius, 10.0 / pi)) {
+        sins.push(format!("two picked lines by an arc of 5: radius / chord / arc {:?}", measure(&p, si).map(|m| (m.radius, m.chord, m.arc))));
+    }
+
     // every corner of a rectangle by a chord of 4: four arcs, each with its ends 4 apart
     let mut p = Project::default();
     p.new_document();

@@ -1966,6 +1966,42 @@ impl Project {
         self.regen_sketch(si);
         true
     }
+    /// The same with a size given by a radius, a chord or an arc length (see `fillet_at_vertex_by`).
+    pub fn fillet_lines_by(&mut self, si: usize, e1: Id, e2: Id, size: FilletSize) -> bool {
+        let r = match size.by {
+            FilletBy::Radius => size.value,
+            _ => {
+                let (Some((a1, b1)), Some((a2, b2))) = (self.line_ends(si, e1), self.line_ends(si, e2)) else { return false };
+                let pc = if a1 == a2 || a1 == b2 {
+                    a1
+                } else if b1 == a2 || b1 == b2 {
+                    b1
+                } else {
+                    return false;
+                };
+                let (o1, o2) = (if a1 == pc { b1 } else { a1 }, if a2 == pc { b2 } else { a2 });
+                let (Some((px, py)), Some((ax, ay)), Some((bx, by))) = (self.point_xy(si, pc), self.point_xy(si, o1), self.point_xy(si, o2)) else { return false };
+                let (la, lb) = ((ax - px).hypot(ay - py), (bx - px).hypot(by - py));
+                if la < 1e-9 || lb < 1e-9 {
+                    return false;
+                }
+                let corner = (((ax - px) * (bx - px) + (ay - py) * (by - py)) / (la * lb)).clamp(-1.0, 1.0).acos();
+                let Some(r) = size.radius_on(std::f64::consts::PI - corner) else { return false };
+                // what the lines take: the points of touching r / tan(corner / 2) from the corner, within the shorter line
+                if r / (corner / 2.0).tan() >= la.min(lb) * 0.95 {
+                    return false;
+                }
+                r
+            }
+        };
+        if !self.fillet_lines(si, e1, e2, r) {
+            return false;
+        }
+        if size.by != FilletBy::Radius {
+            self.give_fillet_its_size(si, size);
+        }
+        true
+    }
     /// Fillet the corner between two segments sharing a vertex, with radius `r`. The lines are shortened to the
     /// tangency points and an arc is inserted between them. Returns whether it succeeded.
     pub fn fillet_lines(&mut self, si: usize, e1: Id, e2: Id, r: f64) -> bool {

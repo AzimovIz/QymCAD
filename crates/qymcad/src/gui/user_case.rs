@@ -1528,6 +1528,30 @@ mod tests {
                 }
                 qymcad_ui_state::set_click_op(&mut qymcad_ui_state::tools_of!(app), &mut app.viewing.mode_3d, 0);
                 check_all(&mut app, "sketch: a chamfer by a leg and an angle", &mut problems);
+
+                // A FILLET BY ITS CHORD on a corner of its own beside it: the way pressed on the bar, the corner clicked,
+                // 5 typed, Enter. The ends of the arc stand 5 apart.
+                {
+                    let mut hand = Hand::new(&mut app);
+                    hand.sk_tool(1).look2d((175.0, -25.0)).click2d(190.0, -40.0).click2d(160.0, -40.0).double_click2d(160.0, -10.0);
+                    hand.sk_tool(0).look2d((175.0, -25.0));
+                    let pressed = hand.press_hint(&qymcad_i18n::tr("tb-fillet-sketch-hint")) && hand.press_word(&qymcad_i18n::tr("opt-fillet-chord"), egui::pos2(0.0, 0.0));
+                    hand.click2d(160.0, -40.0).type_text("5").key(egui::Key::Enter);
+                    let sk = &app.project.sketches[si];
+                    let at = |id: u64| sk.points.iter().find(|q| q.id == id).map(|q| (q.x, q.y));
+                    let chord_5 = sk.entities.iter().any(|e| match e.kind {
+                        qymcad_core::model::EntityKind::Arc { center, a, b, .. } => {
+                            let (Some(c), Some(a), Some(b)) = (at(center), at(a), at(b)) else { return false };
+                            (c.0 - 160.0).hypot(c.1 + 40.0) < 10.0 && ((b.0 - a.0).hypot(b.1 - a.1) - 5.0).abs() < 1e-5
+                        }
+                        _ => false,
+                    });
+                    if !pressed || !chord_5 {
+                        problems.push(format!("sketch: a fillet by a chord of 5 did not leave an arc with its ends 5 apart (way pressed: {pressed}); status: {}", app.status));
+                    }
+                }
+                qymcad_ui_state::set_click_op(&mut qymcad_ui_state::tools_of!(app), &mut app.viewing.mode_3d, 0);
+                check_all(&mut app, "sketch: a fillet by its chord", &mut problems);
             }
 
             // DIMENSIONS: linear, angular, radial. A dimension is not a caption but A CONSTRAINT: it must take

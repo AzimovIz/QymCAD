@@ -805,6 +805,8 @@ pub struct SketchToolPrefs {
     /// value - the second leg, or the angle from the first line in degrees
     pub chamfer_mode: qymcad_core::feature::ChamferMode,
     pub chamfer_second: f64,
+    /// HOW A FILLET IS GIVEN: by its radius, its chord or the length of its arc; `fillet` holds the value in that way
+    pub fillet_by: qymcad_core::model::FilletBy,
     /// a text in a sketch: its contents, its height, and whether it is an annotation rather than geometry
     pub text: String,
     pub text_h: f64,
@@ -12993,7 +12995,7 @@ fn try_modify_in(ed: Editing, sel_sk: &mut SketchSelection, sk_pat: SketchPatter
             true
         }
         EditTool::Fillet => {
-            eids.len() >= 2 && ed.project.fillet_lines(si, eids[0], eids[1], tool_prefs.fillet) && {
+            eids.len() >= 2 && ed.project.fillet_lines_by(si, eids[0], eids[1], fillet_size(tool_prefs)) && {
                 sel_sk.clear(); // the selection and whatever was waiting for it
                 true
             }
@@ -13402,6 +13404,32 @@ pub fn set_chamfer_mode(prefs: &mut SketchToolPrefs, mode: qymcad_core::feature:
         qymcad_core::feature::ChamferMode::DistAngle => 45.0,
         _ => prefs.fillet,
     };
+}
+
+/// The caption of a fillet's field, and the word of its mode on the bar: the radius, the chord or the arc length.
+pub fn fillet_label(by: qymcad_core::model::FilletBy) -> &'static str {
+    use qymcad_core::model::FilletBy;
+    match by {
+        FilletBy::Radius => "opt-radius",
+        FilletBy::Chord => "opt-fillet-chord",
+        FilletBy::ArcLength => "opt-fillet-arc-length",
+    }
+}
+
+/// THE MOST A CORNER TAKES, in the way its size is given: the leg of a chamfer, or the radius, the chord or the arc
+/// length of a fillet - the largest radius worked into the chord or the arc of the same turn. `None` where the corner
+/// is not one of two lines.
+pub fn corner_limit_in(project: &Project, si: usize, pid: Id, chamfer: bool, by: qymcad_core::model::FilletBy) -> Option<f64> {
+    let l = project.corner_limit(si, pid, chamfer)?;
+    if chamfer || by == qymcad_core::model::FilletBy::Radius {
+        return Some(l);
+    }
+    project.corner_sweep(si, pid).map(|sweep| qymcad_core::model::FilletSize::of_radius(by, l, sweep))
+}
+
+/// The size of the fillet the bar holds: the way it is given and the value in that way.
+pub fn fillet_size(prefs: &SketchToolPrefs) -> qymcad_core::model::FilletSize {
+    qymcad_core::model::FilletSize { by: prefs.fillet_by, value: prefs.fillet }
 }
 
 /// The label of a chamfer's first field: the size of an equal chamfer, the first of two legs, or the length along the
