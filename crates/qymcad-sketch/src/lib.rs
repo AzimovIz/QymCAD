@@ -862,11 +862,8 @@ pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Conte
         qymcad_ui_state::begin_edit(&mut *cc.edits, &*cc.project, qymcad_i18n::tr(if chamfer { "tool-chamfer" } else { "tool-fillet" }));
         if r > 1e-6 {
             cc.tool_prefs.fillet = r; // sticky: the next corner offers the same value
-                                      // WHAT STANDS ON THE CORNERS BEFORE THE KNIFE: the point goes with the corner, and a dimension
-                                      // measured to it cannot be stated without its subject - so it goes too, and it is said aloud.
-            let standing_before: Vec<Id> = standing.iter().map(|&(pid, _)| pid).collect();
-            // THE SIZE AS IT WAS GIVEN, not only as a radius: a fillet taken by the length of its arc or by the chord
-            // between its ends is a different drawing, and a chamfer of two legs is two numbers.
+                                      // THE SIZE AS IT WAS GIVEN, not only as a radius: a fillet taken by the length of its arc or by the chord
+                                      // between its ends is a different drawing, and a chamfer of two legs is two numbers.
             let size = qymcad_core::model::FilletSize { by: cc.tool_prefs.fillet_by, value: r };
             if chamfer {
                 let second = parse_num(cc.project, &cc.corner.buf2.clone()).unwrap_or(cc.tool_prefs.chamfer_second);
@@ -911,10 +908,7 @@ pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Conte
                 // that remain are what a further click would work on.
                 cc.sel_sk.items.retain(|&(_, id)| qymcad_ui_state::pick_still_stands(&*cc.project, si, id));
                 qymcad_ui_state::invalidate(cc.regen);
-                let lost: usize = standing_before.iter().map(|&pid| cc.project.constraints_on_point(si, pid)).sum();
-                *cc.status = if lost > 0 {
-                    qymcad_i18n::tr1("sk-corner-dims-lost", "n", &lost.to_string())
-                } else if pid != 0 && cut > 1 {
+                *cc.status = if pid != 0 && cut > 1 {
                     // MORE THAN ONE CORNER CUT AT ONCE IS SAID AS MANY: "done" would read as the one corner the
                     // pointer was on, and the set is not visible in a word that size.
                     qymcad_i18n::tr1("sk-filleted-n", "n", &cut.to_string())

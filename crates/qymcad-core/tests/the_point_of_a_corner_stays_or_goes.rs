@@ -2,9 +2,11 @@
 //!
 //! It depends on what still states something about the point, not on the tool alone:
 //!
-//! - a FILLET states nothing about the corner it rounds, so the point goes with the corner, together with every
-//!   dimension measured to it. A point of the sketch that draws nothing is not a leftover to be cleaned by hand:
-//!   the picking offers it and the solver counts it, so it answers "here is a corner" where there is none.
+//! - a FILLET states nothing about the corner it rounds, so where nothing else does either, the point goes with the
+//!   corner. A point of the sketch that draws nothing is not a leftover to be cleaned by hand: the picking offers it
+//!   and the solver counts it, so it answers "here is a corner" where there is none.
+//! - a DIMENSION OR A CONSTRAINT MEASURED TO THE CORNER keeps the point, as the virtual sharp on the extensions of both
+//!   shortened lines: the width measured corner to corner stays the width at any radius.
 //! - a CHAMFER measures its legs from the sharp corner, so the point stays as the VIRTUAL SHARP on the extensions of
 //!   both shortened lines while those legs are stated. Taken away, the legs would have nothing to be measured from.
 //!
@@ -68,19 +70,25 @@ fn a_chamfered_corner_keeps_the_sharp_its_legs_are_measured_from() {
 }
 
 #[test]
-fn a_dimension_on_the_rounded_corner_goes_with_the_point() {
+fn a_dimension_on_the_rounded_corner_keeps_the_point_as_the_virtual_sharp() {
     let (mut p, si, corner, far, _) = an_angle();
     p.sketches[si].constraints.push(Constraint::Distance { a: corner, b: far, d: 20.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
     p.solve_sketch(si);
-    assert_eq!(p.constraints_on_point(si, corner), 1, "setup: the dimension is measured to the corner");
     assert!(p.fillet_at_vertex(si, corner, 5.0), "the corner was not rounded");
-    assert!(!p.sketches[si].points.iter().any(|q| q.id == corner), "the point of the rounded corner stayed although no line comes to it");
-    assert_eq!(p.constraints_on_point(si, corner), 0, "a dimension is left standing on a point that is not there");
-    assert!(
-        !p.sketches[si].constraints.iter().any(|c| matches!(c, Constraint::Distance { a, .. } if *a == corner)),
-        "the dimension measured to the corner was left behind, and the solver would chase an id that is gone"
-    );
-    assert!(loose_points(&p, si).is_empty(), "a point drawing nothing is left behind: {:?}", loose_points(&p, si));
+    assert!(p.sketches[si].points.iter().any(|q| q.id == corner), "the point the dimension is measured to went with the corner");
+    assert!(p.sketches[si].constraints.iter().any(|c| matches!(c, Constraint::Distance { a, b, .. } if *a == corner && *b == far)), "the dimension measured to the corner was taken away with it");
+    assert_eq!(p.sketches[si].constraints.iter().filter(|c| matches!(c, Constraint::PointOnLine { p, .. } if *p == corner)).count(), 2, "the virtual sharp is not held on both lines");
+    // the dimension still says 20 from the far end to the sharp, at the radius it was rounded with and at another
+    let at = |p: &Project, id: u64| p.sketches[si].points.iter().find(|q| q.id == id).map(|q| (q.x, q.y)).expect("the point");
+    let span = |p: &Project| (at(p, corner).0 - at(p, far).0).hypot(at(p, corner).1 - at(p, far).1);
+    assert!((span(&p) - 20.0).abs() < 1e-6, "the sharp stands {:.4} from the far end, not 20", span(&p));
+    for c in &mut p.sketches[si].constraints {
+        if let Constraint::Diameter { d, .. } = c {
+            *d = 8.0;
+        }
+    }
+    let r = p.solve_sketch(si);
+    assert!(r < 1e-6 && (span(&p) - 20.0).abs() < 1e-6, "after the radius went to 8 the sharp stands {:.4} from the far end, residual {r:.2e}", span(&p));
 }
 
 #[test]

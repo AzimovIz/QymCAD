@@ -2289,7 +2289,6 @@ sk-offset-field-bad = Смещение: расстояние не принято
 sk-profiles-n = Профилей: { $n } — указывайте ещё; Enter — задать размер; Esc — отмена
 sk-r-all-corners = R всех углов
 sk-filleted-n = Скруглено углов: { $n }
-sk-corner-dims-lost = Готово. С размерами на старом углу их было: { $n } — точка ушла, и они ушли вместе с ней
 sk-fillet-too-big = Не удалось: уменьши значение (не влезает в рёбра угла)
 sk-width-short = Ш
 sk-height-short = В

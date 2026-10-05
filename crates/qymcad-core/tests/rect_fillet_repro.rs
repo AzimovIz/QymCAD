@@ -139,12 +139,11 @@ fn one_closed(p: &Project, si: usize) -> bool {
     p.sketches[si].contour_ids.iter().any(|cid| p.contour_profile_xy(*cid).is_some())
 }
 
-// THE POINT OF A CORNER GOES WITH THE CORNER, and a dimension measured to it cannot be stated without its subject:
-// the width and the height of this rectangle were measured corner to corner, so rounding all four corners takes
-// both of them. What must survive is the drawing itself: the contour closed, nothing left dangling, the solver
-// converging, and the radius of every corner still a thing one can change.
+// Editing a filleted rectangle that carries edge dimensions used to break it. With a virtual corner the edits
+// stay associative: changing the width from 40 to 50 makes the geometry follow, and changing the fillet radius
+// leaves the extents alone — the dimension measures to the virtual corner — with the contour intact.
 #[test]
-fn rounding_the_corners_of_a_dimensioned_rectangle_takes_the_corners_dimensions_with_them() {
+fn filleted_rect_stays_associative_on_edits() {
     let mut p = Project::default();
     let _part = p.new_document();
     let sid = p.add_sketch("rect", vec![], None);
@@ -157,21 +156,24 @@ fn rounding_the_corners_of_a_dimensioned_rectangle_takes_the_corners_dimensions_
     p.sketches[si].constraints.push(Constraint::Distance { a: c00, b: c40, d: 40.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
     p.sketches[si].constraints.push(Constraint::Distance { a: c40, b: c43, d: 30.0, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None });
     p.solve_sketch(si);
-    let dims = p.sketches[si].constraints.iter().filter(|c| matches!(c, Constraint::Distance { .. })).count();
+    p.fillet_all_corners(si, 5.0);
+    p.solve_sketch(si);
 
-    assert_eq!(p.fillet_all_corners(si, 5.0), 4, "four corners rounded");
-    let left = p.sketches[si].constraints.iter().filter(|c| matches!(c, Constraint::Distance { .. })).count();
-    eprintln!("the two edge dimensions before: {dims}, after rounding every corner: {left}");
-    assert!(left < dims, "the dimensions measured to the corners are still standing on points that are gone: {left} of {dims} left");
-    assert!(dangling_constraints(&p, si).is_empty(), "a constraint must not be left naming a point that no longer exists");
+    // the width goes from 40 to 50
+    for c in &mut p.sketches[si].constraints {
+        if let Constraint::Distance { a, b, d, .. } = c {
+            if (*a == c00 && *b == c40) || (*a == c40 && *b == c00) {
+                *d = 50.0;
+            }
+        }
+    }
     let r1 = p.solve_sketch(si);
-    assert!(r1 < 1.0 && p.sketch_conflicts(si).is_empty(), "the sketch still solves and nothing conflicts after the corners and their dimensions are gone: residual {r1}");
-    assert!(one_closed(&p, si), "the contour of the rounded rectangle is intact and can still be extruded");
-
-    // the radius of every corner is still a dimension of its own, and changing it keeps the drawing whole. The
-    // extents are free to move now — nothing measures the width or the height any more, and that is the price of
-    // taking the corners' dimensions with them; what must not happen is a conflict, a break or a contour lost.
     let (mx, my) = gab(&p, si);
+    eprintln!("after the width change to 50: residual={r1} extents={mx:.2}×{my:.2}, expecting 50×30, conflicts={:?}", p.sketch_conflicts(si));
+    assert!(r1 < 1.0 && (mx - 50.0).abs() < 0.1 && (my - 30.0).abs() < 0.1, "the dimension drives the geometry after filleting: {mx:.2}×{my:.2}");
+    assert!(p.sketch_conflicts(si).is_empty() && one_closed(&p, si), "no conflicts and the contour is intact after the dimension is edited");
+
+    // the radius of every fillet goes from 5 to 8, and the extents must not move, thanks to the virtual corner
     for c in &mut p.sketches[si].constraints {
         if let Constraint::Diameter { d, .. } = c {
             *d = 8.0;
@@ -179,10 +181,9 @@ fn rounding_the_corners_of_a_dimensioned_rectangle_takes_the_corners_dimensions_
     }
     let r2 = p.solve_sketch(si);
     let (mx2, my2) = gab(&p, si);
-    eprintln!("after the radius change to 8: residual={r2} extents={mx2:.2}×{my2:.2}, against {mx:.2}×{my:.2}");
-    assert!(r2 < 1.0 && p.sketch_conflicts(si).is_empty(), "the sketch still solves and nothing conflicts after the radius of every corner is changed: residual {r2}");
+    eprintln!("after the radius change to 8: residual={r2} extents={mx2:.2}×{my2:.2}, expecting the same 50×30");
+    assert!(r2 < 1.0 && (mx2 - 50.0).abs() < 0.1 && (my2 - 30.0).abs() < 0.1, "changing the radius does not move the extents: {mx2:.2}×{my2:.2}");
     assert!(one_closed(&p, si), "the contour is intact after the radius change");
-    assert!(mx2 > 0.0 && my2 > 0.0, "the drawing is still there after the radius change");
 }
 
 /// ROUNDING EVERY CORNER LEAVES NO CORNER BEHIND: a rectangle of 4 corners rounded is 4 lines and 4 arcs on 12 points -

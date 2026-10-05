@@ -2289,7 +2289,6 @@ sk-offset-field-bad = Offset: the distance cannot be taken - see the mark beside
 sk-profiles-n = Profiles: { $n } — click more; Enter sets the size; Esc cancels
 sk-r-all-corners = R of every corner
 sk-filleted-n = Corners filleted: { $n }
-sk-corner-dims-lost = Done. The old corner carried { $n } constraints — the point went, and they went with it
 sk-fillet-too-big = It did not work: make the value smaller (it does not fit the corner edges)
 sk-width-short = W
 sk-height-short = H
