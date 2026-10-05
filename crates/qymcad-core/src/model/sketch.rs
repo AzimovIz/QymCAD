@@ -1035,6 +1035,29 @@ impl Project {
         }
         self.regen_sketch(si);
     }
+    /// THE WIDTH AND THE HEIGHT DIMENSIONS OF THE RECTANGLE WITH SIDE `side`, laid when it has none: a dimension of a
+    /// side, or of the side across from it, is its width or its height. `None` when the side is no rectangle's.
+    pub fn rect_dims(&mut self, si: usize, side: Id) -> Option<crate::model::RectDims> {
+        let s = self.sketches.get(si)?;
+        let r = s.rects.iter().find(|r| r.sides.contains(&side))?.clone();
+        let [c0, c1, c2, c3] = r.corners;
+        let find =
+            |pairs: [(Id, Id); 2]| s.constraints.iter().position(|c| matches!(*c, Constraint::Distance { a, b, axis: 0, .. } if pairs.iter().any(|&(x, y)| (a == x && b == y) || (a == y && b == x))));
+        let (width, height) = (find([(c0, c1), (c3, c2)]), find([(c1, c2), (c0, c3)]));
+        match (width, height) {
+            (Some(width), Some(height)) => Some(crate::model::RectDims { width, height }),
+            _ => {
+                // the one there is goes, and both are laid afresh beside each other
+                let sk = self.sketches.get_mut(si)?;
+                if let Some(i) = width.or(height) {
+                    sk.constraints.remove(i);
+                }
+                self.dimension_rect(si, side);
+                let n = self.sketches[si].constraints.len();
+                Some(crate::model::RectDims { width: n - 2, height: n - 1 })
+            }
+        }
+    }
     /// THE WIDTH AND THE HEIGHT OF THE RECTANGLE WITH SIDE `side` LAID AS DIMENSIONS, at the lengths its first two sides
     /// stand at, each led out a fifth of the shorter side beyond its side (a positive offset is to the right of a side
     /// run from its first corner, and the corners go round anticlockwise - the dimensions stand outside). Returns

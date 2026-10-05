@@ -116,6 +116,31 @@ mod tests {
         assert!(sins.is_empty(), "{}", sins.join("\n"));
     }
 
+    /// A DOUBLE CLICK ON A SIDE REOPENS THE RECTANGLE WITH ITS WIDTH AND HEIGHT, as a double click on a circle reopens its
+    /// diameter: the dimensions are laid, the values typed are theirs, and the rectangle grows from the corner it was
+    /// drawn from.
+    #[test]
+    fn a_double_click_on_a_side_reopens_the_width_and_height() {
+        let (mut app, si) = a_rectangle("opt-rect-2corners", [(10.0, 10.0), (50.0, 40.0)]);
+        Hand::new(&mut app).double_click2d(30.0, 10.0).type_text("60").key(egui::Key::Tab).type_text("35").key(egui::Key::Enter);
+        let s = &app.project.sketches[si];
+        let mut dims: Vec<f64> = s.constraints.iter().filter_map(|c| if let qymcad_core::model::Constraint::Distance { d, .. } = c { Some(*d) } else { None }).collect();
+        dims.sort_by(f64::total_cmp);
+        let at = |id: u64| s.points.iter().find(|q| q.id == id).map(|q| (q.x, q.y)).expect("a corner");
+        let [a, _, c, _] = s.rects[0].corners.map(at);
+        assert!(
+            dims.len() == 2
+                && (dims[0] - 35.0).abs() < 1e-6
+                && (dims[1] - 60.0).abs() < 1e-6
+                && (a.0 - 10.0).abs() < 1e-6
+                && (a.1 - 10.0).abs() < 1e-6
+                && (c.0 - 70.0).abs() < 1e-6
+                && (c.1 - 45.0).abs() < 1e-6,
+            "a double click on a side, 60 and 35 typed: the dimensions are {dims:?}, the corners {a:?} and {c:?}; status: {}",
+            app.status
+        );
+    }
+
     /// ROTATE TAKES THE WHOLE RECTANGLE: a click on one side, the centre, 30 deg - all four sides turn and the
     /// rectangle stays square. Reported (issue #56): only the side clicked was taken.
     #[test]

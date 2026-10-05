@@ -760,6 +760,14 @@ impl Placing {
         }
     }
 
+    /// A rectangle reopened for its width and height: the indices of those dimensions.
+    pub fn rect_dims(&self) -> Option<qymcad_core::model::RectDims> {
+        match &self.shape {
+            PlacingShape::RectDims(d) => Some(*d),
+            _ => None,
+        }
+    }
+
     /// A rectangle drawn from its centre: the centre plus the corner under the pointer.
     pub fn rect_center(&self) -> Option<(Point2, Point2, Vec<Id>)> {
         match &self.shape {
@@ -2799,6 +2807,8 @@ pub enum PlacingShape {
     Poly(Id),
     /// an ellipse: the entity and its centre
     Ellipse(Id, Point2),
+    /// a rectangle reopened by a double click on a side: its width and height dimensions, edited in place
+    RectDims(qymcad_core::model::RectDims),
 }
 
 /// THE CUSTOM SCHEME SCREEN: what is being edited and what to say about saving.

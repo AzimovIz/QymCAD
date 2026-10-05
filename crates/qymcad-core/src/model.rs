@@ -832,6 +832,14 @@ pub struct SketchRect {
     pub anchor: RectAnchor,
 }
 
+/// THE WIDTH AND THE HEIGHT DIMENSIONS OF A RECTANGLE, as indices of its sketch's constraints: the first along its
+/// first side, the second along the side after it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RectDims {
+    pub width: usize,
+    pub height: usize,
+}
+
 /// What stays put when the width or the height of a rectangle changes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RectAnchor {

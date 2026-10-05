@@ -984,7 +984,111 @@ pub fn place_input_popup(
     let pl = &mut qymcad_ui_state::PlaceCtx { place, project: ed.project, view: &*ed.view, regen: ed.regen };
     ellipse_input_popup(pl, ctx, rect, si);
     rect_input_popup(pl, ctx, rect, si);
+    rect_dims_popup(pl, ctx, rect, si);
     poly_input_popup(pl, ctx, rect, si);
+}
+
+/// A RECTANGLE REOPENED BY A DOUBLE CLICK: its width and its height, typed into the dimensions it holds them by, as the
+/// diameter of a circle is. A value typed is the dimension's at once and the rectangle follows - from the corner it was
+/// drawn from, or about its centre; Enter, the tick or Esc closes the fields.
+pub fn rect_dims_popup(pl: &mut qymcad_ui_state::PlaceCtx, ctx: &egui::Context, rect: Rect, si: usize) {
+    let Some(dims) = pl.place.rect_dims() else { return };
+    let dim = |p: &qymcad_core::model::Project, ci: usize| match p.sketches.get(si).and_then(|s| s.constraints.get(ci)) {
+        Some(c @ qymcad_core::model::Constraint::Distance { .. }) => Some(c.clone()),
+        _ => None,
+    };
+    let (Some(qymcad_core::model::Constraint::Distance { d: w0, a: at, .. }), Some(qymcad_core::model::Constraint::Distance { d: h0, .. })) =
+        (dim(pl.project, dims.width), dim(pl.project, dims.height))
+    else {
+        pl.place.clear(); // the dimensions went from under the fields
+        return;
+    };
+    let want_focus = std::mem::take(&mut pl.place.focus);
+    if want_focus {
+        pl.place.buf = [qymcad_core::expr::fmt_num(w0), qymcad_core::expr::fmt_num(h0)];
+    }
+    let Some(corner) = qymcad_ui_state::sketch_pt(pl.project, si, at) else { return };
+    let enter = ctx.input(|i| i.key_pressed(egui::Key::Enter));
+    let (mut chg, mut close) = (false, false);
+    let mut buf = std::mem::take(&mut pl.place.buf);
+    egui::Area::new(egui::Id::new(("rectdims", si)))
+        .fixed_pos(qymcad_ui_state::clamp_popup((qymcad_ui_state::Sheet { view: *pl.view, rect }).at(corner), rect) + egui::vec2(10.0, -10.0))
+        .order(egui::Order::Foreground)
+        .show(ctx, |ui| {
+            egui::Frame::popup(ui.style()).show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(qymcad_i18n::tr("sk-width-short"));
+                    let r0 = qymcad_ui_state::focus_edit(ui, &mut buf[0], 60.0, "", want_focus);
+                    ui.label(qymcad_i18n::tr("sk-height-short"));
+                    let r1 = qymcad_ui_state::focus_edit(ui, &mut buf[1], 60.0, "", false);
+                    chg = r0.changed() || r1.changed();
+                    if ((r0.lost_focus() || r1.lost_focus()) && enter) || ui.button(ph::CHECK).clicked() {
+                        close = true;
+                    }
+                });
+            });
+        });
+    if chg {
+        let mut set = |ci: usize, text: &str| {
+            if let Some(v) = parse_num(pl.project, text).filter(|v| *v > 0.01) {
+                if let Some(qymcad_core::model::Constraint::Distance { d, .. }) = pl.project.sketches[si].constraints.get_mut(ci) {
+                    *d = v;
+                }
+            }
+        };
+        set(dims.width, &buf[0]);
+        set(dims.height, &buf[1]);
+        pl.project.solve_sketch(si);
+        qymcad_ui_state::invalidate(pl.regen);
+    }
+    pl.place.buf = buf;
+    if close || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+        pl.place.clear();
+    }
+}
+
+/// A DOUBLE CLICK ON A SHAPE OPENS ITS SIZE: a side of a rectangle its width and height, a circle its diameter (laid
+/// as a dimension when it has none), an arc its radius, the circle a polygon hangs on - or the polygon itself - its
+/// radius and turn. Answers whether a shape was there.
+pub fn open_shape_size(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos2, si: usize) -> bool {
+    use qymcad_ui_state::{InlineEdit, PlacingShape};
+    if let Some((1, eid)) = sketch_hit(&sk.pick(), rect, pos, si) {
+        if let Some(dims) = sk.project.rect_dims(si, eid) {
+            sk.project.solve_sketch(si);
+            sk.place.set(PlacingShape::RectDims(dims));
+            sk.place.focus = true;
+            return true;
+        }
+    }
+    if let Some(eid) = qymcad_pick::nearest_circle_entity(&sk.pick(), rect, pos, si) {
+        // a circle gets a diameter dimension; an arc has its radius edited
+        let center = sk.project.sketches[si].entities.iter().find(|e| e.id == eid).and_then(|e| match e.kind {
+            qymcad_core::model::EntityKind::Circle { center, .. } => Some(center),
+            _ => None,
+        });
+        // the circumscribed circle of a polygon (the vertices hang on it) opens the polygon popup (the radius plus the
+        // angle), while an ordinary circle gets a diameter
+        let is_poly_rim = center.is_some_and(|c| sk.project.sketches[si].constraints.iter().any(|x| matches!(x, qymcad_core::model::Constraint::PointOnCircle { c: cc, .. } if *cc == c)));
+        if let (true, Some(c)) = (is_poly_rim, center) {
+            sk.place.set(PlacingShape::Poly(c));
+            sk.place.focus = true;
+        } else if let Some(c) = center {
+            if let Some(ci) = sk.project.ensure_diameter(si, c, true) {
+                *sk.inline = InlineEdit::Dim(ci);
+                sk.dim.focus = true;
+            }
+        } else {
+            *sk.inline = InlineEdit::Circle(eid);
+            sk.dim.focus = true;
+        }
+        return true;
+    }
+    if let Some(cid) = qymcad_ui_state::polygon_under(&*sk.project, &*sk.view, rect, pos, si) {
+        sk.place.set(PlacingShape::Poly(cid)); // editing the radius of the construction circle
+        sk.place.focus = true;
+        return true;
+    }
+    false
 }
 
 /// FINISH THE SPLINE - what a double click does.

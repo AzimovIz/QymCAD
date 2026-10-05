@@ -223,31 +223,8 @@ impl App {
                         self.tools.inline = InlineEdit::Dim(ci);
                         self.tools.dim.focus = true;
                     }
-                } else if let Some(eid) = qymcad_pick::nearest_circle_entity(&self.pick_ctx(), rect, pos, si) {
-                    // a circle gets a diameter dimension; an arc has its radius edited
-                    let center = self.project.sketches[si].entities.iter().find(|e| e.id == eid).and_then(|e| match e.kind {
-                        qymcad_core::model::EntityKind::Circle { center, .. } => Some(center),
-                        _ => None,
-                    });
-                    // the circumscribed circle of a polygon (the vertices hang on it) opens the polygon
-                    // popup (the radius plus the angle), while an ordinary circle gets a diameter
-                    let is_poly_rim =
-                        center.is_some_and(|c| self.project.sketches[si].constraints.iter().any(|x| matches!(x, qymcad_core::model::Constraint::PointOnCircle { c: cc, .. } if *cc == c)));
-                    if let (true, Some(c)) = (is_poly_rim, center) {
-                        self.tools.place.set(PlacingShape::Poly(c));
-                        self.tools.place.focus = true;
-                    } else if let Some(c) = center {
-                        if let Some(ci) = self.project.ensure_diameter(si, c, true) {
-                            self.tools.inline = InlineEdit::Dim(ci);
-                            self.tools.dim.focus = true;
-                        }
-                    } else {
-                        self.tools.inline = InlineEdit::Circle(eid);
-                        self.tools.dim.focus = true;
-                    }
-                } else if let Some(cid) = qymcad_ui_state::polygon_under(&self.project, &self.viewing.view, rect, pos, si) {
-                    self.tools.place.set(PlacingShape::Poly(cid)); // editing the radius of the construction circle
-                    self.tools.place.focus = true;
+                } else {
+                    open_shape_size(&mut self.sketch_ctx(), rect, pos, si);
                 }
             }
         }
