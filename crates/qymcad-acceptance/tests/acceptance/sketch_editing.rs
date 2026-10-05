@@ -1078,3 +1078,31 @@ probe! {
         assert_eq!(counts(&mut s).1, 3, "the corner that came back was not cut with the other two: {:?} ({})", counts(&mut s), s.status());
     }
 }
+
+probe! {
+    /// ESC PUTS THE WHOLE CORNER TOOL DOWN: the tool goes back to the arrow, nothing of the drawing stands lit, and
+    /// the set of corners is no longer drawn. It used to take the tool down alone, and the lines stayed lit with
+    /// their corners drawn on them - a set that was on the screen and in no tool, and the next click landed in it.
+    fn esc_from_the_corner_tool_takes_the_whole_set_down() {
+        let mut s = empty_sketch();
+        line(&mut s, (0.0, 0.0), (60.0, 0.0));
+        line(&mut s, (60.0, 0.0), (30.0, 50.0));
+        line(&mut s, (30.0, 50.0), (0.0, 0.0)); // a contour, three corners
+        let lit = |s: &mut Session| s.lit_in_sketch();
+        let tool = |s: &mut Session| s.editing_tool();
+        let violet = |s: &mut Session| pixels_of(s, PREVIEW_FIXED);
+        take(&mut s, "tb-fillet-sketch-hint");
+        pick_shift(&mut s, 30.0, 0.0);
+        pick_shift(&mut s, 45.0, 25.0);
+        pick_shift(&mut s, 15.0, 25.0);
+        assert_eq!(lit(&mut s), 3, "setup: the three lines of the contour are not all chosen: {}", s.status());
+        assert_eq!(tool(&mut s), 4, "setup: the fillet is not in hand");
+        let drawn = violet(&mut s);
+        assert!(drawn > 40, "setup: no corner of the set is drawn in the colour of one that stands: {drawn} pixels of it");
+        s.key(Key::Escape);
+        assert_eq!(tool(&mut s), 0, "Esc left the fillet in hand: the tool says it is still working");
+        assert_eq!(lit(&mut s), 0, "{} lines are still lit after Esc took the corner tool down", lit(&mut s));
+        let after = violet(&mut s);
+        assert!(after + 40 < drawn, "the corners of the set are still drawn after Esc: {drawn} pixels of violet before, {after} after");
+    }
+}

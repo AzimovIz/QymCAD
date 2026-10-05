@@ -269,8 +269,7 @@ impl App {
             // cancellation: one is sure the tool is active and cannot understand why a click does
             // nothing.
             self.tools.armed = qymcad_ui_state::Armed::None;
-        } else if self.tools.armed.click_op() != 0 {
-            self.tools.armed = qymcad_ui_state::Armed::None;
+        } else if qymcad_ui_state::tools_of!(self).leave_click_tool(&mut self.status) {
         } else if self.tools.armed.pat_op() != 0 {
             self.tools.armed = qymcad_ui_state::Armed::None;
             self.tools.pat.edit = None;

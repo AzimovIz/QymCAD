@@ -13266,6 +13266,41 @@ fn mirror_about_in(ed: Editing, sel_sk: &mut SketchSelection, ax: f64, ay: f64, 
     *ed.status = qymcad_i18n::tr("sk-mirror-done");
 }
 
+/// ESC FROM AN EDITING BUTTON THAT WORKS ON A CLICK, whatever it is: the tool goes down, and what it was working on
+/// goes with it.
+///
+/// **THE CORNER TOOLS TAKE THEIR WHOLE SET WITH THEM.** The fillet and the chamfer work on a set of lines chosen with
+/// Shift, and Esc puts that set down with the tool: what was lit goes dark, the corners drawn on it come off, and the
+/// field stands no longer. It used to take the tool down alone - the lines stayed lit with their corners drawn on
+/// them, a set that was on the screen and in no tool, and the next click landed in it.
+///
+/// The other editing buttons act on one click and keep nothing of their own, so for them Esc takes the button alone.
+///
+/// `None` means no editing button is in hand and the ladder should carry on to its next rung.
+pub fn leave_editing_tool(t: &mut Tools, status: &mut String) -> Option<()> {
+    let corner = match t.armed.click_op() {
+        0 => return None,
+        4 | 5 => true,
+        _ => false,
+    };
+    *t.armed = Armed::None;
+    if corner {
+        t.corner.clear();
+        t.sel_sk.clear();
+        *status = qymcad_i18n::tr("in-selection-cleared");
+    }
+    Some(())
+}
+
+impl Tools<'_> {
+    /// ESC FROM AN EDITING BUTTON THAT WORKS ON A CLICK, said as a question: was one in hand, and has it been put
+    /// down with what it was working on. `leave_editing_tool` says what each of them takes with it; this is the same
+    /// answer in the shape the ladder of cancellations reads.
+    pub fn leave_click_tool(&mut self, status: &mut String) -> bool {
+        leave_editing_tool(self, status).is_some()
+    }
+}
+
 /// PUT DOWN THE SKETCH TOOL THAT IS IN HAND, and say what to tell the person.
 ///
 /// Reported behaviour: "Esc does not reset the Mirror tool to the default Select - the selection is lost
