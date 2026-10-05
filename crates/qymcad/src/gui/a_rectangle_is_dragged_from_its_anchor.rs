@@ -87,6 +87,35 @@ mod tests {
         assert!(sins.is_empty(), "{}", sins.join("\n"));
     }
 
+    /// A WIDTH AND A HEIGHT TYPED IN THE SIZE WINDOW ARE LAID AS DIMENSIONS, as the diameter of a circle is; the window
+    /// closed untouched leaves the rectangle free.
+    #[test]
+    fn a_typed_width_and_height_are_laid_as_dimensions() {
+        let dims = |app: &App, si: usize| -> Vec<f64> {
+            let mut d: Vec<f64> = app.project.sketches[si].constraints.iter().filter_map(|c| if let qymcad_core::model::Constraint::Distance { d, .. } = c { Some(*d) } else { None }).collect();
+            d.sort_by(f64::total_cmp);
+            d
+        };
+        let mut sins = Vec::new();
+        // typed: 60 by 35
+        let mut app = App::default();
+        let si = app.create_sketch_on(SketchPlane::default());
+        app.chosen.sel = Sel::Sketch(si);
+        let mut hand = Hand::new(&mut app);
+        hand.sk_tool(2);
+        hand.click2d(10.0, 10.0).click2d(50.0, 40.0).type_text("60").key(egui::Key::Tab).type_text("35").key(egui::Key::Enter);
+        let got = dims(&app, si);
+        if got.len() != 2 || (got[0] - 35.0).abs() > 1e-6 || (got[1] - 60.0).abs() > 1e-6 {
+            sins.push(format!("60 by 35 typed: the dimensions are {got:?}"));
+        }
+        // untouched: no dimension
+        let (app, si) = a_rectangle("opt-rect-2corners", [(10.0, 10.0), (50.0, 40.0)]);
+        if !dims(&app, si).is_empty() {
+            sins.push(format!("nothing typed: the dimensions are {:?}", dims(&app, si)));
+        }
+        assert!(sins.is_empty(), "{}", sins.join("\n"));
+    }
+
     /// ROTATE TAKES THE WHOLE RECTANGLE: a click on one side, the centre, 30 deg - all four sides turn and the
     /// rectangle stays square. Reported (issue #56): only the side clicked was taken.
     #[test]

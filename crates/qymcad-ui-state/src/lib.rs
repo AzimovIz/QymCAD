@@ -738,6 +738,8 @@ pub struct Placing {
     /// the dimension input fields and the focus within them
     pub buf: [String; 2],
     pub focus: bool,
+    /// a value was typed into the fields: closing them with Enter then lays the dimensions typed
+    pub typed: bool,
 }
 
 impl Placing {

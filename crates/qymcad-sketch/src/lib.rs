@@ -816,6 +816,7 @@ pub fn rect_input_popup(pl: &mut qymcad_ui_state::PlaceCtx, ctx: &egui::Context,
                 });
             });
         pl.place.buf = buf.clone();
+        pl.place.typed |= chg;
         if got_focus {
             pl.place.focus = false;
         }
@@ -837,6 +838,16 @@ pub fn rect_input_popup(pl: &mut qymcad_ui_state::PlaceCtx, ctx: &egui::Context,
                 }
             }
             qymcad_ui_state::invalidate(pl.regen);
+        }
+        // A WIDTH OR A HEIGHT TYPED IS LAID AS DIMENSIONS when the fields are closed with Enter or the tick, as the
+        // diameter of a circle is: a size typed by hand is a size meant. Closed untouched, or with Esc, the rectangle is
+        // left free.
+        if close && pl.place.typed {
+            if let Some(side) = pl.place.rect().or_else(|| pl.place.rect_center()).and_then(|(_, _, ids)| ids.first().copied()) {
+                pl.project.dimension_rect(si, side);
+                pl.project.solve_sketch(si);
+                qymcad_ui_state::invalidate(pl.regen);
+            }
         }
         if close || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             pl.place.clear();

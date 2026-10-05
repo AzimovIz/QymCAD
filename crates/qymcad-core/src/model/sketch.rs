@@ -1035,6 +1035,22 @@ impl Project {
         }
         self.regen_sketch(si);
     }
+    /// THE WIDTH AND THE HEIGHT OF THE RECTANGLE WITH SIDE `side` LAID AS DIMENSIONS, at the lengths its first two sides
+    /// stand at, each led out a fifth of the shorter side beyond its side (a positive offset is to the right of a side
+    /// run from its first corner, and the corners go round anticlockwise - the dimensions stand outside). Returns
+    /// whether the rectangle was found.
+    pub fn dimension_rect(&mut self, si: usize, side: Id) -> bool {
+        let Some(s) = self.sketches.get_mut(si) else { return false };
+        let Some(r) = s.rects.iter().find(|r| r.sides.contains(&side)).cloned() else { return false };
+        let at = |id: Id| s.points.iter().find(|q| q.id == id).map(|q| (q.x, q.y));
+        let (Some(p0), Some(p1), Some(p2)) = (at(r.corners[0]), at(r.corners[1]), at(r.corners[2])) else { return false };
+        let (w, h) = ((p1.0 - p0.0).hypot(p1.1 - p0.1), (p2.0 - p1.0).hypot(p2.1 - p1.1));
+        let off = 0.2 * w.min(h);
+        let dim = |a: Id, b: Id, d: f64| Constraint::Distance { a, b, d, off, expr: String::new(), driven: false, axis: 0, at: None };
+        s.constraints.push(dim(r.corners[0], r.corners[1], w));
+        s.constraints.push(dim(r.corners[1], r.corners[2], h));
+        true
+    }
     /// AN ANGLE DIMENSION ON A SIDE OF A RECTANGLE TAKES ITS TURN: called with the dimension before it is laid. The turns
     /// the rectangle holds itself by go, and its shape is held by parallel and square sides, so the dimension turns it -
     /// both held, the rectangle would be held twice over and the dimension refused.
