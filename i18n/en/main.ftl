@@ -2257,7 +2257,6 @@ sk-click-shape-line = Click ON A line of the shape (or press Esc to cancel)
 sk-distance-dxdy = Distance: { $d } mm (Δx { $dx }, Δy { $dy })
 sk-click-corner = Click a line or the corner vertex (hold Shift to choose several)
 sk-no-corner-here = There is no corner here: the lines do not meet at an angle
-sk-click-corner-next = Click a line or a point to pair with the one already chosen (the corner is taken off the two of them)
 sk-corner-set-n = Corners in the set: { $n } (Enter rounds them all together)
 sk-corner-set-off = Corner put away — the same click brings it back
 sk-corner-set-taken = A corner of the lines already stands at that point
