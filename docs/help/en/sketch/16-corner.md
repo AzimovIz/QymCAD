@@ -69,7 +69,8 @@ of the zone it disappears. The click makes it **violet** — a corner in the set
   free again.
 - A click on a point carrying a corner **of the lines** puts that corner away (it is not deleted), and **the same**
   click brings it back.
-- **A corner put away stays put away**, whatever else changes in the selection afterwards.
+- **A corner put away goes when one of its lines is let go**, hidden or not: it is a corner *of those two lines*.
+  Choosing the line again makes the corner again, and this time it stands.
 - A corner of the lines that takes the place of one named at the point **kills** it: it is one place, and there is
   one corner there.
 - A corner named at a point also dies when one of its lines is let go: it is a corner of those two lines.

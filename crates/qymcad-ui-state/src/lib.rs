@@ -13478,6 +13478,11 @@ impl CornerSet {
     pub fn follow_from(&mut self, project: &Project, si: usize, before: &[Id], selected: &[Id]) {
         let lost: Vec<Id> = before.iter().copied().filter(|l| !selected.contains(l)).collect();
         self.made.retain(|c| selected.contains(&c.pair.0) && selected.contains(&c.pair.1) && project.corner_of_pair(si, c.pair.0, c.pair.1) == Some(c.point));
+        // A CORNER PUT AWAY LIVES WHILE BOTH ITS LINES ARE CHOSEN, and it goes with them. It is remembered as a pair
+        // of lines and not as a mark on the drawing, so a line that is let go takes the corner at its end with it -
+        // put away or not: what is put away is a corner of chosen lines, and a line a person has let go of is one
+        // they do not want. Choosing the line again makes the corner again, and it stands.
+        self.hidden.retain(|&(a, b)| selected.contains(&a) && selected.contains(&b) && project.corner_of_pair(si, a, b).is_some());
         // EVERY POINT WHERE CHOSEN LINES STAND, and the lines standing there in the order they were chosen.
         let mut at: Vec<(Id, Vec<Id>)> = Vec::new();
         for &line in selected {

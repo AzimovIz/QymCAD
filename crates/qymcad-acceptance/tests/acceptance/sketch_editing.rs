@@ -1050,3 +1050,31 @@ probe! {
         assert_eq!(counts(&mut s).0, 6, "the value typed after naming the set cut nothing: {:?} ({})", counts(&mut s), s.status());
     }
 }
+
+probe! {
+    /// A CORNER PUT AWAY GOES WITH THE LINE IT WAS MADE OF. What a click at a point puts away is a corner OF CHOSEN
+    /// LINES, and a line a person lets go of is one they do not want: the corner at its end is gone with it, put
+    /// away or not. Choosing the line again makes the corner again, and this time it stands.
+    fn a_corner_put_away_goes_when_a_line_of_it_is_let_go() {
+        let mut s = empty_sketch();
+        line(&mut s, (0.0, 0.0), (60.0, 0.0));
+        line(&mut s, (60.0, 0.0), (30.0, 50.0));
+        line(&mut s, (30.0, 50.0), (0.0, 0.0)); // a contour, three corners
+        take(&mut s, "tb-fillet-sketch-hint");
+        pick_shift(&mut s, 30.0, 0.0);
+        pick_shift(&mut s, 45.0, 25.0);
+        pick_shift(&mut s, 15.0, 25.0);
+        let at = s.on_sketch(60.0, 0.0); // where the first two lines meet
+        s.click_with(at, PointerButton::Primary, Modifiers::SHIFT); // that corner put away
+        assert!(s.status().contains('2'), "setup: the corner was not put away: {:?}", s.status());
+        pick_shift(&mut s, 30.0, 0.0); // the first line let go
+        assert!(s.status().contains('1'), "the line let go left the corner that was put away standing: {:?}", s.status());
+        pick_shift(&mut s, 30.0, 0.0); // and chosen again
+        assert!(s.status().contains('3'), "the corner of the line chosen again did not come back: {:?}", s.status());
+        // AND IT STANDS RATHER THAN BEING PUT AWAY A SECOND TIME: three corners in the set is three to be cut.
+        let field = field_near(&mut s, at);
+        fill_widget(&mut s, &field, "5");
+        s.key(Key::Enter);
+        assert_eq!(counts(&mut s).1, 3, "the corner that came back was not cut with the other two: {:?} ({})", counts(&mut s), s.status());
+    }
+}

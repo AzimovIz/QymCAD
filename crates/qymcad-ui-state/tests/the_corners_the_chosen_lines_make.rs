@@ -206,3 +206,35 @@ fn the_corner_read_at_a_point_is_the_one_the_cursor_stands_between() {
         assert_ne!(pair.0, pair.1, "a line is a corner of itself");
     }
 }
+/// **A CORNER PUT AWAY GOES WITH ITS LINES.** What a click at a point puts away is a corner OF CHOSEN LINES, and a
+/// line a person has let go of is one they no longer want: the corner at its end is gone with it, put away or not.
+/// Choosing the line again makes the corner again, and this time it stands - a corner that has been forgotten is a
+/// corner nobody asked to keep.
+#[test]
+fn a_corner_put_away_goes_when_a_line_of_it_is_let_go() {
+    let (p, si, l, points) = triangle();
+    let mut set = CornerSet::default();
+    set.follow(&p, si, &l);
+    assert_eq!(pairs(&set).len(), 3, "setup: a contour of three lines makes three corners");
+    assert_eq!(set.click_at_point(&p, si, points[0], None), PointAct::LineHidden, "the corner was not put away");
+    assert_eq!((set.hidden.len(), pairs(&set).len()), (1, 2), "a corner put away is remembered, not deleted");
+    // A LINE OF THAT CORNER LET GO: it takes the corner with it, and the point is free for a corner again.
+    set.follow_from(&p, si, &l, &[l[1], l[2]]);
+    assert_eq!(pairs(&set).len(), 1, "only the corner of the two lines that stayed is left standing: {:?}", pairs(&set));
+    assert!(set.hidden.is_empty(), "the corner put away outlived the line it was made of: {:?}", set);
+    assert!(!set.occupied(&p, si, points[0]), "the point of a corner whose line was let go still answers as taken");
+    // AND THE LINE CHOSEN AGAIN: the corner is made afresh, and it STANDS rather than being put away a second time.
+    set.follow_from(&p, si, &[l[1], l[2]], &l);
+    assert_eq!(pairs(&set).len(), 3, "three lines make three corners and the one that was let go and chosen again is one of them: {:?}", pairs(&set));
+    assert!(set.made.iter().any(|c| c.point == points[0]), "the corner that came back is not standing at its point: {:?}", set);
+    assert!(set.hidden.is_empty(), "the corner came back put away instead of standing: {:?}", set);
+    // A STRANGER TO THAT CORNER CHANGES NOTHING: the corner of the two lines is put away, and letting a third line go
+    // and choosing it again leaves it exactly where it was.
+    let mut set = CornerSet::default();
+    set.follow(&p, si, &l);
+    assert_eq!(set.click_at_point(&p, si, points[0], None), PointAct::LineHidden);
+    set.follow_from(&p, si, &l, &[l[0], l[1]]);
+    assert_eq!(set.hidden.len(), 1, "a line that is a stranger to the corner put away took it with it: {:?}", set);
+    set.follow_from(&p, si, &[l[0], l[1]], &l);
+    assert_eq!((set.hidden.len(), pairs(&set).len()), (1, 2), "the corner put away did not survive a line that had nothing to do with it: {:?}", set);
+}
