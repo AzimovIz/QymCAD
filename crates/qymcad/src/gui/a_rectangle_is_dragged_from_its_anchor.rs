@@ -141,6 +141,33 @@ mod tests {
         );
     }
 
+    /// THE CENTRE OF A RECTANGLE TAKES CONSTRAINTS like any point: clicked, the origin clicked with Shift, Coincident -
+    /// the rectangle stands about the origin; on another, its centre clicked with a circle's centre, Vertical - the
+    /// centre stands straight above it.
+    #[test]
+    fn the_centre_of_a_rectangle_takes_constraints() {
+        let mut sins = Vec::new();
+        let (mut app, si) = a_rectangle("opt-rect-2corners", [(10.0, 10.0), (50.0, 40.0)]);
+        Hand::new(&mut app).click2d(30.0, 25.0).shift_click2d(0.0, 0.0).constraint(0);
+        let c = point_near(&app, si, app.project.sketches[si].rects[0].centre);
+        if c.0.hypot(c.1) > 1e-6 {
+            sins.push(format!("the centre made coincident with the origin stands at {c:?}; status: {}", app.status));
+        }
+        let (mut app, si) = a_rectangle("opt-rect-2corners", [(10.0, 10.0), (50.0, 40.0)]);
+        Hand::new(&mut app).sk_tool(3).click2d(70.0, 60.0).click2d(75.0, 60.0).key(egui::Key::Enter);
+        Hand::new(&mut app).sk_tool(0).click2d(30.0, 25.0).shift_click2d(70.0, 60.0).constraint(2);
+        let c = point_near(&app, si, app.project.sketches[si].rects[0].centre);
+        let o = app.project.sketches[si]
+            .entities
+            .iter()
+            .find_map(|e| if let qymcad_core::model::EntityKind::Circle { center, .. } = e.kind { Some(point_near(&app, si, center)) } else { None })
+            .expect("the circle");
+        if (c.0 - o.0).abs() > 1e-6 {
+            sins.push(format!("the centre made vertical with a circle's centre {o:?} stands at {c:?}; status: {}", app.status));
+        }
+        assert!(sins.is_empty(), "{}", sins.join("\n"));
+    }
+
     /// ROTATE TAKES THE WHOLE RECTANGLE: a click on one side, the centre, 30 deg - all four sides turn and the
     /// rectangle stays square. Reported (issue #56): only the side clicked was taken.
     #[test]
