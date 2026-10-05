@@ -78,4 +78,18 @@ mod tests {
         }
         assert!(sins.is_empty(), "{}", sins.join("\n"));
     }
+
+    /// ROTATE TAKES THE WHOLE RECTANGLE: a click on one side, the centre, 30 deg - all four sides turn and the
+    /// rectangle stays square. Reported (issue #56): only the side clicked was taken.
+    #[test]
+    fn rotate_takes_the_whole_rectangle_by_one_side() {
+        let (mut app, si) = a_rectangle("opt-rect-2corners", [(0.0, 0.0), (40.0, 30.0)]);
+        Hand::new(&mut app).sk_rotate((20.0, 0.0), (20.0, 15.0), 30.0);
+        let s = &app.project.sketches[si];
+        let at = |id: u64| s.points.iter().find(|q| q.id == id).map(|q| (q.x, q.y)).expect("a corner");
+        let [a, b, _, d] = s.rects[0].corners.map(at);
+        let turn = (b.1 - a.1).atan2(b.0 - a.0).to_degrees();
+        let square = (b.0 - a.0) * (d.0 - a.0) + (b.1 - a.1) * (d.1 - a.1);
+        assert!((turn - 30.0).abs() < 1e-6 && square.abs() < 1e-6, "the rectangle turned to {turn:.3} deg, off square by {square:.2e}; status: {}", app.status);
+    }
 }

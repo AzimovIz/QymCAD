@@ -1678,6 +1678,21 @@ pub fn text_ghost_shown(armed: &Armed, inline: &InlineEdit) -> bool {
     armed.draw_kind() == 11 && inline.text().is_none()
 }
 
+/// A RECTANGLE IS TAKEN WHOLE by the tools that carry geometry - move, copy, rotate, the patterns: a click on one side of a
+/// rectangle picked that side alone, and a turn of it was a turn of one line out of a shape held square. Every side of
+/// a rectangle with one side picked joins the selection.
+pub fn take_whole_rects(project: &Project, si: usize, sel_sk: &mut SketchSelection) {
+    let Some(s) = project.sketches.get(si) else { return };
+    let picked: Vec<Id> = sel_sk.items.iter().filter(|(k, _)| *k == 1).map(|(_, id)| *id).collect();
+    for r in s.rects.iter().filter(|r| r.sides.iter().any(|e| picked.contains(e))) {
+        for side in r.sides {
+            if !picked.contains(&side) {
+                sel_sk.items.push((1, side));
+            }
+        }
+    }
+}
+
 /// The indices of the texts selected in sketch `si`, in the order they were picked.
 pub fn sel_text_indices(project: &Project, sel_sk: &SketchSelection, si: usize) -> Vec<usize> {
     let Some(s) = project.sketches.get(si) else { return Vec::new() };

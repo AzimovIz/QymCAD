@@ -3764,9 +3764,16 @@ pub fn sketch_click_at(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context,
                 // an array: pick the entities, then (for a circular one) click THE CENTRE of
                 // rotation, then Enter
                 let shift = ctx.input(|i| i.modifiers.shift);
+                if let qymcad_ui_state::Sel::Sketch(si) = *sk.sel {
+                    qymcad_ui_state::take_whole_rects(&*sk.project, si, &mut *sk.sel_sk);
+                    // and what was selected before the tool
+                }
                 let has_sel = sk.sel_sk.items.iter().any(|(k, _)| *k == 1);
                 if !has_sel {
                     sketch_select_click(sk, rect, pos, shift);
+                    if let qymcad_ui_state::Sel::Sketch(si) = *sk.sel {
+                        qymcad_ui_state::take_whole_rects(&*sk.project, si, &mut *sk.sel_sk);
+                    }
                     *sk.status = if sk.sel_sk.items.iter().any(|(k, _)| *k == 1) {
                         if sk.armed.pat_op() == 2 {
                             qymcad_i18n::tr("sk-click-rot-centre")
@@ -3779,6 +3786,9 @@ pub fn sketch_click_at(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context,
                 } else if shift {
                     // Shift continues picking the source
                     sketch_select_click(sk, rect, pos, true);
+                    if let qymcad_ui_state::Sel::Sketch(si) = *sk.sel {
+                        qymcad_ui_state::take_whole_rects(&*sk.project, si, &mut *sk.sel_sk);
+                    }
                 } else if sk.armed.pat_op() == 2 {
                     // circular: a click sets or moves the centre, snapping to an intersection or a vertex
                     sk.pat.center = Some(snap_world(sk, rect, pos));
@@ -3788,11 +3798,14 @@ pub fn sketch_click_at(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context,
                 // an interactive move or copy: the selection, then the base point, then the target
                 let qymcad_ui_state::Sel::Sketch(si) = *sk.sel else { return }; // the selection may have changed between frames - do not crash
                 let w = snap_world(sk, rect, pos);
+                // what was selected before the tool, too: one side of a rectangle carries the whole rectangle
+                qymcad_ui_state::take_whole_rects(&*sk.project, si, &mut *sk.sel_sk);
                 let eids: Vec<Id> = sk.sel_sk.items.iter().filter(|(k, _)| *k == 1).map(|(_, id)| *id).collect();
                 let texts = qymcad_ui_state::sel_text_indices(&*sk.project, &*sk.sel_sk, si);
                 if eids.is_empty() && texts.is_empty() {
                     let shift = ctx.input(|i| i.modifiers.shift);
                     sketch_select_click(sk, rect, pos, shift);
+                    qymcad_ui_state::take_whole_rects(&*sk.project, si, &mut *sk.sel_sk);
                     if !sk.sel_sk.items.iter().any(|(k, _)| *k == 1 || *k == qymcad_ui_state::SEL_TEXT) {
                         *sk.status = qymcad_i18n::tr("sk-click-for-move");
                     } else {
