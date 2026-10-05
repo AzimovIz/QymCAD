@@ -114,6 +114,21 @@ fn same_rect_constraint(own: &Constraint, c: &Constraint) -> bool {
     }
 }
 
+/// WHAT A SOLVE HOLDS OF RECTANGLE `r` so that its size changes from where it was drawn, `dragged` being the point
+/// under the hand: its anchor - the centre, or the corner it was drawn from - or, when that corner is the one dragged,
+/// the corner across from it, so that pulling it stretches the rectangle rather than carries it. Nothing when the
+/// centre is dragged: the rectangle goes with it.
+fn held_for_size(r: &crate::model::SketchRect, dragged: Option<Id>) -> Option<Id> {
+    if dragged == Some(r.centre) {
+        return None;
+    }
+    match r.anchor {
+        crate::model::RectAnchor::Centre => Some(r.centre),
+        crate::model::RectAnchor::Corner(c) if dragged == Some(c) => r.corners.iter().position(|k| *k == c).map(|k| r.corners[(k + 2) % 4]),
+        crate::model::RectAnchor::Corner(c) => Some(c),
+    }
+}
+
 /// Where a rectangle was drawn from: a corner (its index round the rectangle) or the centre.
 #[derive(Clone, Copy)]
 enum DrawnFrom {
@@ -2893,28 +2908,27 @@ impl Project {
         let (was, radii_was): (Vec<(f64, f64)>, Vec<f64>) = (s.points.iter().map(|p| (p.x, p.y)).collect(), radii.iter().map(|r| r.value).collect());
         // A RECTANGLE CHANGES ITS SIZE FROM WHERE IT WAS DRAWN: from the centre a rectangle drawn from the centre, from the
         // first corner one drawn by its corners. The solver alone spreads a change over every point it may move, so a
-        // dragged corner or a width typed grew a rectangle about wherever the least travel lay. The anchors are held
-        // where they stand for this solve, and let go when the sketch does not solve with them held - a dimension that
-        // moves the rectangle as a whole - or when it is the anchor itself that is dragged.
-        let anchors: Vec<Constraint> = s
-            .rects
-            .iter()
-            .map(|r| match r.anchor {
-                crate::model::RectAnchor::Centre => r.centre,
-                crate::model::RectAnchor::Corner(c) => c,
-            })
-            .filter(|p| drag.is_none_or(|(d, _, _)| d != *p) && s.points.iter().any(|q| q.id == *p))
-            .map(|p| Constraint::Fixed { p })
-            .collect();
+        // dragged corner or a width typed grew a rectangle about wherever the least travel lay. What is held for this
+        // solve (`held_for_size`) is let go when the sketch does not solve with it - a dimension that moves the
+        // rectangle as a whole.
+        let anchors: Vec<Constraint> =
+            s.rects.iter().filter_map(|r| held_for_size(r, drag.map(|(d, _, _)| d))).filter(|p| s.points.iter().any(|q| q.id == *p)).map(|p| Constraint::Fixed { p }).collect();
         let resid = if anchors.is_empty() {
             crate::solver::solve_full_iter(&mut s.points, &mut radii, &active, drag, max_iter)
         } else {
             let (mut held_points, mut held_radii) = (s.points.clone(), radii.clone());
             let held: Vec<Constraint> = active.iter().cloned().chain(anchors).collect();
-            let r = crate::solver::solve_full_iter(&mut held_points, &mut held_radii, &held, drag, max_iter);
-            // solved means to the precision the polish reaches (1e-12 on a solved sketch): a side held 0.0009 short of a
-            // collinear line by its anchor left 1e-7 and passed for solved at 1e-6
-            if r <= 1e-9 {
+            crate::solver::solve_full_iter(&mut held_points, &mut held_radii, &held, drag, max_iter);
+            // SOLVED IS TOLD BY THE SKETCH'S OWN CONSTRAINTS, not by the hold, a soft pull of which a little is always left
+            // under a corner dragged away from it. Solved means to the precision the polish reaches (1e-12): a side held
+            // 0.0009 short of a collinear line by its anchor left 1e-7 and passed at 1e-6. A DRAG FRAME KEEPS THE HOLD
+            // whatever it leaves: a frame is a compromise with the pointer until the release solves it, and the
+            // compromise grows with how far the pointer is from where the corner can go - a corner pulled 8 mm up off
+            // its horizontal side left 2e-2, and a frame let go of the hold carried the corner drawn from 7 mm with it.
+            // The release is solved in full, and lets the hold go if the sketch does not solve with it.
+            let r = crate::solver::residual_per_constraint(&held_points, &held_radii, &active).iter().map(|v| v * v).sum::<f64>().sqrt();
+            let solved = if drag.is_some() { f64::INFINITY } else { 1e-9 };
+            if r <= solved {
                 (s.points, radii) = (held_points, held_radii);
                 r
             } else {

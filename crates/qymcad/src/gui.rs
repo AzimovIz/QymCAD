@@ -3911,6 +3911,7 @@ mod the_move_tool_is_clicked;
 mod a_shape_is_finished_by_hand;
 mod a_sketch_chamfer_takes_two_values;
 mod a_sketch_fillet_by_chord_or_arc;
+mod a_rectangle_is_dragged_from_its_anchor;
 mod a_drag_takes_what_was_pressed;
 mod text_font;
 mod font_row_look;
