@@ -2314,7 +2314,22 @@ impl Project {
                     | Constraint::Orientation { a, b, .. }
                     | Constraint::Tangent { a, b, .. }
                     | Constraint::PointOnLine { a, b, .. } => (*a, *b) = pair(*a, *b),
-                    Constraint::Equal { a, b, c: cc, d } | Constraint::Parallel { a, b, c: cc, d } | Constraint::Perpendicular { a, b, c: cc, d } | Constraint::Collinear { a, b, c: cc, d } => {
+                    // AN EQUALITY IS A LENGTH: it is carried onto the pieces the cut leaves only where they are still
+                    // equal - both sides of the corner shortened alike. Carried regardless, it said 55 = 58 for a chamfer
+                    // of 3 on one of two equal sides of 58, and the solver bent everything tied to the drawing to satisfy
+                    // it. Otherwise it stays on the corner, which then stays as the virtual sharp.
+                    Constraint::Equal { a, b, c: cc, d } => {
+                        let (ab, cd) = (pair(*a, *b), pair(*cc, *d));
+                        let at = |id: Id| s.points.iter().find(|q| q.id == id).map(|q| (q.x, q.y));
+                        let len = |(u, v): (Id, Id)| Some((at(u)?.0 - at(v)?.0).hypot(at(u)?.1 - at(v)?.1));
+                        if let (Some(l1), Some(l2)) = (len(ab), len(cd)) {
+                            if (l1 - l2).abs() <= 1e-9 * l1.max(l2).max(1.0) {
+                                ((*a, *b), (*cc, *d)) = (ab, cd);
+                            }
+                        }
+                    }
+                    // a direction is the same along the whole line, so it is carried as it is
+                    Constraint::Parallel { a, b, c: cc, d } | Constraint::Perpendicular { a, b, c: cc, d } | Constraint::Collinear { a, b, c: cc, d } => {
                         (*a, *b) = pair(*a, *b);
                         (*cc, *d) = pair(*cc, *d);
                     }
