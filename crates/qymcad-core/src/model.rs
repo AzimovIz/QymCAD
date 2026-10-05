@@ -1906,7 +1906,7 @@ pub use regen::{ArrayAxis, BodyOp, ChamferShape, CombineSpan, ExtrudeSpan, HoleT
 mod tess;
 mod timeline;
 mod sketch;
-pub use sketch::{ChamferLegs, CornerBlend, FilletBy, FilletSize, TextSpec};
+pub use sketch::{ChamferLegs, CornerBlend, CornerCut, CornerTool, FilletBy, FilletSize, TextSpec};
 pub(crate) mod comp_pattern;
 pub use comp_pattern::{CompPattern, CompPatternKind};
 mod projection;
@@ -2026,21 +2026,21 @@ impl Project {
     /// Fillet the corner at vertex `pid`, when exactly two edges meet there. The inner side is chosen by
     /// the bisector of the chords. Used both by click-on-corner and by the chain command. Returns whether
     /// it succeeded.
-    /// THE LARGEST FILLET RADIUS OR CHAMFER LEG A CORNER OF TWO LINES TAKES: the point of touching lies r / tan(theta / 2)
-    /// from the corner (theta the angle between the lines), and a leg lies along the line - neither may reach the far
-    /// end of the shorter line. `None` for a corner not made of two lines. The field of the tool refuses a value past it
+    /// THE LARGEST VALUE A CORNER OF TWO LINES TAKES for `tool`: a fillet's point of touching lies r / tan(theta / 2) from
+    /// the corner (theta the angle between the lines), a chamfer's leg along the line, and the cut of a symmetric chamfer
+    /// is 2 sin(theta / 2) times its leg - none may reach the far end of the shorter line. `None` for a corner not made of two lines. The field of the tool refuses a value past it
     /// in words, where the corner used to take it and do nothing, or cut it down without a word.
-    pub fn corner_limit(&self, si: usize, pid: Id, chamfer: bool) -> Option<f64> {
+    pub fn corner_limit(&self, si: usize, pid: Id, tool: CornerTool) -> Option<f64> {
         // Where more than two edges meet, there is a corner for every pair, and the field must refuse a value that
         // is too big for AT LEAST ONE of them: the tightest corner is the one that bounds it.
-        self.vertex_pairs(si, pid).iter().filter_map(|pair| self.corner_limit_of_pair(si, pid, *pair, chamfer)).fold(None, |m: Option<f64>, v| Some(m.map_or(v, |m| m.min(v))))
+        self.vertex_pairs(si, pid).iter().filter_map(|pair| self.corner_limit_of_pair(si, pid, *pair, tool)).fold(None, |m: Option<f64>, v| Some(m.map_or(v, |m| m.min(v))))
     }
     /// The bound of the one corner the point `(x, y)` stands in, where more than two edges meet at `pid`.
-    pub fn corner_limit_near(&self, si: usize, pid: Id, chamfer: bool, x: f64, y: f64) -> Option<f64> {
-        self.vertex_pair(si, pid, Some((x, y))).and_then(|pair| self.corner_limit_of_pair(si, pid, pair, chamfer))
+    pub fn corner_limit_near(&self, si: usize, pid: Id, tool: CornerTool, x: f64, y: f64) -> Option<f64> {
+        self.vertex_pair(si, pid, Some((x, y))).and_then(|pair| self.corner_limit_of_pair(si, pid, pair, tool))
     }
     /// The bound of one named pair of edges at `pid`.
-    pub fn corner_limit_of_pair(&self, si: usize, pid: Id, (e1, e2): (Id, Id), chamfer: bool) -> Option<f64> {
+    pub fn corner_limit_of_pair(&self, si: usize, pid: Id, (e1, e2): (Id, Id), tool: CornerTool) -> Option<f64> {
         let (pcx, pcy) = self.point_xy(si, pid)?;
         let mut dirs = Vec::new();
         for e in [e1, e2] {
@@ -2057,18 +2057,19 @@ impl Project {
             return None;
         }
         let shorter = dirs[0].2.min(dirs[1].2);
-        if chamfer {
-            return Some(shorter);
-        }
         let theta = (dirs[0].0 * dirs[1].0 + dirs[0].1 * dirs[1].1).clamp(-1.0, 1.0).acos();
-        Some(shorter * (theta / 2.0).tan())
+        Some(match tool {
+            CornerTool::Fillet => shorter * (theta / 2.0).tan(),
+            CornerTool::Chamfer(crate::feature::ChamferMode::Symmetric) => shorter * 2.0 * (theta / 2.0).sin(),
+            CornerTool::Chamfer(_) => shorter,
+        })
     }
 
-    /// THE LARGEST RADIUS "FILLET ALL" TAKES on the corners of a set of lines (every line of the sketch with `None`): a
-    /// line between two corners being rounded spends both touching points on itself, r / tan(a / 2) + r / tan(b / 2) of
-    /// its length, and a line with one corner rounded spends one. `None` when there is no corner of two lines to round.
-    /// A rectangle 40 x 30 takes up to 15, half its short side, where one corner alone takes 30.
-    pub fn all_corners_limit(&self, si: usize, only: Option<&std::collections::HashSet<Id>>) -> Option<f64> {
+    /// THE LARGEST VALUE `tool` TAKES on the corners of a set of lines at once (every line of the sketch with `None`): a
+    /// line between two corners being cut spends both on itself - for a fillet r / tan(a / 2) + r / tan(b / 2) of its
+    /// length - and a line with one corner cut spends one. `None` when there is no corner of two lines to cut. A
+    /// rectangle 40 x 30 takes a radius up to 15, half its short side, where one corner alone takes 30.
+    pub fn all_corners_limit(&self, si: usize, only: Option<&std::collections::HashSet<Id>>, tool: CornerTool) -> Option<f64> {
         let s = self.sketches.get(si)?;
         let lines: Vec<(Id, Id, Id)> = s
             .entities
@@ -2079,14 +2080,15 @@ impl Project {
                 _ => None,
             })
             .collect();
-        // the cotangent of half the angle at every corner of two lines, the corners being the points two lines of the set meet at
+        // what one unit of the value spends along each line at every corner of two lines - the cotangent of half the angle for
+        // a fillet - the corners being the points two lines of the set meet at
         let mut cot: std::collections::HashMap<Id, f64> = std::collections::HashMap::new();
         for &(_, a, b) in &lines {
             for p in [a, b] {
                 if cot.contains_key(&p) || lines.iter().filter(|(_, x, y)| *x == p || *y == p).count() != 2 || self.vertex_edges(si, p).len() != 2 {
                     continue;
                 }
-                if let Some(l) = self.corner_limit(si, p, false) {
+                if let Some(l) = self.corner_limit(si, p, tool) {
                     let (pcx, pcy) = self.point_xy(si, p)?;
                     let ends: Vec<f64> = self
                         .vertex_edges(si, p)
@@ -2096,7 +2098,7 @@ impl Project {
                         .map(|(ox, oy)| (ox - pcx).hypot(oy - pcy))
                         .collect();
                     let shorter = ends.iter().copied().fold(f64::INFINITY, f64::min);
-                    cot.insert(p, shorter / l); // corner_limit = shorter * tan(theta / 2)
+                    cot.insert(p, shorter / l); // corner_limit = shorter / (what one unit spends)
                 }
             }
         }
@@ -2147,7 +2149,7 @@ impl Project {
             FilletBy::Radius => size.value,
             _ => {
                 let Some(r) = self.corner_sweep(si, pid).and_then(|sweep| size.radius_on(sweep)) else { return false };
-                if self.corner_limit(si, pid, false).is_some_and(|l| r >= l * (1.0 - 1e-9)) {
+                if self.corner_limit(si, pid, CornerTool::Fillet).is_some_and(|l| r >= l * (1.0 - 1e-9)) {
                     return false;
                 }
                 r

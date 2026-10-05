@@ -92,7 +92,10 @@ fn the_cursor_stands_in_the_corner_it_names() {
 #[test]
 fn a_corner_of_the_shared_point_is_cut_where_the_cursor_stands() {
     let (mut p, si, shared) = two_squares_at_one_point();
-    assert!(p.chamfer_at_vertex_near(si, shared, ChamferLegs::equal(5.0), 19.0, 19.0, None), "the chamfer of the corner the cursor stands in did not apply");
+    assert!(
+        p.chamfer_at_vertex_near(si, shared, ChamferLegs { mode: qymcad_core::feature::ChamferMode::TwoDist, first: 5.0, second: 5.0 }, 19.0, 19.0, None),
+        "the chamfer of the corner the cursor stands in did not apply"
+    );
     assert!(
         has_point(&p, si, 15.0, 20.0) && has_point(&p, si, 20.0, 15.0),
         "the cut of 5 does not meet the sides of the first square at (15, 20) and (20, 15): the points stand at {:?}",
@@ -133,11 +136,19 @@ fn two_lines_in_one_straight_line_make_no_corner() {
 #[test]
 fn the_field_is_bounded_by_the_tightest_of_the_corners() {
     let (p, si, shared) = two_squares_at_one_point();
-    let tightest = p.vertex_pairs(si, shared).iter().filter_map(|pair| p.corner_limit_of_pair(si, shared, *pair, true)).fold(None, |m: Option<f64>, v| Some(m.map_or(v, |m| m.min(v))));
+    let tightest = p
+        .vertex_pairs(si, shared)
+        .iter()
+        .filter_map(|pair| p.corner_limit_of_pair(si, shared, *pair, qymcad_core::model::CornerTool::Chamfer(qymcad_core::feature::ChamferMode::TwoDist)))
+        .fold(None, |m: Option<f64>, v| Some(m.map_or(v, |m| m.min(v))));
     assert!(tightest.is_some(), "no corner at the shared point has a bound at all");
-    assert_eq!(p.corner_limit(si, shared, true), tightest, "the bound of a point with four lines through it is not the tightest corner among them");
+    assert_eq!(
+        p.corner_limit(si, shared, qymcad_core::model::CornerTool::Chamfer(qymcad_core::feature::ChamferMode::TwoDist)),
+        tightest,
+        "the bound of a point with four lines through it is not the tightest corner among them"
+    );
     // the corner under the cursor is bounded by its own two sides
-    let bound = p.corner_limit_near(si, shared, true, 19.0, 19.0).expect("the corner the cursor stands in has a bound");
+    let bound = p.corner_limit_near(si, shared, qymcad_core::model::CornerTool::Chamfer(qymcad_core::feature::ChamferMode::TwoDist), 19.0, 19.0).expect("the corner the cursor stands in has a bound");
     assert!(bound > 0.0 && bound <= tightest.unwrap_or(0.0), "the bound of the corner under the cursor ({bound}) does not fit among the corners there");
 }
 

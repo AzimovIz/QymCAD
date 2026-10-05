@@ -624,7 +624,7 @@ fn draw_corner_preview(cc: &qymcad_ui_state::CornerCtx, ctx: &egui::Context, rec
     let layer = ctx.layer_painter(egui::LayerId::new(egui::Order::Middle, egui::Id::new(("cornerpreview", si)))).with_clip_rect(rect);
     for &Shown { point: pid, pair, in_set } in corners {
         let Some(pair) = pair else { continue };
-        let Some(b) = cc.project.corner_blend(si, pid, pair, chamfer, v) else { continue };
+        let Some(b) = cc.project.corner_blend(si, pid, pair, corner_cut(cc, chamfer, v)) else { continue };
         // THE COLOUR IS A CONSEQUENCE OF WHETHER THE CORNER IS IN THE SET, not a thing of its own: a corner that is
         // in it keeps the two lines it was made by and is drawn as such, and the one the cursor is pointing at -
         // the only corner a click can still make - is drawn apart from them.
@@ -644,6 +644,16 @@ fn draw_corner_preview(cc: &qymcad_ui_state::CornerCtx, ctx: &egui::Context, rec
             layer.circle_stroke(at(e), 3.0, egui::Stroke::new(1.4, col));
         }
     }
+}
+
+/// THE CUT THE TOOL IN HAND MAKES OF `value`: a fillet of that radius, or a chamfer in the mode of the bar with its
+/// second value - so the preview of two legs or of a leg and an angle is the chamfer Enter makes.
+fn corner_cut(cc: &qymcad_ui_state::CornerCtx, chamfer: bool, value: f64) -> qymcad_core::model::CornerCut {
+    if !chamfer {
+        return qymcad_core::model::CornerCut::Fillet { radius: value };
+    }
+    let second = parse_num(cc.project, &cc.corner.buf2).unwrap_or(cc.tool_prefs.chamfer_second);
+    qymcad_core::model::CornerCut::Chamfer(qymcad_core::model::ChamferLegs { mode: cc.tool_prefs.chamfer_mode, first: value, second })
 }
 
 /// THE SET SAID IN WORDS: how many corners one answer will cut.
@@ -735,7 +745,7 @@ fn corner_box_place(cc: &qymcad_ui_state::CornerCtx, rect: Rect, si: usize, firs
     let (pid, pair) = first?;
     // a value too big for the corner draws no preview, and the side of the corner is the same at any value
     let v = value_for_preview(cc);
-    let b = cc.project.corner_blend(si, pid, pair, chamfer, v).or_else(|| cc.project.corner_blend(si, pid, pair, chamfer, CORNER_BOX_PROBE))?;
+    let b = cc.project.corner_blend(si, pid, pair, corner_cut(cc, chamfer, v)).or_else(|| cc.project.corner_blend(si, pid, pair, corner_cut(cc, chamfer, CORNER_BOX_PROBE)))?;
     let sh = qymcad_ui_state::Sheet { view: *cc.view, rect };
     let at = |p: [f64; 2]| sh.at(qymcad_core::geom::Point2::new(p[0], p[1]));
     let corner = at(b.vertex);
@@ -783,7 +793,7 @@ pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Conte
     // ONE VALUE CUTS THE WHOLE SET, so it is held by the tightest corner in it AND by what the lines between the
     // corners spend on themselves. A value that fits one corner and overruns the one beside it would leave a
     // half-cut drawing behind, and rounding every corner of a rectangle takes half its short side for that reason.
-    let limit = cc.corner.set.limit(cc.project, si, chamfer);
+    let limit = cc.corner.set.limit(cc.project, si, qymcad_ui_state::corner_tool(chamfer, cc.tool_prefs));
     // WHY THIS VALUE CANNOT BE TAKEN, said of the value as it is typed and again at Enter - one sentence, read in
     // two places, so that what the box says beside the field is the very reason Enter refuses it for.
     let judge = |project: &qymcad_core::model::Project, text: &str| -> Option<String> {

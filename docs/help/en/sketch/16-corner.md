@@ -8,9 +8,11 @@
   the corner, **Enter**.
 - **Fillet by its chord or arc length**: on the bar above press **Chord** (the straight distance between the two
   ends of the arc) or **Arc length** instead of **Radius**, then click the corner, type the value, **Enter**.
-- **Chamfer**: click the corner of two lines, type the size into the field at the corner, **Enter**.
+- **Chamfer**: click the corner of two lines, type the size into the field at the corner, **Enter**. The size is the
+  length of the cut itself; its dimension stands on the two ends of the cut, and the cut stands back from the corner
+  equally along both lines.
 - **Chamfer by two values**: on the bar above press **Two distances** (**Leg 1** and **Leg 2**) or **Leg and angle**
-  (**Length** and the **Angle** between that line and the cut); **Symmetric** gives one size along both lines. The
+  (**Length** and the **Angle** between that line and the cut); **Symmetric** gives one size, the length of the cut. The
   first value runs along the line you click nearer to: click the corner a little to the side of that line. Type the first
   value, **Tab** to the second, **Enter**.
 - **The corner of the lines**: choose the lines (with **Shift**, if there is more than one) — the corners they make

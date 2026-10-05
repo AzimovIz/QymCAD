@@ -6549,7 +6549,9 @@ pub fn tool_options_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
                 let corner_hi = bc
                     .corner
                     .at
-                    .and_then(|(si, pid, ch)| (pid != 0).then(|| qymcad_ui_state::corner_limit_in(&*bc.project, si, pid, ch, bc.tool_prefs.fillet_by)).flatten())
+                    .and_then(|(si, pid, ch)| {
+                        (pid != 0).then(|| qymcad_ui_state::corner_limit_in(&*bc.project, si, pid, qymcad_ui_state::corner_tool(ch, bc.tool_prefs), bc.tool_prefs.fillet_by)).flatten()
+                    })
                     .map_or(10000.0, |l| l * (1.0 - 1e-9));
                 bc.tool_prefs.fillet = qymcad_ui_state::num_or_expr(
                     &mut qymcad_ui_state::ExprBarCtx { bar_exprs: &mut *bc.bar_exprs, project: &*bc.project, scheme: &*bc.scheme },

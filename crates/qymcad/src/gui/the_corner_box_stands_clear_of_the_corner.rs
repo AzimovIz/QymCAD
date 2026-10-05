@@ -25,7 +25,18 @@ mod tests {
         let Some(bx) = hand.corner_box() else { return vec!["the box is not up".into()] };
         let standing = hand.app.tools.corner.set.standing();
         let Some(&(pid, pair)) = standing.first() else { return vec!["no corner named".into()] };
-        let Some(b) = hand.app.project.corner_blend(si, pid, pair, chamfer, 3.0) else { return vec!["no preview of the corner".into()] };
+        let Some(b) = hand.app.project.corner_blend(
+            si,
+            pid,
+            pair,
+            if chamfer {
+                qymcad_core::model::CornerCut::Chamfer(qymcad_core::model::ChamferLegs::equal(3.0))
+            } else {
+                qymcad_core::model::CornerCut::Fillet { radius: 3.0 }
+            },
+        ) else {
+            return vec!["no preview of the corner".into()];
+        };
         let mid = match b.arc {
             // the middle of the arc: from the centre towards the corner, at the radius
             Some((c, r)) => {

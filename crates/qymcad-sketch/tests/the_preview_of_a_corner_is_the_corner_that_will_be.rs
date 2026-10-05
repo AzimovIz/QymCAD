@@ -45,7 +45,7 @@ fn an_angle(d1: (i32, i32), d2: (i32, i32)) -> (Project, usize, (u64, u64)) {
 /// THE ARC OF THE PREVIEW AS THE SHEET SHOWS IT, with the three points it is about: the corner, and the two ends.
 fn drawn(p: &Project, si: usize, e: (u64, u64), r: f64) -> (Vec<Pos2>, Pos2, Pos2, Pos2) {
     let pid = p.shared_vertex(si, e.0, e.1).expect("the two lines share the corner");
-    let b = p.corner_blend(si, pid, e, false, r).expect("a fillet of this corner can be shown");
+    let b = p.corner_blend(si, pid, e, qymcad_core::model::CornerCut::Fillet { radius: r }).expect("a fillet of this corner can be shown");
     let (Some((c, _)), [e0, e1]) = (b.arc, b.ends) else { panic!("a fillet is shown as an arc, not as a straight cut") };
     let sh = sheet();
     let at = |q: [f64; 2]| sh.at(Point2::new(q[0], q[1]));
@@ -78,7 +78,7 @@ fn the_arc_of_the_preview_bulges_towards_the_corner() {
 fn the_ends_of_the_preview_are_the_ends_of_the_fillet() {
     let (mut p, si, e) = an_angle((1, 0), (0, 1));
     let pid = p.shared_vertex(si, e.0, e.1).expect("the two lines share the corner");
-    let b = p.corner_blend(si, pid, e, false, 4.0).expect("a fillet of this corner can be shown");
+    let b = p.corner_blend(si, pid, e, qymcad_core::model::CornerCut::Fillet { radius: 4.0 }).expect("a fillet of this corner can be shown");
     assert!(p.fillet_at_pair(si, e, 4.0), "the fillet of the corner did not apply");
     let arc = p.sketches[si].entities.iter().find_map(|x| if let EntityKind::Arc { a, b, .. } = x.kind { Some((a, b)) } else { None }).expect("the fillet is an arc");
     let xy = |id| p.sketches[si].points.iter().find(|q| q.id == id).map(|q| (q.x, q.y)).expect("the arc stands on points of the sketch");

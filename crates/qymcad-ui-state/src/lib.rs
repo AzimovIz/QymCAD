@@ -13563,10 +13563,10 @@ impl CornerSet {
     /// One value cuts them all, so it is held by the tightest of them; and a line between two corners spends the
     /// value on itself at both ends, which is why rounding every corner of a rectangle takes half its short side.
     /// `None` when the set holds no corner, and a value then is held by nothing.
-    pub fn limit(&self, project: &Project, si: usize, chamfer: bool) -> Option<f64> {
-        let of_corners = self.standing().iter().filter_map(|&(pid, pair)| project.corner_limit_of_pair(si, pid, pair, chamfer)).fold(None, |m: Option<f64>, v| Some(m.map_or(v, |m| m.min(v))));
+    pub fn limit(&self, project: &Project, si: usize, tool: qymcad_core::model::CornerTool) -> Option<f64> {
+        let of_corners = self.standing().iter().filter_map(|&(pid, pair)| project.corner_limit_of_pair(si, pid, pair, tool)).fold(None, |m: Option<f64>, v| Some(m.map_or(v, |m| m.min(v))));
         let lines = self.lines();
-        match (of_corners, project.all_corners_limit(si, Some(&lines))) {
+        match (of_corners, project.all_corners_limit(si, Some(&lines), tool)) {
             (Some(a), Some(b)) => Some(a.min(b)),
             (a, b) => a.or(b),
         }
@@ -14103,15 +14103,24 @@ pub fn fillet_label(by: qymcad_core::model::FilletBy) -> &'static str {
     }
 }
 
-/// THE MOST A CORNER TAKES, in the way its size is given: the leg of a chamfer, or the radius, the chord or the arc
-/// length of a fillet - the largest radius worked into the chord or the arc of the same turn. `None` where the corner
-/// is not one of two lines.
-pub fn corner_limit_in(project: &Project, si: usize, pid: Id, chamfer: bool, by: qymcad_core::model::FilletBy) -> Option<f64> {
-    let l = project.corner_limit(si, pid, chamfer)?;
-    if chamfer || by == qymcad_core::model::FilletBy::Radius {
+/// THE MOST A CORNER TAKES, in the way its size is given: the cut or the leg of a chamfer, or the radius, the chord or
+/// the arc length of a fillet - the largest radius worked into the chord or the arc of the same turn. `None` where the
+/// corner is not one of two lines.
+pub fn corner_limit_in(project: &Project, si: usize, pid: Id, tool: qymcad_core::model::CornerTool, by: qymcad_core::model::FilletBy) -> Option<f64> {
+    let l = project.corner_limit(si, pid, tool)?;
+    if tool != qymcad_core::model::CornerTool::Fillet || by == qymcad_core::model::FilletBy::Radius {
         return Some(l);
     }
     project.corner_sweep(si, pid).map(|sweep| qymcad_core::model::FilletSize::of_radius(by, l, sweep))
+}
+
+/// THE CORNER TOOL IN HAND, with the way the bar reads a chamfer's first value.
+pub fn corner_tool(chamfer: bool, prefs: &SketchToolPrefs) -> qymcad_core::model::CornerTool {
+    if chamfer {
+        qymcad_core::model::CornerTool::Chamfer(prefs.chamfer_mode)
+    } else {
+        qymcad_core::model::CornerTool::Fillet
+    }
 }
 
 /// The size of the fillet the bar holds: the way it is given and the value in that way.

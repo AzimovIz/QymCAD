@@ -25,7 +25,9 @@ fn near(a: [f64; 2], b: (f64, f64)) -> bool {
 #[test]
 fn the_chamfer_is_shown_as_the_cut_it_will_make() {
     let (p, si, corner, edges) = an_angle();
-    let b = p.corner_blend(si, corner, edges, true, 5.0).expect("a leg of 5 fits this corner");
+    let b = p
+        .corner_blend(si, corner, edges, qymcad_core::model::CornerCut::Chamfer(qymcad_core::model::ChamferLegs { mode: qymcad_core::feature::ChamferMode::TwoDist, first: 5.0, second: 5.0 }))
+        .expect("a leg of 5 fits this corner");
     assert_eq!(b.vertex, [20.0, 0.0], "the preview is not drawn at the corner");
     assert!(near(b.ends[0], (15.0, 0.0)) && near(b.ends[1], (20.0, 5.0)), "a leg of 5 does not meet the lines at (15, 0) and (20, 5): {:?}", b.ends);
     assert!(b.arc.is_none(), "a chamfer is a straight cut and has no arc");
@@ -38,7 +40,7 @@ fn the_chamfer_is_shown_as_the_cut_it_will_make() {
 #[test]
 fn the_fillet_is_shown_as_the_arc_it_will_leave() {
     let (p, si, corner, edges) = an_angle();
-    let b = p.corner_blend(si, corner, edges, false, 5.0).expect("a radius of 5 fits this corner");
+    let b = p.corner_blend(si, corner, edges, qymcad_core::model::CornerCut::Fillet { radius: 5.0 }).expect("a radius of 5 fits this corner");
     // a right angle: the arc touches each line 5 from the corner, its centre on the bisector
     assert!(near(b.ends[0], (15.0, 0.0)) && near(b.ends[1], (20.0, 5.0)), "the arc of radius 5 does not meet the lines at (15, 0) and (20, 5): {:?}", b.ends);
     let (c, r) = b.arc.expect("a fillet leaves an arc");
@@ -52,10 +54,22 @@ fn the_fillet_is_shown_as_the_arc_it_will_leave() {
 #[test]
 fn a_value_the_corner_cannot_take_is_shown_as_nothing() {
     let (p, si, corner, edges) = an_angle();
-    assert!(p.corner_blend(si, corner, edges, true, 25.0).is_none(), "a leg of 25 was drawn on lines of 20: a preview must not promise what cannot be built");
-    assert!(p.corner_blend(si, corner, edges, false, 25.0).is_none(), "a radius of 25 was drawn on lines of 20");
-    assert!(p.corner_blend(si, corner, edges, true, 0.0).is_none(), "a leg of zero is nothing to draw");
-    assert!(p.corner_blend(si, corner, edges, true, 19.9).is_some(), "a leg of 19.9 fits a line of 20 and must be shown");
+    assert!(
+        p.corner_blend(si, corner, edges, qymcad_core::model::CornerCut::Chamfer(qymcad_core::model::ChamferLegs { mode: qymcad_core::feature::ChamferMode::TwoDist, first: 25.0, second: 25.0 }))
+            .is_none(),
+        "a leg of 25 was drawn on lines of 20: a preview must not promise what cannot be built"
+    );
+    assert!(p.corner_blend(si, corner, edges, qymcad_core::model::CornerCut::Fillet { radius: 25.0 }).is_none(), "a radius of 25 was drawn on lines of 20");
+    assert!(
+        p.corner_blend(si, corner, edges, qymcad_core::model::CornerCut::Chamfer(qymcad_core::model::ChamferLegs { mode: qymcad_core::feature::ChamferMode::TwoDist, first: 0.0, second: 0.0 }))
+            .is_none(),
+        "a leg of zero is nothing to draw"
+    );
+    assert!(
+        p.corner_blend(si, corner, edges, qymcad_core::model::CornerCut::Chamfer(qymcad_core::model::ChamferLegs { mode: qymcad_core::feature::ChamferMode::TwoDist, first: 19.9, second: 19.9 }))
+            .is_some(),
+        "a leg of 19.9 fits a line of 20 and must be shown"
+    );
 }
 
 #[test]
@@ -65,5 +79,9 @@ fn a_pair_that_is_not_a_corner_is_shown_as_nothing() {
     let far = p.add_line_entity(si, 60.0, 60.0, 80.0, 60.0, Purpose::Real);
     p.regen_sketch(si);
     assert_eq!(p.corner_of_pair(si, left, far), None, "setup: these two lines share no corner");
-    assert!(p.corner_blend(si, corner, (left, far), true, 5.0).is_none(), "a preview was drawn between two lines that meet nowhere");
+    assert!(
+        p.corner_blend(si, corner, (left, far), qymcad_core::model::CornerCut::Chamfer(qymcad_core::model::ChamferLegs { mode: qymcad_core::feature::ChamferMode::TwoDist, first: 5.0, second: 5.0 }))
+            .is_none(),
+        "a preview was drawn between two lines that meet nowhere"
+    );
 }

@@ -22,9 +22,9 @@ pub struct TextSpec {
     pub font: crate::model::FontRef,
 }
 
-/// THE SIZE OF A SKETCH CHAMFER, as the chamfer of a part is given: how (`ChamferMode`), the first leg - along the first
-/// line - and the second value: the second leg for two legs, the angle from the first line in degrees for a leg and an
-/// angle, nothing for equal legs.
+/// THE SIZE OF A SKETCH CHAMFER: how (`ChamferMode`), the first value and the second. For a symmetric chamfer the first
+/// is the length of the cut itself and there is no second; for two legs, the first leg - along the first line - and the
+/// second; for a leg and an angle, the first leg and the angle from the first line in degrees.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ChamferLegs {
     pub mode: crate::feature::ChamferMode,
@@ -33,7 +33,7 @@ pub struct ChamferLegs {
 }
 
 impl ChamferLegs {
-    /// Equal legs of `d`.
+    /// A symmetric chamfer whose cut is `d` long.
     pub fn equal(d: f64) -> Self {
         ChamferLegs { mode: crate::feature::ChamferMode::Symmetric, first: d, second: 0.0 }
     }
@@ -41,20 +41,41 @@ impl ChamferLegs {
     /// The two legs along the lines of a corner whose angle is `corner` (radians); `None` where the size cannot be
     /// laid: a leg of no length, or an angle that with the corner leaves no triangle (law of sines).
     pub fn along(&self, corner: f64) -> Option<(f64, f64)> {
-        let d1 = self.first;
-        let d2 = match self.mode {
-            crate::feature::ChamferMode::Symmetric => d1,
-            crate::feature::ChamferMode::TwoDist => self.second,
+        let (d1, d2) = match self.mode {
+            // the cut is the base of an isosceles triangle whose apex is the corner: each leg is cut / (2 sin(corner / 2))
+            crate::feature::ChamferMode::Symmetric => {
+                let base = 2.0 * (corner / 2.0).sin();
+                if base <= 1e-9 {
+                    return None;
+                }
+                (self.first / base, self.first / base)
+            }
+            crate::feature::ChamferMode::TwoDist => (self.first, self.second),
             crate::feature::ChamferMode::DistAngle => {
                 let a = self.second.to_radians();
                 if a <= 0.0 || a + corner >= std::f64::consts::PI - 1e-9 {
                     return None;
                 }
-                d1 * a.sin() / (a + corner).sin()
+                (self.first, self.first * a.sin() / (a + corner).sin())
             }
         };
         (d1 > 1e-9 && d2 > 1e-9 && d1.is_finite() && d2.is_finite()).then_some((d1, d2))
     }
+}
+
+/// WHICH OF THE TWO CORNER TOOLS A VALUE IS FOR, and for a chamfer how its first value is read: the length of the cut for a
+/// symmetric one, a leg for the others. What the most a corner takes is depends on it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum CornerTool {
+    Fillet,
+    Chamfer(crate::feature::ChamferMode),
+}
+
+/// THE CUT A CORNER IS SHOWN WITH before it is made: a fillet of a radius, or a chamfer of its size.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum CornerCut {
+    Fillet { radius: f64 },
+    Chamfer(ChamferLegs),
 }
 
 /// HOW A SKETCH FILLET IS GIVEN: by its radius, by its chord - the straight distance between the two points where it
@@ -2456,17 +2477,26 @@ impl Project {
                 }
             }
             s.entities.push(SketchEntity { id: seg, kind: EntityKind::Line { a: t1, b: t2 }, construction: false });
-            // THE CHAMFER KEEPS ITS SIZE AS DIMENSIONS, measured from the sharp corner, so it can be changed afterwards and
-            // the cut follows: the first leg, then the second leg - equal to the first for equal legs - or the angle from
-            // the first line. Standing on the corner, they keep it as the virtual sharp below.
+            // THE CHAMFER KEEPS ITS SIZE AS DIMENSIONS, so it can be changed afterwards and the cut follows. A symmetric
+            // one is sized by the cut itself, between its two ends, and held symmetric by its legs kept equal; two legs,
+            // or a leg and the angle from the first line, are measured from the sharp corner. Whatever stands on the
+            // corner keeps it as the virtual sharp below.
             let leg = |a: Id, b: Id, d: f64| Constraint::Distance { a, b, d, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None };
-            s.constraints.push(leg(pc, t1, d1));
-            s.constraints.push(match legs.mode {
-                crate::feature::ChamferMode::Symmetric => Constraint::Equal { a: pc, b: t1, c: pc, d: t2 },
-                crate::feature::ChamferMode::TwoDist => leg(pc, t2, d2),
+            match legs.mode {
+                crate::feature::ChamferMode::Symmetric => {
+                    s.constraints.push(leg(t1, t2, legs.first));
+                    s.constraints.push(Constraint::Equal { a: pc, b: t1, c: pc, d: t2 });
+                }
+                crate::feature::ChamferMode::TwoDist => {
+                    s.constraints.push(leg(pc, t1, d1));
+                    s.constraints.push(leg(pc, t2, d2));
+                }
                 // the angle between the first line, run towards the corner, and the cut: what a drawing of the chamfer gives
-                crate::feature::ChamferMode::DistAngle => Constraint::AngleLines { a: o1, b: t1, c: t1, d: t2, deg: legs.second, expr: String::new(), driven: false, off: 0.0, at: None },
-            });
+                crate::feature::ChamferMode::DistAngle => {
+                    s.constraints.push(leg(pc, t1, d1));
+                    s.constraints.push(Constraint::AngleLines { a: o1, b: t1, c: t1, d: t2, deg: legs.second, expr: String::new(), driven: false, off: 0.0, at: None });
+                }
+            }
         }
         // Virtual corner: the vertex is held on the extensions of both lines, so dimensions to the corner stay
         // valid and the contour stays whole.
@@ -2897,7 +2927,7 @@ impl Project {
     /// drawn at all when the value does not fit the corner.
     ///
     /// `None` when the pair is not a corner, when the value is not one, or when it is too big for the corner.
-    pub fn corner_blend(&self, si: usize, pid: Id, (e1, e2): (Id, Id), chamfer: bool, value: f64) -> Option<CornerBlend> {
+    pub fn corner_blend(&self, si: usize, pid: Id, (e1, e2): (Id, Id), cut: CornerCut) -> Option<CornerBlend> {
         // THE PAIR MUST BE THE CORNER: two lines that meet nowhere, or that lie along one straight line, are not a
         // corner and there is nothing to show where they are not.
         if self.corner_of_pair(si, e1, e2) != Some(pid) {
@@ -2916,15 +2946,22 @@ impl Project {
         let (Some((d1x, d1y, l1)), Some((d2x, d2y, l2))) = (dir(self, e1), dir(self, e2)) else { return None };
         let shorter = l1.min(l2);
         let theta = (d1x * d2x + d1y * d2y).clamp(-1.0, 1.0).acos();
-        // THE MOST THE CORNER TAKES: a leg along the line for a chamfer, a radius whose touching points stand at
-        // r / tan(theta / 2) from the corner for a fillet. Past this there is nothing to show.
-        let limit = if chamfer { shorter } else { shorter * (theta / 2.0).tan() };
+        let at = |dx: f64, dy: f64, d: f64| [pcx + dx * d, pcy + dy * d];
+        // THE MOST THE CORNER TAKES: a chamfer's legs short of the far end of each line, a radius whose touching points
+        // stand at r / tan(theta / 2) from the corner for a fillet. Past this there is nothing to show.
+        let value = match cut {
+            CornerCut::Chamfer(legs) => {
+                let (a, b) = legs.along(theta)?;
+                if a >= l1 * (1.0 - 1e-9) || b >= l2 * (1.0 - 1e-9) {
+                    return None;
+                }
+                return Some(CornerBlend { vertex: [pcx, pcy], ends: [at(d1x, d1y, a), at(d2x, d2y, b)], arc: None });
+            }
+            CornerCut::Fillet { radius } => radius,
+        };
+        let limit = shorter * (theta / 2.0).tan();
         if value <= 1e-6 || !limit.is_finite() || value >= limit * (1.0 - 1e-9) {
             return None;
-        }
-        let at = |dx: f64, dy: f64, d: f64| [pcx + dx * d, pcy + dy * d];
-        if chamfer {
-            return Some(CornerBlend { vertex: [pcx, pcy], ends: [at(d1x, d1y, value), at(d2x, d2y, value)], arc: None });
         }
         let half = (theta / 2.0).max(1e-6);
         let along = value / half.tan(); // where the arc touches each line
