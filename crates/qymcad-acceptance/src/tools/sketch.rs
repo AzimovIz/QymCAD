@@ -78,9 +78,9 @@ pub static LINE: Tool = Tool {
     ],
 };
 
-/// A 40 x 30 rectangle by its two corners.
+/// A 40 x 30 rectangle by its two corners, its centre a point of its own.
 const RECT_BY_CORNERS: Outcome = Outcome::Sketch {
-    points: 4,
+    points: 5,
     lines: 4,
     arcs: 0,
     circles: 0,
@@ -92,13 +92,14 @@ const RECT_BY_CORNERS: Outcome = Outcome::Sketch {
     dof: None,
     box_of: None,
     size_of: None,
-    under: &[(20.0, 0.0, Under::Line), (0.0, 30.0, Under::Point), (20.0, 15.0, Under::Nothing)],
+    under: &[(20.0, 0.0, Under::Line), (0.0, 30.0, Under::Point), (20.0, 15.0, Under::Point), (10.0, 8.0, Under::Nothing)],
 };
 
-/// The same rectangle from a centre at the origin: 80 x 60, its sides through the corner clicked.
+/// The same rectangle from a centre at the origin: 80 x 60, its sides through the corner clicked, its centre a point of
+/// its own and its two construction diagonals through it.
 const RECT_FROM_CENTRE: Outcome = Outcome::Sketch {
-    points: 4,
-    lines: 4,
+    points: 5,
+    lines: 6,
     arcs: 0,
     circles: 0,
     ellipses: 0,
@@ -112,9 +113,9 @@ const RECT_FROM_CENTRE: Outcome = Outcome::Sketch {
     under: &[(0.0, 30.0, Under::Line), (40.0, 30.0, Under::Point), (20.0, 20.0, Under::Nothing)],
 };
 
-/// A rectangle by three points: a side from the first two, the height to the third.
+/// A rectangle by three points: a side from the first two, the height to the third; its centre a point of its own.
 const RECT_BY_THREE: Outcome = Outcome::Sketch {
-    points: 4,
+    points: 5,
     lines: 4,
     arcs: 0,
     circles: 0,
@@ -126,7 +127,7 @@ const RECT_BY_THREE: Outcome = Outcome::Sketch {
     dof: None,
     box_of: None,
     size_of: None,
-    under: &[(20.0, 0.0, Under::Line), (0.0, 0.0, Under::Point), (20.0, 10.0, Under::Nothing)],
+    under: &[(20.0, 0.0, Under::Line), (0.0, 0.0, Under::Point), (20.0, 10.0, Under::Point), (10.0, 5.0, Under::Nothing)],
 };
 
 /// A RECTANGLE: two corners, or a centre and a corner, or three points.
@@ -728,7 +729,7 @@ pub static TEXT: Tool = Tool {
 /// The rectangle of the fixture with its bottom side given a length: the width follows the number typed.
 const fn rect_of_width(w: f64) -> Outcome {
     Outcome::Sketch {
-        points: 4,
+        points: 5,
         lines: 4,
         arcs: 0,
         circles: 0,
@@ -736,7 +737,8 @@ const fn rect_of_width(w: f64) -> Outcome {
         splines: 0,
         texts: 0,
         notes: 0,
-        constraints: Some(5),
+        // the four turns of its sides, its centre on the middle, the dimension
+        constraints: Some(6),
         dof: Some(3),
         box_of: None,
         // a dimension sets the size; where the line stands is for the solver, which moves both of its free ends
@@ -1721,7 +1723,8 @@ pub static CON_EQUAL: Tool = Tool {
     words: &[],
     fields: &[],
     modes: &[],
-    result: Outcome::Sketch { points: 4, lines: 4, arcs: 0, circles: 0, ellipses: 0, splines: 0, texts: 0, notes: 0, constraints: None, dof: Some(3), box_of: None, size_of: None, under: &[] },
+    // four corners and the centre of the rectangle
+    result: Outcome::Sketch { points: 5, lines: 4, arcs: 0, circles: 0, ellipses: 0, splines: 0, texts: 0, notes: 0, constraints: None, dof: Some(3), box_of: None, size_of: None, under: &[] },
     node: "Sketch",
     // one step of undo named by the kind of edit, "Constraint", as the other constraints name theirs
     undo: "sk-constraint",
@@ -2234,9 +2237,9 @@ const EDITS: &[(u8, &str)] = &[
     DRAWS[5],
 ];
 
-/// A rectangle 40 x 30 with one more side 30 below its bottom: a copy placed, or a cut side put back lower.
+/// A rectangle 40 x 30 - its four corners and its centre - with one more side 30 below its bottom: a copy placed.
 const RECT_AND_SIDE_BELOW: Outcome = Outcome::Sketch {
-    points: 6,
+    points: 7,
     lines: 5,
     arcs: 0,
     circles: 0,

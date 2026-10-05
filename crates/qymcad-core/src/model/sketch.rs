@@ -2901,6 +2901,33 @@ impl Project {
         let mut radii = self.entity_radii(si);
         let intrinsics = self.entity_intrinsics(si);
         let Some(s) = self.sketches.get_mut(si) else { return 0.0 };
+        // THE CENTRE OF A RECTANGLE DRAWN BY ITS CORNERS FOLLOWS THE CORNERS: it is put on the middle of the diagonal
+        // before the solve. Left where it stood, it held the corners back - a side moved from 20 to 30 came out at 28.9,
+        // the solver sharing the move between the corners and the centre. A centre a rectangle was drawn from is its
+        // anchor and stays.
+        struct Mid {
+            centre: Id,
+            at: Point2,
+        }
+        let mids: Vec<Mid> = s
+            .rects
+            .iter()
+            .filter(|r| matches!(r.anchor, crate::model::RectAnchor::Corner(_)))
+            // only a centre nothing else holds: one that carries a constraint of its own is solved with it, and put back on
+            // the middle before every solve of a contradicting sketch it was a new compromise each time - a point drifted
+            // by 1 mm from one solve to the next
+            .filter(|r| s.constraints.iter().filter(|c| c.points().contains(&r.centre)).count() == 1)
+            .filter_map(|r| {
+                let at = |id: Id| s.points.iter().find(|q| q.id == id).map(|q| Point2::new(q.x, q.y));
+                let (a, c) = (at(r.corners[0])?, at(r.corners[2])?);
+                Some(Mid { centre: r.centre, at: Point2::new((a.x + c.x) / 2.0, (a.y + c.y) / 2.0) })
+            })
+            .collect();
+        for m in mids {
+            if let Some(q) = s.points.iter_mut().find(|q| q.id == m.centre) {
+                (q.x, q.y) = (m.at.x, m.at.y);
+            }
+        }
         // Reference (driven) dimensions do not constrain the geometry and are excluded from the solver, while
         // the arc intrinsics (endpoints on the circle of radius R) are always active.
         let mut active: Vec<Constraint> = s.constraints.iter().filter(|c| !c.is_driven()).cloned().collect();
