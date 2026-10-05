@@ -291,9 +291,9 @@ impl App {
                     // would be a false alarm of "a heap of errors" on a perfectly good sketch.
                     let has_conflict = !sketch_diag(&self.cache, &self.project, si).conflicts.is_empty();
                     let (_, free) = sketch_status(&mut self.sketch_ctx(), si); // cached: the Jacobian is not computed every frame
-                                                                               // the reference points (the origin, the guides of the axes) are drawn by the axis marker
-                                                                               // rather than as numbered geometry, so they are hidden from the common list.
-                    let refset: std::collections::HashSet<Id> = self.project.sketches[si].system_ids().into_iter().collect();
+                                                                               // the reference points and the virtual sharps of rectangles are not drawn
+                                                                               // as numbered geometry (see `unseen_points`)
+                    let refset = self.project.sketches[si].unseen_points();
                     for (pi, p) in self.project.sketches[si].points.iter().enumerate() {
                         if refset.contains(&p.id) {
                             continue;

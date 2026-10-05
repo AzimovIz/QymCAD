@@ -608,6 +608,29 @@ impl Sketch {
     ///
     /// One source of truth on purpose: spelled out by hand in six places the set drifts apart, some copies
     /// forgetting the origin and others the axes.
+    /// THE CORNERS OF A RECTANGLE LEFT AS VIRTUAL SHARPS: a corner rounded or cut away stays a point of the rectangle -
+    /// its centre stands on the middle of the corners, its turn is told by them - but no line of it ends there any
+    /// more. Such a point is the rectangle's own, not geometry: it is not drawn and not picked. Shown, a rectangle
+    /// rounded all round carried four points out in the air beyond its arcs.
+    pub fn virtual_sharps(&self) -> std::collections::HashSet<Id> {
+        let ends: std::collections::HashSet<Id> = self
+            .entities
+            .iter()
+            .filter(|e| !e.construction)
+            .flat_map(|e| match e.kind {
+                EntityKind::Line { a, b } | EntityKind::Arc { a, b, .. } => vec![a, b],
+                _ => Vec::new(),
+            })
+            .collect();
+        self.rects.iter().flat_map(|r| r.corners).filter(|c| !ends.contains(c)).collect()
+    }
+
+    /// The points not drawn among the sketch's own: the frame of reference (drawn by the axis marker) and the virtual
+    /// sharps of rectangles.
+    pub fn unseen_points(&self) -> std::collections::HashSet<Id> {
+        self.system_ids().into_iter().chain(self.virtual_sharps()).collect()
+    }
+
     pub fn system_ids(&self) -> Vec<Id> {
         std::iter::once(self.origin).chain(std::iter::once(self.frame)).chain(self.axis_pts).filter(|id| *id != 0).collect()
     }

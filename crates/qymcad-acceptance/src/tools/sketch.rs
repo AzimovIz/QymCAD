@@ -2470,18 +2470,20 @@ pub static MEASURE: Tool = Tool {
 };
 
 /// The rectangle 40 x 30 with every corner rounded with radius `r`: four sides cut back by r at each end, four arcs of
-/// quarter turns - eight points where arcs touch sides and four centres; the box of the whole is untouched.
+/// quarter turns - eight points where arcs touch sides and four centres, and the rectangle's own five: its four
+/// corners left as virtual sharps, which are neither drawn nor picked (the far corner (40, 30) takes no click), and
+/// its centre; the box of the whole is untouched.
 fn all_corners_rounded(r: f64) -> Outcome {
     let near = r - r / std::f64::consts::SQRT_2;
     // what lies under the pointer is asked only of an arc the pointer can tell from its ends: at 0.01 the whole arc is
     // under one pixel with its two ends, and the pick rightly finds a point there
     let under: &'static [(f64, f64, Under)] = if r >= 1.0 {
-        Box::leak(vec![(r / 2.0, 0.0, Under::Nothing), (20.0, 0.0, Under::Line), (near, near, Under::Arc), (40.0 - near, 30.0 - near, Under::Arc)].into_boxed_slice())
+        Box::leak(vec![(r / 2.0, 0.0, Under::Nothing), (20.0, 0.0, Under::Line), (near, near, Under::Arc), (40.0 - near, 30.0 - near, Under::Arc), (40.0, 30.0, Under::Nothing)].into_boxed_slice())
     } else {
         &[(20.0, 0.0, Under::Line)]
     };
     Outcome::Sketch {
-        points: 12,
+        points: 17,
         lines: 4,
         arcs: 4,
         circles: 0,
@@ -2525,8 +2527,9 @@ pub static FILLET_ALL: Tool = Tool {
         outcome: all_corners_rounded,
     }],
     modes: &[],
+    // see `all_corners_rounded`: twelve drawn, the four virtual sharps and the centre of the rectangle
     result: Outcome::Sketch {
-        points: 12,
+        points: 17,
         lines: 4,
         arcs: 4,
         circles: 0,
@@ -2538,7 +2541,7 @@ pub static FILLET_ALL: Tool = Tool {
         dof: None,
         box_of: Some(([0.0, 0.0], [40.0, 30.0])),
         size_of: None,
-        under: &[(2.5, 0.0, Under::Nothing), (20.0, 0.0, Under::Line)],
+        under: &[(2.5, 0.0, Under::Nothing), (20.0, 0.0, Under::Line), (40.0, 30.0, Under::Nothing)],
     },
     node: "Sketch",
     undo: "tool-fillet",

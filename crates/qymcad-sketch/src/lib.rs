@@ -421,8 +421,9 @@ pub fn sketch_hit(pick: &qymcad_ui_state::PickCtx, rect: Rect, pos: Pos2, si: us
     // every tie to a real point.
     let mut best_pt: Option<(f32, Id)> = None;
     let mut best_sys: Option<(f32, Id)> = None;
+    let sharps = s.virtual_sharps(); // not drawn, so not picked
     for p in &s.points {
-        if is_axis_ref(p.id) {
+        if is_axis_ref(p.id) || sharps.contains(&p.id) {
             continue;
         }
         let d = sh.at(Point2::new(p.x, p.y)).distance(pos);
