@@ -2979,20 +2979,20 @@ impl Project {
     /// length the role of an area, so descriptive queries ("along the axis", "the longest") work on edges
     /// without any separate code.
     pub fn edge_pool(&self, body: Id) -> Vec<crate::refs::Candidate> {
-        self.regen_edges
-            .get(&body)
-            .map(|es| {
-                es.iter()
-                    .map(|e| crate::refs::Candidate {
-                        desc: e.id,
-                        centroid: e.mid,
-                        normal: e.dir,
-                        area: ((e.b[0] - e.a[0]).powi(2) + (e.b[1] - e.a[1]).powi(2) + (e.b[2] - e.a[2]).powi(2)).sqrt(),
-                        edge: Some(crate::refs::EdgeGeom { a: e.a, b: e.b, center: e.center, axis: e.axis, radius: e.radius }),
-                    })
-                    .collect()
+        self.regen_edges.get(&body).map(|es| Self::edge_candidates(es)).unwrap_or_default()
+    }
+
+    /// A list of edges as resolution sees it, wherever the list came from.
+    fn edge_candidates(es: &[crate::geom::MeshEdge]) -> Vec<crate::refs::Candidate> {
+        es.iter()
+            .map(|e| crate::refs::Candidate {
+                desc: e.id,
+                centroid: e.mid,
+                normal: e.dir,
+                area: ((e.b[0] - e.a[0]).powi(2) + (e.b[1] - e.a[1]).powi(2) + (e.b[2] - e.a[2]).powi(2)).sqrt(),
+                edge: Some(crate::refs::EdgeGeom { a: e.a, b: e.b, center: e.center, axis: e.axis, radius: e.radius }),
             })
-            .unwrap_or_default()
+            .collect()
     }
 
     /// Every vertex of a body as resolution sees it: a point plus a name derived from its edges.
@@ -3062,6 +3062,15 @@ impl Project {
     /// is always phrased through faces ("every edge of this face", "the seam between these two sets").
     pub fn resolve_edge_refs(&self, body: Id, r: &crate::refs::Ref, what: &str) -> Result<Vec<u32>, crate::refs::RefError> {
         r.resolve(what, &self.edge_pool(body), &self.names, &self.face_pool(body))
+    }
+
+    /// The same against an explicit list of the body's edges, as the kernel holds them now.
+    ///
+    /// `regen_edges` is filled by the post pass of a rebuild and is not written into a bundle: in the middle of
+    /// a pass it holds the previous state of the body, and right after a file is opened it holds nothing. A
+    /// query resolved against it there found no edges at all, while the faces it is phrased through were known.
+    pub fn resolve_edge_refs_in(&self, body: Id, edges: &[crate::geom::MeshEdge], r: &crate::refs::Ref, what: &str) -> Result<Vec<u32>, crate::refs::RefError> {
+        r.resolve(what, &Self::edge_candidates(edges), &self.names, &self.face_pool(body))
     }
 
     /// Resolve a reference to a single face into a descriptor, a centre and a normal, or into a named
