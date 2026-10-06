@@ -2375,22 +2375,12 @@ impl Project {
     /// THE POINT OF A CORNER THAT HAS BEEN TAKEN OFF: it stays, as the VIRTUAL SHARP on the extensions of both shortened
     /// lines - drawn and picked like any point, so a dimension or a constraint can be measured to the corner at any time.
     ///
-    /// Where four lines met at the point and two of them have just been cut, the other two still stand on it and the
-    /// point is their corner: it stays as it is.
+    /// Where four lines met at the point and two of them have just been cut, the other two still end at it and the point
+    /// stays their vertex - and the two cut lines are tied to it all the same, as to any sharp.
     pub(super) fn settle_the_corner_point(&mut self, si: usize, pc: Id, o1: Id, t1: Id, o2: Id, t2: Id) {
-        // a construction line ending at the corner - the diagonal of a rectangle - does not keep it a vertex of the
-        // contour; it holds on to the virtual sharp, below
-        let used_by_contour = self.sketches.get(si).is_some_and(|s| {
-            s.entities.iter().filter(|e| !e.construction).any(|e| match e.kind {
-                EntityKind::Line { a, b } => a == pc || b == pc,
-                EntityKind::Arc { center, a, b, .. } => center == pc || a == pc || b == pc,
-                EntityKind::Circle { center, .. } => center == pc,
-                EntityKind::Ellipse { c, ma, mi } => c == pc || ma == pc || mi == pc,
-            })
-        });
-        if used_by_contour {
-            return;
-        }
+        // THE TWO CUT LINES ARE TIED TO THE CORNER EVEN WHERE OTHER LINES STILL END AT IT. Skipped there, the first cut
+        // of a cross left its two lines on nothing: their constraints still named the point, the lines no longer did,
+        // and dragging the point swung them loose by 4 mm.
         self.carry_edge_constraints(si, pc, Some((o1, t1)), Some((o2, t2)));
         // THE CORNER STAYS, ALWAYS, as the virtual sharp on the extensions of both shortened lines: drawn and picked, so a
         // dimension or a constraint can be measured to it at any time, as in the professional systems. Kept only while
@@ -2734,32 +2724,18 @@ impl Project {
         // never reaches a contour or a profile.
         //
         // `pc` is held against every support: a line by `PointOnLine` on its extension, an arc or circle by
-        // `PointOnCircle`. When `pc` is still needed by a third edge (three or more edges met at the corner) it
-        // is a real vertex already and is left alone.
-        // a construction line ending at the corner - the diagonal of a rectangle - does not keep it a vertex of the contour
-        let pc_still_used = self.sketches.get(si).is_some_and(|s| {
-            s.entities.iter().filter(|e| !e.construction).any(|e| match e.kind {
-                EntityKind::Line { a, b } => a == pc || b == pc,
-                EntityKind::Arc { center, a, b, .. } => center == pc || a == pc || b == pc,
-                EntityKind::Circle { center, .. } => center == pc,
-                EntityKind::Ellipse { c, ma, mi } => c == pc || ma == pc || mi == pc,
-            })
-        });
-        if !pc_still_used {
-            let side = |sup: &Sup, o: Id, t: Id| matches!(sup, Sup::Line { .. }).then_some((o, t));
-            self.carry_edge_constraints(si, pc, side(&s1c, o1, t1), side(&s2c, o2, t2));
-        }
-        // the vertex stays, always, as the virtual sharp on both supports - as `settle_the_corner_point` keeps it
-        if !pc_still_used {
-            if let Some(s) = self.sketches.get_mut(si) {
-                match s1c {
-                    Sup::Line { .. } => s.constraints.push(Constraint::PointOnLine { p: pc, a: o1, b: t1 }),
-                    Sup::Circle { center, .. } => s.constraints.push(Constraint::PointOnCircle { p: pc, c: center }),
-                }
-                match s2c {
-                    Sup::Line { .. } => s.constraints.push(Constraint::PointOnLine { p: pc, a: o2, b: t2 }),
-                    Sup::Circle { center, .. } => s.constraints.push(Constraint::PointOnCircle { p: pc, c: center }),
-                }
+        // `PointOnCircle` - also where a third edge still ends at it and it stays that edge's vertex: the two cut
+        // edges no longer end there, and untied they swing loose when the point is dragged.
+        let side = |sup: &Sup, o: Id, t: Id| matches!(sup, Sup::Line { .. }).then_some((o, t));
+        self.carry_edge_constraints(si, pc, side(&s1c, o1, t1), side(&s2c, o2, t2));
+        if let Some(s) = self.sketches.get_mut(si) {
+            match s1c {
+                Sup::Line { .. } => s.constraints.push(Constraint::PointOnLine { p: pc, a: o1, b: t1 }),
+                Sup::Circle { center, .. } => s.constraints.push(Constraint::PointOnCircle { p: pc, c: center }),
+            }
+            match s2c {
+                Sup::Line { .. } => s.constraints.push(Constraint::PointOnLine { p: pc, a: o2, b: t2 }),
+                Sup::Circle { center, .. } => s.constraints.push(Constraint::PointOnCircle { p: pc, c: center }),
             }
         }
         self.regen_sketch(si);
