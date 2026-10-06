@@ -1,10 +1,10 @@
-//! A FILLET OR A CHAMFER PICKED BY A FACE REOPENS WITH THAT FACE.
+//! A FILLET, A CHAMFER OR A PATCH PICKED BY A FACE REOPENS WITH THAT FACE.
 //!
-//! A click on a face in the fillet or the chamfer is recorded as "every edge of this face"
+//! A click on a face in the fillet, the chamfer or the patch is recorded as "every edge of this face"
 //! (`Adjacent(Id(face))`), not as a list of edges. Reported behaviour: a double click on such a fillet in the tree
 //! highlighted no edge and previewed both rims of a cylinder, and Enter wrote the edges back as a list; right after the
-//! file was opened the same double click showed "Not one of the 1 named edges is left in the body" instead. The
-//! chamfer reopened through the same code.
+//! file was opened the same double click showed "Not one of the 1 named edges is left in the body" instead. The patch
+//! reopened through the same reading of the face number as an edge.
 #[cfg(test)]
 mod tests {
     use super::super::hand::Hand;
@@ -18,6 +18,7 @@ mod tests {
     enum Tool {
         Fillet,
         Chamfer,
+        Patch,
     }
 
     impl Tool {
@@ -25,14 +26,16 @@ mod tests {
             match self {
                 Tool::Fillet => 4,
                 Tool::Chamfer => 5,
+                Tool::Patch => 32,
             }
         }
 
-        /// The key of the field of the size.
-        fn size_key(self) -> &'static str {
+        /// The field of the size of a fillet or a chamfer: its key, and none for a patch.
+        fn size_key(self) -> Option<&'static str> {
             match self {
-                Tool::Fillet => "radius",
-                Tool::Chamfer => "dist",
+                Tool::Fillet => Some("radius"),
+                Tool::Chamfer => Some("dist"),
+                Tool::Patch => None,
             }
         }
     }
@@ -64,6 +67,7 @@ mod tests {
                 (Tool::Fillet, FeatureKind::Fillet { src, edges, .. }) | (Tool::Chamfer, FeatureKind::Chamfer { src, edges, .. }) => {
                     Some(Made { node: n.id, src: *src, body: n.id, edges: edges.clone() })
                 }
+                (Tool::Patch, FeatureKind::Patch { src, edges, body, .. }) => Some(Made { node: n.id, src: *src, body: *body, edges: edges.clone() }),
                 _ => None,
             })
             .unwrap_or_else(|| panic!("the {tool:?} node in the timeline"))
@@ -87,17 +91,30 @@ mod tests {
 
     /// That the node built on the top rim alone. A cylinder has 3 faces, and a fillet or a chamfer of one rim adds 1, of
     /// both rims 2.
+    /// A patch over the top rim is a disc of pi 10^2 = 314.2 mm^2, 313.0 as the faceted face measures; over both rims
+    /// it would be twice that.
     fn on_the_top_rim_alone(app: &App, tool: Tool, when: &str) {
         let made = the_node(app, tool);
         assert!(!app.project.regen_errors.contains_key(&made.node), "[{when}] the {tool:?} builds: {:?}", app.project.regen_errors.get(&made.node));
-        let faces = app.project.regen_faces.get(&made.body).map(|f| f.len()).unwrap_or(0);
-        assert_eq!(faces, 4, "[{when}] the {tool:?} takes the top rim alone: 3 faces of the cylinder and 1 of its own, and there are {faces}");
+        match tool {
+            Tool::Fillet | Tool::Chamfer => {
+                let faces = app.project.regen_faces.get(&made.body).map(|f| f.len()).unwrap_or(0);
+                assert_eq!(faces, 4, "[{when}] the {tool:?} takes the top rim alone: 3 faces of the cylinder and 1 of its own, and there are {faces}");
+            }
+            Tool::Patch => {
+                let area: f64 = app.project.regen_faces.get(&made.body).map_or(0.0, |fs| fs.iter().map(|f| f.area).sum());
+                let disc = std::f64::consts::PI * 100.0;
+                assert!((area - disc).abs() < 5.0, "[{when}] the patch spans the top rim alone, a disc of {disc:.1} mm^2, and it is {area:.1}");
+            }
+        }
     }
 
     /// A cylinder, the tool, a click on its top face, Enter - by hand.
     fn a_top_face_pick(hand: &mut Hand, tool: Tool) {
         hand.look_at([0.0, 0.0, 10.0], 9.0).tool(tool.button()).click([0.0, 0.0, 20.0]);
-        hand.set(tool.size_key(), 2.0);
+        if let Some(key) = tool.size_key() {
+            hand.set(key, 2.0);
+        }
         hand.enter();
         let _ = its_face(&the_node(hand.app, tool).edges);
         on_the_top_rim_alone(hand.app, tool, "setup");
@@ -129,7 +146,9 @@ mod tests {
     /// top rim alone is taken.
     fn enter_keeps_the_face(hand: &mut Hand, tool: Tool, when: &str) {
         let before = the_node(hand.app, tool).edges;
-        hand.set(tool.size_key(), 3.0);
+        if let Some(key) = tool.size_key() {
+            hand.set(key, 3.0);
+        }
         hand.enter();
         let after = the_node(hand.app, tool).edges;
         assert_eq!(after.query, before.query, "[{when}] Enter on the reopened {tool:?} keeps \"every edge of this face\"");
@@ -191,5 +210,15 @@ mod tests {
     #[test]
     fn a_face_chamfer_reopens_with_its_face_after_opening_the_file() {
         reopens_after_opening_the_file(Tool::Chamfer);
+    }
+
+    #[test]
+    fn a_face_patch_reopens_with_its_face() {
+        reopens_in_the_session(Tool::Patch);
+    }
+
+    #[test]
+    fn a_face_patch_reopens_with_its_face_after_opening_the_file() {
+        reopens_after_opening_the_file(Tool::Patch);
     }
 }

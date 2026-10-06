@@ -3898,7 +3898,7 @@ mod scheme_use_tests;
 mod audit;
 mod behaviour_sweep;
 mod described_picks;
-/// A fillet or a chamfer picked by a face reopens with that face: `gui/a_face_pick_reopens_with_its_face.rs`.
+/// A fillet, a chamfer or a patch picked by a face reopens with that face: `gui/a_face_pick_reopens_with_its_face.rs`.
 mod a_face_pick_reopens_with_its_face;
 /// A fillet with a radius at a corner reopens with that corner: `gui/a_variable_fillet_reopens_with_its_corners.rs`.
 mod a_variable_fillet_reopens_with_its_corners;

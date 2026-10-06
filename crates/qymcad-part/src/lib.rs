@@ -90,7 +90,7 @@ pub fn live_picks(project: &qymcad_core::model::Project, body: Id, r: &qymcad_co
     picked.into_iter().filter(|d| live.contains(d)).collect()
 }
 
-/// THE EDGES OF A REOPENED FILLET OR CHAMFER, picked again the way they were recorded.
+/// THE EDGES OF A REOPENED FILLET, CHAMFER OR PATCH, picked again the way they were recorded.
 ///
 /// A list is a list of edges and goes through [`live_picks`]. A description ("every edge of this face") holds the
 /// number of a FACE: taken as an edge it was dropped as unknown - the pick came out empty, which the kernel reads as
@@ -2846,7 +2846,7 @@ pub fn update_feat(pc: &mut qymcad_ui_state::PartCtx, fid: Id) -> Option<Id> {
             }
             FeatureKind::Patch { edges: e, tangent, .. } => {
                 if !edges.is_empty() {
-                    *e = qymcad_core::refs::Ref::picks(&edges); // a hand-picked boundary is a query built from ids
+                    *e = picked_edges.clone();
                 }
                 *tangent = patch_tangent;
             }
@@ -3506,7 +3506,7 @@ pub fn start_feat_cmd_edit(pc: &mut qymcad_ui_state::PartCtx, fid: Id) {
             pc.cmd.open(pc.armed, 32, was_3d);
             qymcad_ui_state::select_body(&mut *pc.project, &mut *pc.sel, &mut *pc.view, src);
             refresh_edges(pc);
-            pc.gsel.edges = live_picks(&*pc.project, src, edges, false);
+            restore_edge_picks(pc, src, edges);
             pc.opts.patch_tangent = tangent;
             pc.cmd.params = vec![];
         }
@@ -4178,10 +4178,10 @@ pub fn refresh_edges(pc: &mut qymcad_ui_state::PartCtx) {
     // EDITING a fillet or a chamfer: the edges always belong to the feature's SOURCE BODY (a selection fix
     // put `sel` back on the node being edited, and `qymcad_ui_state::selected_body` then returned the OUTPUT body, so the edge
     // selection was cleared and the highlight vanished). The source of the feature being edited is aimed at
-    // explicitly.
+    // explicitly. A patch the same: its output is a sheet of its own, and a reopened patch highlighted no edge.
     let edit_src = pc.cmd.edit.and_then(|fid| {
         pc.project.timeline.iter().find(|n| n.id == fid).and_then(|n| match n.kind {
-            qymcad_core::feature::FeatureKind::Fillet { src, .. } | qymcad_core::feature::FeatureKind::Chamfer { src, .. } => Some(src),
+            qymcad_core::feature::FeatureKind::Fillet { src, .. } | qymcad_core::feature::FeatureKind::Chamfer { src, .. } | qymcad_core::feature::FeatureKind::Patch { src, .. } => Some(src),
             _ => None,
         })
     });
