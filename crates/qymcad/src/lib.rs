@@ -75,3 +75,4 @@ mod viewport_gpu;
 mod start_notice;
 mod system;
 mod wide_signature_ratchet;
+mod window_identity_guard;

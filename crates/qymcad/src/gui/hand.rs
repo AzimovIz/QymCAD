@@ -131,6 +131,13 @@ impl<'a> Hand<'a> {
         self.win.widgets.iter().filter(|w| w.kind == super::window::Kind::Number).map(|w| w.rect).min_by(|a, b| a.center().distance(near).total_cmp(&b.center().distance(near)))
     }
 
+    /// WHERE THE WINDOW TITLED `title` STANDS, the next frame drawn, as a screen reader is told about it: the whole
+    /// window, its title bar included.
+    pub fn window_titled(&mut self, title: &str) -> Option<egui::Rect> {
+        self.frame(Vec::new());
+        self.win.widgets.iter().find(|w| w.kind == super::window::Kind::Window && w.label == title).map(|w| w.rect)
+    }
+
     /// DOUBLE-CLICK A POINT OF THE SCREEN: the hand rests over it, then presses and releases twice, each in a frame
     /// of its own - four sixtieths of a second, well inside the time egui allows a double click.
     pub fn double_click_screen(&mut self, at: egui::Pos2) -> &mut Self {
@@ -954,15 +961,22 @@ impl<'a> Hand<'a> {
         let basis = self.app.viewing.cam.basis();
         let scr = qymcad_ui_state::Screen { cam: &self.app.viewing.cam, set: &self.app.set, rect: self.app.viewing.view_rect, basis: &basis };
         let (a, b) = (scr.at(from).0, scr.at(to).0);
+        self.drag_screen(a, b)
+    }
+
+    /// DRAG WITH THE MOUSE from one point of the screen to another: the hand comes over `from`, presses, leads in
+    /// steps of 3 px and releases, in whole frames. What is taken is what lies under `from` - the title of a
+    /// window, a handle, or the canvas.
+    pub fn drag_screen(&mut self, from: egui::Pos2, to: egui::Pos2) -> &mut Self {
         self.win.clock += 1.0;
-        self.frame(vec![egui::Event::PointerMoved(a)]);
+        self.frame(vec![egui::Event::PointerMoved(from)]);
         let press = |pos, pressed| egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
-        self.frame(vec![press(a, true)]);
-        let steps = ((b - a).length() / 3.0).ceil().max(1.0) as usize;
+        self.frame(vec![press(from, true)]);
+        let steps = ((to - from).length() / 3.0).ceil().max(1.0) as usize;
         for k in 1..=steps {
-            self.frame(vec![egui::Event::PointerMoved(a + (b - a) * (k as f32 / steps as f32))]);
+            self.frame(vec![egui::Event::PointerMoved(from + (to - from) * (k as f32 / steps as f32))]);
         }
-        self.frame(vec![press(b, false)])
+        self.frame(vec![press(to, false)])
     }
 
     /// Whether a text field holds the keyboard - a caret blinking in it.

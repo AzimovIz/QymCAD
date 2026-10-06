@@ -11877,7 +11877,7 @@ pub fn font_picker_window(cache: &mut FontCache, ctx: &egui::Context, want_file:
 
     let mut chosen: Option<qymcad_core::model::FontRef> = None;
     let mut open = true;
-    egui::Window::new(qymcad_i18n::tr("font-window")).open(&mut open).default_pos(egui::pos2(40.0, 40.0)).default_width(460.0).resizable(true).show(ctx, |ui| {
+    egui::Window::new(qymcad_i18n::tr("font-window")).id(egui::Id::new("win_font")).open(&mut open).default_pos(egui::pos2(40.0, 40.0)).default_width(460.0).resizable(true).show(ctx, |ui| {
         ui.horizontal(|ui| {
             ui.add(egui::TextEdit::singleline(&mut cache.picker.search).desired_width(200.0).hint_text(qymcad_i18n::tr("font-search")));
             if ui.button(qymcad_i18n::tr("font-from-file")).on_hover_text(qymcad_i18n::tr("opt-pick-font")).clicked() {
