@@ -2372,16 +2372,12 @@ impl Project {
             }
         }
     }
-    /// THE POINT OF A CORNER THAT HAS BEEN TAKEN OFF: it goes with the corner, unless something still stands on it.
+    /// THE POINT OF A CORNER THAT HAS BEEN TAKEN OFF: it stays, as the VIRTUAL SHARP on the extensions of both shortened
+    /// lines - drawn and picked like any point, so a dimension or a constraint can be measured to the corner at any time.
     ///
     /// Where four lines met at the point and two of them have just been cut, the other two still stand on it and the
-    /// point is their corner: it stays. While a dimension or a constraint is stated about it, a diagonal ends at it or it
-    /// is a corner of a rectangle, it stays as the VIRTUAL SHARP on the extensions of both shortened lines. Where nothing
-    /// holds it, it goes. A point of the sketch that draws nothing is a point the picking offers and the solver counts,
-    /// and it answers "here is the corner" where there is none any more.
-    ///
-    /// Returns how many constraints were lost with it, so that the caller can say so out loud.
-    pub(super) fn settle_the_corner_point(&mut self, si: usize, pc: Id, o1: Id, t1: Id, o2: Id, t2: Id) -> usize {
+    /// point is their corner: it stays as it is.
+    pub(super) fn settle_the_corner_point(&mut self, si: usize, pc: Id, o1: Id, t1: Id, o2: Id, t2: Id) {
         // a construction line ending at the corner - the diagonal of a rectangle - does not keep it a vertex of the
         // contour; it holds on to the virtual sharp, below
         let used_by_contour = self.sketches.get(si).is_some_and(|s| {
@@ -2393,20 +2389,17 @@ impl Project {
             })
         });
         if used_by_contour {
-            return 0;
+            return;
         }
         self.carry_edge_constraints(si, pc, Some((o1, t1)), Some((o2, t2)));
-        // A DIMENSION OR A CONSTRAINT ON THE CORNER, a diagonal ending at it, or a rectangle it is a corner of keeps it,
-        // as the virtual sharp on the extensions of both shortened lines: a dimension measured to a corner holds at any
-        // radius, as it does in the professional systems, rather than going with the corner.
-        if self.corner_still_held(si, pc) {
-            if let Some(s) = self.sketches.get_mut(si) {
-                s.constraints.push(Constraint::PointOnLine { p: pc, a: o1, b: t1 });
-                s.constraints.push(Constraint::PointOnLine { p: pc, a: o2, b: t2 });
-            }
-            return 0;
+        // THE CORNER STAYS, ALWAYS, as the virtual sharp on the extensions of both shortened lines: drawn and picked, so a
+        // dimension or a constraint can be measured to it at any time, as in the professional systems. Kept only while
+        // something stood on it, a chamfer left its sharp and a fillet did not, and a rectangle's were hidden: three
+        // rules for one point.
+        if let Some(s) = self.sketches.get_mut(si) {
+            s.constraints.push(Constraint::PointOnLine { p: pc, a: o1, b: t1 });
+            s.constraints.push(Constraint::PointOnLine { p: pc, a: o2, b: t2 });
         }
-        self.drop_point_if_unused(si, pc)
     }
     /// Whether any entity of the sketch stands on the point `pid` - an end of a line or an arc, a centre of one.
     pub fn point_used_by_geometry(&self, si: usize, pid: Id) -> bool {
@@ -2422,33 +2415,6 @@ impl Project {
     /// HOW MANY CONSTRAINTS STATE SOMETHING ABOUT THE POINT `pid` - a dimension measured to a corner above all.
     pub fn constraints_on_point(&self, si: usize, pid: Id) -> usize {
         self.sketches.get(si).map(|s| s.constraints.iter().filter(|c| constraint_point_ids(c).contains(&pid)).count()).unwrap_or(0)
-    }
-    /// DELETE A POINT NOTHING STANDS ON ANY MORE, together with whatever was stated about it.
-    ///
-    /// A point no entity and no spline uses draws nothing: it cannot be part of a contour or a profile, yet the
-    /// picking finds it and the solver counts it. The constraints that named it go with it - a dimension cannot be
-    /// stated without its subject, and leaving it would send the solver after an id that is not there.
-    ///
-    /// Returns how many constraints were lost, so that the caller can name the loss rather than make it silently.
-    pub fn drop_point_if_unused(&mut self, si: usize, pid: Id) -> usize {
-        if self.point_used_by_geometry(si, pid) || self.sketches.get(si).is_some_and(|s| s.system_ids().contains(&pid)) {
-            return 0;
-        }
-        let before = self.sketches.get(si).map(|s| s.constraints.len()).unwrap_or(0);
-        let Some(s) = self.sketches.get_mut(si) else { return 0 };
-        s.constraints.retain(|c| !constraint_point_ids(c).contains(&pid));
-        s.points.retain(|p| p.id != pid);
-        before - s.constraints.len()
-    }
-    /// IS THE VANISHED CORNER `pc` STILL HELD - by a constraint or a dimension on it, by a construction line ending at
-    /// it (the diagonal of a rectangle), or as a corner of a rectangle kept as one shape? Then it stays, as the virtual
-    /// sharp on the extensions of its sides.
-    fn corner_still_held(&self, si: usize, pc: Id) -> bool {
-        self.sketches.get(si).is_some_and(|s| {
-            s.constraints.iter().any(|c| c.points().contains(&pc))
-                || s.entities.iter().any(|e| matches!(e.kind, EntityKind::Line { a, b } if a == pc || b == pc))
-                || s.rects.iter().any(|r| r.corners.contains(&pc))
-        })
     }
     /// Chamfer between two segments sharing a vertex, with setback `d`.
     pub fn chamfer_lines(&mut self, si: usize, e1: Id, e2: Id, legs: ChamferLegs) -> bool {
@@ -2783,15 +2749,8 @@ impl Project {
             let side = |sup: &Sup, o: Id, t: Id| matches!(sup, Sup::Line { .. }).then_some((o, t));
             self.carry_edge_constraints(si, pc, side(&s1c, o1, t1), side(&s2c, o2, t2));
         }
-        // the vertex stays, as the virtual sharp on both supports, only while a dimension or another constraint stands on it
-        let referenced = self.corner_still_held(si, pc);
-        if !pc_still_used && !referenced {
-            // nothing stands on the vanished vertex any more: it goes, rather than stay a point of its own
-            if let Some(s) = self.sketches.get_mut(si) {
-                s.points.retain(|p| p.id != pc);
-            }
-        }
-        if !pc_still_used && referenced {
+        // the vertex stays, always, as the virtual sharp on both supports - as `settle_the_corner_point` keeps it
+        if !pc_still_used {
             if let Some(s) = self.sketches.get_mut(si) {
                 match s1c {
                     Sup::Line { .. } => s.constraints.push(Constraint::PointOnLine { p: pc, a: o1, b: t1 }),

@@ -608,23 +608,6 @@ impl Sketch {
     ///
     /// One source of truth on purpose: spelled out by hand in six places the set drifts apart, some copies
     /// forgetting the origin and others the axes.
-    /// THE CORNERS OF A RECTANGLE LEFT AS VIRTUAL SHARPS: a corner rounded or cut away stays a point of the rectangle -
-    /// its centre stands on the middle of the corners, its turn is told by them - but no line of it ends there any
-    /// more. Such a point is the rectangle's own, not geometry: it is not drawn and not picked. Shown, a rectangle
-    /// rounded all round carried four points out in the air beyond its arcs.
-    pub fn virtual_sharps(&self) -> std::collections::HashSet<Id> {
-        let ends: std::collections::HashSet<Id> = self
-            .entities
-            .iter()
-            .filter(|e| !e.construction)
-            .flat_map(|e| match e.kind {
-                EntityKind::Line { a, b } | EntityKind::Arc { a, b, .. } => vec![a, b],
-                _ => Vec::new(),
-            })
-            .collect();
-        self.rects.iter().flat_map(|r| r.corners).filter(|c| !ends.contains(c)).collect()
-    }
-
     /// THE CONSTRAINTS A CUT CORNER HOLDS ITSELF BY, by their index: the virtual sharp standing on the extension of each
     /// side (`PointOnLine` of a point no geometry ends at), the legs of a symmetric chamfer kept equal on it (`Equal` from
     /// the sharp to the two ends of the cut line), and the arc of a fillet touching the lines it ends on (`Tangent` of a
@@ -658,10 +641,10 @@ impl Sketch {
             .collect()
     }
 
-    /// The points not drawn among the sketch's own: the frame of reference (drawn by the axis marker) and the virtual
-    /// sharps of rectangles.
+    /// The points not drawn among the sketch's own: the frame of reference, drawn by the axis marker. The virtual sharp of
+    /// a cut corner is drawn, and picked, like any point.
     pub fn unseen_points(&self) -> std::collections::HashSet<Id> {
-        self.system_ids().into_iter().chain(self.virtual_sharps()).collect()
+        self.system_ids().into_iter().collect()
     }
 
     pub fn system_ids(&self) -> Vec<Id> {

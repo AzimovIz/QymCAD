@@ -1,6 +1,7 @@
 //! A CORNER HELD BY THE AUTOMATIC CONSTRAINTS A PERSON'S DEFAULTS PUT ON IT - the one line horizontal, the other
 //! vertical, the two equal - rounds and bevels as a bare one: the constraints go with the shortened lines, and the
-//! vanished corner does not stay behind as a point of its own. A leg or a radius past what the corner takes is refused.
+//! corner stays as the virtual sharp, as it does after every cut. A leg or a radius past what the corner takes is
+//! refused.
 //!
 //! Reported behaviour: with the automatic constraints on, the typed radius did nothing - no arc, no step of undo, no word.
 use qymcad_core::feature::Purpose;
@@ -35,7 +36,7 @@ fn counts(p: &Project, si: usize) -> (usize, usize, usize) {
 fn a_corner_with_its_automatic_constraints_rounds_and_bevels() {
     let (mut p, si, pc) = corner();
     assert!(p.fillet_at_vertex(si, pc, 3.0), "the corner rounded R3");
-    assert_eq!(counts(&p, si), (5, 2, 1), "the far ends, the two points of touching and the centre - the corner gone");
+    assert_eq!(counts(&p, si), (6, 2, 1), "the far ends, the two points of touching, the centre and the virtual sharp");
     let (mut p, si, pc) = corner();
     assert!(p.chamfer_at_vertex(si, pc, qymcad_core::model::ChamferLegs::equal(3.0), None), "the corner bevelled 3");
     // the corner stays as the virtual sharp the legs are measured from - a point, no line (issue #35)

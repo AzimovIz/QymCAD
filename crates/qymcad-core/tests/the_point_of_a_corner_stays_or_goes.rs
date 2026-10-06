@@ -1,17 +1,11 @@
 //! WHAT BECOMES OF THE POINT OF A CORNER, kept in one place.
 //!
-//! It depends on what still states something about the point, not on the tool alone:
+//! It stays, after a fillet as after a chamfer, as the VIRTUAL SHARP on the extensions of both shortened lines - drawn
+//! and picked like any point, so a dimension or a constraint can be measured to the corner at any time. A dimension
+//! measured to it before the cut stays on it.
 //!
-//! - a FILLET states nothing about the corner it rounds, so where nothing else does either, the point goes with the
-//!   corner. A point of the sketch that draws nothing is not a leftover to be cleaned by hand: the picking offers it
-//!   and the solver counts it, so it answers "here is a corner" where there is none.
-//! - a DIMENSION OR A CONSTRAINT MEASURED TO THE CORNER keeps the point, as the virtual sharp on the extensions of both
-//!   shortened lines: the width measured corner to corner stays the width at any radius.
-//! - a CHAMFER measures its legs from the sharp corner, so the point stays as the VIRTUAL SHARP on the extensions of
-//!   both shortened lines while those legs are stated. Taken away, the legs would have nothing to be measured from.
-//!
-//! And the point stays in either case where the rest of the drawing still needs it: a third line at a T, or the two
-//! lines of the far square at the point two squares share.
+//! And where the rest of the drawing still needs the point - a third line at a T, or the two lines of the far square
+//! at the point two squares share - it stays as it is.
 use qymcad_core::feature::Purpose;
 use qymcad_core::model::{ChamferLegs, Constraint, EntityKind, Project};
 
@@ -45,12 +39,13 @@ fn entity_points(e: &qymcad_core::model::SketchEntity) -> Vec<u64> {
 }
 
 #[test]
-fn a_rounded_corner_leaves_no_point_behind() {
-    // a fillet states nothing about the corner it rounds: nothing holds the point, so it goes
+fn a_rounded_corner_keeps_its_point_as_the_virtual_sharp() {
+    // a fillet keeps the corner as a chamfer does: on the extensions of both shortened lines
     let (mut p, si, corner, _far, _) = an_angle();
     assert!(p.fillet_at_vertex(si, corner, 5.0), "the corner was not rounded");
-    assert!(!p.sketches[si].points.iter().any(|q| q.id == corner), "the point of a rounded corner nothing stands on any more stayed in the sketch");
-    assert!(loose_points(&p, si).is_empty(), "a point drawing nothing is left behind: {:?}", loose_points(&p, si));
+    assert!(p.sketches[si].points.iter().any(|q| q.id == corner), "the point of a rounded corner went with the corner");
+    assert_eq!(p.sketches[si].constraints.iter().filter(|c| matches!(c, Constraint::PointOnLine { p, .. } if *p == corner)).count(), 2, "the virtual sharp of a fillet is not held on both lines");
+    assert!(!p.sketches[si].unseen_points().contains(&corner), "the virtual sharp of a fillet is hidden from the drawing");
 }
 
 #[test]

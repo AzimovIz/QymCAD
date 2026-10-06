@@ -65,6 +65,25 @@ mod tests {
         assert!(shown.is_empty(), "the tangencies of the fillet are drawn as badges: {shown:?}");
     }
 
+    /// THE CORNER OF A ROUNDED RECTANGLE IS A POINT ONE CAN PICK: its virtual sharp is drawn and picked like any point,
+    /// so a dimension or a constraint can be measured to it.
+    #[test]
+    fn the_sharp_of_a_rounded_rectangle_is_picked() {
+        let mut app = App::default();
+        let si = app.create_sketch_on(SketchPlane::default());
+        app.chosen.sel = Sel::Sketch(si);
+        Hand::new(&mut app).sk_tool(2).click2d(0.0, 0.0).click2d(40.0, 30.0).key(egui::Key::Enter);
+        Hand::new(&mut app).sk_tool(0);
+        let sides: Vec<(u8, u64)> = app.project.sketches[si].rects[0].sides.iter().map(|&id| (1u8, id)).collect();
+        assert!(Hand::new(&mut app).sk_corner_set("tb-fillet-sketch-hint", &sides, 3.0), "no place to click on the four sides");
+        let corner = app.project.sketches[si].rects[0].corners[2];
+        assert!(!app.project.sketches[si].unseen_points().contains(&corner), "the corner of the rounded rectangle is hidden from the drawing");
+        let at = app.project.sketches[si].points.iter().find(|q| q.id == corner).map(|q| (q.x, q.y)).expect("the corner stays");
+        let mut hand = Hand::new(&mut app);
+        hand.hover2d(at.0, at.1);
+        assert_eq!(app.chosen.hover.sketch, Some((0, corner)), "the cursor on the sharp of the rounded corner does not take it");
+    }
+
     /// THE DIMENSION OF A SYMMETRIC CHAMFER STANDS OUTSIDE: on a corner of a triangle the dimension line is drawn off to
     /// the side of the sharp - the left of its first end looking at the second, on screen, as the renderer lays it - and
     /// not into the triangle.
