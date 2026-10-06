@@ -182,11 +182,18 @@ probe! {
     }
 }
 
+/// THE HEIGHT THE TREE WRITES on the row of the extrusion, read off the screen; `None` when no row shows one.
+fn height_in_the_tree(s: &mut Session) -> Option<f64> {
+    let line = s.word("feat-extrude");
+    let head = line.split('{').next().unwrap_or_default().to_string();
+    s.words().iter().find_map(|w| w.split_once(head.as_str()).and_then(|(_, rest)| rest.trim().replace(',', ".").parse().ok()))
+}
+
 probe! {
-    /// A PARAMETER NAMED IN CAPITALS DRIVES ITS NODE as one in small letters does: the body is rebuilt. A formula
-    /// reads `H` and `h` as one name.
+    /// A PARAMETER NAMED IN CAPITALS DRIVES ITS NODE as one in small letters does: the body is rebuilt and the tree
+    /// writes the new height on the row.
     /// Reported behaviour: a parameter H changed from 20 to 40 under an extrusion of height H, the properties said
-    /// 40, the body stayed 20 high; with the name h the body was rebuilt.
+    /// 40, the body stayed 20 high; with the name h the body was rebuilt, yet the tree row still said h=20.0.
     fn a_parameter_named_in_capitals_rebuilds_what_counts_from_it() {
         let mut s = Session::start();
         build::into_the_first_part(&mut s);
@@ -206,6 +213,8 @@ probe! {
         set_parameter(&mut s, "H", "20");
         assert!((parameter(&mut s, "H").value - 20.0).abs() < 1e-9, "H was written as 20 and holds {}", parameter(&mut s, "H").value);
         assert!((volume(&mut s) - 24000.0).abs() < 1e-3, "H was made 20 and the block 40 x 30 x H is {} mm^3, not 24000", volume(&mut s));
+        let shown = height_in_the_tree(&mut s);
+        assert!(shown.is_some_and(|h| (h - 20.0).abs() < 1e-9), "H was made 20 and the tree writes the height of the extrusion as {shown:?}");
     }
 }
 

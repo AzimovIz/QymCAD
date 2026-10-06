@@ -2535,6 +2535,13 @@ impl Project {
         self.feat_dims.get(&id).and_then(|m| m.get(key)).map(|s| s.as_str())
     }
 
+    /// Value of dimension `key` of feature `id` as the rebuild takes it: the expression evaluated against `vars`
+    /// when there is one, otherwise `stored`, the number kept in the node. The number in the node is what was typed
+    /// last and does not follow a parameter; whatever shows a size of a built feature reads it through here.
+    pub fn feat_dim_value(&self, id: Id, key: &str, stored: f64, vars: &std::collections::HashMap<String, f64>) -> f64 {
+        eval_dim(self.feat_dims.get(&id), key, stored, vars)
+    }
+
     /// Mark as dirty the features whose expressions reference parameter `name`, and their consumers.
     ///
     /// Marking every feature that has any expression means rebuilding a project with a hundred dimensions

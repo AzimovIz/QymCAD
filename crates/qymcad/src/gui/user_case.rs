@@ -1873,6 +1873,12 @@ mod tests {
                 if (a2 - a1).abs() < 1e-6 {
                     problems.push(format!("the variable was changed from 18 to 34 and the body did not move: the area went {a1:.0} -> {a2:.0} (it was {a0:.0} before the binding)"));
                 }
+                let ti = app.project.timeline.iter().position(|n| n.id == node).unwrap_or(0);
+                let row = crate::gui::panels_tree::feature_row_label(&app.project, ti);
+                let height = crate::i18n::num(34.0, 1);
+                if !row.contains(&height) {
+                    problems.push(format!("the variable was changed to 34 and the tree row of the extrude reads \"{row}\""));
+                }
                 check_all(&mut app, "the height of an extrude driven by a global variable", &mut problems);
             }
         }
