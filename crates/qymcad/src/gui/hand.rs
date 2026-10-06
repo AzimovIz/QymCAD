@@ -371,10 +371,11 @@ impl<'a> Hand<'a> {
         }
     }
 
-    /// WHERE THE BOX OF THE CORNER TOOLS STANDS on screen, as the last frame laid it out; `None` while it is not up.
+    /// WHERE THE BOX OF THE CORNER TOOLS STANDS on screen, as the last frame laid it out; `None` while it is not up. The
+    /// box of a set of corners, or the one of "fillet all", which is opened for the whole shape (point 0).
     pub fn corner_box(&self) -> Option<egui::Rect> {
         let si = qymcad_ui_state::edit_si(&self.app.project, &self.app.sketch_ses)?;
-        self.win.ctx.memory(|m| m.area_rect(egui::Id::new(("cornerinput", si, qymcad_ui_state::CORNER_SET))))
+        [qymcad_ui_state::CORNER_SET, 0].into_iter().find_map(|pid| self.win.ctx.memory(|m| m.area_rect(egui::Id::new(("cornerinput", si, pid)))))
     }
 
     /// Where a place of the sketch stands on screen, on the canvas as the last frame laid it out.

@@ -3922,6 +3922,7 @@ mod a_rounded_rectangle_turns_whole;
 mod a_cut_corner_draws_clean;
 mod the_dimensions_of_a_cut_corner_stand_outside;
 mod a_corner_set_takes_its_size_whole;
+mod the_box_of_fillet_all_stands_at_the_clicked_side;
 mod a_drag_takes_what_was_pressed;
 mod text_font;
 mod font_row_look;

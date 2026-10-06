@@ -4065,8 +4065,13 @@ pub fn sketch_click_at(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context,
                         sk.corner.only = Some(comp.clone());
                         // THE CHOSEN LINES GO IN AS THE WHOLE SET, so the corners the shape is made of are drawn on it
                         // while its field is being answered: this command is the same act as naming them with Shift,
-                        // said in one word.
-                        sk.corner.set.follow(&*sk.project, si, &comp.iter().copied().collect::<Vec<Id>>());
+                        // said in one word. THE LINE CLICKED GOES FIRST, the rest in the order they were drawn: the
+                        // box stands beside the first corner of the set, and taken in the order of a hash set it stood
+                        // at the bottom of a rectangle one time and at the top of the sheet under the bar the next.
+                        let mut lines: Vec<Id> = comp.iter().copied().filter(|&id| id != eid).collect();
+                        lines.sort_unstable();
+                        lines.insert(0, eid);
+                        sk.corner.set.follow(&*sk.project, si, &lines);
                         sk.corner.pos = Some(pos);
                         sk.corner.shifted = false;
                         sk.corner.buf = qymcad_core::expr::fmt_num(sk.tool_prefs.fillet);
