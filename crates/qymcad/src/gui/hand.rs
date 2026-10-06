@@ -197,6 +197,32 @@ impl<'a> Hand<'a> {
         true
     }
 
+    /// WHAT THE TRIAL BUILD SAYS of the command as it stands, waited for the way a person waits for the preview: the
+    /// words of its refusal, if it refuses. A trial runs on a worker; a check that ends without waiting for it leaves the
+    /// kernel working while the process exits.
+    pub fn trial_says(&mut self) -> Option<String> {
+        let ctx = egui::Context::default();
+        for _ in 0..6000 {
+            match qymcad_part::trial_refusal(&mut self.app.part_ctx(), &ctx) {
+                qymcad_part::Trial::Checking => std::thread::sleep(std::time::Duration::from_millis(10)),
+                qymcad_part::Trial::Refused(_, words) => return Some(words),
+                qymcad_part::Trial::Clear => return None,
+            }
+        }
+        panic!("the trial build of the command never answered");
+    }
+
+    /// DOUBLE-CLICK WHERE `word` IS WRITTEN - a row of the tree reopens its feature or enters its part this way. The
+    /// icon drawn before a word by a font of its own is not part of the words on screen, so it is left out of `word`.
+    /// Answers whether the word was on screen.
+    pub fn double_click_word(&mut self, word: &str) -> bool {
+        let word: String = word.chars().filter(|c| !('\u{e000}'..='\u{f8ff}').contains(c)).collect();
+        let Some(at) = self.written_at(word.trim()) else { return false };
+        self.double_click_screen(at.center());
+        self.close_window();
+        true
+    }
+
     /// CTRL WITH `key`, pressed and released in whole frames; the window closes after it.
     pub fn ctrl(&mut self, key: egui::Key) -> &mut Self {
         self.chord(egui::Modifiers::COMMAND, key);

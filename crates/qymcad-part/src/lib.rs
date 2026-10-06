@@ -90,6 +90,28 @@ pub fn live_picks(project: &qymcad_core::model::Project, body: Id, r: &qymcad_co
     picked.into_iter().filter(|d| live.contains(d)).collect()
 }
 
+/// THE EDGES OF A REOPENED FILLET OR CHAMFER, picked again the way they were recorded.
+///
+/// A list is a list of edges and goes through [`live_picks`]. A description ("every edge of this face") holds the
+/// number of a FACE: taken as an edge it was dropped as unknown - the pick came out empty, which the kernel reads as
+/// every edge - or, with no edges known yet, handed on as an edge that does not exist. So the description goes back
+/// into the selection, and its edges, resolved on the live body, are what is highlighted. Reported behaviour: a
+/// fillet of the top face of a cylinder reopened with no edge highlighted and both rims in the preview.
+///
+/// The edges of a body just opened are taken from its live B-rep first, for either kind: the corners of a variable
+/// radius are named by them too, and without them a reopened fillet lost the field of its corner and Enter wrote an
+/// empty table back.
+fn restore_edge_picks(pc: &mut qymcad_ui_state::PartCtx, src: Id, r: &qymcad_core::refs::Ref) {
+    qymcad_ui_state::ensure_model_edges(&mut pc.rebuild(), src);
+    if r.query.is_pick_list() {
+        pc.gsel.described = None;
+        pc.gsel.edges = live_picks(&*pc.project, src, r, false);
+        return;
+    }
+    pc.gsel.edges = pc.project.resolve_edge_refs(src, r, "ref-what-fillet-edge").map(|v| v.into_iter().collect()).unwrap_or_default();
+    pc.gsel.described = Some(r.query.clone());
+}
+
 /// The raw text of a command field (an expression or a number), by key.
 pub fn cmd_txt(cmd: &qymcad_ui_state::FeatCommand, key: &str) -> String {
     cmd.params.iter().find(|p| p.key == key).map(|p| p.txt.clone()).unwrap_or_default()
@@ -2601,6 +2623,7 @@ pub fn update_feat(pc: &mut qymcad_ui_state::PartCtx, fid: Id) -> Option<Id> {
         None => (Vec::new(), Vec::new()),
     };
     let edges: Vec<u32> = pc.gsel.edges.iter().copied().collect();
+    let picked_edges = pc.gsel.recorded(&edges);
     let faces_set: Vec<u32> = pc.gsel.faces.iter().copied().collect(); // the shell: a multiple selection by id
     let shell_side = pc.opts.shell_side; // the shell: which way the wall goes
     let draft_neutral = pc.draft.neutral; // the draft: the neutral face, 0 means unset
@@ -2767,12 +2790,12 @@ pub fn update_feat(pc: &mut qymcad_ui_state::PartCtx, fid: Id) -> Option<Id> {
             }
             FeatureKind::Fillet { radius, edges: e, at_vertices, .. } => {
                 *radius = r;
-                *e = qymcad_core::refs::Ref::picks(&edges); // a hand-picked set of edges is a query built from ids
+                *e = picked_edges.clone();
                 *at_vertices = vtable; // the "vertex -> radius" table
             }
             FeatureKind::Chamfer { dist: d, edges: e, mode, d2, flip, ref_face, .. } => {
                 *d = dist;
-                *e = qymcad_core::refs::Ref::picks(&edges); // a hand-picked set of edges is a query built from ids
+                *e = if ch_mode != qymcad_core::feature::ChamferMode::Symmetric && !edges.is_empty() { qymcad_core::refs::Ref::picks(&edges) } else { picked_edges.clone() };
                 *mode = ch_mode; // the mode: symmetric, two distances, or a leg plus an angle
                 *d2 = ch_d2;
                 *flip = ch_flip;
@@ -3391,7 +3414,7 @@ pub fn start_feat_cmd_edit(pc: &mut qymcad_ui_state::PartCtx, fid: Id) {
             pc.cmd.open(pc.armed, 4, was_3d);
             qymcad_ui_state::select_body(&mut *pc.project, &mut *pc.sel, &mut *pc.view, src);
             refresh_edges(pc); // pull up the edges of the body (this clears the selection), then restore it
-            pc.gsel.edges = live_picks(&*pc.project, src, edges, false);
+            restore_edge_picks(pc, src, edges);
             pc.cmd.params = vec![cmd_param_from(&*pc.project, fid, "f-radius", "radius", radius, 0.05, 1000.0)];
             // THE TABLE OF VERTICES - one field per vertex, each at its own place. The reference is
             // resolved against the live body: the name of a vertex is derived from its edges and survives
@@ -3410,7 +3433,7 @@ pub fn start_feat_cmd_edit(pc: &mut qymcad_ui_state::PartCtx, fid: Id) {
             pc.cmd.open(pc.armed, 5, was_3d);
             qymcad_ui_state::select_body(&mut *pc.project, &mut *pc.sel, &mut *pc.view, src);
             refresh_edges(pc);
-            pc.gsel.edges = live_picks(&*pc.project, src, edges, false);
+            restore_edge_picks(pc, src, edges);
             pc.chamfer.mode = mode; // restore the mode, the side and the second parameter
             pc.chamfer.flip = flip;
             pc.chamfer.ref_face = ref_face; // restore the hand-picked reference face
