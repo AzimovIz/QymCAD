@@ -908,14 +908,14 @@ pub fn apply_edge_cmd(pc: &mut qymcad_ui_state::PartCtx, cmd: u8) -> Option<Id> 
     // IT IS RECORDED THE WAY IT WAS PICKED. If there is a description ("every edge of this face", "every
     // edge parallel to this one"), the description goes in: it survives an edit that adds elements.
     // Otherwise the list of picked ids goes in.
-    let described: Option<qymcad_core::refs::Ref> = pc.gsel.described.clone().map(qymcad_core::refs::Ref::many);
+    let described = pc.gsel.described_ref();
     let last = if cmd == 4 {
         let r = qymcad_ui_state::cmd_val(pc.cmd, "radius");
         // THE "VERTEX -> RADIUS" TABLE. It works with a description and with a list alike: the radius is
         // set at a point rather than along an edge, so it needs no direction of an edge.
         let at = fillet_vertex_table(pc.cmd);
         if !at.is_empty() {
-            let q = described.clone().unwrap_or_else(|| qymcad_core::refs::Ref::picks(&edges));
+            let q = pc.gsel.recorded(&edges);
             pc.project.add_fillet_at_vertices(body, r, q, at)
         } else if let Some(q) = described {
             pc.project.add_fillet_ref(body, r, q)
@@ -1013,7 +1013,7 @@ pub fn apply_offset_surface_cmd(pc: &mut qymcad_ui_state::PartCtx) -> Option<Id>
         return None;
     }
     let picks: Vec<u32> = pc.gsel.faces.iter().copied().collect();
-    let q = pc.gsel.described.clone().map(qymcad_core::refs::Ref::many).unwrap_or_else(|| qymcad_core::refs::Ref::picks(&picks));
+    let q = pc.gsel.recorded(&picks);
     let body = pc.project.add_offset_surface(src, q, qymcad_ui_state::cmd_val(pc.cmd, "dist"));
     store_cmd_exprs(pc.cmd, pc.project, body);
     Some(body)
@@ -1029,7 +1029,7 @@ pub fn apply_face_copy_cmd(pc: &mut qymcad_ui_state::PartCtx) -> Option<Id> {
         return None;
     }
     let picks: Vec<u32> = pc.gsel.faces.iter().copied().collect();
-    let q = pc.gsel.described.clone().map(qymcad_core::refs::Ref::many).unwrap_or_else(|| qymcad_core::refs::Ref::picks(&picks));
+    let q = pc.gsel.recorded(&picks);
     Some(pc.project.add_face_copy(src, q))
 }
 
@@ -1070,7 +1070,7 @@ pub fn apply_patch_cmd(pc: &mut qymcad_ui_state::PartCtx) -> Option<Id> {
         return None;
     }
     let picks: Vec<u32> = pc.gsel.edges.iter().copied().collect();
-    let q = pc.gsel.described.clone().map(qymcad_core::refs::Ref::many).unwrap_or_else(|| qymcad_core::refs::Ref::picks(&picks));
+    let q = pc.gsel.recorded(&picks);
     Some(pc.project.add_patch(src, q, pc.opts.patch_tangent))
 }
 
@@ -1633,7 +1633,7 @@ pub fn apply_surface_replace_cmd(pc: &mut qymcad_ui_state::PartCtx) -> Option<Id
             return None;
         }
     }
-    let q = pc.gsel.described.clone().map(qymcad_core::refs::Ref::many).unwrap_or_else(|| qymcad_core::refs::Ref::picks(&picks));
+    let q = pc.gsel.recorded(&picks);
     Some(pc.project.add_surface_replace(src, q, surface))
 }
 

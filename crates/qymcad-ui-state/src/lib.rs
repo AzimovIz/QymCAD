@@ -2512,6 +2512,17 @@ impl GeomSelection {
             _ => Query::Adjacent(Box::new(Query::Id(fid))),
         });
     }
+
+    /// THE DESCRIPTION AS A FEATURE RECORDS IT, when one was given: it survives an edit that adds elements.
+    pub fn described_ref(&self) -> Option<qymcad_core::refs::Ref> {
+        self.described.clone().map(qymcad_core::refs::Ref::many)
+    }
+
+    /// THE SELECTION AS A FEATURE RECORDS IT: the description when one was given, otherwise the list `picks` of what
+    /// was clicked. One rule for every command that records a selection, on creation and on an edit alike.
+    pub fn recorded(&self, picks: &[u32]) -> qymcad_core::refs::Ref {
+        self.described_ref().unwrap_or_else(|| qymcad_core::refs::Ref::picks(picks))
+    }
 }
 
 /// THE CLIPBOARD: sketch geometry and tree nodes are different things, but they share one state of "what has been copied".
