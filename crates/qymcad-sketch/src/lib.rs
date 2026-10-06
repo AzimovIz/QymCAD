@@ -646,11 +646,12 @@ fn draw_corner_preview(cc: &qymcad_ui_state::CornerCtx, ctx: &egui::Context, rec
     }
 }
 
-/// THE CUT THE TOOL IN HAND MAKES OF `value`: a fillet of that radius, or a chamfer in the mode of the bar with its
-/// second value - so the preview of two legs or of a leg and an angle is the chamfer Enter makes.
+/// THE CUT THE TOOL IN HAND MAKES OF `value`: a fillet of that size in the way of the bar - a radius, a chord or an
+/// arc length - or a chamfer in the mode of the bar with its second value. The preview and Enter both take it, so the
+/// corner shown is the corner made.
 fn corner_cut(cc: &qymcad_ui_state::CornerCtx, chamfer: bool, value: f64) -> qymcad_core::model::CornerCut {
     if !chamfer {
-        return qymcad_core::model::CornerCut::Fillet { radius: value };
+        return qymcad_core::model::CornerCut::Fillet(qymcad_core::model::FilletSize { by: cc.tool_prefs.fillet_by, value });
     }
     let second = parse_num(cc.project, &cc.corner.buf2).unwrap_or(cc.tool_prefs.chamfer_second);
     qymcad_core::model::CornerCut::Chamfer(qymcad_core::model::ChamferLegs { mode: cc.tool_prefs.chamfer_mode, first: value, second })
@@ -804,7 +805,7 @@ pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Conte
     // ONE VALUE CUTS THE WHOLE SET, so it is held by the tightest corner in it AND by what the lines between the
     // corners spend on themselves. A value that fits one corner and overruns the one beside it would leave a
     // half-cut drawing behind, and rounding every corner of a rectangle takes half its short side for that reason.
-    let limit = cc.corner.set.limit(cc.project, si, qymcad_ui_state::corner_tool(chamfer, cc.tool_prefs));
+    let limit = cc.corner.set.limit(cc.project, si, qymcad_ui_state::corner_tool(chamfer, cc.tool_prefs), cc.tool_prefs.fillet_by);
     // WHY THIS VALUE CANNOT BE TAKEN, said of the value as it is typed and again at Enter - one sentence, read in
     // two places, so that what the box says beside the field is the very reason Enter refuses it for.
     let judge = |project: &qymcad_core::model::Project, text: &str| -> Option<String> {
@@ -939,11 +940,8 @@ pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Conte
                                       // THE SIZE AS IT WAS GIVEN, not only as a radius: a fillet taken by the length of its arc or by the chord
                                       // between its ends is a different drawing, and a chamfer of two legs is two numbers.
             let size = qymcad_core::model::FilletSize { by: cc.tool_prefs.fillet_by, value: r };
-            if chamfer {
-                let second = parse_num(cc.project, &cc.corner.buf2.clone()).unwrap_or(cc.tool_prefs.chamfer_second);
-                if second_used {
-                    cc.tool_prefs.chamfer_second = second;
-                }
+            if chamfer && second_used {
+                cc.tool_prefs.chamfer_second = parse_num(cc.project, &cc.corner.buf2.clone()).unwrap_or(cc.tool_prefs.chamfer_second);
             }
             let cut: usize = if pid == 0 {
                 // "ROUND EVERY CORNER" OF A SHAPE, which is one command about a whole set of lines rather than about
@@ -954,26 +952,11 @@ pub fn corner_input_popup(cc: &mut qymcad_ui_state::CornerCtx, ctx: &egui::Conte
                 });
                 cc.project.fillet_all_corners_by(si, size, only.as_ref())
             } else {
-                let legs =
-                    qymcad_core::model::ChamferLegs { mode: cc.tool_prefs.chamfer_mode, first: r, second: parse_num(cc.project, &cc.corner.buf2.clone()).unwrap_or(cc.tool_prefs.chamfer_second) };
-                // **ONE CORNER OF THE SET IS THE CORNER UNDER THE POINTER**, and there the whole of what the bar says
-                // is honoured: a fillet taken by its arc length or by its chord is that corner's own size. Several
-                // corners are cut by their pairs, since the pair is what says which of several at a point is meant,
-                // and only the radius is common to all of them.
-                let one = standing.len() == 1;
-                standing
-                    .iter()
-                    .map(|&(pid, pair)| {
-                        if chamfer {
-                            cc.project.chamfer_lines_of_pair(si, pair, legs, cc.corner.near)
-                        } else if one {
-                            cc.project.fillet_at_vertex_by(si, pid, size)
-                        } else {
-                            cc.project.fillet_at_pair(si, pair, r)
-                        }
-                    })
-                    .filter(|&n| n)
-                    .count()
+                // ONE ANSWER CUTS THE WHOLE SET, OR NOTHING: the core cuts every corner by the size as the bar gives it,
+                // the same cut the preview drew, and leaves the sketch as it was where one corner does not take it
+                let corners: Vec<qymcad_core::model::CornerAt> = standing.iter().map(|&(point, pair)| qymcad_core::model::CornerAt { point, pair }).collect();
+                let cut = corner_cut(cc, chamfer, r);
+                cc.project.cut_corner_set(si, &corners, cut, cc.corner.near)
             };
             if cut > 0 {
                 // THE CHOSEN LINES THAT THE KNIFE HAS CONSUMED GO OUT OF THE SELECTION: a line that is no longer

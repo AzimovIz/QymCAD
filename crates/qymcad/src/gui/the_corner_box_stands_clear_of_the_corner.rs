@@ -32,7 +32,7 @@ mod tests {
             if chamfer {
                 qymcad_core::model::CornerCut::Chamfer(qymcad_core::model::ChamferLegs::equal(3.0))
             } else {
-                qymcad_core::model::CornerCut::Fillet { radius: 3.0 }
+                qymcad_core::model::CornerCut::Fillet(qymcad_core::model::FilletSize::radius(3.0))
             },
         ) else {
             return vec!["no preview of the corner".into()];

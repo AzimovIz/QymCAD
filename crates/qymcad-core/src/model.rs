@@ -1934,7 +1934,7 @@ pub use regen::{ArrayAxis, BodyOp, ChamferShape, CombineSpan, ExtrudeSpan, HoleT
 mod tess;
 mod timeline;
 mod sketch;
-pub use sketch::{ChamferLegs, CornerBlend, CornerCut, CornerTool, FilletBy, FilletSize, TextSpec};
+pub use sketch::{ChamferLegs, CornerAt, CornerBlend, CornerCut, CornerTool, FilletBy, FilletSize, TextSpec};
 pub(crate) mod comp_pattern;
 pub use comp_pattern::{CompPattern, CompPatternKind};
 mod projection;
@@ -2153,9 +2153,14 @@ impl Project {
         if edges.len() != 2 {
             return None;
         }
+        self.corner_sweep_of_pair(si, pid, (edges[0], edges[1]))
+    }
+
+    /// The same for the corner the two named edges make at `pid`, where more than two edges may meet.
+    pub fn corner_sweep_of_pair(&self, si: usize, pid: Id, (e1, e2): (Id, Id)) -> Option<f64> {
         let (pcx, pcy) = self.point_xy(si, pid)?;
         let mut dirs = Vec::new();
-        for e in edges {
+        for e in [e1, e2] {
             let (a, b) = self.edge_end_ids(si, e)?;
             let (ox, oy) = self.point_xy(si, if a == pid { b } else { a })?;
             let l = (ox - pcx).hypot(oy - pcy);
@@ -2192,6 +2197,39 @@ impl Project {
         true
     }
 
+    /// CUT EVERY CORNER OF A SET WITH ONE ANSWER, OR NONE OF THEM: a fillet of the size on every corner - a chord or an
+    /// arc length makes its own radius on each and is kept as it was given - or a chamfer of the legs, its first line
+    /// the one nearer `toward`. A corner the cut does not fit leaves the sketch as it was and answers 0: cut on the
+    /// corners that took it and left whole on the one that did not, the set was a half-made drawing nobody asked for.
+    /// Answers how many corners were cut.
+    pub fn cut_corner_set(&mut self, si: usize, corners: &[CornerAt], cut: CornerCut, toward: Option<crate::geom::Point2>) -> usize {
+        let Some(before) = self.sketches.get(si).cloned() else { return 0 };
+        for corner in corners {
+            let done = match cut {
+                CornerCut::Chamfer(legs) => self.chamfer_lines_of_pair(si, corner.pair, legs, toward),
+                CornerCut::Fillet(size) if size.by == FilletBy::Radius => self.fillet_at_pair(si, corner.pair, size.value),
+                CornerCut::Fillet(size) => self.fillet_pair_by(si, *corner, size),
+            };
+            if !done {
+                self.sketches[si] = before;
+                self.regen_sketch(si);
+                return 0;
+            }
+        }
+        corners.len()
+    }
+
+    /// A FILLET OF THE CORNER OF A SET BY ITS CHORD OR ITS ARC LENGTH: the radius the size makes on this corner, as the
+    /// preview of the corner draws it, and the size kept as it was given.
+    fn fillet_pair_by(&mut self, si: usize, corner: CornerAt, size: FilletSize) -> bool {
+        let Some((_, r)) = self.corner_blend(si, corner.point, corner.pair, CornerCut::Fillet(size)).and_then(|b| b.arc) else { return false };
+        if !self.fillet_at_pair(si, corner.pair, r) {
+            return false;
+        }
+        self.give_fillet_its_size(si, size);
+        true
+    }
+
     /// THE LAST FILLET LAID KEEPS ITS SIZE AS IT WAS GIVEN: its radius dimension is put in place of a distance between
     /// the two points of touching (a chord) or of an arc length dimension, and the sketch is solved.
     pub(super) fn give_fillet_its_size(&mut self, si: usize, size: FilletSize) {
@@ -2199,8 +2237,13 @@ impl Project {
         let Some(last) = s.entities.iter().filter(|e| matches!(e.kind, EntityKind::Arc { .. })).max_by_key(|e| e.id).copied() else { return };
         let EntityKind::Arc { center: centre, a, b, ccw } = last.kind else { return };
         let Some(ci) = self.fillet_radius_constraint(si, last.id) else { return };
+        let end = |id: Id| self.point_xy(si, id).map(|(x, y)| sketch::DimEnd { id, at: crate::geom::Point2::new(x, y) });
+        let (Some(end_a), Some(end_b), Some((cx, cy))) = (end(a), end(b), self.point_xy(si, centre)) else { return };
+        // THE CHORD STANDS OUTSIDE THE SHAPE, on the side of the arc away from its centre: written as the arc ran, it
+        // stood inside the shape on one corner out of two
+        let [ca, cb] = sketch::ends_facing([end_a, end_b], sketch::Side::AwayFrom(crate::geom::Point2::new(cx, cy)));
         self.sketches[si].constraints[ci] = match size.by {
-            FilletBy::Chord => Constraint::Distance { a, b, d: size.value, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None },
+            FilletBy::Chord => Constraint::Distance { a: ca, b: cb, d: size.value, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None },
             _ => Constraint::ArcLength { c: centre, a, b, ccw, len: size.value, off: 0.0, expr: String::new(), driven: false },
         };
         self.solve_sketch(si);

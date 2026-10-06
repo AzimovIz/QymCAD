@@ -115,7 +115,7 @@ fn a_contour_of_chosen_lines_is_a_corner_at_each_of_its_points() {
         assert!(set.made.iter().any(|k| k.point == *c), "no corner stands at {c}: {:?}", set.made);
     }
     // AND THE VALUE IS HELD BY THE TIGHTEST OF THEM, with the lines between them spending on themselves.
-    let limit = set.limit(&p, si, qymcad_core::model::CornerTool::Fillet).expect("three corners hold a value");
+    let limit = set.limit(&p, si, qymcad_core::model::CornerTool::Fillet, qymcad_core::model::FilletBy::Radius).expect("three corners hold a value");
     let one = p.corner_limit_of_pair(si, points[0], (l[0], l[1]), qymcad_core::model::CornerTool::Fillet).expect("one corner holds a value");
     assert!(limit <= one + 1e-9, "one value cuts all three, so the set takes no more than the tightest of them");
     assert!(limit > 0.0, "the corners of a triangle hold a positive value");

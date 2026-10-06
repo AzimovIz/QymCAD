@@ -8328,7 +8328,11 @@ fn angle_sides(project: &Project, si: usize, c: &qymcad_core::model::Constraint,
         Constraint::AngleLines { a, b, c, d, off, at, .. } => {
             let (sa, sb, sc, sd) = (p(a)?, p(b)?, p(c)?, p(d)?);
             let ix = lines_intersect(sa, sb, sc, sd)?;
-            Some(AngleSides { center: ix, s1: [sb, sa], s2: [sd, sc], off, at })
+            // A SIDE THAT ENDS WHERE THE SIDES MEET runs on past its end the way its line runs, first end to second:
+            // the angle of a chamfer is measured at the end of the cut, and the side taken from the meeting to that
+            // same end had no length and so no direction - the arc of the angle turned with the rounding noise.
+            let far = |first: Pos2, second: Pos2| if (second - ix).length() < 1.0 { ix + (second - first).normalized() } else { second };
+            Some(AngleSides { center: ix, s1: [far(sa, sb), sa], s2: [far(sc, sd), sc], off, at })
         }
         _ => None,
     }
@@ -13651,13 +13655,23 @@ impl CornerSet {
     /// One value cuts them all, so it is held by the tightest of them; and a line between two corners spends the
     /// value on itself at both ends, which is why rounding every corner of a rectangle takes half its short side.
     /// `None` when the set holds no corner, and a value then is held by nothing.
-    pub fn limit(&self, project: &Project, si: usize, tool: qymcad_core::model::CornerTool) -> Option<f64> {
-        let of_corners = self.standing().iter().filter_map(|&(pid, pair)| project.corner_limit_of_pair(si, pid, pair, tool)).fold(None, |m: Option<f64>, v| Some(m.map_or(v, |m| m.min(v))));
+    ///
+    /// A FILLET GIVEN BY ITS CHORD OR ITS ARC LENGTH is held in that way: the radius bound is the same for every corner,
+    /// and each corner turns it into the chord or the arc of its own sweep - the set takes the least of them. Held by
+    /// the radius alone, a chord of 18 passed on a corner of 135 deg where it is a radius of 23.5 against 20.5.
+    pub fn limit(&self, project: &Project, si: usize, tool: qymcad_core::model::CornerTool, by: qymcad_core::model::FilletBy) -> Option<f64> {
+        let least = |m: Option<f64>, v: f64| Some(m.map_or(v, |m: f64| m.min(v)));
+        let standing = self.standing();
+        let of_corners = standing.iter().filter_map(|&(pid, pair)| project.corner_limit_of_pair(si, pid, pair, tool)).fold(None, least);
         let lines = self.lines();
-        match (of_corners, project.all_corners_limit(si, Some(&lines), tool)) {
+        let radius = match (of_corners, project.all_corners_limit(si, Some(&lines), tool)) {
             (Some(a), Some(b)) => Some(a.min(b)),
             (a, b) => a.or(b),
+        }?;
+        if tool != qymcad_core::model::CornerTool::Fillet || by == qymcad_core::model::FilletBy::Radius {
+            return Some(radius);
         }
+        standing.iter().filter_map(|&(pid, pair)| project.corner_sweep_of_pair(si, pid, pair)).map(|sweep| qymcad_core::model::FilletSize::of_radius(by, radius, sweep)).fold(None, least)
     }
 
     /// WHAT A CLICK AT A POINT DOES TO THE SET, and nothing else: the selection of lines does not move, and a

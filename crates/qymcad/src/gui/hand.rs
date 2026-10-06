@@ -651,6 +651,23 @@ impl<'a> Hand<'a> {
     /// that cannot reach the third line must not have taken the tool either, since it would be standing over half
     /// a contour.
     pub fn sk_corner_set(&mut self, key: &str, lines: &[(u8, u64)], value: f64) -> bool {
+        self.sk_corner_set_in(key, None, lines, value)
+    }
+
+    /// THE SAME IN A MODE OF THE TOOL: after the tool is taken, the word of the mode on its bar is pressed - "two
+    /// distances", "chord" - as a person picks it before naming the corners.
+    pub fn sk_corner_set_in(&mut self, key: &str, mode: Option<&str>, lines: &[(u8, u64)], value: f64) -> bool {
+        if !self.sk_corner_typed(key, mode, lines, value) {
+            return false;
+        }
+        self.key(egui::Key::Enter);
+        self.close_window();
+        true
+    }
+
+    /// THE SAME UP TO THE VALUE TYPED, and no Enter: the tool stands with its set named and the value in its field,
+    /// as a person looks at the preview before answering. The window stays open.
+    pub fn sk_corner_typed(&mut self, key: &str, mode: Option<&str>, lines: &[(u8, u64)], value: f64) -> bool {
         let places = self.places_on2d(lines);
         let all: Vec<(f64, f64)> = places.iter().flatten().copied().collect();
         let n = all.len().max(1) as f64;
@@ -662,6 +679,9 @@ impl<'a> Hand<'a> {
             return false;
         }
         self.press_hint_or_fail(key);
+        if let Some(word) = mode {
+            assert!(self.press_word(&crate::i18n::tr(word), egui::Pos2::ZERO), "the mode {word} is not on the bar of the tool");
+        }
         for (item, places) in lines.iter().zip(&places) {
             // THE FIELD OF THE CORNER ALREADY NAMED STANDS WHERE IT WAS NAMED, and a click on its buttons answers
             // the field rather than joining the set - so the place is looked up again now, not only before the tool
@@ -674,9 +694,22 @@ impl<'a> Hand<'a> {
         }
         self.frame(Vec::new()); // the field takes the focus
         self.type_text(&format!("{value}"));
-        self.key(egui::Key::Enter);
-        self.close_window();
         true
+    }
+
+    /// THE SMALL RINGS OF `radius` px THE LAST FRAME DREW, where they stand on screen: the marks a preview puts where a
+    /// line will be cut.
+    pub fn rings_drawn(&self, radius: f32) -> Vec<egui::Pos2> {
+        fn rings(s: &egui::Shape, radius: f32, out: &mut Vec<egui::Pos2>) {
+            match s {
+                egui::Shape::Circle(c) if (c.radius - radius).abs() < 1e-3 => out.push(c.center),
+                egui::Shape::Vec(v) => v.iter().for_each(|x| rings(x, radius, out)),
+                _ => {}
+            }
+        }
+        let mut out = Vec::new();
+        self.win.shapes.iter().for_each(|cs| rings(&cs.shape, radius, &mut out));
+        out
     }
 
     /// A LEFTOVER SELECTION IS DROPPED WITH Esc before a shape is picked, as a person drops it: the move tool

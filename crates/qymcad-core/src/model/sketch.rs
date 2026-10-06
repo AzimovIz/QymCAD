@@ -71,11 +71,20 @@ pub enum CornerTool {
     Chamfer(crate::feature::ChamferMode),
 }
 
-/// THE CUT A CORNER IS SHOWN WITH before it is made: a fillet of a radius, or a chamfer of its size.
+/// THE CUT OF A CORNER: a fillet of its size - a radius, a chord or an arc length - or a chamfer of its legs. The same
+/// cut is what the corner is shown with before it is made and what is made: a fillet by its chord was shown as a
+/// fillet of that radius.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum CornerCut {
-    Fillet { radius: f64 },
+    Fillet(FilletSize),
     Chamfer(ChamferLegs),
+}
+
+/// ONE CORNER OF A SET: the point it stands at and the two edges that make it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CornerAt {
+    pub point: Id,
+    pub pair: (Id, Id),
 }
 
 /// HOW A SKETCH FILLET IS GIVEN: by its radius, by its chord - the straight distance between the two points where it
@@ -2450,25 +2459,27 @@ impl Project {
             // one is sized by the cut itself, between its two ends, and held symmetric by its legs kept equal; two legs,
             // or a leg and the angle from the first line, are measured from the sharp corner. Whatever stands on the
             // corner keeps it as the virtual sharp below.
-            let leg = |a: Id, b: Id, d: f64| Constraint::Distance { a, b, d, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None };
+            // EVERY DIMENSION OF THE CHAMFER STANDS OUTSIDE THE SHAPE: the cut on the side of the sharp, a leg on the side
+            // of its line away from the cut. Written as they came, the dimension of a chamfer on one corner of a triangle
+            // dipped into the triangle, and one leg of two on a square stood inside it.
+            let (sharp, at1, at2) = (Point2::new(px, py), Point2::new(t1x, t1y), Point2::new(t2x, t2y));
+            let leg = |ends: [DimEnd; 2], side: Side, d: f64| {
+                let [a, b] = ends_facing(ends, side);
+                Constraint::Distance { a, b, d, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None }
+            };
+            let (end_c, end_1, end_2) = (DimEnd { id: pc, at: sharp }, DimEnd { id: t1, at: at1 }, DimEnd { id: t2, at: at2 });
             match legs.mode {
                 crate::feature::ChamferMode::Symmetric => {
-                    // THE DIMENSION STANDS OUTSIDE THE SHAPE, on the side of the sharp: a linear dimension is drawn off to
-                    // the left of its first end looking at the second (the world normal (dy, -dx)), so the ends are
-                    // written in the order that puts the sharp on that side. Written as they came, the dimension of a
-                    // chamfer on one corner of a triangle dipped into the triangle.
-                    let toward_sharp = (t2y - t1y) * (px - (t1x + t2x) / 2.0) - (t2x - t1x) * (py - (t1y + t2y) / 2.0) > 0.0;
-                    let (from, to) = if toward_sharp { (t1, t2) } else { (t2, t1) };
-                    s.constraints.push(leg(from, to, legs.first));
+                    s.constraints.push(leg([end_1, end_2], Side::Toward(sharp), legs.first));
                     s.constraints.push(Constraint::Equal { a: pc, b: t1, c: pc, d: t2 });
                 }
                 crate::feature::ChamferMode::TwoDist => {
-                    s.constraints.push(leg(pc, t1, d1));
-                    s.constraints.push(leg(pc, t2, d2));
+                    s.constraints.push(leg([end_c, end_1], Side::AwayFrom(at2), d1));
+                    s.constraints.push(leg([end_c, end_2], Side::AwayFrom(at1), d2));
                 }
                 // the angle between the first line, run towards the corner, and the cut: what a drawing of the chamfer gives
                 crate::feature::ChamferMode::DistAngle => {
-                    s.constraints.push(leg(pc, t1, d1));
+                    s.constraints.push(leg([end_c, end_1], Side::AwayFrom(at2), d1));
                     s.constraints.push(Constraint::AngleLines { a: o1, b: t1, c: t1, d: t2, deg: legs.second, expr: String::new(), driven: false, off: 0.0, at: None });
                 }
             }
@@ -2911,7 +2922,8 @@ impl Project {
                 }
                 return Some(CornerBlend { vertex: [pcx, pcy], ends: [at(d1x, d1y, a), at(d2x, d2y, b)], arc: None });
             }
-            CornerCut::Fillet { radius } => radius,
+            // the radius the size makes on this corner, whose arc turns through pi less the angle of its edges
+            CornerCut::Fillet(size) => size.radius_on(std::f64::consts::PI - theta)?,
         };
         let limit = shorter * (theta / 2.0).tan();
         if value <= 1e-6 || !limit.is_finite() || value >= limit * (1.0 - 1e-9) {
@@ -4976,14 +4988,56 @@ fn seam_cleaned(loop_: &[Point2]) -> Vec<Point2> {
     out
 }
 
+/// ONE END OF A LINEAR DIMENSION: its point and where the point stands.
+#[derive(Clone, Copy)]
+pub(crate) struct DimEnd {
+    pub(crate) id: Id,
+    pub(crate) at: Point2,
+}
+
+/// WHICH SIDE OF ITS TWO ENDS A LINEAR DIMENSION IS TO STAND ON: the side of a point, or the side away from one.
+#[derive(Clone, Copy)]
+pub(crate) enum Side {
+    Toward(Point2),
+    AwayFrom(Point2),
+}
+
+/// THE ORDER OF THE TWO ENDS OF A LINEAR DIMENSION THAT PUTS IT ON `side`: a linear dimension is drawn off to the left of
+/// its first end looking at the second, on screen - the world normal (dy, -dx) - so the order is the side.
+pub(crate) fn ends_facing([a, b]: [DimEnd; 2], side: Side) -> [Id; 2] {
+    let (dx, dy) = (b.at.x - a.at.x, b.at.y - a.at.y);
+    let (mx, my) = ((a.at.x + b.at.x) / 2.0, (a.at.y + b.at.y) / 2.0);
+    let (q, toward) = match side {
+        Side::Toward(q) => (q, true),
+        Side::AwayFrom(q) => (q, false),
+    };
+    let on_normal = dy * (q.x - mx) - dx * (q.y - my) > 0.0;
+    if on_normal == toward {
+        [a.id, b.id]
+    } else {
+        [b.id, a.id]
+    }
+}
+
+/// WHERE THE RADIUS OF A FILLET IS LED: from the centre out through its arc, a quarter of the arc off its middle towards
+/// the more level of its two ends. Its text stands on a level shelf past the arc, and led through the middle it stood
+/// over the sharp of the corner, which lies on the same bisector 0.41 r past the arc of a square corner. The answer is
+/// an angle on the screen, where y runs down: the angle of the world direction (x, y) is atan2(-y, x). Taken as
+/// atan2(y, -x) it pointed the other way, from the centre into the shape.
 fn fillet_label_angle(points: &[SketchPoint], cen: Id, t1: Id, t2: Id) -> f64 {
     let get = |id: Id| points.iter().find(|p| p.id == id).map(|p| (p.x, p.y));
     let (Some(c), Some(a), Some(b)) = (get(cen), get(t1), get(t2)) else { return 0.0 };
-    let (dx, dy) = ((a.0 - c.0) + (b.0 - c.0), (a.1 - c.1) + (b.1 - c.1));
-    if dx.hypot(dy) < 1e-9 {
+    let unit = |(x, y): (f64, f64)| {
+        let l = x.hypot(y);
+        (l > 1e-12).then(|| (x / l, y / l))
+    };
+    let (Some(ua), Some(ub)) = (unit((a.0 - c.0, a.1 - c.1)), unit((b.0 - c.0, b.1 - c.1))) else { return 0.0 };
+    let Some(mid) = unit((ua.0 + ub.0, ua.1 + ub.1)) else {
         return 0.0; // The tangency points are diametrically opposite, so there is no bisector.
-    }
-    dy.atan2(-dx)
+    };
+    let level = if ua.0.abs() >= ub.0.abs() { ua } else { ub };
+    let (x, y) = unit((mid.0 + level.0, mid.1 + level.1)).unwrap_or(mid);
+    (-y).atan2(x)
 }
 
 /// A CIRCLE OR AN ARC READ AS ONE THING: the centre, the radius, and for an arc the angular range.

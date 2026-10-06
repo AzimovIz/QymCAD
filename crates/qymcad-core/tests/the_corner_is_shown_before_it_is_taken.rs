@@ -40,7 +40,7 @@ fn the_chamfer_is_shown_as_the_cut_it_will_make() {
 #[test]
 fn the_fillet_is_shown_as_the_arc_it_will_leave() {
     let (p, si, corner, edges) = an_angle();
-    let b = p.corner_blend(si, corner, edges, qymcad_core::model::CornerCut::Fillet { radius: 5.0 }).expect("a radius of 5 fits this corner");
+    let b = p.corner_blend(si, corner, edges, qymcad_core::model::CornerCut::Fillet(qymcad_core::model::FilletSize::radius(5.0))).expect("a radius of 5 fits this corner");
     // a right angle: the arc touches each line 5 from the corner, its centre on the bisector
     assert!(near(b.ends[0], (15.0, 0.0)) && near(b.ends[1], (20.0, 5.0)), "the arc of radius 5 does not meet the lines at (15, 0) and (20, 5): {:?}", b.ends);
     let (c, r) = b.arc.expect("a fillet leaves an arc");
@@ -59,7 +59,7 @@ fn a_value_the_corner_cannot_take_is_shown_as_nothing() {
             .is_none(),
         "a leg of 25 was drawn on lines of 20: a preview must not promise what cannot be built"
     );
-    assert!(p.corner_blend(si, corner, edges, qymcad_core::model::CornerCut::Fillet { radius: 25.0 }).is_none(), "a radius of 25 was drawn on lines of 20");
+    assert!(p.corner_blend(si, corner, edges, qymcad_core::model::CornerCut::Fillet(qymcad_core::model::FilletSize::radius(25.0))).is_none(), "a radius of 25 was drawn on lines of 20");
     assert!(
         p.corner_blend(si, corner, edges, qymcad_core::model::CornerCut::Chamfer(qymcad_core::model::ChamferLegs { mode: qymcad_core::feature::ChamferMode::TwoDist, first: 0.0, second: 0.0 }))
             .is_none(),

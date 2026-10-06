@@ -85,7 +85,9 @@ chamfered exactly as if they had been chosen with **Shift** already in the mode.
 ## The value and the undo
 
 One value cuts the **whole set**. It is held by the tightest corner in the set and by what the lines between the
-corners spend on themselves: rounding every corner of a rectangle takes half its short side.
+corners spend on themselves: rounding every corner of a rectangle takes half its short side. A chord or an arc length
+is kept on every corner of the set, each corner making the radius of its own angle. If one corner of the set does not
+take the value, no corner is cut: the reason is written at the field — type a smaller value.
 
 - **Enter** (or the tick) applies the whole set — one step of undo.
 - **Esc** cancels.
