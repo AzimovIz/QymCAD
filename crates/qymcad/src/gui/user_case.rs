@@ -1842,6 +1842,9 @@ mod tests {
         // This is already checked inside a sketch; here it is the same thing at the level of THE TIMELINE: the
         // height of an extrude holds on to a variable, and editing that variable must rebuild THE BODY.
         // Otherwise the parametrics end at the sketch and the part stays hand-made.
+        //
+        // The name carries a capital: `Height` is a name of its own, not `height`. The window marks nothing by hand
+        // after the edit, so neither does this step: what rebuilds the body is the edit of the variable alone.
         {
             use qymcad_core::feature::FeatureKind as FK;
             let ext = app.project.timeline.iter().find_map(|n| match n.kind {
@@ -1852,20 +1855,18 @@ mod tests {
                 let area = |a: &App| a.project.regen_faces.get(&body).map(|fs| fs.iter().map(|f| f.area).sum::<f64>()).unwrap_or(0.0);
                 let a0 = area(&app);
                 qymcad_ui_state::begin_edit(&mut app.disk.edits, &app.project, "the height follows a variable");
-                app.project.parameters.push(qymcad_core::model::Param { name: "height".into(), expr: "18".into(), value: 18.0 });
-                app.project.feat_dims.entry(node).or_default().insert("height".into(), "height".into());
+                app.project.parameters.push(qymcad_core::model::Param { name: "Height".into(), expr: "18".into(), value: 18.0 });
+                app.project.set_feat_dim(node, "height", "Height".into());
                 qymcad_ui_state::commit_edit(&mut app.rebuild_ctx());
-                app.project.mark_node_dirty(node);
                 qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
                 let a1 = area(&app);
 
                 qymcad_ui_state::begin_edit(&mut app.disk.edits, &app.project, "editing the variable");
-                if let Some(p) = app.project.parameters.iter_mut().find(|p| p.name == "height") {
+                if let Some(p) = app.project.parameters.iter_mut().find(|p| p.name == "Height") {
                     p.expr = "34".into();
                     p.value = 34.0;
                 }
                 qymcad_ui_state::commit_edit(&mut app.rebuild_ctx());
-                app.project.mark_node_dirty(node);
                 qymcad_ui_state::rebuild_if_dirty(&mut app.rebuild_ctx());
                 let a2 = area(&app);
 

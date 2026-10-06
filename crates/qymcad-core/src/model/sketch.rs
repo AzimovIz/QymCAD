@@ -3280,7 +3280,7 @@ impl Project {
             crate::model::DimTarget::Feature { node, key } => {
                 if let Some(e) = self.feat_dim(*node, key) {
                     if !e.trim().is_empty() {
-                        let vars: std::collections::HashMap<String, f64> = self.parameters.iter().filter(|p| !p.name.is_empty()).map(|p| (p.name.to_lowercase(), p.value)).collect();
+                        let vars: std::collections::HashMap<String, f64> = self.parameters.iter().filter(|p| !p.name.is_empty()).map(|p| (p.name.clone(), p.value)).collect();
                         return crate::expr::eval(e, &vars).ok();
                     }
                 }

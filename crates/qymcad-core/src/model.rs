@@ -2341,16 +2341,17 @@ impl Project {
     }
 
     /// Solve the sketch constraints (moving the points) and re-tessellate the contour.
-    /// Map of global parameter names (lower-cased) to values, used to evaluate feature and command
-    /// dimension expressions through [`crate::expr::eval`], the same way sketch dimensions are evaluated.
+    /// Map of global parameter names to values, used to evaluate feature and command dimension expressions
+    /// through [`crate::expr::eval`], the same way sketch dimensions are evaluated. A name is a key as written: `H`
+    /// and `h` are two parameters.
     pub fn param_map(&self) -> std::collections::HashMap<String, f64> {
-        let mut m: std::collections::HashMap<String, f64> = self.parameters.iter().filter(|p| !p.name.is_empty()).map(|p| (p.name.to_lowercase(), p.value)).collect();
+        let mut m: std::collections::HashMap<String, f64> = self.parameters.iter().filter(|p| !p.name.is_empty()).map(|p| (p.name.clone(), p.value)).collect();
         // Named driving dimensions (the skeleton sketch of an assembly): a name resolves to a dimension
         // value, which parts then consume through expressions.
         for nd in &self.named_dims {
             if !nd.name.is_empty() {
                 if let Some(v) = self.named_dim_value(nd) {
-                    m.insert(nd.name.to_lowercase(), v);
+                    m.insert(nd.name.clone(), v);
                 }
             }
         }
@@ -2401,7 +2402,7 @@ impl Project {
         if nm.is_empty() {
             return false;
         }
-        self.parameters.iter().any(|p| p.name.eq_ignore_ascii_case(nm)) || self.named_dims.iter().any(|n| n.name.eq_ignore_ascii_case(nm) && n.target != *target)
+        self.parameters.iter().any(|p| p.name == nm) || self.named_dims.iter().any(|n| n.name == nm && n.target != *target)
     }
 
     /// The same for a sketch dimension, addressed by entities the way the popup addresses it.
@@ -2577,7 +2578,7 @@ impl Project {
         let mut vars = self.param_map();
         for p in &self.parameters {
             if !p.name.is_empty() {
-                vars.insert(p.name.to_lowercase(), p.value); // seed with the previous value
+                vars.insert(p.name.clone(), p.value); // seed with the previous value
             }
         }
         // Fixed point over the dependencies (up to eight passes).
@@ -2588,7 +2589,7 @@ impl Project {
                     continue;
                 }
                 if let Ok(v) = eval(&p.expr, &vars) {
-                    let key = p.name.to_lowercase();
+                    let key = p.name.clone();
                     if vars.get(&key).is_none_or(|o| (o - v).abs() > 1e-12) {
                         changed = true;
                     }
@@ -2648,7 +2649,7 @@ impl Project {
     }
 
     /// Evaluate an arbitrary expression in the context of the project parameters, for validating a
-    /// dimension field in the interface. Parameter names are case-insensitive.
+    /// dimension field in the interface. A parameter name is matched as written.
     pub fn eval_expr(&self, src: &str) -> Result<f64, crate::errors::ExprError> {
         // Going through `param_map` exposes both the global parameters and the named driving dimensions of
         // a skeleton sketch.

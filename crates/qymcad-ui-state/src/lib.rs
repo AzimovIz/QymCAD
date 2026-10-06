@@ -10384,7 +10384,7 @@ pub fn restore(rc: &mut RebuildCtx, snap: Snapshot) -> Vec<Id> {
     // the values counted again from the expressions first: the snapshot may hold an expression its value never caught up
     // with, the value being counted when the table's edit is applied
     let _ = restored.eval_parameters();
-    let said = |p: &Project| p.parameters.iter().map(|q| (q.name.to_lowercase(), (q.expr.clone(), q.value.to_bits()))).collect::<std::collections::HashMap<_, _>>();
+    let said = |p: &Project| p.parameters.iter().map(|q| (q.name.clone(), (q.expr.clone(), q.value.to_bits()))).collect::<std::collections::HashMap<_, _>>();
     let (was, now) = (said(rc.project), said(&restored));
     let moved: Vec<String> = was.keys().chain(now.keys()).filter(|k| was.get(*k) != now.get(*k)).cloned().collect();
     shelve_source_data(rc.live, rc.project, &mut restored);

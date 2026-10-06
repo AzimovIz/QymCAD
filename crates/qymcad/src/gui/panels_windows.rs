@@ -604,7 +604,7 @@ pub(crate) fn params_rows_ui(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui
                 // THE NAME. It is edited in A BUFFER and goes into the document on Enter - it used to be written
                 // into the model on every letter, and every formula referring to it broke on the very first one.
                 let own = names[i].clone();
-                let taken = |nm: &str| !nm.eq_ignore_ascii_case(&own) && wc.project.name_owner(nm).is_some();
+                let taken = |nm: &str| nm != own && wc.project.name_owner(nm).is_some();
                 let ok = |nm: &str| qymcad_core::drivers::check_ident(nm).is_ok() && !taken(nm);
                 let id = egui::Id::new(("par_name", i));
                 let r = super::expr_field::name_field(ui, &*wc.project, id, &names[i], w_name, "w", &ok);
@@ -618,7 +618,7 @@ pub(crate) fn params_rows_ui(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui
                 let nm = r.text.trim().to_string();
                 if !nm.is_empty() && !ok(&nm) {
                     refusal = Some(match wc.project.name_owner(&nm) {
-                        Some(o) if !nm.eq_ignore_ascii_case(&own) => {
+                        Some(o) if nm != own => {
                             // A GLOBAL PARAMETER HAS NO PATH, and giving it a "where this dimension sits" would be
                             // a lie: it is not a dimension and it sits nowhere.
                             let where_ = if o.path.is_empty() { crate::i18n::tr("par-owner-project") } else { o.path.clone() };
@@ -667,7 +667,7 @@ pub(crate) fn params_rows_ui(wc: &mut qymcad_ui_state::WinCtx, ui: &mut egui::Ui
                 .iter()
                 .enumerate()
                 .map(|(k, n)| {
-                    let dup = wc.project.named_dims.iter().filter(|m| m.name.eq_ignore_ascii_case(&n.name)).count() > 1;
+                    let dup = wc.project.named_dims.iter().filter(|m| m.name == n.name).count() > 1;
                     (k, n.name.clone(), wc.project.driver_path(&n.target), wc.project.named_dim_value(n), dup)
                 })
                 .filter(|(_, nm, path, _, _)| hit(nm, path))
