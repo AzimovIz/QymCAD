@@ -1139,7 +1139,8 @@ pub static OFFSET: Tool = Tool {
 
 /// The right-angled corner rounded with radius `r`: the arc touches each line r from the corner, its centre at (r, r),
 /// and it passes the corner as close as r - r / sqrt(2) = 0.293 r on the diagonal. What stays: the two far ends, the two
-/// points of touching, the centre of the arc; the box of the whole is untouched.
+/// points of touching, the centre of the arc and the corner itself, kept as the virtual sharp; the box of the whole is
+/// untouched.
 fn corner_rounded(r: f64) -> Outcome {
     let near = r - r / std::f64::consts::SQRT_2;
     // the line is looked for halfway along what is left of it (a radius of 29.9 leaves 0.1 of it); the gap and the arc at
@@ -1150,7 +1151,7 @@ fn corner_rounded(r: f64) -> Outcome {
     }
     let under: &'static [(f64, f64, Under)] = Box::leak(at.into_boxed_slice());
     Outcome::Sketch {
-        points: 5,
+        points: 6,
         lines: 2,
         arcs: 1,
         circles: 0,
@@ -1171,7 +1172,7 @@ fn corner_rounded(r: f64) -> Outcome {
 /// what is left of it and the arc r - r / sqrt 2 out on the diagonal; the gap at half the radius along the line is not
 /// looked for: the arc of a radius of 2.1 passes 0.25 from it, within a click.
 const ROUNDED_BY_CHORD_3: Outcome = Outcome::Sketch {
-    points: 5,
+    points: 6,
     lines: 2,
     arcs: 1,
     circles: 0,
@@ -1188,7 +1189,7 @@ const ROUNDED_BY_CHORD_3: Outcome = Outcome::Sketch {
 
 /// See `ROUNDED_BY_CHORD_3`: an arc of 3, a radius of 1.9099.
 const ROUNDED_BY_ARC_3: Outcome = Outcome::Sketch {
-    points: 5,
+    points: 6,
     lines: 2,
     arcs: 1,
     circles: 0,
@@ -1205,7 +1206,7 @@ const ROUNDED_BY_ARC_3: Outcome = Outcome::Sketch {
 
 /// The corner rounded with a radius of 3, the result of the tool as the bar opens.
 const ROUNDED_BY_RADIUS_3: Outcome = Outcome::Sketch {
-    points: 5,
+    points: 6,
     lines: 2,
     arcs: 1,
     circles: 0,
