@@ -2497,7 +2497,13 @@ impl Project {
             let leg = |a: Id, b: Id, d: f64| Constraint::Distance { a, b, d, off: 0.0, expr: String::new(), driven: false, axis: 0, at: None };
             match legs.mode {
                 crate::feature::ChamferMode::Symmetric => {
-                    s.constraints.push(leg(t1, t2, legs.first));
+                    // THE DIMENSION STANDS OUTSIDE THE SHAPE, on the side of the sharp: a linear dimension is drawn off to
+                    // the left of its first end looking at the second (the world normal (dy, -dx)), so the ends are
+                    // written in the order that puts the sharp on that side. Written as they came, the dimension of a
+                    // chamfer on one corner of a triangle dipped into the triangle.
+                    let toward_sharp = (t2y - t1y) * (px - (t1x + t2x) / 2.0) - (t2x - t1x) * (py - (t1y + t2y) / 2.0) > 0.0;
+                    let (from, to) = if toward_sharp { (t1, t2) } else { (t2, t1) };
+                    s.constraints.push(leg(from, to, legs.first));
                     s.constraints.push(Constraint::Equal { a: pc, b: t1, c: pc, d: t2 });
                 }
                 crate::feature::ChamferMode::TwoDist => {

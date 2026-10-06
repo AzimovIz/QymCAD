@@ -625,6 +625,39 @@ impl Sketch {
         self.rects.iter().flat_map(|r| r.corners).filter(|c| !ends.contains(c)).collect()
     }
 
+    /// THE CONSTRAINTS A CUT CORNER HOLDS ITSELF BY, by their index: the virtual sharp standing on the extension of each
+    /// side (`PointOnLine` of a point no geometry ends at), the legs of a symmetric chamfer kept equal on it (`Equal` from
+    /// the sharp to the two ends of the cut line), and the arc of a fillet touching the lines it ends on (`Tangent` of a
+    /// line to the arc that ends at one of its points). They are the corner's own, as the turn of a rectangle is the
+    /// rectangle's: shown, a chamfer of 3 carried two "=" and a point-on-line badge out in the air beside its cut, and a
+    /// fillet a tangency badge on each line. A dimension a person measured to the sharp is not among them.
+    pub fn corner_holders(&self) -> std::collections::HashSet<usize> {
+        let drawn: std::collections::HashSet<Id> = self
+            .entities
+            .iter()
+            .flat_map(|e| match e.kind {
+                EntityKind::Line { a, b } => vec![a, b],
+                EntityKind::Arc { center, a, b, .. } => vec![center, a, b],
+                EntityKind::Circle { center, .. } => vec![center],
+                EntityKind::Ellipse { c, ma, mi } => vec![c, ma, mi],
+            })
+            .collect();
+        let cut = |x: Id, y: Id| self.entities.iter().any(|e| matches!(e.kind, EntityKind::Line { a, b } if (a == x && b == y) || (a == y && b == x)));
+        self.constraints
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| match **c {
+                Constraint::PointOnLine { p, .. } => !drawn.contains(&p) && !self.system_ids().contains(&p),
+                Constraint::Equal { a, b, c, d } => a == c && !drawn.contains(&a) && cut(b, d),
+                Constraint::Tangent { a, b, c, .. } => {
+                    self.entities.iter().any(|e| matches!(e.kind, EntityKind::Arc { center, a: x, b: y, .. } if center == c && [x, y].iter().any(|q| *q == a || *q == b)))
+                }
+                _ => false,
+            })
+            .map(|(i, _)| i)
+            .collect()
+    }
+
     /// The points not drawn among the sketch's own: the frame of reference (drawn by the axis marker) and the virtual
     /// sharps of rectangles.
     pub fn unseen_points(&self) -> std::collections::HashSet<Id> {
