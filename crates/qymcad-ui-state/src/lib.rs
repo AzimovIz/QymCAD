@@ -7978,7 +7978,8 @@ pub fn dim_caption(project: &Project, si: usize, c: &qymcad_core::model::Constra
         Constraint::EdgeDistance { d, .. } => format!("T {d:.1}"),
         Constraint::DistancePL { d, .. } => format!("{:.1}", d.abs()), // d is signed (it carries the side)
         Constraint::Diameter { d, diam, .. } => format!("{}{d:.1}", if diam { "Ø" } else { "R" }),
-        Constraint::ArcLength { len, .. } => format!("L{len:.1}"),
+        // the number alone: the arc mark over it is drawn with the dimension, a letter said less
+        Constraint::ArcLength { len, .. } => format!("{len:.1}"),
         Constraint::Angle { deg, .. } | Constraint::AngleLines { deg, .. } => format!("{deg:.0}°"),
         _ => return None,
     };
@@ -8174,6 +8175,65 @@ pub struct RadialDim {
     /// the turn of the text, radians: 0 on the shelf, the line's own direction (kept readable) on the line
     pub angle: f32,
     pub shelf: Option<[Pos2; 2]>,
+}
+
+/// AN ARC LENGTH ON THE SCREEN, drawn as the drawing standards draw it: a dimension arc about the same centre, out
+/// past the measured arc by `ARC_DIM_GAP` px plus the dimension's own offset (`off`, mm along the radius), extension
+/// lines from the ends of the arc out to it, arrows at both ends along it, and the number over its middle with a small
+/// arc drawn over the number - the mark of an arc length. It was a caption beside the middle of the arc with a letter
+/// L, no line and nothing to say what it measured. One geometry for drawing the dimension and for taking its text.
+pub struct ArcLengthDim {
+    /// the dimension arc, as screen points from its first end to its second
+    pub arc: Vec<Pos2>,
+    /// the two extension lines, from an end of the arc out past the dimension arc
+    pub ext: [[Pos2; 2]; 2],
+    /// the two arrows: the tip and the direction it points along the dimension arc
+    pub arrows: [(Pos2, egui::Vec2); 2],
+    /// the centre of the number
+    pub text: Pos2,
+    pub size: egui::Vec2,
+    /// the arc mark over the number, as screen points
+    pub mark: Vec<Pos2>,
+}
+
+/// How far the dimension arc of an arc length stands out past the arc it measures, in pixels, before its own offset.
+const ARC_DIM_GAP: f32 = 14.0;
+
+/// The screen geometry of arc length dimension `ci`; `None` for any other constraint.
+pub fn arc_length_dim_geom(project: &Project, si: usize, ci: usize, sh: &Sheet, set: &Settings) -> Option<ArcLengthDim> {
+    let s = project.sketches.get(si)?;
+    let c = s.constraints.get(ci)?;
+    let qymcad_core::model::Constraint::ArcLength { c: centre, a, b, ccw, off, .. } = *c else { return None };
+    let (cp, pa, pb) = (sketch_pt(project, si, centre)?, sketch_pt(project, si, a)?, sketch_pt(project, si, b)?);
+    let r = (pa.x - cp.x).hypot(pa.y - cp.y);
+    let scale = sh.view.scale as f64;
+    let rd = (r + ARC_DIM_GAP as f64 / scale + off).max(r * 0.2); // never through the centre
+    let (a0, a1) = ((pa.y - cp.y).atan2(pa.x - cp.x), (pb.y - cp.y).atan2(pb.x - cp.x));
+    let tau = std::f64::consts::TAU;
+    let sweep = if ccw { (a1 - a0).rem_euclid(tau) } else { -(a0 - a1).rem_euclid(tau) };
+    let at = |ang: f64, rad: f64| sh.at(Point2::new(cp.x + rad * ang.cos(), cp.y + rad * ang.sin()));
+    let steps = ((sweep.abs() * rd * scale / 4.0).ceil() as usize).clamp(4, 96);
+    let arc: Vec<Pos2> = (0..=steps).map(|k| at(a0 + sweep * k as f64 / steps as f64, rd)).collect();
+    let past = rd + 3.0 / scale; // the extension lines run a little past the dimension arc
+    let ext = [[at(a0, r), at(a0, past)], [at(a0 + sweep, r), at(a0 + sweep, past)]];
+    let along = |i: usize, j: usize| (arc[j] - arc[i]).normalized();
+    let n = arc.len() - 1;
+    let arrows = [(arc[0], along(1, 0)), (arc[n], along(n - 1, n))];
+    let mid = a0 + sweep / 2.0;
+    let size = dim_text_size(&dim_caption(project, si, c, set)?, set.dim_font);
+    let out = egui::vec2(mid.cos() as f32, -(mid.sin() as f32)); // the screen's y runs down
+    let text = at(mid, rd) + out * (size.y * 0.5 + 9.0);
+    // the arc mark: a small arc over the number, bulging away from the dimension arc
+    let half = size.x.min(14.0) * 0.5;
+    let side = egui::vec2(out.y, -out.x);
+    let crown = text + out * (size.y * 0.5 + 4.0);
+    let mark: Vec<Pos2> = (0..=8)
+        .map(|k| {
+            let t = k as f32 / 8.0 * 2.0 - 1.0;
+            crown + side * (t * half) + out * ((1.0 - t * t) * 3.0)
+        })
+        .collect();
+    Some(ArcLengthDim { arc, ext, arrows, text, size, mark })
 }
 
 /// The screen geometry of radius or diameter dimension `ci`; `None` for any other constraint.

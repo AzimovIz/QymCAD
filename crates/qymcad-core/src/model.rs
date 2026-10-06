@@ -641,6 +641,18 @@ impl Sketch {
             .collect()
     }
 
+    /// WHETHER THE CIRCLE OR ARC ABOUT `centre` CARRIES A SIZE OF ITS OWN: a radius or a diameter, the length of the arc,
+    /// or the chord between its two ends. Where it does, no passive radius is labelled beside it: a fillet sized by its
+    /// chord or its arc length showed an R it does not hold by as well.
+    pub fn rim_sized(&self, centre: Id) -> bool {
+        let chord = |x: Id, y: Id| self.entities.iter().any(|e| matches!(e.kind, EntityKind::Arc { center, a, b, .. } if center == centre && ((a == x && b == y) || (a == y && b == x))));
+        self.constraints.iter().any(|c| match *c {
+            Constraint::Diameter { c, .. } | Constraint::ArcLength { c, .. } => c == centre,
+            Constraint::Distance { a, b, .. } => chord(a, b),
+            _ => false,
+        })
+    }
+
     /// The points not drawn among the sketch's own: the frame of reference, drawn by the axis marker. The virtual sharp of
     /// a cut corner is drawn, and picked, like any point.
     pub fn unseen_points(&self) -> std::collections::HashSet<Id> {

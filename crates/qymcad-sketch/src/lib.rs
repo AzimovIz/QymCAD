@@ -2026,16 +2026,9 @@ pub fn dim_label_box(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, si: usize,
         // both angles: where the drawing puts the label, from the one geometry of an angular dimension
         Constraint::Angle { .. } | Constraint::AngleLines { .. } => qymcad_ui_state::angle_dim_geom(sk.project, si, ci, &sh, sk.set).map(|g| (g.label, size, 0.0)),
         Constraint::Diameter { .. } => qymcad_ui_state::radial_dim_geom(sk.project, si, ci, &sh, sk.set).map(|g| (g.text, g.size, g.angle)),
-        // an arc length: the caption sits at the middle of the arc, matching how it is drawn - otherwise
-        // `dim_at` does not find it, and the dimension can be neither picked, nor edited, nor dragged.
-        Constraint::ArcLength { c, a, b, off, .. } => {
-            let (cp, pa, pb) = (qymcad_ui_state::sketch_pt(sk.project, si, c)?, qymcad_ui_state::sketch_pt(sk.project, si, a)?, qymcad_ui_state::sketch_pt(sk.project, si, b)?);
-            let r = ((pa.x - cp.x).powi(2) + (pa.y - cp.y).powi(2)).sqrt();
-            let mid = Point2::new((pa.x + pb.x) / 2.0 - cp.x, (pa.y + pb.y) / 2.0 - cp.y);
-            let ml = (mid.x * mid.x + mid.y * mid.y).sqrt().max(1e-9);
-            let ed = sh.at(Point2::new(cp.x + mid.x / ml * r, cp.y + mid.y / ml * r));
-            Some(((ed.to_vec2() + egui::vec2(10.0, -8.0 + off as f32 * sk.view.scale)).to_pos2(), size, 0.0))
-        }
+        // an arc length: the number over the middle of its dimension arc, from the one geometry it is drawn by - otherwise
+        // `dim_at` does not find it, and the dimension can be neither picked, nor edited, nor dragged
+        Constraint::ArcLength { .. } => qymcad_ui_state::arc_length_dim_geom(sk.project, si, ci, &sh, sk.set).map(|g| (g.text, g.size, 0.0)),
         _ => None,
     }
 }
@@ -3782,7 +3775,7 @@ pub fn ref_edge_at(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos2, s
 /// beyond the rim); an arc's sits by the middle of the arc, where the passive leader draws it.
 pub fn passive_radius_label_at(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos2, si: usize) -> Option<(Id, bool)> {
     let sh = qymcad_ui_state::Sheet { view: *sk.view, rect };
-    use qymcad_core::model::{Constraint, EntityKind};
+    use qymcad_core::model::EntityKind;
     let s = sk.project.sketches.get(si)?;
     for e in &s.entities {
         let (center, diam) = match e.kind {
@@ -3790,8 +3783,8 @@ pub fn passive_radius_label_at(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, 
             EntityKind::Arc { center, .. } => (center, false),
             _ => continue,
         };
-        if s.constraints.iter().any(|x| matches!(x, Constraint::Diameter { c, .. } if *c == center)) {
-            continue;
+        if s.rim_sized(center) {
+            continue; // a size of its own is drawn, and grabbed, by its constraint
         }
         let Some(cp) = qymcad_ui_state::sketch_pt(&*sk.project, si, center) else { continue };
         let Some(r) = qymcad_ui_state::center_radius(&sk.draw(), si, center) else { continue };
@@ -3922,8 +3915,19 @@ pub fn sketch_drag_update(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Conte
                                 0.0
                             }
                         }
-                        // an arc length: `off` is the vertical screen shift of the caption (see the drawing)
-                        Some(Constraint::ArcLength { .. }) => dl.y as f64,
+                        // an arc length: `off` runs along the radius through the middle of the arc, outwards
+                        Some(Constraint::ArcLength { c, a, b, ccw, .. }) => {
+                            match (qymcad_ui_state::sketch_pt(&*sk.project, si, c), qymcad_ui_state::sketch_pt(&*sk.project, si, a), qymcad_ui_state::sketch_pt(&*sk.project, si, b)) {
+                                (Some(cp), Some(pa), Some(pb)) => {
+                                    let (a0, a1) = ((pa.y - cp.y).atan2(pa.x - cp.x), (pb.y - cp.y).atan2(pb.x - cp.x));
+                                    let tau = std::f64::consts::TAU;
+                                    let mid = if ccw { a0 + (a1 - a0).rem_euclid(tau) / 2.0 } else { a0 - (a0 - a1).rem_euclid(tau) / 2.0 };
+                                    let out = egui::vec2(mid.cos() as f32, -(mid.sin() as f32)); // the screen's y runs down
+                                    (dl.x * out.x + dl.y * out.y) as f64
+                                }
+                                _ => 0.0,
+                            }
+                        }
                         // a tangent distance: `off` runs along the perpendicular to the line of centres c1-c2
                         Some(Constraint::EdgeDistance { c1, c2, .. }) => {
                             if let (Some(p1), Some(p2)) = (qymcad_ui_state::sketch_pt(&*sk.project, si, c1), qymcad_ui_state::sketch_pt(&*sk.project, si, c2)) {
