@@ -12710,8 +12710,36 @@ pub fn contour_under_3d(project: &Project, scr: &Screen, screen: Pos2, si: usize
 pub struct ActiveEdges {
     /// The straight ones, as their two endpoints.
     pub lines: Vec<(Point2, Point2)>,
-    /// The round ones, as a centre and a radius.
-    pub circles: Vec<(Point2, f64)>,
+    /// The round ones: circles whole, and arcs with the part of their circle they run over.
+    pub circles: Vec<Rim>,
+}
+
+/// THE RIM OF A CIRCLE OR AN ARC, as the cursor snaps to it.
+pub struct Rim {
+    pub centre: Point2,
+    pub radius: f64,
+    /// For an arc, the part of the circle it runs over; `None` for a whole circle.
+    pub arc: Option<RimArc>,
+}
+
+/// THE PART OF ITS CIRCLE AN ARC RUNS OVER: from its start to its end, counter-clockwise or not.
+pub struct RimArc {
+    pub from: Point2,
+    pub to: Point2,
+    pub ccw: bool,
+}
+
+impl Rim {
+    /// WHETHER A POINT OF THE CIRCLE LIES ON THE RIM ITSELF: anywhere for a circle, within its sweep for an arc. A snap
+    /// on the rest of an arc's circle stood where nothing is drawn - beside a fillet R20, on the far side of its circle.
+    pub fn holds(&self, p: Point2) -> bool {
+        let Some(arc) = &self.arc else { return true };
+        let ang = |q: Point2| (q.y - self.centre.y).atan2(q.x - self.centre.x);
+        let (a0, a1, at) = (ang(arc.from), ang(arc.to), ang(p));
+        let tau = std::f64::consts::TAU;
+        let (start, sweep) = if arc.ccw { (a0, (a1 - a0).rem_euclid(tau)) } else { (a1, (a0 - a1).rem_euclid(tau)) };
+        (at - start).rem_euclid(tau) <= sweep + 1e-9
+    }
 }
 
 pub fn active_edges(dc: &DrawCtx, si: usize) -> ActiveEdges {
@@ -12729,12 +12757,12 @@ pub fn active_edges(dc: &DrawCtx, si: usize) -> ActiveEdges {
                 }
                 EntityKind::Circle { center, r } => {
                     if let Some(c) = pt(center) {
-                        circs.push((c, r));
+                        circs.push(Rim { centre: c, radius: r, arc: None });
                     }
                 }
-                EntityKind::Arc { center, a, .. } => {
-                    if let (Some(c), Some(pa)) = (pt(center), pt(a)) {
-                        circs.push((c, ((pa.x - c.x).powi(2) + (pa.y - c.y).powi(2)).sqrt()));
+                EntityKind::Arc { center, a, b, ccw } => {
+                    if let (Some(c), Some(pa), Some(pb)) = (pt(center), pt(a), pt(b)) {
+                        circs.push(Rim { centre: c, radius: ((pa.x - c.x).powi(2) + (pa.y - c.y).powi(2)).sqrt(), arc: Some(RimArc { from: pa, to: pb, ccw }) });
                     }
                 }
                 EntityKind::Ellipse { .. } => {} // drawn by its own outline (as a profile)

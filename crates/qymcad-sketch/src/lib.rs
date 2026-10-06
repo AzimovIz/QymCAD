@@ -4580,8 +4580,8 @@ pub fn snap_world(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, screen: Pos2)
                     }
                 }
             }
-            for (c, r) in &circs {
-                for p in qymcad_ui_state::seg_circle_intersect(lines[i].0, lines[i].1, *c, *r) {
+            for rim in &circs {
+                for p in qymcad_ui_state::seg_circle_intersect(lines[i].0, lines[i].1, rim.centre, rim.radius).into_iter().filter(|p| rim.holds(*p)) {
                     let d = sd(p, &*sk.view);
                     if d <= qymcad_ui_state::grab::grab(sk.set, Grab::Snap) && cand.is_none_or(|(bd, _, bty)| (5u8, d) < (bty, bd)) {
                         cand = Some((d, p, 5));
@@ -4615,8 +4615,8 @@ pub fn snap_world(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, screen: Pos2)
                     }
                 }
             }
-            for (c, r) in &circs {
-                for p in qymcad_ui_state::circle_axis_intersect(*c, *r, axis) {
+            for rim in &circs {
+                for p in qymcad_ui_state::circle_axis_intersect(rim.centre, rim.radius, axis).into_iter().filter(|p| rim.holds(*p)) {
                     let d = sd(p, &*sk.view);
                     if d <= qymcad_ui_state::grab::grab(sk.set, Grab::Snap) && cand.is_none_or(|(bd, _, bty)| (5u8, d) < (bty, bd)) {
                         cand = Some((d, p, 5));
@@ -4643,11 +4643,15 @@ pub fn snap_world(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, screen: Pos2)
                 }
             }
         }
-        for (c, r) in &circs {
+        for rim in &circs {
+            let (c, r) = (rim.centre, rim.radius);
             let dir = Point2::new(w.x - c.x, w.y - c.y);
             let len = (dir.x * dir.x + dir.y * dir.y).sqrt();
             if len > 1e-9 {
                 let p = Point2::new(c.x + dir.x / len * r, c.y + dir.y / len * r);
+                if !rim.holds(p) {
+                    continue; // the part of an arc's circle the arc does not run over is no edge
+                }
                 let d = sd(p, &*sk.view);
                 if d <= qymcad_ui_state::grab::grab(sk.set, Grab::Snap) && cand.is_none_or(|(bd, _, bty)| (6u8, d) < (bty, bd)) {
                     cand = Some((d, p, 6));

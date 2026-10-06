@@ -65,6 +65,24 @@ mod tests {
         assert!(shown.is_empty(), "the tangencies of the fillet are drawn as badges: {shown:?}");
     }
 
+    /// THE CURSOR DOES NOT STICK TO THE PART OF A CIRCLE AN ARC DOES NOT RUN OVER: the corner of two lines rounded R20
+    /// leaves an arc of a quarter turn about (20, 20), and the cursor rested on the same circle at 20 deg - its far side,
+    /// off the grid nodes - finds no snap to the circle there.
+    ///
+    /// Reported behaviour: a green snap mark showed, and the cursor stuck to it, beside a fillet where no arc is drawn.
+    #[test]
+    fn the_hidden_part_of_a_fillet_circle_is_no_snap() {
+        let (mut app, si) = drawn(&[(40.0, 0.0), (0.0, 0.0), (0.0, 40.0)]);
+        let lines = lines_at(&app, si, (0.0, 0.0));
+        assert!(Hand::new(&mut app).sk_corner_set("tb-fillet-sketch-hint", &lines, 20.0), "no place to click on the two lines");
+        let mut hand = Hand::new(&mut app);
+        hand.sk_tool(1); // a drawing tool: the cursor snaps while drawing
+        let far = (20.0 + 20.0 * 20f64.to_radians().cos(), 20.0 + 20.0 * 20f64.to_radians().sin());
+        hand.hover2d(far.0, far.1);
+        let hint = app.snap_hint;
+        assert!(hint.is_none_or(|(p, _)| (p.x - far.0).hypot(p.y - far.1) > 1e-3), "the cursor snapped to the hidden part of the fillet circle at {far:?}: {hint:?}");
+    }
+
     /// THE CORNER OF A ROUNDED RECTANGLE IS A POINT ONE CAN PICK: its virtual sharp is drawn and picked like any point,
     /// so a dimension or a constraint can be measured to it.
     #[test]
