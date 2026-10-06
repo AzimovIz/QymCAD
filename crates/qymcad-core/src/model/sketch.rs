@@ -2480,7 +2480,10 @@ impl Project {
                 // the angle between the first line, run towards the corner, and the cut: what a drawing of the chamfer gives
                 crate::feature::ChamferMode::DistAngle => {
                     s.constraints.push(leg([end_c, end_1], Side::AwayFrom(at2), d1));
-                    s.constraints.push(Constraint::AngleLines { a: o1, b: t1, c: t1, d: t2, deg: legs.second, expr: String::new(), driven: false, off: 0.0, at: None });
+                    // THE ARC OF THE ANGLE STANDS PAST THE END OF THE CUT, 1.25 of its length out, both sides carried to it:
+                    // at the radius of every angle, 24 px, it was a tick tucked between the cut and the line
+                    let off = 1.25 * (t2x - t1x).hypot(t2y - t1y);
+                    s.constraints.push(Constraint::AngleLines { a: o1, b: t1, c: t1, d: t2, deg: legs.second, expr: String::new(), driven: false, off, at: None });
                 }
             }
         }

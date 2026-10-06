@@ -1,6 +1,7 @@
 //! THE DIMENSIONS OF A CUT CORNER STAND OUTSIDE THE SHAPE, through the window, in every mode of the tool: the legs of
 //! a chamfer of two legs, the leg of a chamfer of a leg and an angle, the chord of a fillet - each drawn off to the side
-//! away from the shape; the angle of a chamfer between the line run on to the sharp and the cut, its arc reaching both;
+//! away from the shape; the angle of a chamfer between the line run on to the sharp and the cut, its arc reaching both
+//! past the end of the cut;
 //! the radius of a fillet led from the centre out through the arc, its text clear of the sharp.
 //!
 //! Reported behaviour: on a square, one leg of a chamfer of two legs stood inside, the leg of a chamfer of a leg and an
@@ -109,6 +110,10 @@ mod tests {
         assert!(first.dot((sharp - t1).normalized()) > 0.999, "the first side of the angle does not run on to the sharp: {first:?}");
         assert!(second.dot((t2 - t1).normalized()) > 0.999, "the second side of the angle does not run along the cut: {second:?}");
         assert!((g.sweep.abs().to_degrees() - 45.0).abs() < 0.5, "the arc does not span the angle of 45 deg: {} deg", g.sweep.to_degrees());
+        // THE ARC STANDS PAST THE END OF THE CUT, where it reads: drawn at the radius of every angle, 24 px, it was a
+        // tick tucked into the corner of the cut and the line
+        let cut = t1.distance(t2);
+        assert!(g.r > 1.2 * cut, "the arc of the angle does not stand past the end of the cut, {} px against a cut of {cut} px", g.r);
     }
 
     #[test]
