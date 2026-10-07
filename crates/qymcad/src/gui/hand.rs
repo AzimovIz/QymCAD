@@ -134,6 +134,13 @@ impl<'a> Hand<'a> {
         self.frame(vec![button(false)]);
     }
 
+    /// CLICK A POINT OF THE SCREEN: a press and a release of the left button there, each in a frame of its own - a glyph
+    /// or a caption that has no place in the sketch's own coordinates.
+    pub fn click_screen(&mut self, at: egui::Pos2) -> &mut Self {
+        self.press_screen(at);
+        self
+    }
+
     /// WHERE THE NUMBER FIELD NEAREST TO `near` STANDS, the next frame drawn - a field a person drags or types into.
     pub fn number_near(&mut self, near: egui::Pos2) -> Option<egui::Rect> {
         self.frame(Vec::new());

@@ -1647,6 +1647,46 @@ fn shape_sizes(project: &Project, si: usize) -> Vec<f64> {
         .collect()
 }
 
+/// Which way a line is turned to lie: level, or upright.
+#[derive(Clone, Copy)]
+enum Level {
+    Horizontal,
+    Vertical,
+}
+
+/// Turn line `(a, b)` of sketch `si` to lie `level`, keeping its length and the way it runs from `a` to `b`: about its
+/// middle, or about an end the sketch holds so the held end stays where it is.
+fn turn_to_level(project: &mut Project, si: usize, (a, b): (Id, Id), level: Level) {
+    let Some(s) = project.sketches.get_mut(si) else { return };
+    let held = s.held_points();
+    let at = |s: &qymcad_core::model::Sketch, id: Id| s.points.iter().find(|q| q.id == id).map(|q| (q.x, q.y));
+    let (Some((ax, ay)), Some((bx, by))) = (at(s, a), at(s, b)) else { return };
+    let len = (bx - ax).hypot(by - ay);
+    if len < 1e-9 {
+        return;
+    }
+    // the way the line runs along the new axis: as it ran along it, or forward where it did not run along it at all
+    let (dx, dy) = match level {
+        Level::Horizontal => (if bx < ax { -len } else { len }, 0.0),
+        Level::Vertical => (0.0, if by < ay { -len } else { len }),
+    };
+    let ((nax, nay), (nbx, nby)) = if held.contains(&a) {
+        ((ax, ay), (ax + dx, ay + dy))
+    } else if held.contains(&b) {
+        ((bx - dx, by - dy), (bx, by))
+    } else {
+        let (mx, my) = ((ax + bx) / 2.0, (ay + by) / 2.0);
+        ((mx - dx / 2.0, my - dy / 2.0), (mx + dx / 2.0, my + dy / 2.0))
+    };
+    for q in s.points.iter_mut() {
+        if q.id == a {
+            (q.x, q.y) = (nax, nay);
+        } else if q.id == b {
+            (q.x, q.y) = (nbx, nby);
+        }
+    }
+}
+
 /// THE LINES CLICKED AT THEIR MIDDLE READ AS THEIR MIDDLES WHERE THE CONSTRAINT TAKES POINTS: Coincident always,
 /// Horizontal and Vertical when points are picked with them - a line and a point are not one line nor two points, so
 /// "the centre above the middle of the line" is what is meant. Every other constraint takes the lines as lines, and so
@@ -1763,6 +1803,19 @@ pub fn try_constraint_inner(
     // the points of what was selected: the relations among them that the new ones make redundant are lifted below
     let among: std::collections::HashSet<Id> = pts.iter().copied().chain(lines.iter().flat_map(|&(a, b)| [a, b])).collect();
     let (had, old_pts): (usize, Vec<(f64, f64)>) = (project.sketches[si].constraints.len(), project.sketches[si].points.iter().map(|p| (p.x, p.y)).collect());
+    // A LINE MADE HORIZONTAL OR VERTICAL IS TURNED TO IT FIRST, about its middle (about an end that is held), keeping its
+    // length: a line given a direction is turned to it, not squashed onto it. The solve takes the least movement of the points, and bringing both
+    // ends to one height is less than turning a steep line: a line at 80 deg given Horizontal came out 5 mm long of 30,
+    // and a vertical one, its Vertical deleted, was refused as pulled into a point. Taken back with the rest if the
+    // constraint is not kept.
+    for c in &new {
+        let (line, level) = match *c {
+            Constraint::Horizontal { a, b } if drawn.contains(&(a, b)) => ((a, b), Level::Horizontal),
+            Constraint::Vertical { a, b } if drawn.contains(&(a, b)) => ((a, b), Level::Vertical),
+            _ => continue,
+        };
+        turn_to_level(project, si, line, level);
+    }
     // EQUAL ON TWO CIRCLES THAT EACH CARRY THEIR RADIUS: the second one's radius becomes a reference and follows the
     // first - one radius, not a contradiction. Reported behaviour: the circle tool gives each circle its dimension, and
     // Equal on two of them left the sketch over-defined (residual 2.89).
