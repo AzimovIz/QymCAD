@@ -4184,6 +4184,11 @@ pub fn sketch_drag_update(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Conte
         sk.view.center.x -= d.x / sk.view.scale;
         sk.view.center.y += d.y / sk.view.scale;
     }
+    // the points of a sketch being dragged hold its diagnostics to its shape until the release (`Caches::sk_dragged`)
+    sk.cache.sk_dragged.set(match *sk.drag {
+        qymcad_ui_state::Dragging::Point(si, _) | qymcad_ui_state::Dragging::Move(si, _) => Some(si),
+        _ => None,
+    });
 }
 
 /// DRAG THE TAKEN POINT to where the cursor is - one frame of a drag.

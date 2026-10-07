@@ -1020,6 +1020,26 @@ impl<'a> Hand<'a> {
         self.close_window()
     }
 
+    /// A DRAG NOT LET GO: the left button pressed at `from` and led to `to` in steps of 3 px, still held - what the
+    /// window shows in the middle of a drag. `release2d` ends it.
+    pub fn drag2d_begun(&mut self, from: (f64, f64), to: (f64, f64)) -> &mut Self {
+        self.in_view2d(&[from, to]);
+        let a = self.rest_over2d(from);
+        let b = self.screen2d(to);
+        self.frame(vec![egui::Event::PointerButton { pos: a, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE }]);
+        let steps = ((b - a).length() / 3.0).ceil().max(1.0) as usize;
+        for k in 1..=steps {
+            self.frame(vec![egui::Event::PointerMoved(a + (b - a) * (k as f32 / steps as f32))]);
+        }
+        self
+    }
+
+    /// LET GO of the left button at `at`, a drag begun by `drag2d_begun` ends there.
+    pub fn release2d(&mut self, at: (f64, f64)) -> &mut Self {
+        let pos = self.screen2d(at);
+        self.frame(vec![egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE }])
+    }
+
     /// DRAG WITH THE MOUSE from one point of the scene to another, given in world coordinates and seen through the
     /// canvas the last frame laid out: press, lead in steps of 3 px, release, in whole frames. What is taken is what
     /// the window takes - a handle of a tool, a gizmo, or nothing and the camera turns.

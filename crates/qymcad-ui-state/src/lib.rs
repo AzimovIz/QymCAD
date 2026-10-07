@@ -216,12 +216,17 @@ pub struct Caches {
     /// bodies for the section caps (a Common boolean is expensive, and the plane cuts a handful of bodies out of a
     /// thousand).
     pub mesh_bounds: std::cell::RefCell<Cached<std::collections::HashMap<usize, WorldBox>>>,
-    /// The sketch diagnostics cache. The key is a fingerprint of the geometry and the constraints. The rank
-    /// analysis builds a FULL Jacobian and runs Gaussian elimination (O(m * nv^2)) - without a cache that was
-    /// computed EVERY FRAME several times over (the panel, the list, the overlay, the glyphs, the tree), and on
-    /// large sketches the interface hung. It is recomputed only on an edit.
+    /// The sketch diagnostics cache. The rank analysis builds a FULL Jacobian and runs Gaussian elimination
+    /// (O(m * nv^2)) - without a cache that was computed EVERY FRAME several times over (the panel, the list, the
+    /// overlay, the glyphs, the tree), and on large sketches the interface hung. It is recomputed only on an edit, and
+    /// while points are dragged only on an edit of the sketch's shape (`sk_dragged`).
     /// A `RefCell`, because drawing goes through `&self` and needs that very cache.
-    pub sk_status: std::cell::RefCell<Option<(usize, u64, SketchDiag)>>,
+    pub sk_status: std::cell::RefCell<Option<SketchStatus>>,
+    /// THE SKETCH WHOSE POINTS ARE BEING DRAGGED, set by the sketch's drag handling after every frame of it. While it
+    /// is set, the diagnostics of that sketch are those of its shape (`SketchStatus::shape`) and are not recomputed for
+    /// the points moving: 3 000 lines took 3.7 s for their degrees of freedom on every frame. The release clears it,
+    /// and the diagnostics are recomputed once where the points came to rest - a degenerate place shows there.
+    pub sk_dragged: std::cell::Cell<Option<usize>>,
     /// THE BORDERS OF A BODY MADE OF A MESH THAT DID NOT CLOSE, by body index, each a loop of corners in the body's own
     /// coordinates; keyed by the meshes they were found on.
     pub open_borders: std::cell::RefCell<Cached<std::collections::HashMap<usize, Vec<OpenBorder>>>>,
@@ -242,6 +247,7 @@ impl Default for Caches {
             bbox_world: std::cell::RefCell::new(Cached { rev: u64::MAX, value: std::collections::HashMap::new() }),
             pick_edges: std::cell::RefCell::new(Cached { rev: u64::MAX, value: std::collections::HashMap::new() }),
             sk_status: std::cell::RefCell::new(None),
+            sk_dragged: std::cell::Cell::new(None),
             section_caps: std::cell::RefCell::new(Cached { rev: 0, value: std::rc::Rc::new(Vec::new()) }),
             mesh_bounds: std::cell::RefCell::new(Cached { rev: 0, value: std::collections::HashMap::new() }),
             open_borders: std::cell::RefCell::new(Cached { rev: u64::MAX, value: std::collections::HashMap::new() }),
@@ -2804,6 +2810,16 @@ pub struct Busy {
 
 /// The sketch's diagnostics in one piece: the degrees of freedom and the redundancy, the free points, THE ARGUING
 /// SET of constraints and the redundant ones. Computed in a single pass in `sketch_diag`.
+/// The diagnostics of one sketch and what they were computed for.
+pub struct SketchStatus {
+    pub si: usize,
+    /// `sketch_shape_key` at the time
+    pub shape: u64,
+    /// `sketch_place_key` at the time
+    pub place: u64,
+    pub diag: SketchDiag,
+}
+
 #[derive(Clone, Default)]
 pub struct SketchDiag {
     /// (the degrees of freedom, the redundancy)
@@ -9451,10 +9467,11 @@ pub fn joint_slot_geom(kind: qymcad_core::feature::JointKind) -> Vec<(u8, bool, 
 /// the dimension overlay, the glyphs and the model tree - five independent runs over the same sketch.
 /// Now there is one source.
 pub fn sketch_diag(cache: &Caches, project: &Project, si: usize) -> SketchDiag {
-    let fp = sketch_fingerprint(project, si);
-    if let Some((csi, cfp, d)) = &*cache.sk_status.borrow() {
-        if *csi == si && *cfp == fp {
-            return d.clone();
+    let (shape, place) = (sketch_shape_key(project, si), sketch_place_key(project, si));
+    if let Some(st) = &*cache.sk_status.borrow() {
+        let dragged = cache.sk_dragged.get() == Some(si);
+        if st.si == si && st.shape == shape && (dragged || st.place == place) {
+            return st.diag.clone();
         }
     }
     let d = SketchDiag {
@@ -9463,7 +9480,7 @@ pub fn sketch_diag(cache: &Caches, project: &Project, si: usize) -> SketchDiag {
         conflicts: project.sketch_conflicts(si).into_iter().collect(),
         redundant: project.sketch_redundant_constraints(si).into_iter().collect(),
     };
-    *cache.sk_status.borrow_mut() = Some((si, fp, d.clone()));
+    *cache.sk_status.borrow_mut() = Some(SketchStatus { si, shape, place, diag: d.clone() });
     d
 }
 
@@ -9529,25 +9546,54 @@ pub fn flagged_redundant(cache: &Caches, project: &qymcad_core::model::Project, 
         .collect()
 }
 
-/// The imprint of a sketch, for the status cache: the coordinates of the points plus the number of
-/// entities, constraints and splines. O(n) per frame is pennies against the Jacobian. Any edit or drag
-/// changes the imprint, which forces a recount.
-pub fn sketch_fingerprint(project: &qymcad_core::model::Project, si: usize) -> u64 {
+/// THE SHAPE OF A SKETCH, for the status cache: its points, entities, splines and constraints by what they are and
+/// what they tie, and the values of its dimensions - everything the diagnostics depend on but where the points stand.
+/// O(n) per frame is pennies against the Jacobian.
+pub fn sketch_shape_key(project: &qymcad_core::model::Project, si: usize) -> u64 {
+    use qymcad_core::model::EntityKind;
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
     if let Some(s) = project.sketches.get(si) {
         for p in &s.points {
             p.id.hash(&mut h);
+        }
+        for e in &s.entities {
+            e.id.hash(&mut h);
+            e.construction.hash(&mut h);
+            match e.kind {
+                EntityKind::Line { a, b } => [0, a, b, 0].hash(&mut h),
+                EntityKind::Arc { center, a, b, ccw } => [1, center, a, b, ccw as u64].hash(&mut h),
+                EntityKind::Circle { center, .. } => [2, center].hash(&mut h),
+                EntityKind::Ellipse { c, ma, mi } => [3, c, ma, mi].hash(&mut h),
+            }
+        }
+        s.splines.len().hash(&mut h);
+        for c in &s.constraints {
+            std::mem::discriminant(c).hash(&mut h);
+            c.points().hash(&mut h);
+            c.is_driven().hash(&mut h);
+            // the values of the dimensions (a number edited without the points moving - before solving)
+            if let Some(d) = c.dim_value() {
+                d.to_bits().hash(&mut h);
+            }
+        }
+    }
+    h.finish()
+}
+
+/// WHERE THE POINTS OF A SKETCH STAND AND HOW BIG ITS CIRCLES ARE, for the status cache: any move of a point or a
+/// rim changes it.
+pub fn sketch_place_key(project: &qymcad_core::model::Project, si: usize) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    if let Some(s) = project.sketches.get(si) {
+        for p in &s.points {
             p.x.to_bits().hash(&mut h);
             p.y.to_bits().hash(&mut h);
         }
-        s.entities.len().hash(&mut h);
-        s.constraints.len().hash(&mut h);
-        s.splines.len().hash(&mut h);
-        // the values of the dimensions (a number edited without the points moving - before solving)
-        for c in &s.constraints {
-            if let Some(d) = c.dim_value() {
-                d.to_bits().hash(&mut h);
+        for e in &s.entities {
+            if let qymcad_core::model::EntityKind::Circle { r, .. } = e.kind {
+                r.to_bits().hash(&mut h);
             }
         }
     }
