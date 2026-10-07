@@ -193,3 +193,31 @@ fn the_diagnostics_of_the_parts_are_those_of_the_whole() {
     }
     assert!(failures.is_empty(), "the diagnostics of the parts and of the whole disagree:\n{}", failures.join("\n"));
 }
+
+#[test]
+fn the_freedom_a_constraint_takes_is_counted_in_its_part_as_in_the_whole() {
+    let mut failures = Vec::new();
+    for kind in KINDS {
+        for (how, i) in [("plain", input(&build(kind, 3))), ("arguing", arguing(input(&build(kind, 3))))] {
+            let all = solver::dof_whole(&i.points, &i.radii, &i.constraints).0;
+            // and the same, the sketch solved first with every constraint, as a constraint laid while drawing is judged
+            let mut solved = Input { points: i.points.clone(), radii: i.radii.clone(), constraints: i.constraints.clone() };
+            solver::solve_full_iter(&mut solved.points, &mut solved.radii, &solved.constraints, None, 120);
+            let all_solved = solver::dof_whole(&solved.points, &solved.radii, &solved.constraints).0;
+            for k in 0..i.constraints.len() {
+                let without: Vec<Constraint> = i.constraints.iter().enumerate().filter(|(t, _)| *t != k).map(|(_, c)| c.clone()).collect();
+                let whole = solver::dof_whole(&i.points, &i.radii, &without).0 - all;
+                let part = solver::freedom_taken(&i.points, &i.radii, &i.constraints, k);
+                if part != whole {
+                    failures.push(format!("{kind:?}, {how}, constraint {k}: takes {part} in its part, {whole} in the whole"));
+                }
+                let whole_solved = solver::dof_whole(&solved.points, &solved.radii, &without).0 - all_solved;
+                let part_solved = solver::freedom_taken_where_solved(&i.points, &i.radii, &i.constraints, k);
+                if part_solved != whole_solved {
+                    failures.push(format!("{kind:?}, {how}, constraint {k} where solved: takes {part_solved} in its part, {whole_solved} in the whole"));
+                }
+            }
+        }
+    }
+    assert!(failures.is_empty(), "the freedom a constraint takes disagrees:\n{}", failures.join("\n"));
+}

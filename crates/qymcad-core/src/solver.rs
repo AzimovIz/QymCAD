@@ -1587,6 +1587,44 @@ pub fn free_points(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[C
     out
 }
 
+/// THE DEGREES OF FREEDOM `constraints[k]` TAKES: those of its part without it less those with it - 0 for a
+/// constraint that follows from the others. Counted in its own part alone: no other part changes its rank with it.
+/// A constraint laid while drawing in a sketch of 10 000 lines counted the whole sketch twice.
+pub fn freedom_taken(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint], k: usize) -> i32 {
+    let Some(PartOf { part, at }) = part_of(points, radii, constraints, k) else { return 0 };
+    let own = part.own(points, radii, constraints);
+    taken(&own, at)
+}
+
+/// THE SAME, judged where the constraints hold: on a copy of the part solved with them all, to the thresholds of the
+/// whole sketch, as a solve of the sketch solves that part.
+pub fn freedom_taken_where_solved(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint], k: usize) -> i32 {
+    let Some(PartOf { part, at }) = part_of(points, radii, constraints, k) else { return 0 };
+    let mut own = part.own(points, radii, constraints);
+    let how = Solve { scale: Scale::of(points), algebra: Algebra::BySize };
+    guarded(&mut own.points, &mut own.radii, |points, radii| solve_full_iter_inner(points, radii, &own.constraints, None, 120, how));
+    taken(&own, at)
+}
+
+/// The part that holds a constraint, and the place of the constraint among the constraints of the part.
+struct PartOf {
+    part: Part,
+    at: usize,
+}
+
+fn part_of(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint], k: usize) -> Option<PartOf> {
+    parts(points, radii, constraints).into_iter().find_map(|part| {
+        let at = part.constraints.iter().position(|&ci| ci == k)?;
+        Some(PartOf { part, at })
+    })
+}
+
+/// The degrees of freedom of a part without its constraint `at` less those with it.
+fn taken(own: &Own, at: usize) -> i32 {
+    let without: Vec<Constraint> = own.constraints.iter().enumerate().filter(|(t, _)| *t != at).map(|(_, c)| c.clone()).collect();
+    dof_whole(&own.points, &own.radii, &without).0 - dof_whole(&own.points, &own.radii, &own.constraints).0
+}
+
 /// THE REDUNDANT CONSTRAINTS among the first `own` of `constraints` (the rest are those of the entities themselves, such
 /// as the ends of an arc on its circle): each whose removal frees no degree of freedom. Counted part by part, and only in
 /// a part with an excess: a removal changes the rank of its own part alone. Counted whole, every constraint took two

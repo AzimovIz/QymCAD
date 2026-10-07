@@ -103,3 +103,17 @@ fn a_drag_frame_among_separate_shapes_stays_in_its_frame() {
     eprintln!("Lines x10000, drag frame: {t:?}");
     assert!(t < Duration::from_millis(100), "a drag frame among 10 000 lines took {t:?}, budget 100 ms in a test build");
 }
+
+#[test]
+fn a_constraint_laid_among_separate_shapes_is_judged_in_its_own() {
+    // Reported behaviour (#95): a constraint or a dimension laid in a sketch of 300 lines took seconds to minutes.
+    let p = build(Kind::Lines, 10_000);
+    let s = &p.sketches[0];
+    // a Vertical between the first point of the first line and the last point of the last: two parts made one
+    let (a, b) = (s.points[0].id, s.points[s.points.len() - 1].id);
+    let mut laid = false;
+    let t = best_of_three(|| laid = p.clone().add_constraint_if_independent(0, qymcad_core::model::Constraint::Vertical { a, b }));
+    eprintln!("Lines x10000, a constraint laid: {t:?}");
+    assert!(laid, "the Vertical constrains something and is laid");
+    assert!(t < Duration::from_millis(500), "a constraint laid among 10 000 lines took {t:?}, budget 500 ms in a test build");
+}

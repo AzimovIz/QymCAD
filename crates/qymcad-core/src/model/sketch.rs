@@ -530,12 +530,10 @@ impl Project {
         let intr = self.entity_intrinsics(si);
         let mut without: Vec<Constraint> = s.constraints.iter().enumerate().filter(|(i, c)| *i != ci && !c.is_driven()).map(|(_, c)| c.clone()).collect();
         without.extend(intr.iter().cloned());
-        let radii = self.entity_radii(si);
-        let (dof_without, _) = crate::solver::dof(&s.points, &radii, &without);
         let mut with = without;
         with.push(s.constraints[ci].clone());
-        let (dof_with, _) = crate::solver::dof(&s.points, &radii, &with);
-        dof_with == dof_without // The rank did not grow, so the dimension constrains nothing.
+        // The rank did not grow, so the dimension constrains nothing.
+        crate::solver::freedom_taken(&s.points, &self.entity_radii(si), &with, with.len() - 1) == 0
     }
     /// Redundant constraints: non-reference constraints whose removal frees no degree of freedom (the rank of
     /// the Jacobian does not drop), so they can be removed without losing determinacy.
@@ -560,17 +558,13 @@ impl Project {
         let radii = self.entity_radii(si);
         let mut active: Vec<Constraint> = s.constraints.iter().filter(|x| !x.is_driven()).cloned().collect();
         active.extend(intr.iter().cloned());
-        let mut with = active.clone();
+        let mut with = active;
         with.push(c.clone());
         // JUDGED WHERE THE CONSTRAINTS HOLD, on a copy solved with the new one: at the geometry as clicked, nearly but not
         // quite satisfying what is laid, constraints that follow from each other read as independent. A U drawn with
         // Line, its corners squared, got a Parallel between its legs on top of the two Perpendiculars that imply it, and
-        // once solved all of them stood redundant.
-        let (mut points, mut held_radii) = (s.points.clone(), radii.clone());
-        crate::solver::solve_full(&mut points, &mut held_radii, &with, None);
-        let (dof_before, _) = crate::solver::dof(&points, &held_radii, &active);
-        let (dof_after, _) = crate::solver::dof(&points, &held_radii, &with);
-        if dof_after < dof_before {
+        // once solved all of them stood redundant. Only the part the new constraint lies in is solved and counted.
+        if crate::solver::freedom_taken_where_solved(&s.points, &radii, &with, with.len() - 1) > 0 {
             self.sketches[si].constraints.push(c);
             true
         } else {
@@ -586,7 +580,6 @@ impl Project {
         let radii = self.entity_radii(si);
         let mut active: Vec<Constraint> = s.constraints.iter().filter(|x| !x.is_driven()).cloned().collect();
         active.extend(self.entity_intrinsics(si));
-        let (mut dof_now, _) = crate::solver::dof(&s.points, &radii, &active);
         let mut kept = Vec::new();
         for c in new {
             if matches!(c, Constraint::EqualRadius { .. }) {
@@ -594,9 +587,7 @@ impl Project {
                 continue;
             }
             active.push(c.clone());
-            let (dof_with, _) = crate::solver::dof(&s.points, &radii, &active);
-            if dof_with < dof_now {
-                dof_now = dof_with;
+            if crate::solver::freedom_taken(&s.points, &radii, &active, active.len() - 1) > 0 {
                 kept.push(c);
             } else {
                 active.pop();
@@ -622,17 +613,15 @@ impl Project {
             )
         };
         let mut cs = s.constraints.clone();
-        let active = |cs: &[Constraint], skip: Option<usize>| -> Vec<Constraint> {
-            cs.iter().enumerate().filter(|(i, c)| Some(*i) != skip && !c.is_driven()).map(|(_, c)| c.clone()).chain(intr.iter().cloned()).collect()
-        };
+        let active = |cs: &[Constraint]| -> Vec<Constraint> { cs.iter().filter(|c| !c.is_driven()).cloned().chain(intr.iter().cloned()).collect() };
         let mut gone = 0;
         for ci in (0..had.min(cs.len())).rev() {
             if !relation(&cs[ci]) || !constraint_point_ids(&cs[ci]).iter().all(|p| among.contains(p)) {
                 continue;
             }
-            let (dof_all, _) = crate::solver::dof(&s.points, &radii, &active(&cs, None));
-            let (dof_without, _) = crate::solver::dof(&s.points, &radii, &active(&cs, Some(ci)));
-            if dof_without == dof_all {
+            // the place of the relation among the active constraints: the reference ones before it are not there
+            let at = cs[..ci].iter().filter(|c| !c.is_driven()).count();
+            if crate::solver::freedom_taken(&s.points, &radii, &active(&cs), at) == 0 {
                 cs.remove(ci);
                 gone += 1;
             }
