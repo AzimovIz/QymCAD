@@ -46,3 +46,15 @@ fn a_drag_frame_solves_its_own_shape_alone() {
     eprintln!("Lines x10000, the solve of a drag frame: {t:?}");
     assert!(t < Duration::from_millis(16), "the solve of a drag frame among 10 000 lines took {t:?}, budget 16 ms");
 }
+
+#[test]
+fn an_array_of_rectangles_is_solved_as_one_sparse_part() {
+    // 300 rectangles tied by Equal and spacing dimensions: one part of 2 400 unknowns, whose dense step is 1.4e10
+    // operations and a matrix of 46 MB
+    let p = build(Kind::Array, 300);
+    let mut residual = f64::INFINITY;
+    let t = best_of_three(|| residual = p.clone().solve_sketch(0));
+    assert!(residual < 1e-6, "the array is not solved: residual {residual:e}");
+    eprintln!("Array x300, solve: {t:?}");
+    assert!(t < Duration::from_millis(2_000), "an array of 300 rectangles took {t:?} to solve, budget 2 s");
+}

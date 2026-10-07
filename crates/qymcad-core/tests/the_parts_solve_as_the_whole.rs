@@ -110,3 +110,22 @@ fn a_drag_moves_its_own_part_alone() {
     }
     assert!(failures.is_empty(), "a drag frame by parts disagrees:\n{}", failures.join("\n"));
 }
+
+#[test]
+fn the_sparse_algebra_solves_as_the_dense() {
+    // every part, whatever its size, by the sparse Cholesky, against the dense Gauss-Jordan of the whole
+    let mut failures = Vec::new();
+    for kind in KINDS {
+        for n in [1, 3, size_of(kind)] {
+            let p = build(kind, n);
+            let (mut sparse, mut dense) = (input(&p), input(&p));
+            let r_sparse = solver::solve_full_iter_sparse(&mut sparse.points, &mut sparse.radii, &sparse.constraints, None, 120);
+            let r_dense = solver::solve_full_iter_whole(&mut dense.points, &mut dense.radii, &dense.constraints, None, 120);
+            let d = apart(&sparse, &dense);
+            if d > AGREE || (r_sparse - r_dense).abs() > 1e-9 {
+                failures.push(format!("{kind:?} x{n}: {d:.2e} mm apart, residual {r_sparse:.2e} against {r_dense:.2e}"));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "the sparse and the dense algebra disagree:\n{}", failures.join("\n"));
+}

@@ -47,14 +47,21 @@ pub fn solve_full(points: &mut [SketchPoint], radii: &mut [RadiusVar], constrain
 /// stability and responsiveness outweigh it.
 pub fn solve_full_iter(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, max_iter: usize) -> f64 {
     let scale = Scale::of(points);
-    guarded(points, radii, |points, radii| solve_by_parts(points, radii, constraints, drag, max_iter, scale))
+    guarded(points, radii, |points, radii| solve_by_parts(points, radii, constraints, drag, max_iter, Solve { scale, algebra: Algebra::BySize }))
+}
+
+/// The solve of `solve_full_iter` with every part solved by the sparse algebra, whatever its size - the check of that
+/// algebra against the dense one on parts small enough for both.
+pub fn solve_full_iter_sparse(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, max_iter: usize) -> f64 {
+    let scale = Scale::of(points);
+    guarded(points, radii, |points, radii| solve_by_parts(points, radii, constraints, drag, max_iter, Solve { scale, algebra: Algebra::Sparse }))
 }
 
 /// The whole sketch as one system, the way it was solved before it was split into parts (`solve_full_iter`). Kept as
 /// the reference the parts are checked against: on a sketch whose parts are solved alone, the answer is the same.
 pub fn solve_full_iter_whole(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, max_iter: usize) -> f64 {
     let scale = Scale::of(points);
-    guarded(points, radii, |points, radii| solve_full_iter_inner(points, radii, constraints, drag, max_iter, scale))
+    guarded(points, radii, |points, radii| solve_full_iter_inner(points, radii, constraints, drag, max_iter, Solve { scale, algebra: Algebra::Dense }))
 }
 
 /// Run a solve, and put the sketch back as it was if it comes out with a non-number.
@@ -99,6 +106,29 @@ impl Scale {
         }
         Scale { span, extent: if hi > lo { hi - lo } else { 0.0 } }
     }
+}
+
+/// How the system of a step is solved.
+#[derive(Clone, Copy, PartialEq)]
+enum Algebra {
+    /// Gauss-Jordan on the dense normal matrix, whatever the size
+    Dense,
+    /// the sparse Cholesky of the normal matrix, whatever the size
+    Sparse,
+    /// dense up to `DENSE_UP_TO` free unknowns, sparse past it
+    BySize,
+}
+
+/// Up to this many free unknowns a step is solved dense. A sketch part of a few shapes - nearly every part there is -
+/// is solved as it always was; the dense matrix of 8 000 unknowns (an array of 1 000 rectangles) is 512 MB and
+/// its Gauss-Jordan 5e11 operations a step.
+const DENSE_UP_TO: usize = 200;
+
+/// What a solve keeps through all of its runs: the size it scales with and its algebra.
+#[derive(Clone, Copy)]
+struct Solve {
+    scale: Scale,
+    algebra: Algebra,
 }
 
 /// A part of a sketch that no constraint ties to the rest: its points, the radii of its circles and its constraints,
@@ -169,7 +199,7 @@ fn parts(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint]
 /// Solve every part of the sketch as a system of its own. 300 separate lines are 300 systems of 4 unknowns, not one
 /// of 1 200: the dense algebra of a solve costs the cube of its unknowns. A part with no constraint is not solved. A
 /// drag solves only the part of the dragged point - nothing ties the others to it, and the release solves them all.
-fn solve_by_parts(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, max_iter: usize, scale: Scale) -> f64 {
+fn solve_by_parts(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, max_iter: usize, how: Solve) -> f64 {
     let drag = drag.filter(|(id, _, _)| points.iter().any(|p| p.id == *id));
     let mut sum_sq = 0.0;
     for part in parts(points, radii, constraints) {
@@ -180,7 +210,7 @@ fn solve_by_parts(points: &mut [SketchPoint], radii: &mut [RadiusVar], constrain
         let mut own_points: Vec<SketchPoint> = part.points.iter().map(|&i| points[i]).collect();
         let mut own_radii: Vec<RadiusVar> = part.radii.iter().map(|&j| radii[j]).collect();
         let own_constraints: Vec<Constraint> = part.constraints.iter().map(|&ci| constraints[ci].clone()).collect();
-        let r = solve_full_iter_inner(&mut own_points, &mut own_radii, &own_constraints, part_drag, max_iter, scale);
+        let r = solve_full_iter_inner(&mut own_points, &mut own_radii, &own_constraints, part_drag, max_iter, how);
         sum_sq += r * r;
         for (&i, q) in part.points.iter().zip(own_points) {
             points[i] = q;
@@ -192,13 +222,14 @@ fn solve_by_parts(points: &mut [SketchPoint], radii: &mut [RadiusVar], constrain
     sum_sq.sqrt()
 }
 
-fn solve_full_iter_inner(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, max_iter: usize, scale: Scale) -> f64 {
+fn solve_full_iter_inner(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, max_iter: usize, how: Solve) -> f64 {
+    let scale = how.scale;
     // Two stages. First, a solve with a pull towards the previous state, which selects the solution closest to
     // how the sketch currently looks — without it the free degrees of freedom, such as the rotation of a
     // polygon, drift anywhere. Second, a polish without that pull, started from the solution just found: the
     // constraints are driven to machine precision, and there is nowhere left to travel in the null space
     // because the start already sits in the right place.
-    let mut best = solve_lm(points, radii, constraints, drag, max_iter, Pull::SETTLE);
+    let mut best = solve_lm(points, radii, constraints, drag, max_iter, Pull::SETTLE, how.algebra);
     // The polish runs only if the system is solvable. For a contradictory sketch the solution is a
     // least-squares compromise, and there is a whole set of such compromises: the polish would wander across
     // it, and re-solving would shift the geometry — the property test for a sketch drifting between solves
@@ -219,7 +250,7 @@ fn solve_full_iter_inner(points: &mut [SketchPoint], radii: &mut [RadiusVar], co
     if drag.is_none() && best >= 1e-4 * span {
         let mut trial: Vec<SketchPoint> = points.to_vec();
         let mut trial_radii: Vec<RadiusVar> = radii.to_vec();
-        let r = solve_lm(&mut trial, &mut trial_radii, constraints, drag, max_iter, Pull { hold_arms: false, ..Pull::SETTLE });
+        let r = solve_lm(&mut trial, &mut trial_radii, constraints, drag, max_iter, Pull { hold_arms: false, ..Pull::SETTLE }, how.algebra);
         if r < 1e-4 * span {
             best = r;
             points.copy_from_slice(&trial);
@@ -227,7 +258,7 @@ fn solve_full_iter_inner(points: &mut [SketchPoint], radii: &mut [RadiusVar], co
         }
     }
     if best < 1e-4 * span {
-        best = solve_lm(points, radii, constraints, drag, 40, Pull::POLISH).min(best);
+        best = solve_lm(points, radii, constraints, drag, 40, Pull::POLISH, how.algebra).min(best);
     }
     const SOLVED: f64 = 1e-4; // below this the system counts as solved and there is nothing left to try
     if drag.is_some() || best <= SOLVED {
@@ -243,7 +274,7 @@ fn solve_full_iter_inner(points: &mut [SketchPoint], radii: &mut [RadiusVar], co
         } else {
             trial[ib].y = 2.0 * trial[ia].y - trial[ib].y;
         }
-        let r = solve_lm(&mut trial, &mut trial_radii, constraints, drag, max_iter, Pull::SETTLE);
+        let r = solve_lm(&mut trial, &mut trial_radii, constraints, drag, max_iter, Pull::SETTLE, how.algebra);
         if r < best - 1e-9 {
             best = r;
             points.copy_from_slice(&trial);
@@ -306,7 +337,7 @@ fn violated_axis_dims(points: &[SketchPoint], constraints: &[Constraint], extent
 // THE INDEX IS THE MEANING: `a[i][i]` is the DIAGONAL of the normal matrix. An iterator over rows would
 // still have to index the column, and the damping would stop being visibly a diagonal one.
 #[allow(clippy::needless_range_loop)]
-fn solve_lm(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, max_iter: usize, pull: Pull) -> f64 {
+fn solve_lm(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, max_iter: usize, pull: Pull, algebra: Algebra) -> f64 {
     let Pull { reg: w_reg, lambda0, hold_arms } = pull;
     if points.is_empty() {
         return 0.0;
@@ -512,45 +543,19 @@ fn solve_lm(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[
                 jrows[base + 1].push((2 * di + 1, w_drag));
             }
         }
-        let mut a = vec![vec![0.0; nv]; nv];
         let mut grad = vec![0.0; nv];
         for (rowi, row) in jrows.iter().enumerate() {
-            let rv = r[rowi];
             for &(i, vi) in row {
-                grad[i] += vi * rv;
-                for &(j, vj) in row {
-                    a[i][j] += vi * vj;
-                }
+                grad[i] += vi * r[rowi];
             }
         }
-        // Levenberg damping, plain λ·I. It is needed at the start so that the step does not fly off on
-        // degenerate configurations; the accuracy of the final answer comes from the polish stage at λ = 0,
-        // which is pure Gauss-Newton with quadratic convergence.
-        //
-        // Scaling the diagonal instead (the Marquardt form) was tried and dropped: along degenerate directions
-        // the damping vanished, the solution no longer reached the minimum within the iteration budget, and the
-        // next call carried on descending, so the sketch drifted between solves — the property test caught it.
-        // Once the real causes of the accuracy loss were fixed (analytic Jacobian, hard anchoring, splitting the
-        // pull towards the previous state into two stages), the scaled form bought nothing anyway.
-        for i in 0..nv {
-            a[i][i] += lambda;
-        }
-        // An anchored point is not a variable. `Fixed` used to be a penalty row of weight 50, so the anchor
-        // held only softly: the sketch axis drifted by about 1e-9 during a solve and tilted slightly, and
-        // everything measured from it inherited the drift — a 130 mm dimension produced the coordinate
-        // −129.9999997 while the constraint itself was formally satisfied, the point being correct relative to
-        // the axis that had moved. Anchored geometry is therefore excluded from the unknowns: the system is
-        // solved over the free variables only, and anchored ones stay exactly where they were anchored.
-        let free: Vec<usize> = (0..nv).filter(|k| !fixed_var[*k] && a[*k][*k] > 1e-12).collect();
-        let ared: Vec<Vec<f64>> = free.iter().map(|&i| free.iter().map(|&j| a[i][j]).collect()).collect();
-        let rhs: Vec<f64> = free.iter().map(|&i| -grad[i]).collect();
-        let delta = match solve_linear(ared, rhs).map(|d| {
-            let mut full = vec![0.0; nv];
-            for (t, &k) in free.iter().enumerate() {
-                full[k] = d[t];
-            }
-            full
-        }) {
+        let anchored = fixed_var.iter().filter(|f| **f).count();
+        let dense = match algebra {
+            Algebra::Dense => true,
+            Algebra::Sparse => false,
+            Algebra::BySize => nv - anchored <= DENSE_UP_TO,
+        };
+        let delta = match if dense { dense_step(&jrows, &grad, &fixed_var, lambda) } else { sparse_step(&jrows, &grad, &fixed_var, lambda) } {
             Some(d) => d,
             // The normal equations are singular — a rank deficiency of a degenerate configuration: coincident
             // points, zero lengths, collinearity. Rather than give up, raise the damping, which grows the
@@ -592,6 +597,97 @@ fn solve_lm(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[
         rv.value = x[np * 2 + j].max(0.001); // a radius stays positive
     }
     residuals_of(&x, &x0, &idx, &ridx, &anchor, &cons).iter().map(|v| v * v).sum::<f64>().sqrt()
+}
+
+/// One step of Levenberg-Marquardt on the dense normal matrix: `(JᵀJ + lambda·I) d = -Jᵀr` over the free unknowns,
+/// `None` where the matrix is singular.
+// THE INDEX IS THE MEANING: `a[i][i]` is the DIAGONAL of the normal matrix, see `solve_lm`.
+#[allow(clippy::needless_range_loop)]
+fn dense_step(jrows: &[Vec<(usize, f64)>], grad: &[f64], fixed_var: &[bool], lambda: f64) -> Option<Vec<f64>> {
+    let nv = grad.len();
+    let mut a = vec![vec![0.0; nv]; nv];
+    for row in jrows {
+        for &(i, vi) in row {
+            for &(j, vj) in row {
+                a[i][j] += vi * vj;
+            }
+        }
+    }
+    // Levenberg damping, plain λ·I. It is needed at the start so that the step does not fly off on
+    // degenerate configurations; the accuracy of the final answer comes from the polish stage at λ = 0,
+    // which is pure Gauss-Newton with quadratic convergence.
+    //
+    // Scaling the diagonal instead (the Marquardt form) was tried and dropped: along degenerate directions
+    // the damping vanished, the solution no longer reached the minimum within the iteration budget, and the
+    // next call carried on descending, so the sketch drifted between solves — the property test caught it.
+    // Once the real causes of the accuracy loss were fixed (analytic Jacobian, hard anchoring, splitting the
+    // pull towards the previous state into two stages), the scaled form bought nothing anyway.
+    for i in 0..nv {
+        a[i][i] += lambda;
+    }
+    // An anchored point is not a variable. `Fixed` used to be a penalty row of weight 50, so the anchor
+    // held only softly: the sketch axis drifted by about 1e-9 during a solve and tilted slightly, and
+    // everything measured from it inherited the drift — a 130 mm dimension produced the coordinate
+    // −129.9999997 while the constraint itself was formally satisfied, the point being correct relative to
+    // the axis that had moved. Anchored geometry is therefore excluded from the unknowns: the system is
+    // solved over the free variables only, and anchored ones stay exactly where they were anchored.
+    let free: Vec<usize> = (0..nv).filter(|k| !fixed_var[*k] && a[*k][*k] > 1e-12).collect();
+    let ared: Vec<Vec<f64>> = free.iter().map(|&i| free.iter().map(|&j| a[i][j]).collect()).collect();
+    let rhs: Vec<f64> = free.iter().map(|&i| -grad[i]).collect();
+    let d = solve_linear(ared, rhs)?;
+    let mut full = vec![0.0; nv];
+    for (t, &k) in free.iter().enumerate() {
+        full[k] = d[t];
+    }
+    Some(full)
+}
+
+/// The same step on the sparse normal matrix, by its Cholesky factor (`faer`, ordered to keep the factor sparse): the
+/// same sums, the same damping and the same free unknowns as `dense_step`, at the cost of the non-zeros instead of
+/// the cube of the unknowns. `None` where the matrix is not positive definite - singular, as the dense step says.
+fn sparse_step(jrows: &[Vec<(usize, f64)>], grad: &[f64], fixed_var: &[bool], lambda: f64) -> Option<Vec<f64>> {
+    use faer::linalg::solvers::Solve;
+    use faer::sparse::{SparseColMat, Triplet};
+    let nv = grad.len();
+    // the lower triangle of JᵀJ + lambda·I, every product as the dense matrix sums it, then summed by place
+    let mut parts: Vec<Triplet<usize, usize, f64>> = (0..nv).map(|k| Triplet::new(k, k, lambda)).collect();
+    for row in jrows {
+        for &(i, vi) in row {
+            for &(j, vj) in row {
+                if i >= j {
+                    parts.push(Triplet::new(i, j, vi * vj));
+                }
+            }
+        }
+    }
+    parts.sort_unstable_by_key(|e| (e.col, e.row));
+    let mut sums: Vec<Triplet<usize, usize, f64>> = Vec::with_capacity(parts.len());
+    for e in parts {
+        match sums.last_mut() {
+            Some(last) if last.row == e.row && last.col == e.col => last.val += e.val,
+            _ => sums.push(e),
+        }
+    }
+    let mut diagonal = vec![0.0; nv];
+    for e in sums.iter().filter(|e| e.row == e.col) {
+        diagonal[e.row] = e.val;
+    }
+    // the free unknowns as `dense_step` takes them, and the place of each among them
+    let free: Vec<usize> = (0..nv).filter(|&k| !fixed_var[k] && diagonal[k] > 1e-12).collect();
+    let mut place = vec![usize::MAX; nv];
+    for (t, &k) in free.iter().enumerate() {
+        place[k] = t;
+    }
+    let own: Vec<Triplet<usize, usize, f64>> = sums.iter().filter(|e| place[e.row] != usize::MAX && place[e.col] != usize::MAX).map(|e| Triplet::new(place[e.row], place[e.col], e.val)).collect();
+    let n = free.len();
+    let matrix = SparseColMat::<usize, f64>::try_new_from_triplets(n, n, &own).ok()?;
+    let factor = matrix.sp_cholesky(faer::Side::Lower).ok()?;
+    let d = factor.solve(faer::Mat::<f64>::from_fn(n, 1, |t, _| -grad[free[t]]));
+    let mut full = vec![0.0; nv];
+    for (t, &k) in free.iter().enumerate() {
+        full[k] = d[(t, 0)];
+    }
+    full.iter().all(|v| v.is_finite()).then_some(full)
 }
 
 /// Direct solution of the linear system `a·x = b` by Gauss-Jordan elimination with partial pivoting.
