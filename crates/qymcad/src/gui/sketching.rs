@@ -28,7 +28,7 @@ impl App {
             "sketch.corner-fillet" => qymcad_ui_state::set_click_op(&mut qymcad_ui_state::tools_of!(self), &mut self.viewing.mode_3d, 4),
             "sketch.trim" => qymcad_ui_state::set_click_op(&mut qymcad_ui_state::tools_of!(self), &mut self.viewing.mode_3d, 1),
             "sketch.mirror" => qymcad_ui_state::modify_button(qymcad_ui_state::editing_of!(self), &mut qymcad_ui_state::tools_of!(self), self.sk_pat, &self.tool_prefs, EditTool::Mirror),
-            "sketch.construction" => self.tools.tool.construction = !self.tools.tool.construction,
+            "sketch.construction" => qymcad_ui_state::construction_toggle(qymcad_ui_state::editing_of!(self), &self.tools.sel_sk, &self.sketch_ses, &mut self.tools.tool.construction),
             _ => {}
         }
     }

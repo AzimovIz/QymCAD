@@ -6670,6 +6670,16 @@ pub fn construction_selected(ed: Editing, sel_sk: &SketchSelection, sketch_ses: 
     true
 }
 
+/// THE CONSTRUCTION TOGGLE, by the button of the bar or by its key X - one rule for both: what is selected is turned
+/// into construction geometry or back, and with nothing selected the kind of what is drawn next is switched. The key
+/// switched the drawing mode whatever was selected: a line selected stayed as it was, and the next line came out
+/// construction.
+pub fn construction_toggle(ed: Editing, sel_sk: &SketchSelection, sketch_ses: &SketchSession, drawing_construction: &mut bool) {
+    if !construction_selected(ed, sel_sk, sketch_ses) {
+        *drawing_construction = !*drawing_construction;
+    }
+}
+
 impl Editing<'_> {
     /// A shorter borrow of the same five, so one gesture can hand them on to another.
     pub fn reborrow(&mut self) -> Editing<'_> {

@@ -127,10 +127,6 @@ impl App {
                 }
             }
         }
-        // X switches the selected entities into or out of construction geometry
-        if !ctx.egui_wants_keyboard_input() && ctx.input(|i| !i.modifiers.any() && i.key_pressed(egui::Key::X)) {
-            qymcad_ui_state::construction_selected(qymcad_ui_state::editing_of!(self), &self.tools.sel_sk, &self.sketch_ses);
-        }
         // Ctrl+C / Ctrl+X / Ctrl+V — the clipboard.
         // While editing a sketch with entities selected: copying and pasting GEOMETRY.
         // Otherwise (a node of the tree is selected): copying and pasting SKETCHES, PARTS and

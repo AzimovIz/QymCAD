@@ -5971,10 +5971,8 @@ pub fn wb_toolbar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
                     cat(ui, &qymcad_i18n::tr("tb-type"));
                     // WHAT IS SELECTED IS TURNED, as the construction toggle of the professional systems does; with nothing selected
                     // the button switches what is drawn next
-                    if qymcad_render::sym_button(ui, qymcad_ui_state::Gly::Construction, &qymcad_i18n::tr("tb-construction-hint"), bc.tool.construction)
-                        && !qymcad_ui_state::construction_selected(qymcad_ui_state::editing_in!(bc), &*bc.sel_sk, &*bc.sketch_ses)
-                    {
-                        bc.tool.construction = !bc.tool.construction;
+                    if qymcad_render::sym_button(ui, qymcad_ui_state::Gly::Construction, &qymcad_i18n::tr("tb-construction-hint"), bc.tool.construction) {
+                        qymcad_ui_state::construction_toggle(qymcad_ui_state::editing_in!(bc), &*bc.sel_sk, &*bc.sketch_ses, &mut bc.tool.construction);
                     }
                     // --- Editing and replication (over the selected entities) ---
                     cat(ui, &qymcad_i18n::tr("tb-group-edit"));
