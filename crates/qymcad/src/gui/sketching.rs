@@ -232,10 +232,7 @@ impl App {
         self.cursor = resp.hover_pos().map(|p| snap_world(&mut self.sketch_ctx(), rect, p));
         let lit = qymcad_sketch::pre_select(&mut self.sketch_ctx(), rect, resp.hover_pos(), resp.dragged());
         (self.chosen.hover.sketch, self.chosen.hover.constraint) = (lit.sketch, lit.constraint.or(self.chosen.hover.constraint));
-        update_placing_dim(&mut self.sketch_ctx(), rect); // the dimension follows the cursor until it is placed
-        if resp.hover_pos().is_none() {
-            self.snap_hint = None;
-        }
+        qymcad_sketch::follow_pointer(&mut self.sketch_ctx(), rect, resp.hover_pos());
         if self.sketch_ses.editing.is_some() {
             qymcad_render::draw_sketch_grid(&self.scheme, &self.set, self.viewing.view, painter, rect);
             // the grid and the axes while a sketch is being edited

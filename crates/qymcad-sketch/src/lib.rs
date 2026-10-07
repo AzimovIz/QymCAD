@@ -2083,8 +2083,17 @@ fn put_angle_label(project: &mut Project, si: usize, ci: usize, (r, t): (f64, Op
     }
 }
 
-/// While the dimension follows the cursor, its offset (`off`) is updated to match.
-pub fn update_placing_dim(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect) {
+/// WHAT FOLLOWS THE POINTER ON THE SHEET THIS FRAME: a dimension being placed, led by the pointer as it is, and the hint
+/// of a snap, gone once the pointer has left the sheet.
+pub fn follow_pointer(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pointer: Option<Pos2>) {
+    update_placing_dim(sk, rect, pointer);
+    if pointer.is_none() {
+        *sk.snap_hint = None;
+    }
+}
+
+/// While the dimension follows the pointer, its offset (`off`) is updated to match.
+fn update_placing_dim(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pointer: Option<Pos2>) {
     let sh = qymcad_ui_state::Sheet { view: *sk.view, rect };
     use qymcad_core::model::Constraint;
     let Some(ci) = sk.place.dim else { return };
@@ -2092,8 +2101,10 @@ pub fn update_placing_dim(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect) {
         sk.place.dim = None;
         return;
     };
-    let Some(cur) = *sk.cursor else { return };
-    let sc = sh.at(cur);
+    // THE POINTER AS IT IS, NOT THE SNAPPED CURSOR: snapping is for the points a dimension is put between, not for where
+    // its line is laid. Led by the snapped cursor, the dimension stuck on the line it measures - its middle and the
+    // points on it caught the cursor - and further off it jumped from node to node of the grid, 3 px behind the hand.
+    let Some(sc) = pointer else { return };
     match sk.project.sketches[si].constraints.get(ci).cloned() {
         Some(Constraint::Distance { a, b, .. }) => {
             if let (Some(pa), Some(pb)) = (qymcad_ui_state::sketch_pt(sk.project, si, a), qymcad_ui_state::sketch_pt(sk.project, si, b)) {
