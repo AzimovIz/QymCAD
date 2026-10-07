@@ -218,23 +218,81 @@ fn parts(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint]
 /// drag solves only the part of the dragged point - nothing ties the others to it, and the release solves them all.
 fn solve_by_parts(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, max_iter: usize, how: Solve) -> f64 {
     let drag = drag.filter(|(id, _, _)| points.iter().any(|p| p.id == *id));
+    // the parts to solve, each with the drag if it holds the dragged point
+    let work: Vec<ToSolve> = parts(points, radii, constraints)
+        .into_iter()
+        .map(|part| {
+            let drag = drag.filter(|(id, _, _)| part.points.iter().any(|&i| points[i].id == *id));
+            ToSolve { part, drag }
+        })
+        .filter(|w| !(w.part.constraints.is_empty() && w.drag.is_none() || drag.is_some() && w.drag.is_none()))
+        .collect();
+    let (shared_points, shared_radii): (&[SketchPoint], &[RadiusVar]) = (points, radii);
+    let solved = each_part(&work, |w| {
+        let mut own = w.part.own(shared_points, shared_radii, constraints);
+        let residual = solve_full_iter_inner(&mut own.points, &mut own.radii, &own.constraints, w.drag, max_iter, how);
+        Solved { own, residual }
+    });
+    // put back and summed in the order of the parts, whatever thread solved which
     let mut sum_sq = 0.0;
-    for part in parts(points, radii, constraints) {
-        let part_drag = drag.filter(|(id, _, _)| part.points.iter().any(|&i| points[i].id == *id));
-        if part.constraints.is_empty() && part_drag.is_none() || drag.is_some() && part_drag.is_none() {
-            continue;
-        }
-        let mut own = part.own(points, radii, constraints);
-        let r = solve_full_iter_inner(&mut own.points, &mut own.radii, &own.constraints, part_drag, max_iter, how);
-        sum_sq += r * r;
-        for (&i, q) in part.points.iter().zip(own.points) {
+    for (w, Solved { own, residual }) in work.iter().zip(solved) {
+        sum_sq += residual * residual;
+        for (&i, q) in w.part.points.iter().zip(own.points) {
             points[i] = q;
         }
-        for (&j, rv) in part.radii.iter().zip(own.radii) {
+        for (&j, rv) in w.part.radii.iter().zip(own.radii) {
             radii[j] = rv;
         }
     }
     sum_sq.sqrt()
+}
+
+/// A part to solve, with the drag if it holds the dragged point.
+struct ToSolve {
+    part: Part,
+    drag: Option<(Id, f64, f64)>,
+}
+
+/// A part solved: its points and radii as they came out, and what is left of its constraints.
+struct Solved {
+    own: Own,
+    residual: f64,
+}
+
+/// Fewer parts than this are solved on the calling thread: a thread costs more to start than a few parts to solve.
+const PARTS_FOR_A_THREAD: usize = 256;
+
+/// `solve` over every item of `work`, the answers in the order of `work`. Spread over `threads()` threads in runs of
+/// items one after another, where there are enough items for each thread to take `PARTS_FOR_A_THREAD`; each item is
+/// solved alone, so the answers do not depend on how many threads there are.
+fn each_part<W: Sync, R: Send>(work: &[W], solve: impl Fn(&W) -> R + Sync) -> Vec<R> {
+    let threads = threads().min(work.len() / PARTS_FOR_A_THREAD).max(1);
+    if threads == 1 {
+        return work.iter().map(&solve).collect();
+    }
+    let run = work.len().div_ceil(threads);
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = work.chunks(run).map(|chunk| scope.spawn(|| chunk.iter().map(&solve).collect::<Vec<R>>())).collect();
+        handles.into_iter().flat_map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e))).collect()
+    })
+}
+
+/// HOW MANY THREADS A SOLVE MAY SPREAD ITS PARTS OVER, as said by `set_threads`; zero, the start, is all the cores but
+/// one.
+static THREADS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// SAY HOW MANY THREADS A SOLVE MAY TAKE: the setting of the program for the cores of a computation, handed over with
+/// the kernel's own (`qymcad_kernel::set_parallel`) - one number for all of it. One is a single thread.
+pub fn set_threads(n: usize) {
+    THREADS.store(n, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// How many threads a solve takes now (`set_threads`).
+pub fn threads() -> usize {
+    match THREADS.load(std::sync::atomic::Ordering::Relaxed) {
+        0 => std::thread::available_parallelism().map(|n| n.get()).unwrap_or(2).saturating_sub(1).max(1),
+        n => n,
+    }
 }
 
 fn solve_full_iter_inner(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, max_iter: usize, how: Solve) -> f64 {
