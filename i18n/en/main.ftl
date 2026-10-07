@@ -1943,6 +1943,7 @@ sk-conflicts-n = (!) they conflict with each other: { $n } constraint(s)/dimensi
 sk-conflict-advice = remove any of the set, change its value, or make a dimension a reference ({ $icon } in the list) — the sketch will solve
 sk-redundant-n = (i) redundant dimensions: { $n } (the values agree — these are references, not an error)
 sk-dof-n = { $n } constraint(s)/dimension(s) short — the yellow points can still move
+sk-unsolved-left = { $n } group(s) of shapes were not solved in time — any edit continues the solve
 sk-stitched-n = Points stitched: { $n }
 sk-list-hint = hover to highlight it in the viewport · click to select · { $icon } / Del to remove
 sk-rotated-by = Rotated by { $a }°

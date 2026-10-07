@@ -258,6 +258,7 @@ impl Project {
             axis_pts: [0, 0],
             frame: 0,
             origin_uv: None,
+            left_unsolved: 0,
         });
         self.sketches.len() - 1
     }
@@ -442,6 +443,7 @@ impl Project {
             axis_pts: [0, 0],
             frame: 0,
             origin_uv: None,
+            left_unsolved: 0,
         });
         self.regen_sketch(si);
         sid
@@ -469,6 +471,7 @@ impl Project {
             axis_pts: [0, 0],
             frame: 0,
             origin_uv: None,
+            left_unsolved: 0,
         });
         self.sketches.len() - 1
     }
@@ -3394,7 +3397,7 @@ impl Project {
         }
         out
     }
-    pub(super) fn solve_sketch_inner(&mut self, si: usize, drag: Option<(Id, f64, f64)>, max_iter: usize) -> f64 {
+    pub(super) fn solve_sketch_inner(&mut self, si: usize, drag: Option<(Id, f64, f64)>, budget: crate::solver::Budget) -> f64 {
         // The radius variables and the implicit arc constraints are computed before the mutable borrow.
         let mut radii = self.entity_radii(si);
         let intrinsics = self.entity_intrinsics(si);
@@ -3456,12 +3459,12 @@ impl Project {
         // rectangle as a whole.
         let anchors: Vec<Constraint> =
             s.rects.iter().filter_map(|r| held_for_size(r, drag.map(|(d, _, _)| d))).filter(|p| s.points.iter().any(|q| q.id == *p)).map(|p| Constraint::Fixed { p }).collect();
-        let resid = if anchors.is_empty() {
-            crate::solver::solve_full_iter(&mut s.points, &mut radii, &active, drag, max_iter)
+        let outcome = if anchors.is_empty() {
+            crate::solver::solve_within(&mut s.points, &mut radii, &active, drag, budget)
         } else {
             let (mut held_points, mut held_radii) = (s.points.clone(), radii.clone());
             let held: Vec<Constraint> = active.iter().cloned().chain(anchors).collect();
-            crate::solver::solve_full_iter(&mut held_points, &mut held_radii, &held, drag, max_iter);
+            let with_hold = crate::solver::solve_within(&mut held_points, &mut held_radii, &held, drag, budget);
             // SOLVED IS TOLD BY THE SKETCH'S OWN CONSTRAINTS, not by the hold, a soft pull of which a little is always left
             // under a corner dragged away from it. Solved means to the precision the polish reaches (1e-12): a side held
             // 0.0009 short of a collinear line by its anchor left 1e-7 and passed at 1e-6. A DRAG FRAME KEEPS THE HOLD
@@ -3473,11 +3476,14 @@ impl Project {
             let solved = if drag.is_some() { f64::INFINITY } else { 1e-9 };
             if r <= solved {
                 (s.points, radii) = (held_points, held_radii);
-                r
+                crate::solver::Outcome { residual: r, left: with_hold.left }
             } else {
-                crate::solver::solve_full_iter(&mut s.points, &mut radii, &active, drag, max_iter)
+                crate::solver::solve_within(&mut s.points, &mut radii, &active, drag, budget)
             }
         };
+        // NOT SOLVED TO THE END: the parts the time ran out before, said beside the degrees of freedom of the sketch
+        s.left_unsolved = outcome.left;
+        let resid = outcome.residual;
         // A SOLVED SKETCH SOLVED AGAIN STAYS AS IT WAS: a move below rounding is not written. Each solve of a solved
         // polygon shifted its points by about 2e-18 mm, the document key read every frame as an edit, and a rebuild
         // in the background always came back stale and was started again - the program never came to rest.
@@ -4304,6 +4310,7 @@ impl Project {
             axis_pts: [0, 0],
             frame: 0,
             origin_uv: None,
+            left_unsolved: 0,
         });
         id
     }
@@ -5025,7 +5032,7 @@ impl Project {
         // set directly, changing a feature height during an ordinary build.
         for si in 0..self.sketches.len() {
             let before: Vec<(Id, f64, f64)> = self.sketches[si].points.iter().map(|p| (p.id, p.x, p.y)).collect();
-            self.solve_sketch_inner(si, None, 120);
+            self.solve_sketch_inner(si, None, crate::solver::Budget::FULL);
             let moved = self.sketches[si].points.iter().zip(before.iter()).any(|(p, (id, x, y))| p.id != *id || (p.x - x).abs() > 1e-9 || (p.y - y).abs() > 1e-9);
             if moved {
                 self.regen_sketch(si); // The points moved, so the contours are rebuilt; otherwise the profile

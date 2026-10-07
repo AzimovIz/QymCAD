@@ -46,22 +46,55 @@ pub fn solve_full(points: &mut [SketchPoint], radii: &mut [RadiusVar], constrain
 /// again, and the result is accepted only if the residual strictly dropped. Disabled during a drag, where frame
 /// stability and responsiveness outweigh it.
 pub fn solve_full_iter(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, max_iter: usize) -> f64 {
+    solve_within(points, radii, constraints, drag, Budget { steps: max_iter, time: None }).residual
+}
+
+/// WHAT A SOLVE MAY SPEND: Levenberg-Marquardt steps a run, and the time of the whole solve. The steps make the answer -
+/// the same on any machine; the time is a guard, set well above what a solve takes, against a sketch no budget of
+/// steps keeps short.
+#[derive(Clone, Copy)]
+pub struct Budget {
+    pub steps: usize,
+    /// `None`: no guard of time
+    pub time: Option<std::time::Duration>,
+}
+
+impl Budget {
+    /// A solve of a sketch: 120 steps a run, and 10 s for all of it - 70 000 separate lines take 1 s in a release build.
+    pub const FULL: Budget = Budget { steps: 120, time: Some(std::time::Duration::from_secs(10)) };
+    /// A frame of a drag: fewer steps, the release solves in full; and half a second, past which the pointer is not
+    /// followed anyway.
+    pub const FRAME: Budget = Budget { steps: 40, time: Some(std::time::Duration::from_millis(500)) };
+}
+
+/// What a solve came to.
+#[derive(Clone, Copy, Debug)]
+pub struct Outcome {
+    /// the residual of every constraint together
+    pub residual: f64,
+    /// the parts the time ran out before; they are left as they stood, and the next solve takes them up
+    pub left: usize,
+}
+
+/// `solve_full_iter` within `budget`: the parts not begun when the time is out are left as they stood and counted.
+pub fn solve_within(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, budget: Budget) -> Outcome {
     let scale = Scale::of(points);
-    guarded(points, radii, |points, radii| solve_by_parts(points, radii, constraints, drag, max_iter, Solve { scale, algebra: Algebra::BySize }))
+    let until = budget.time.map(|t| std::time::Instant::now() + t);
+    solve_by_parts(points, radii, constraints, drag, budget.steps, Solve { scale, algebra: Algebra::BySize, until })
 }
 
 /// The solve of `solve_full_iter` with every part solved by the sparse algebra, whatever its size - the check of that
 /// algebra against the dense one on parts small enough for both.
 pub fn solve_full_iter_sparse(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, max_iter: usize) -> f64 {
     let scale = Scale::of(points);
-    guarded(points, radii, |points, radii| solve_by_parts(points, radii, constraints, drag, max_iter, Solve { scale, algebra: Algebra::Sparse }))
+    solve_by_parts(points, radii, constraints, drag, max_iter, Solve { scale, algebra: Algebra::Sparse, until: None }).residual
 }
 
 /// The whole sketch as one system, the way it was solved before it was split into parts (`solve_full_iter`). Kept as
 /// the reference the parts are checked against: on a sketch whose parts are solved alone, the answer is the same.
 pub fn solve_full_iter_whole(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, max_iter: usize) -> f64 {
     let scale = Scale::of(points);
-    guarded(points, radii, |points, radii| solve_full_iter_inner(points, radii, constraints, drag, max_iter, Solve { scale, algebra: Algebra::Dense }))
+    guarded(points, radii, |points, radii| solve_full_iter_inner(points, radii, constraints, drag, max_iter, Solve { scale, algebra: Algebra::Dense, until: None }))
 }
 
 /// Run a solve, and put the sketch back as it was if it comes out with a non-number.
@@ -124,11 +157,13 @@ enum Algebra {
 /// its Gauss-Jordan 5e11 operations a step.
 const DENSE_UP_TO: usize = 200;
 
-/// What a solve keeps through all of its runs: the size it scales with and its algebra.
+/// What a solve keeps through all of its runs: the size it scales with, its algebra and the moment its time is out.
 #[derive(Clone, Copy)]
 struct Solve {
     scale: Scale,
     algebra: Algebra,
+    /// past this no run takes another step, and no part is begun
+    until: Option<std::time::Instant>,
 }
 
 /// A part of a sketch that no constraint ties to the rest: its points, the radii of its circles and its constraints,
@@ -216,7 +251,7 @@ fn parts(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint]
 /// Solve every part of the sketch as a system of its own. 300 separate lines are 300 systems of 4 unknowns, not one
 /// of 1 200: the dense algebra of a solve costs the cube of its unknowns. A part with no constraint is not solved. A
 /// drag solves only the part of the dragged point - nothing ties the others to it, and the release solves them all.
-fn solve_by_parts(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, max_iter: usize, how: Solve) -> f64 {
+fn solve_by_parts(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, max_iter: usize, how: Solve) -> Outcome {
     let drag = drag.filter(|(id, _, _)| points.iter().any(|p| p.id == *id));
     // the parts to solve, each with the drag if it holds the dragged point
     let work: Vec<ToSolve> = parts(points, radii, constraints)
@@ -228,15 +263,28 @@ fn solve_by_parts(points: &mut [SketchPoint], radii: &mut [RadiusVar], constrain
         .filter(|w| !(w.part.constraints.is_empty() && w.drag.is_none() || drag.is_some() && w.drag.is_none()))
         .collect();
     let (shared_points, shared_radii): (&[SketchPoint], &[RadiusVar]) = (points, radii);
+    let out_of_time = || how.until.is_some_and(|t| std::time::Instant::now() >= t);
     let solved = each_part(&work, |w| {
+        if out_of_time() {
+            return None; // the time is out: the part is left as it stood
+        }
         let mut own = w.part.own(shared_points, shared_radii, constraints);
-        let residual = solve_full_iter_inner(&mut own.points, &mut own.radii, &own.constraints, w.drag, max_iter, how);
-        Solved { own, residual }
+        // each part guarded on its own: a part that came out a non-number is put back, the others keep their answers
+        let residual = guarded(&mut own.points, &mut own.radii, |points, radii| solve_full_iter_inner(points, radii, &own.constraints, w.drag, max_iter, how));
+        // a part the time ran out in the middle of keeps the best it reached, and is counted as not solved to the end
+        Some(Solved { own, residual, cut: out_of_time() })
     });
     // put back and summed in the order of the parts, whatever thread solved which
-    let mut sum_sq = 0.0;
-    for (w, Solved { own, residual }) in work.iter().zip(solved) {
+    let (mut sum_sq, mut left) = (0.0, 0);
+    for (w, solved) in work.iter().zip(solved) {
+        let Some(Solved { own, residual, cut }) = solved else {
+            left += 1;
+            let own = w.part.own(points, radii, constraints);
+            sum_sq += residual_per_constraint(&own.points, &own.radii, &own.constraints).iter().map(|v| v * v).sum::<f64>();
+            continue;
+        };
         sum_sq += residual * residual;
+        left += usize::from(cut);
         for (&i, q) in w.part.points.iter().zip(own.points) {
             points[i] = q;
         }
@@ -244,7 +292,7 @@ fn solve_by_parts(points: &mut [SketchPoint], radii: &mut [RadiusVar], constrain
             radii[j] = rv;
         }
     }
-    sum_sq.sqrt()
+    Outcome { residual: sum_sq.sqrt(), left }
 }
 
 /// A part to solve, with the drag if it holds the dragged point.
@@ -253,10 +301,12 @@ struct ToSolve {
     drag: Option<(Id, f64, f64)>,
 }
 
-/// A part solved: its points and radii as they came out, and what is left of its constraints.
+/// A part solved: its points and radii as they came out, what is left of its constraints, and whether the time ran out
+/// while it was solved.
 struct Solved {
     own: Own,
     residual: f64,
+    cut: bool,
 }
 
 /// Fewer parts than this are solved on the calling thread: a thread costs more to start than a few parts to solve.
@@ -302,7 +352,7 @@ fn solve_full_iter_inner(points: &mut [SketchPoint], radii: &mut [RadiusVar], co
     // polygon, drift anywhere. Second, a polish without that pull, started from the solution just found: the
     // constraints are driven to machine precision, and there is nowhere left to travel in the null space
     // because the start already sits in the right place.
-    let mut best = solve_lm(points, radii, constraints, drag, max_iter, Pull::SETTLE, how.algebra);
+    let mut best = solve_lm(points, radii, constraints, drag, max_iter, Pull::SETTLE, how);
     // The polish runs only if the system is solvable. For a contradictory sketch the solution is a
     // least-squares compromise, and there is a whole set of such compromises: the polish would wander across
     // it, and re-solving would shift the geometry — the property test for a sketch drifting between solves
@@ -323,7 +373,7 @@ fn solve_full_iter_inner(points: &mut [SketchPoint], radii: &mut [RadiusVar], co
     if drag.is_none() && best >= 1e-4 * span {
         let mut trial: Vec<SketchPoint> = points.to_vec();
         let mut trial_radii: Vec<RadiusVar> = radii.to_vec();
-        let r = solve_lm(&mut trial, &mut trial_radii, constraints, drag, max_iter, Pull { hold_arms: false, ..Pull::SETTLE }, how.algebra);
+        let r = solve_lm(&mut trial, &mut trial_radii, constraints, drag, max_iter, Pull { hold_arms: false, ..Pull::SETTLE }, how);
         if r < 1e-4 * span {
             best = r;
             points.copy_from_slice(&trial);
@@ -331,7 +381,7 @@ fn solve_full_iter_inner(points: &mut [SketchPoint], radii: &mut [RadiusVar], co
         }
     }
     if best < 1e-4 * span {
-        best = solve_lm(points, radii, constraints, drag, 40, Pull::POLISH, how.algebra).min(best);
+        best = solve_lm(points, radii, constraints, drag, 40, Pull::POLISH, how).min(best);
     }
     const SOLVED: f64 = 1e-4; // below this the system counts as solved and there is nothing left to try
     if drag.is_some() || best <= SOLVED {
@@ -347,7 +397,7 @@ fn solve_full_iter_inner(points: &mut [SketchPoint], radii: &mut [RadiusVar], co
         } else {
             trial[ib].y = 2.0 * trial[ia].y - trial[ib].y;
         }
-        let r = solve_lm(&mut trial, &mut trial_radii, constraints, drag, max_iter, Pull::SETTLE, how.algebra);
+        let r = solve_lm(&mut trial, &mut trial_radii, constraints, drag, max_iter, Pull::SETTLE, how);
         if r < best - 1e-9 {
             best = r;
             points.copy_from_slice(&trial);
@@ -410,7 +460,8 @@ fn violated_axis_dims(points: &[SketchPoint], constraints: &[Constraint], extent
 // THE INDEX IS THE MEANING: `a[i][i]` is the DIAGONAL of the normal matrix. An iterator over rows would
 // still have to index the column, and the damping would stop being visibly a diagonal one.
 #[allow(clippy::needless_range_loop)]
-fn solve_lm(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, max_iter: usize, pull: Pull, algebra: Algebra) -> f64 {
+fn solve_lm(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, max_iter: usize, pull: Pull, how: Solve) -> f64 {
+    let Solve { algebra, until, .. } = how;
     let Pull { reg: w_reg, lambda0, hold_arms } = pull;
     if points.is_empty() {
         return 0.0;
@@ -564,6 +615,9 @@ fn solve_lm(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[
     }
     let mut lambda = lambda0;
     for _ in 0..max_iter.max(1) {
+        if until.is_some_and(|t| std::time::Instant::now() >= t) {
+            break; // the time of the solve is out: the best reached so far is the answer
+        }
         let r = residuals(&x);
         let m = r.len();
         let err: f64 = r.iter().map(|v| v * v).sum();
@@ -1668,7 +1722,7 @@ pub fn freedom_taken(points: &[SketchPoint], radii: &[RadiusVar], constraints: &
 pub fn freedom_taken_where_solved(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint], k: usize) -> i32 {
     let Some(PartOf { part, at }) = part_of(points, radii, constraints, k) else { return 0 };
     let mut own = part.own(points, radii, constraints);
-    let how = Solve { scale: Scale::of(points), algebra: Algebra::BySize };
+    let how = Solve { scale: Scale::of(points), algebra: Algebra::BySize, until: None };
     guarded(&mut own.points, &mut own.radii, |points, radii| solve_full_iter_inner(points, radii, &own.constraints, None, 120, how));
     taken(&own, at)
 }

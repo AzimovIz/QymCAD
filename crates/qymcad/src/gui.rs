@@ -3927,6 +3927,7 @@ mod every_field_of_a_pattern_bar_has_a_caption;
 mod the_x_key_turns_the_selection;
 mod a_shape_goes_with_its_centre;
 mod diagnostics_wait_for_the_release;
+mod the_sketch_says_what_it_did_not_solve_in_time;
 mod an_arc_by_its_centre_ends_on_itself;
 mod a_shift_box_leaves_the_sheet_still;
 mod a_dimension_being_placed_follows_the_pointer;

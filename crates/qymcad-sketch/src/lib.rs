@@ -95,6 +95,11 @@ pub fn sketch_props(pr: &mut qymcad_ui_state::PropsCtx, ui: &mut egui::Ui, si: u
         if dof > 0 {
             ui.label(egui::RichText::new(qymcad_i18n::tr1("sk-dof-n", "n", &dof.to_string())).weak().small());
         }
+        // the parts of the sketch its last solve had no time for (`Sketch::left_unsolved`)
+        let left = pr.project.sketches[si].left_unsolved;
+        if left > 0 {
+            ui.label(egui::RichText::new(qymcad_i18n::tr1("sk-unsolved-left", "n", &left.to_string())).color(pr.scheme.pal.note()).small());
+        }
         ui.separator();
         ui.checkbox(&mut pr.win.constraints, qymcad_i18n::tr("sk-show-constraints")).on_hover_text(qymcad_i18n::tr("sk-show-constraints-hint"));
         ui.separator();

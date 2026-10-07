@@ -600,6 +600,10 @@ pub struct Sketch {
     /// origin). Invariant to body placement: u*X + v*Y travels with the frame (see `sketch_frame`).
     #[serde(default)]
     pub origin_uv: Option<Point2>,
+    /// THE PARTS THE LAST SOLVE DID NOT REACH: its time ran out before them (`solver::Budget`), and they stand as
+    /// they stood until the next solve. Not a fact of the drawing - it is not written to a file.
+    #[serde(skip)]
+    pub left_unsolved: usize,
 }
 
 impl Sketch {
@@ -2671,7 +2675,14 @@ impl Project {
     /// follows the pointer and constrained geometry resists.
     pub fn solve_sketch_drag(&mut self, si: usize, drag: Option<(Id, f64, f64)>) -> f64 {
         self.eval_parameters(); // Parametric dimensions become values before the solve.
-        self.solve_sketch_inner(si, drag, 120)
+        self.solve_sketch_inner(si, drag, crate::solver::Budget::FULL)
+    }
+
+    /// Solve a sketch within `budget`: what is left when its time is out stands as it stood and is counted in
+    /// `Sketch::left_unsolved`.
+    pub fn solve_sketch_within(&mut self, si: usize, budget: crate::solver::Budget) -> f64 {
+        self.eval_parameters();
+        self.solve_sketch_inner(si, None, budget)
     }
 
     /// Fast path for a drag frame: no `eval_parameters` (parameters are static during a drag, and the
@@ -2682,7 +2693,7 @@ impl Project {
     /// iterations with a numeric Jacobian) and a regenerate over every sketch, which lagged visibly on any
     /// sizeable sketch.
     pub fn solve_sketch_drag_fast(&mut self, si: usize, drag: Option<(Id, f64, f64)>) -> f64 {
-        self.solve_sketch_inner(si, drag, 40)
+        self.solve_sketch_inner(si, drag, crate::solver::Budget::FRAME)
     }
 
     /// Add a regular polygon as a parametric group of entities: a construction circumscribed circle plus n
