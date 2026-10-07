@@ -6513,7 +6513,11 @@ pub fn pan_sheet_2d(view: &mut View2d, ctx: &egui::Context, resp: &egui::Respons
     if zoom_latched(ctx) {
         return; // the middle button zooms while the latch is on
     }
-    let by_layout = nav.pans().iter().any(|g| g.sheet_may_take() && g.active(ctx, resp));
+    // THE LEFT BUTTON ALONE IS THE SKETCH'S OWN, whatever the gesture names: a gesture of any button with Shift (ours)
+    // names no left button of its own, and passed `sheet_may_take`, so a left drag with Shift drew the selection box and
+    // moved the sheet under it at once. Held with the right or the middle one it is a chord, and moves the sheet.
+    let left_alone = ctx.input(|i| i.pointer.primary_down() && !i.pointer.secondary_down() && !i.pointer.middle_down());
+    let by_layout = !left_alone && nav.pans().iter().any(|g| g.sheet_may_take() && g.active(ctx, resp));
     let ours = nav == MouseNav::QymCad && ctx.input(|i| i.pointer.middle_down());
     if !ours && !by_layout {
         return;

@@ -7,6 +7,15 @@
 //!
 //! The hand can do exactly what a person can: press a tool button, click a point in the scene, press
 //! Enter or Esc. It has nothing else — and that is its main property.
+/// A DRAG ON THE SKETCH: from where to where, in the sketch's own coordinates, by which button and with which keys held.
+#[cfg(test)]
+pub(super) struct Drag2d {
+    pub from: (f64, f64),
+    pub to: (f64, f64),
+    pub button: egui::PointerButton,
+    pub modifiers: egui::Modifiers,
+}
+
 #[cfg(test)]
 pub(super) struct Hand<'a> {
     pub app: &'a mut super::App,
@@ -985,16 +994,22 @@ impl<'a> Hand<'a> {
     /// that jumped 40 px in one frame would start its drag with the point already out of reach, which is not what
     /// a person's hand does.
     pub fn drag2d(&mut self, from: (f64, f64), to: (f64, f64)) -> &mut Self {
+        self.drag2d_held(Drag2d { from, to, button: egui::PointerButton::Primary, modifiers: egui::Modifiers::NONE })
+    }
+
+    /// THE SAME DRAG WITH `drag.button`, the keys of `drag.modifiers` held through every frame of it.
+    pub fn drag2d_held(&mut self, drag: Drag2d) -> &mut Self {
+        let Drag2d { from, to, button, modifiers } = drag;
         self.in_view2d(&[from, to]);
         let a = self.rest_over2d(from);
         let b = self.screen2d(to);
-        let press = |pos, pressed| egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
-        self.frame(vec![press(a, true)]);
+        let press = |pos, pressed| egui::Event::PointerButton { pos, button, pressed, modifiers };
+        self.frame_holding(modifiers, vec![press(a, true)]);
         let steps = ((b - a).length() / 3.0).ceil().max(1.0) as usize;
         for k in 1..=steps {
-            self.frame(vec![egui::Event::PointerMoved(a + (b - a) * (k as f32 / steps as f32))]);
+            self.frame_holding(modifiers, vec![egui::Event::PointerMoved(a + (b - a) * (k as f32 / steps as f32))]);
         }
-        self.frame(vec![press(b, false)]);
+        self.frame_holding(modifiers, vec![press(b, false)]);
         self.close_window()
     }
 
