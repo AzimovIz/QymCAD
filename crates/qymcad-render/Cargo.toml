@@ -11,7 +11,7 @@ edition = "2021"
 # drawing layer that sat inside one workbench would make the other two depend on it.
 [dependencies]
 egui = "0.35"
-egui-phosphor = "0.11"
+egui-phosphor = "0.13"
 qymcad-core = { path = "../qymcad-core" }
 qymcad-ui-state = { path = "../qymcad-ui-state" }
 qymcad-pick = { path = "../qymcad-pick" }
