@@ -587,19 +587,28 @@ fn solve_lm(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[
             trial[i] += delta[i];
         }
         let new_err: f64 = residuals(&trial).iter().map(|v| v * v).sum();
+        // The stopping criterion is relative. A fixed threshold of 1e-9 on the step meant "no further to
+        // go" regardless of the size of the sketch: on a part of hundreds of millimetres that is still
+        // coarse, leaving the solution 2e-9 away from the dimension, while on a tiny part it would have
+        // prevented stopping in time.
+        let step = delta.iter().map(|v| v * v).sum::<f64>().sqrt();
         if new_err < err {
             x = trial;
             lambda *= 0.5;
-            // The stopping criterion is relative. A fixed threshold of 1e-9 on the step meant "no further to
-            // go" regardless of the size of the sketch: on a part of hundreds of millimetres that is still
-            // coarse, leaving the solution 2e-9 away from the dimension, while on a tiny part it would have
-            // prevented stopping in time.
-            let step = delta.iter().map(|v| v * v).sum::<f64>().sqrt();
             let scale = x.iter().map(|v| v * v).sum::<f64>().sqrt().max(1.0);
             if step < 1e-14 * scale {
                 break;
             }
         } else {
+            // A STEP REFUSED BELOW THE THRESHOLD ENDS THE RUN as an accepted one does: x, J and r stay as they are,
+            // the damping only grows, and a Levenberg-Marquardt step shrinks as the damping grows - whatever step is
+            // taken next is shorter still and would end the run on its own. Running on, a circle with its diameter
+            // to change took all 120 steps of the first stage (5 with this), an arc 120 (23): 80 us a part, 5.6 s on
+            // 70 000 circles.
+            let scale = x.iter().map(|v| v * v).sum::<f64>().sqrt().max(1.0);
+            if step < 1e-14 * scale {
+                break;
+            }
             lambda = (lambda * 4.0).clamp(1e-12, 1e6);
         }
     }

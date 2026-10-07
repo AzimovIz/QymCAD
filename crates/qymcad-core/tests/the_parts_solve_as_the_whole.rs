@@ -221,3 +221,39 @@ fn the_freedom_a_constraint_takes_is_counted_in_its_part_as_in_the_whole() {
     }
     assert!(failures.is_empty(), "the freedom a constraint takes disagrees:\n{}", failures.join("\n"));
 }
+
+/// The first dimension of a sketch made 1 mm longer, or the first Horizontal turned Vertical where there is no
+/// dimension: an edit of one shape.
+fn edited(mut i: Input) -> Input {
+    let at = i.constraints.iter().position(|c| matches!(c, Constraint::Distance { .. } | Constraint::Diameter { .. } | Constraint::Horizontal { .. }));
+    match at.map(|k| &mut i.constraints[k]) {
+        Some(Constraint::Distance { d, .. } | Constraint::Diameter { d, .. }) => *d += 1.0,
+        Some(c @ Constraint::Horizontal { .. }) => {
+            if let Constraint::Horizontal { a, b } = *c {
+                *c = Constraint::Vertical { a, b };
+            }
+        }
+        _ => {}
+    }
+    i
+}
+
+#[test]
+fn a_solved_sketch_edited_in_one_shape_is_solved_as_the_whole() {
+    // the parts that hold are passed over; the answer is that of the whole solve all the same
+    let mut failures = Vec::new();
+    for kind in KINDS {
+        for n in [3, size_of(kind)] {
+            let mut solved = input(&build(kind, n));
+            solver::solve_full_iter_whole(&mut solved.points, &mut solved.radii, &solved.constraints, None, 120);
+            let (mut parts, mut whole) = (edited(Input { points: solved.points.clone(), radii: solved.radii.clone(), constraints: solved.constraints.clone() }), edited(solved));
+            let r_parts = solver::solve_full_iter(&mut parts.points, &mut parts.radii, &parts.constraints, None, 120);
+            let r_whole = solver::solve_full_iter_whole(&mut whole.points, &mut whole.radii, &whole.constraints, None, 120);
+            let d = apart(&parts, &whole);
+            if d > AGREE || (r_parts - r_whole).abs() > 1e-9 {
+                failures.push(format!("{kind:?} x{n}, one shape edited: {d:.2e} mm apart, residual {r_parts:.2e} against {r_whole:.2e}"));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "the parts and the whole disagree:\n{}", failures.join("\n"));
+}

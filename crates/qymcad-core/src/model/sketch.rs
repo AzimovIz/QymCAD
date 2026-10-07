@@ -3493,13 +3493,13 @@ impl Project {
             }
         }
         // The solved radii go back into the circles; an arc derives its radius from its points and stores
-        // none.
-        for rv in &radii {
-            for e in s.entities.iter_mut() {
-                if let EntityKind::Circle { center, r } = &mut e.kind {
-                    if *center == rv.center {
-                        *r = rv.value;
-                    }
+        // none. By the centre, from a table: every radius against every entity was 4.9e9 steps a solve on 70 000
+        // circles.
+        let solved: std::collections::HashMap<Id, f64> = radii.iter().map(|rv| (rv.center, rv.value)).collect();
+        for e in s.entities.iter_mut() {
+            if let EntityKind::Circle { center, r } = &mut e.kind {
+                if let Some(&v) = solved.get(center) {
+                    *r = v;
                 }
             }
         }

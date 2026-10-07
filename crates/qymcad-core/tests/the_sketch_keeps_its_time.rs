@@ -117,3 +117,17 @@ fn a_constraint_laid_among_separate_shapes_is_judged_in_its_own() {
     assert!(laid, "the Vertical constrains something and is laid");
     assert!(t < Duration::from_millis(500), "a constraint laid among 10 000 lines took {t:?}, budget 500 ms in a test build");
 }
+
+#[test]
+fn separate_circles_and_tangents_are_solved_each_alone() {
+    // Measured in a release build with the solve by parts: 70 000 circles 12.8 s to solve and 7.9 s a drag frame, 70 000
+    // tangent lines and circles 43 s - the solved radii went back into the circles as every radius against every entity.
+    for kind in [Kind::Circles, Kind::Tangents] {
+        let p = build(kind, 10_000);
+        let t = best_of_three(|| {
+            let _ = p.clone().solve_sketch(0);
+        });
+        eprintln!("{kind:?} x10000, solve: {t:?}");
+        assert!(t < Duration::from_secs(2), "10 000 {kind:?} took {t:?} to solve, budget 2 s in a test build");
+    }
+}
