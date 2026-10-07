@@ -4193,6 +4193,13 @@ impl Project {
     /// Add an arc entity (centre, start, end, direction).
     pub fn add_arc_entity(&mut self, si: usize, c: crate::geom::Point2, a: crate::geom::Point2, b: crate::geom::Point2, winding: crate::feature::Winding, purpose: crate::feature::Purpose) {
         let ((cx, cy), (ax, ay), (bx, by)) = ((c.x, c.y), (a.x, a.y), (b.x, b.y));
+        // THE END LANDS ON THE ARC: the point given for it says which way the arc runs to, and the end stands on the
+        // circle of the start's radius in that direction. Laid where it was clicked, the end of an arc drawn by its centre
+        // stood inside or outside the arc, away from its end (a third click at (0, 50) of an arc from (100, 0) about the
+        // origin left it at (0, 50), where the arc ends at (0, 100)).
+        let (r, (dx, dy)) = ((ax - cx).hypot(ay - cy), (bx - cx, by - cy));
+        let d = dx.hypot(dy);
+        let (bx, by) = if r > 1e-12 && d > 1e-12 { (cx + dx / d * r, cy + dy / d * r) } else { (bx, by) };
         let construction = purpose == crate::feature::Purpose::Construction;
         let ccw = winding == crate::feature::Winding::Ccw;
         let center = self.radius_center_at(si, cx, cy); // Its own centre node (see `radius_center_at`).
