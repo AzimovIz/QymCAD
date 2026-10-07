@@ -3925,6 +3925,7 @@ mod a_corner_set_takes_its_size_whole;
 mod the_box_of_fillet_all_stands_at_the_clicked_side;
 mod every_field_of_a_pattern_bar_has_a_caption;
 mod the_x_key_turns_the_selection;
+mod a_shape_goes_with_its_centre;
 mod an_arc_by_its_centre_ends_on_itself;
 mod a_shift_box_leaves_the_sheet_still;
 mod a_drag_takes_what_was_pressed;

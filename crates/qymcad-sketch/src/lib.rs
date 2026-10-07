@@ -3516,9 +3516,18 @@ pub fn sketch_drag_start(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Contex
                     // rectangle could not be taken by its centre. A centre pinned stays refused.
                     let pinned: std::collections::HashSet<Id> =
                         sk.project.sketches[si].constraints.iter().filter_map(|c| if let qymcad_core::model::Constraint::Fixed { p } = c { Some(*p) } else { None }).collect();
-                    for r in &sk.project.sketches[si].rects {
-                        if !pinned.contains(&r.centre) {
-                            arc_pts.remove(&r.centre);
+                    // AND SO IS THE CENTRE OF ANY SHAPE IT CARRIES (`carried_with`): an arc of its own, the ends of a slot.
+                    // The centre of a fillet carries nothing and stays refused - the lines it touches hold it.
+                    let s = &sk.project.sketches[si];
+                    let centres: Vec<Id> = s
+                        .rects
+                        .iter()
+                        .map(|r| r.centre)
+                        .chain(s.entities.iter().filter_map(|e| if let qymcad_core::model::EntityKind::Arc { center, .. } = e.kind { Some(center) } else { None }))
+                        .collect();
+                    for c in centres {
+                        if !pinned.contains(&c) && !s.carried_with(c).is_empty() {
+                            arc_pts.remove(&c);
                         }
                     }
                     // DRIVEN POINTS (projections of the geometry of a body) are not dragged: their

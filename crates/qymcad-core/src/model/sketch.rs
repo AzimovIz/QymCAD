@@ -3380,11 +3380,13 @@ impl Project {
                 (q.x, q.y) = (m.at.x, m.at.y);
             }
         }
-        // A RECTANGLE DRAGGED BY ITS CENTRE GOES WITH IT AS A WHOLE, as a circle goes with its centre: its corners are
-        // carried by the move of the centre before the solve. Left where they stood, the drag pulled the centre alone,
-        // the middle of the diagonal pulled it back by the two corners on it, and the rectangle hardly moved.
+        // A SHAPE DRAGGED BY ITS CENTRE GOES WITH IT AS A WHOLE, as a circle goes with its centre: what the centre
+        // carries (`Sketch::carried_with` - the corners of a rectangle, the ends of an arc, a slot, the axis ends of an
+        // ellipse) is moved by the move of the centre before the solve. Left where they stood, the drag pulled the
+        // centre alone: the middle of a rectangle's diagonal pulled it back by the two corners on it, and an ellipse
+        // turned and changed shape about its axis ends.
         if let Some((d, tx, ty)) = drag {
-            let carried: Vec<Id> = s.rects.iter().filter(|r| r.centre == d).flat_map(|r| r.corners).collect();
+            let carried: Vec<Id> = s.carried_with(d);
             if let Some((cx, cy)) = s.points.iter().find(|q| q.id == d).map(|q| (q.x, q.y)) {
                 if !carried.is_empty() {
                     let held = s.held_points();

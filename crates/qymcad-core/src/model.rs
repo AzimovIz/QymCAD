@@ -744,6 +744,59 @@ impl Sketch {
             .collect()
     }
 
+    /// WHAT GOES WITH THE POINT `centre` WHEN IT IS DRAGGED, as a circle goes with its centre: the corners of a rectangle
+    /// it is the centre of, the two ends of an arc it is the centre of, every point of a slot it is the centre of an end
+    /// of (a slot's two arcs are held to one radius, `EqualRadius`), and the axis ends of an ellipse. Left behind, the
+    /// drag pulled the centre alone: an arc and a slot were refused the drag, and an ellipse turned and changed shape.
+    /// The centre of a fillet - an arc touching its lines (`Tangent`) with no partner of one radius - carries nothing:
+    /// the lines it touches hold it. Empty for any other point.
+    pub fn carried_with(&self, centre: Id) -> Vec<Id> {
+        let rect: Vec<Id> = self.rects.iter().filter(|r| r.centre == centre).flat_map(|r| r.corners).collect();
+        if !rect.is_empty() {
+            return rect;
+        }
+        if let Some((ma, mi)) = self.entities.iter().find_map(|e| match e.kind {
+            EntityKind::Ellipse { c, ma, mi } if c == centre => Some((ma, mi)),
+            _ => None,
+        }) {
+            return vec![ma, mi];
+        }
+        let Some(arc) = self.entities.iter().find(|e| matches!(e.kind, EntityKind::Arc { center, .. } if center == centre)) else { return Vec::new() };
+        let touches = self.constraints.iter().any(|c| matches!(*c, Constraint::Tangent { c, .. } if c == centre));
+        let partner = self.constraints.iter().find_map(|c| match *c {
+            Constraint::EqualRadius { c1, c2 } if c1 == centre => Some(c2),
+            Constraint::EqualRadius { c1, c2 } if c2 == centre => Some(c1),
+            _ => None,
+        });
+        match (touches, partner) {
+            // a slot: every point of the shape the arc is part of, the centres of its arcs with them
+            (_, Some(_)) => {
+                let mut shape = vec![arc.id];
+                let mut k = 0;
+                while k < shape.len() {
+                    let here = self.entities.iter().find(|e| e.id == shape[k]).map_or(Vec::new(), entity_points);
+                    for e in &self.entities {
+                        if !shape.contains(&e.id) && entity_points(e).iter().any(|p| here.contains(p)) {
+                            shape.push(e.id);
+                        }
+                    }
+                    k += 1;
+                }
+                let mut out: Vec<Id> = shape.iter().flat_map(|id| self.entities.iter().find(|e| e.id == *id).map_or(Vec::new(), entity_points)).filter(|p| *p != centre).collect();
+                out.sort_unstable();
+                out.dedup();
+                out
+            }
+            // a fillet: held by the lines it touches
+            (true, None) => Vec::new(),
+            // an arc of its own: its two ends
+            (false, None) => match arc.kind {
+                EntityKind::Arc { a, b, .. } => vec![a, b],
+                _ => Vec::new(),
+            },
+        }
+    }
+
     /// EVERYTHING AN EDITING TOOL MUST LEAVE WHERE IT IS: the frame, the driven projections, and whatever
     /// the person pinned.
     ///
