@@ -3750,10 +3750,13 @@ impl Project {
             }
             (crate::geom::Point2::new(sx / n, sy / n), (0.5 * area).abs())
         };
+        // the place of every contour by its id, looked up once: a look along the list for each contour of a sketch of
+        // 10 000 is 5e7 comparisons; the places of the contours kept do not change while new ones are added below
+        let place: std::collections::HashMap<Id, usize> = self.contours.ids().iter().enumerate().map(|(i, &id)| (id, i)).collect();
         let old: Vec<(Id, Point2, f64, bool)> = entity_cids
             .iter()
             .filter_map(|&cid| {
-                let ci = self.contour_index(cid)?;
+                let ci = *place.get(&cid)?;
                 let c = &self.contours[ci];
                 let (ctr, ar) = sig(&c.points);
                 Some((cid, ctr, ar, c.closed))
@@ -3808,9 +3811,29 @@ impl Project {
         }
         // Phase two: the rest are matched greedily by geometry (centroid and area), best matches first, or the
         // first loop would take an id belonging to another.
+        //
+        // A loop that stands as it stood matches at no distance, and such matches come first, each new loop taking the
+        // first old one free: they are made by the exact signature, without a pair of every new loop with every old.
+        // A drag frame among 10 000 lines is 10 000 open chains matched to 10 000 - 1e8 pairs on every frame.
+        {
+            let exact = |ctr: Point2, ar: f64, cl: bool| [(ctr.x + 0.0).to_bits(), (ctr.y + 0.0).to_bits(), (ar + 0.0).to_bits(), cl as u64];
+            let mut free_old: std::collections::HashMap<[u64; 4], std::collections::VecDeque<usize>> = std::collections::HashMap::new();
+            for (oi, o) in old.iter().enumerate().filter(|(oi, o)| !used_old[*oi] && o.1.x.is_finite() && o.1.y.is_finite() && o.2.is_finite()) {
+                free_old.entry(exact(o.1, o.2, o.3)).or_default().push_back(oi);
+            }
+            for (ni, (ctr, ar, cl)) in new_sig.iter().enumerate() {
+                if assign[ni].is_some() {
+                    continue;
+                }
+                if let Some(oi) = free_old.get_mut(&exact(*ctr, *ar, *cl)).and_then(|q| q.pop_front()) {
+                    assign[ni] = Some(old[oi].0);
+                    used_old[oi] = true;
+                }
+            }
+        }
         let mut cands: Vec<(usize, usize, f64)> = Vec::new();
-        for (ni, (ctr, ar, cl)) in new_sig.iter().enumerate() {
-            for (oi, o) in old.iter().enumerate() {
+        for (ni, (ctr, ar, cl)) in new_sig.iter().enumerate().filter(|(ni, _)| assign[*ni].is_none()) {
+            for (oi, o) in old.iter().enumerate().filter(|(oi, _)| !used_old[*oi]) {
                 if o.3 == *cl {
                     cands.push((ni, oi, ctr.dist(o.1) + (ar - o.2).abs().sqrt()));
                 }
@@ -3829,7 +3852,7 @@ impl Project {
                               // them.
             match assign[ni] {
                 Some(cid) => {
-                    if let Some(ci) = self.contour_index(cid) {
+                    if let Some(&ci) = place.get(&cid) {
                         if let Some(slot) = self.contours.get_mut(ci) {
                             *slot = c;
                         }
@@ -4764,19 +4787,31 @@ impl Project {
     /// without it: a pad flush against a wall was counted as a hole, the hole touched the outer loop, the face
     /// failed to build, and the whole region silently disappeared from the body.
     pub(super) fn rebuild_contour_nesting(&mut self, cids: &[Id]) {
+        let place: std::collections::HashMap<Id, usize> = self.contours.ids().iter().enumerate().map(|(i, &id)| (id, i)).collect();
         let data: Vec<(Id, Vec<Point2>, f64)> = cids
             .iter()
             .filter_map(|&cid| {
-                let c = self.contours.get(self.contour_index(cid)?)?;
+                let c = self.contours.get(*place.get(&cid)?)?;
                 (c.closed && c.points.len() >= 3).then(|| (cid, c.points.clone(), c.signed_area().abs()))
             })
             .collect();
         for &cid in cids {
             self.contours.clear_parent(cid);
         }
-        for (cid, pts, _) in &data {
-            let parent = data
+        // A contour holds another only if every point of the other is inside it, so only one whose box meets the box of
+        // the other is tried (`meeting_boxes`), in the order of the list: 10 000 rectangles were 1e8 tries of a polygon.
+        let boxes: Vec<[f64; 4]> =
+            data.iter().map(|(_, pts, _)| pts.iter().fold([f64::MAX, f64::MAX, f64::MIN, f64::MIN], |b, p| [b[0].min(p.x), b[1].min(p.y), b[2].max(p.x), b[3].max(p.y)])).collect();
+        let mut meets: Vec<Vec<usize>> = vec![Vec::new(); data.len()];
+        for super::tess::BoxPair { first, second } in super::tess::meeting_boxes(&boxes) {
+            meets[first].push(second);
+            meets[second].push(first);
+        }
+        for (k, (cid, pts, _)) in data.iter().enumerate() {
+            meets[k].sort_unstable();
+            let parent = meets[k]
                 .iter()
+                .map(|&o| &data[o])
                 .filter(|(oid, opts, _)| oid != cid && poly_contains(opts, pts) && !polys_touch(opts, pts))
                 .min_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal))
                 .map(|(oid, _, _)| *oid);

@@ -33,8 +33,8 @@ fn separate_shapes_are_solved_each_alone() {
 
 #[test]
 fn a_drag_frame_solves_its_own_shape_alone() {
-    // The solve of a drag frame alone: the frame through `Project::solve_sketch_drag_fast` also rebuilds the contours
-    // of the sketch, which intersect every curve with every other - 14 s among 10 000 lines, a step of its own.
+    // The solve of a drag frame alone; the whole frame, with the contours rebuilt, is
+    // `a_drag_frame_among_separate_shapes_stays_in_its_frame`.
     let mut p = build(Kind::Lines, 10_000);
     p.solve_sketch(0);
     let s = &mut p.sketches[0];
@@ -77,4 +77,29 @@ fn the_diagnostics_of_separate_shapes_are_counted_each_alone() {
     eprintln!("Lines x10000, redundant: {t:?}");
     assert_eq!(redundant.len(), 20_000, "each Horizontal of a line laid twice is redundant");
     assert!(t < Duration::from_secs(1), "the redundant constraints of 10 000 lines took {t:?}, budget 1 s");
+}
+
+#[test]
+fn the_contours_of_separate_shapes_are_built_without_a_pass_of_all_pairs() {
+    // Measured before: the contours of 10 000 separate lines 3 s in a release build, 14 s in a test build - every
+    // curve was intersected with every other.
+    for kind in [Kind::Lines, Kind::Rectangles, Kind::Circles] {
+        let mut p = build(kind, 10_000);
+        let t = best_of_three(|| p.regen_sketch(0));
+        eprintln!("{kind:?} x10000, contours: {t:?}");
+        assert!(t < Duration::from_secs(1), "the contours of 10 000 {kind:?} took {t:?}, budget 1 s");
+    }
+}
+
+#[test]
+fn a_drag_frame_among_separate_shapes_stays_in_its_frame() {
+    // the whole frame through the project's door: the solve of the dragged part and the contours rebuilt
+    let mut p = build(Kind::Lines, 10_000);
+    p.solve_sketch(0);
+    let q = p.sketches[0].points[0];
+    let t = best_of_three(|| {
+        let _ = p.solve_sketch_drag_fast(0, Some((q.id, q.x + 1.0, q.y + 1.0)));
+    });
+    eprintln!("Lines x10000, drag frame: {t:?}");
+    assert!(t < Duration::from_millis(100), "a drag frame among 10 000 lines took {t:?}, budget 100 ms in a test build");
 }
