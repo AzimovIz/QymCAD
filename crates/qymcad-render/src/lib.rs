@@ -1711,6 +1711,13 @@ pub fn draw_sketch_constraints(pn: &Painting, painter: &egui::Painter, rect: Rec
             EntityKind::Line { a, b } => {
                 if let (Some(pa), Some(pb)) = (pt(a), pt(b)) {
                     painter.line_segment([sh.at(pa), sh.at(pb)], hl);
+                    // A LINE PICKED AT ITS MIDDLE SHOWS IT: a ring of the snap's colour round a dot of the selection's, at
+                    // the middle - lit as any picked line, the middle taken was not seen
+                    if sel && pn.sel_sk.at_middle.contains(&e.id) {
+                        let mid = sh.at(Point2::new((pa.x + pb.x) / 2.0, (pa.y + pb.y) / 2.0));
+                        painter.circle_stroke(mid, MIDDLE_RING, Stroke::new(1.6, pn.scheme.pal.snap_marker()));
+                        painter.circle_filled(mid, 2.5, pn.scheme.pal.emphasis());
+                    }
                 }
             }
             EntityKind::Circle { center, r } => {
@@ -1802,6 +1809,9 @@ pub fn draw_sketch_constraints(pn: &Painting, painter: &egui::Painter, rect: Rec
         paint_gly(painter, at, 4.5, g, pn.scheme.pal.glyph_text());
     }
 }
+
+/// The radius of the ring that marks a line picked at its middle, px.
+pub const MIDDLE_RING: f32 = 6.0;
 
 pub fn draw_sketch_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
     let sh = qymcad_ui_state::Sheet { view: pn.view, rect };

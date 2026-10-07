@@ -99,4 +99,29 @@ mod tests {
         let mids = s.constraints.iter().filter(|k| matches!(k, Constraint::Midpoint { .. })).count();
         assert!(h == 2 && mids == 0, "two lines and Horizontal: {h} Horizontal, {mids} midpoints: {:?}", s.constraints);
     }
+
+    /// A LINE PICKED AT ITS MIDDLE SHOWS IT: a ring at the middle, of the snap's colour, stands while it is picked, so the
+    /// middle is seen as what was taken; a line picked elsewhere shows none. Reported behaviour: the click at the middle
+    /// lit the line as any click on it did, and nothing told the middle had been taken.
+    #[test]
+    fn a_line_picked_at_its_middle_shows_a_ring_there() {
+        let (mut app, _) = a_line_and_a_circle();
+        let mut hand = Hand::new(&mut app);
+        hand.sk_tool(0);
+        hand.hover2d(20.0, 0.0);
+        hand.click2d(20.0, 0.0);
+        hand.hover2d(20.0, 15.0);
+        let middle = hand.on_screen2d((20.0, 0.0));
+        let rings = hand.rings_drawn(MIDDLE_RING);
+        assert!(rings.iter().any(|r| r.distance(middle) < 1.0), "no ring at the middle of the line picked there: {rings:?}");
+        hand.key(egui::Key::Escape);
+        hand.hover2d(10.0, 0.0);
+        hand.click2d(10.0, 0.0);
+        hand.hover2d(20.0, 15.0);
+        let rings = hand.rings_drawn(MIDDLE_RING);
+        assert!(!rings.iter().any(|r| r.distance(middle) < 1.0), "a ring at the middle of a line picked elsewhere: {rings:?}");
+    }
+
+    /// The radius of the ring that marks a line picked at its middle, px.
+    const MIDDLE_RING: f32 = qymcad_render::MIDDLE_RING;
 }
