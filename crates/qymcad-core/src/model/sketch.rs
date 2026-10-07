@@ -986,6 +986,7 @@ impl Project {
         // A RECTANGLE LOSING A SIDE IS BROKEN: its diagonals go with the side, its centre with them, and the constraints
         // it held itself by - four plain lines are left, with nothing of the rectangle on them.
         let mut eids = eids.to_vec();
+        let before: Vec<crate::model::SketchRect> = self.sketches.get(si).map(|s| s.rects.clone()).unwrap_or_default();
         if let Some(s) = self.sketches.get_mut(si) {
             let broken: Vec<crate::model::SketchRect> = s.rects.iter().filter(|r| r.sides.iter().chain(r.diagonals.iter().flatten()).any(|e| eids.contains(e))).cloned().collect();
             s.rects.retain(|r| !broken.contains(r));
@@ -1036,6 +1037,8 @@ impl Project {
             s.constraints.retain(|c| constraint_point_ids(c).iter().all(|id| alive.contains(id)));
         }
         self.regen_sketch(si);
+        // the sides a broken rectangle leaves keep what they plainly have, as they do in a sketch of plain lines
+        self.relate_lines_left(si, &before);
     }
     /// Toggle the selected entities between ordinary and construction geometry. Construction geometry never
     /// reaches a profile. Returns the new state.
@@ -1181,7 +1184,65 @@ impl Project {
     /// Delete constraint `ci` of a sketch. For a midpoint constraint the orphaned midpoint is pruned as well
     /// (nothing else uses it and it is not a system point), so no debris is left behind. The sketch is then
     /// re-solved.
+    /// THE LINES A BROKEN RECTANGLE LEAVES GET WHAT THEY PLAINLY HAVE, as lines drawn by hand get it with auto-constraints
+    /// on: of every rectangle of `before` the sketch no longer holds, the sides still standing are laid Horizontal or
+    /// Vertical where they stand so, then Perpendicular and Parallel between them, then Equal between those of one
+    /// length - each only where it constrains something (`add_constraint_if_independent`), so nothing is over-defined.
+    /// Left as plain lines, a rectangle broken by deleting a side still stood level and square, held by nothing: a corner
+    /// dragged pulled it out of shape. Answers how many constraints were laid.
+    pub fn relate_lines_left(&mut self, si: usize, before: &[crate::model::SketchRect]) -> usize {
+        let Some(s) = self.sketches.get(si) else { return 0 };
+        let lines: Vec<(Id, Id)> = before
+            .iter()
+            .filter(|r| !s.rects.iter().any(|k| k.id == r.id))
+            .flat_map(|r| r.sides)
+            .filter_map(|side| match s.entities.iter().find(|e| e.id == side)?.kind {
+                EntityKind::Line { a, b } => Some((a, b)),
+                _ => None,
+            })
+            .collect();
+        let at = |id: Id| s.points.iter().find(|q| q.id == id).map(|q| (q.x, q.y));
+        let dirs: Vec<Option<(f64, f64, f64)>> = lines
+            .iter()
+            .map(|&(a, b)| {
+                let ((ax, ay), (bx, by)) = (at(a)?, at(b)?);
+                let len = (bx - ax).hypot(by - ay);
+                (len > 1e-9).then(|| ((bx - ax) / len, (by - ay) / len, len))
+            })
+            .collect();
+        // a relation is read off geometry the rectangle held exactly, so the tolerance is the solver's, not the hand's
+        const TOL: f64 = 1e-6;
+        let mut wanted: Vec<Constraint> = Vec::new();
+        for (&(a, b), d) in lines.iter().zip(&dirs) {
+            let Some((ux, uy, _)) = *d else { continue };
+            if uy.abs() < TOL {
+                wanted.push(Constraint::Horizontal { a, b });
+            } else if ux.abs() < TOL {
+                wanted.push(Constraint::Vertical { a, b });
+            }
+        }
+        for i in 0..lines.len() {
+            for j in i + 1..lines.len() {
+                let (Some((ux, uy, lu)), Some((vx, vy, lv))) = (dirs[i], dirs[j]) else { continue };
+                let ((a, b), (c, d)) = (lines[i], lines[j]);
+                if (ux * vx + uy * vy).abs() < TOL {
+                    wanted.push(Constraint::Perpendicular { a, b, c, d });
+                } else if (ux * vy - uy * vx).abs() < TOL {
+                    wanted.push(Constraint::Parallel { a, b, c, d });
+                }
+                if (lu - lv).abs() < TOL * lu.max(lv) {
+                    wanted.push(Constraint::Equal { a, b, c, d });
+                }
+            }
+        }
+        let laid = wanted.into_iter().filter(|c| self.add_constraint_if_independent(si, c.clone())).count();
+        if laid > 0 {
+            self.solve_sketch(si);
+        }
+        laid
+    }
     pub fn delete_sketch_constraint(&mut self, si: usize, ci: usize) -> bool {
+        let before: Vec<crate::model::SketchRect> = self.sketches.get(si).map(|s| s.rects.clone()).unwrap_or_default();
         {
             let Some(s) = self.sketches.get_mut(si) else { return false };
             if ci >= s.constraints.len() {
@@ -1205,6 +1266,8 @@ impl Project {
             self.settle_rects_after(si, &removed);
         }
         self.solve_sketch(si);
+        // a rectangle broken by losing one of its own constraints leaves its sides what they plainly have
+        self.relate_lines_left(si, &before);
         true
     }
     /// The points of `eids` an editing tool is allowed to shift: everything except what the sketch holds
