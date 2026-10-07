@@ -578,10 +578,16 @@ impl Project {
         let radii = self.entity_radii(si);
         let mut active: Vec<Constraint> = s.constraints.iter().filter(|x| !x.is_driven()).cloned().collect();
         active.extend(intr.iter().cloned());
-        let (dof_before, _) = crate::solver::dof(&s.points, &radii, &active);
-        let mut with = active;
+        let mut with = active.clone();
         with.push(c.clone());
-        let (dof_after, _) = crate::solver::dof(&s.points, &radii, &with);
+        // JUDGED WHERE THE CONSTRAINTS HOLD, on a copy solved with the new one: at the geometry as clicked, nearly but not
+        // quite satisfying what is laid, constraints that follow from each other read as independent. A U drawn with
+        // Line, its corners squared, got a Parallel between its legs on top of the two Perpendiculars that imply it, and
+        // once solved all of them stood redundant.
+        let (mut points, mut held_radii) = (s.points.clone(), radii.clone());
+        crate::solver::solve_full(&mut points, &mut held_radii, &with, None);
+        let (dof_before, _) = crate::solver::dof(&points, &held_radii, &active);
+        let (dof_after, _) = crate::solver::dof(&points, &held_radii, &with);
         if dof_after < dof_before {
             self.sketches[si].constraints.push(c);
             true

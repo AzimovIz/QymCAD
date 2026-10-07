@@ -57,4 +57,17 @@ mod tests {
         let parallels = app.project.sketches[si].constraints.iter().filter(|c| matches!(c, Constraint::Parallel { .. })).count();
         assert_eq!(parallels, 2, "a parallelogram drawn with Line: {:?}", app.project.sketches[si].constraints);
     }
+
+    /// A CHAIN TURNING TWICE BY A SQUARE CORNER gets each corner squared and nothing more: its third line is parallel to
+    /// its first through the two Perpendiculars already, and a Parallel laid on top of them is redundant.
+    ///
+    /// Reported behaviour: a U drawn with Line got a Perpendicular at each corner and a Parallel between its legs as
+    /// well, every one of them drawn in the colour of a redundant constraint.
+    #[test]
+    fn a_u_drawn_with_line_holds_no_redundant_constraint() {
+        // the corners nearly square, as clicks leave them: the third line runs 1 mm off parallel to the first
+        let (app, si) = drawn(&[&[(30.0, 50.0), (0.0, 0.0), (20.0, -12.0), (51.0, 38.0)]]);
+        let (_, redundant) = app.project.sketch_dof(si);
+        assert_eq!(redundant, 0, "a U drawn with Line holds redundant constraints: {:?}", app.project.sketches[si].constraints);
+    }
 }
