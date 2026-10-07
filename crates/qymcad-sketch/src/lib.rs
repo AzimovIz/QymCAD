@@ -2113,12 +2113,27 @@ fn update_placing_dim(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pointer: 
                 // THE ORIENTATION follows the cursor: to the side gives a vertical dimension (dy), above or
                 // below a horizontal one (dx), anything else an aligned one.
                 let (cx, cy) = (sc.x - mid.x, sc.y - mid.y);
-                let new_axis = if cx.abs() > cy.abs() * 1.7 {
+                let wanted = if cx.abs() > cy.abs() * 1.7 {
                     2u8
                 } else if cy.abs() > cx.abs() * 1.7 {
                     1u8
                 } else {
                     0u8
+                };
+                // A PROJECTION THAT MEASURES NOTHING IS NOT OFFERED: led to the side of a horizontal line the dimension
+                // turned vertical and measured the line's height, 0.0, drawn red. Under 0.1 % of the length a projection
+                // gives way to the other axis, and that to the length along the line.
+                let along = |axis: u8| match axis {
+                    1 => (pa.x - pb.x).abs(),
+                    2 => (pa.y - pb.y).abs(),
+                    _ => ((pa.x - pb.x).powi(2) + (pa.y - pb.y).powi(2)).sqrt(),
+                };
+                let nothing = 1e-3 * along(0);
+                let new_axis = match wanted {
+                    0 => 0,
+                    w if along(w) > nothing => w,
+                    w if along(3 - w) > nothing => 3 - w,
+                    _ => 0,
                 };
                 // the offset of the line: along Y for a horizontal dimension, along X for a vertical one,
                 // along the perpendicular for an aligned one.
@@ -2135,11 +2150,7 @@ fn update_placing_dim(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pointer: 
                     }
                 };
                 // the measured value for the chosen axis, in world coordinates
-                let measured = match new_axis {
-                    1 => (pa.x - pb.x).abs(),
-                    2 => (pa.y - pb.y).abs(),
-                    _ => ((pa.x - pb.x).powi(2) + (pa.y - pb.y).powi(2)).sqrt(),
-                };
+                let measured = along(new_axis);
                 if let Some(Constraint::Distance { off: o, axis, d, .. }) = sk.project.sketches[si].constraints.get_mut(ci) {
                     *o = off;
                     *axis = new_axis;
