@@ -139,6 +139,23 @@ struct Part {
     constraints: Vec<usize>,
 }
 
+/// The points, radii and constraints of one part, copied out of the sketch's lists.
+struct Own {
+    points: Vec<SketchPoint>,
+    radii: Vec<RadiusVar>,
+    constraints: Vec<Constraint>,
+}
+
+impl Part {
+    fn own(&self, points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint]) -> Own {
+        Own {
+            points: self.points.iter().map(|&i| points[i]).collect(),
+            radii: self.radii.iter().map(|&j| radii[j]).collect(),
+            constraints: self.constraints.iter().map(|&ci| constraints[ci].clone()).collect(),
+        }
+    }
+}
+
 /// The parts of a sketch: the points a constraint names are of one part, and a radius is of the part of its centre.
 /// A constraint that names no point of the sketch is of no part - the solve leaves it out anyway (`cons_ok`).
 fn parts(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint]) -> Vec<Part> {
@@ -207,15 +224,13 @@ fn solve_by_parts(points: &mut [SketchPoint], radii: &mut [RadiusVar], constrain
         if part.constraints.is_empty() && part_drag.is_none() || drag.is_some() && part_drag.is_none() {
             continue;
         }
-        let mut own_points: Vec<SketchPoint> = part.points.iter().map(|&i| points[i]).collect();
-        let mut own_radii: Vec<RadiusVar> = part.radii.iter().map(|&j| radii[j]).collect();
-        let own_constraints: Vec<Constraint> = part.constraints.iter().map(|&ci| constraints[ci].clone()).collect();
-        let r = solve_full_iter_inner(&mut own_points, &mut own_radii, &own_constraints, part_drag, max_iter, how);
+        let mut own = part.own(points, radii, constraints);
+        let r = solve_full_iter_inner(&mut own.points, &mut own.radii, &own.constraints, part_drag, max_iter, how);
         sum_sq += r * r;
-        for (&i, q) in part.points.iter().zip(own_points) {
+        for (&i, q) in part.points.iter().zip(own.points) {
             points[i] = q;
         }
-        for (&j, rv) in part.radii.iter().zip(own_radii) {
+        for (&j, rv) in part.radii.iter().zip(own.radii) {
             radii[j] = rv;
         }
     }
@@ -775,6 +790,43 @@ pub fn residual_per_constraint(points: &[SketchPoint], radii: &[RadiusVar], cons
 /// conflicting set. This is what lets the sketch point at the specific dimensions that disagree instead of
 /// reporting one overall residual.
 pub fn conflicts(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint]) -> Vec<usize> {
+    // Part by part, as `dof`: no row of one part combines with a row of another. The rows of every part are judged
+    // together, against the largest residual of the sketch, as the rows of the whole were.
+    let mut rows = Vec::new();
+    for part in parts(points, radii, constraints).iter().filter(|p| !p.constraints.is_empty()) {
+        let own = part.own(points, radii, constraints);
+        rows.extend(eliminated(&own.points, &own.radii, &own.constraints).into_iter().map(|r| Eliminated { from: r.from.iter().map(|&k| part.constraints[k]).collect(), ..r }));
+    }
+    conflicting(&rows)
+}
+
+/// The conflicting constraints of the whole sketch from one elimination (`conflicts`); the reference of the parts.
+pub fn conflicts_whole(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint]) -> Vec<usize> {
+    conflicting(&eliminated(points, radii, constraints))
+}
+
+/// A row of the augmented matrix [J | r] after the elimination of `eliminated`.
+struct Eliminated {
+    /// no coefficient is left on a free unknown: moving the unanchored geometry can no longer satisfy the row
+    null: bool,
+    residual: f64,
+    /// the constraints whose rows went into it
+    from: Vec<usize>,
+}
+
+/// The constraints of the null rows whose residual is left: those that disagree together.
+fn conflicting(rows: &[Eliminated]) -> Vec<usize> {
+    // residual scale: compare against a typical magnitude rather than against absolute zero
+    let scale = rows.iter().map(|r| r.residual.abs()).fold(0.0_f64, f64::max).max(1.0);
+    let mut bad: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
+    for r in rows.iter().filter(|r| r.null && r.residual.abs() > 1e-6 * scale) {
+        bad.extend(r.from.iter().copied());
+    }
+    bad.into_iter().collect()
+}
+
+/// The rows of [J | r] of a sketch reduced to row echelon form, see `conflicts`.
+fn eliminated(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint]) -> Vec<Eliminated> {
     let np = points.len();
     if np == 0 {
         return Vec::new();
@@ -832,7 +884,6 @@ pub fn conflicts(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Con
     }
 
     // forward elimination with pivoting
-    let mut bad: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
     let mut used = vec![false; rows.len()];
     for col in (0..nv).filter(|k| !fixed_var[*k]) {
         let piv = (0..rows.len()).filter(|&i| !used[i]).max_by(|&a, &b| rows[a].0[col].abs().partial_cmp(&rows[b].0[col].abs()).unwrap_or(std::cmp::Ordering::Equal));
@@ -851,19 +902,14 @@ pub fn conflicts(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Con
             rows[i].2.extend(src);
         }
     }
-    // residual scale: compare against a typical magnitude rather than against absolute zero
-    let scale = rows.iter().map(|r| r.1.abs()).fold(0.0_f64, f64::max).max(1.0);
-    for (dense, resid, src) in &rows {
-        // a row counts as null when no coefficients are left on the free variables: moving the unanchored
-        // geometry can no longer satisfy it
-        let zero_row = (0..nv).filter(|k| !fixed_var[*k]).all(|k| dense[k].abs() <= 1e-7);
-        if zero_row && resid.abs() > 1e-6 * scale {
-            for &ci in src {
-                bad.insert(ci);
-            }
-        }
-    }
-    bad.into_iter().collect()
+    rows.into_iter()
+        .map(|(dense, residual, from)| {
+            // a row counts as null when no coefficients are left on the free variables: moving the unanchored
+            // geometry can no longer satisfy it
+            let null = (0..nv).filter(|k| !fixed_var[*k]).all(|k| dense[k].abs() <= 1e-7);
+            Eliminated { null, residual, from }
+        })
+        .collect()
 }
 
 /// Jacobian cross-check, used by tests: the largest discrepancy between the analytic derivatives of a
@@ -1450,6 +1496,27 @@ fn cons_ok(c: &Constraint, has: &impl Fn(Id) -> bool, is_center: &impl Fn(Id) ->
 /// Degrees of freedom of a sketch, from the rank of the constraint Jacobian; this accounts for redundancy and
 /// for radius variables. Returns (degrees of freedom, number of redundant constraint equations).
 pub fn dof(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint]) -> (i32, i32) {
+    // The rank of a Jacobian whose parts share no unknown is the sum of the ranks of the parts: a sketch is counted
+    // part by part, and a part with no constraint is all freedom. 10 000 separate lines took 49 s counted whole.
+    let parts = parts(points, radii, constraints);
+    let mut free = (radii.len() - parts.iter().map(|p| p.radii.len()).sum::<usize>()) as i32; // radii of no point
+    let mut redundant = 0;
+    for part in &parts {
+        if part.constraints.is_empty() {
+            free += (part.points.len() * 2 + part.radii.len()) as i32;
+            continue;
+        }
+        let own = part.own(points, radii, constraints);
+        let (f, r) = dof_whole(&own.points, &own.radii, &own.constraints);
+        free += f;
+        redundant += r;
+    }
+    (free, redundant)
+}
+
+/// The degrees of freedom of the whole sketch counted as one Jacobian, the way they were counted before the sketch
+/// was split into parts (`dof`); the reference of the parts.
+pub fn dof_whole(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint]) -> (i32, i32) {
     if points.is_empty() {
         return (0, 0);
     }
@@ -1509,6 +1576,42 @@ fn normalize_rows(jac: &mut [Vec<f64>]) {
 
 /// Which points can still move (`true`), used to highlight the under-constrained ones.
 pub fn free_points(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint]) -> Vec<bool> {
+    // part by part, as `dof`: a point of a part with no constraint is free
+    let mut out = vec![true; points.len()];
+    for part in parts(points, radii, constraints).iter().filter(|p| !p.constraints.is_empty()) {
+        let own = part.own(points, radii, constraints);
+        for (&i, f) in part.points.iter().zip(free_points_whole(&own.points, &own.radii, &own.constraints)) {
+            out[i] = f;
+        }
+    }
+    out
+}
+
+/// THE REDUNDANT CONSTRAINTS among the first `own` of `constraints` (the rest are those of the entities themselves, such
+/// as the ends of an arc on its circle): each whose removal frees no degree of freedom. Counted part by part, and only in
+/// a part with an excess: a removal changes the rank of its own part alone. Counted whole, every constraint took two
+/// counts of the whole sketch - 49 s on 10 000 lines for one count.
+pub fn redundant(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint], own: usize) -> Vec<usize> {
+    let mut out = Vec::new();
+    for part in parts(points, radii, constraints) {
+        let mine = part.own(points, radii, constraints);
+        let (free_all, excess) = dof_whole(&mine.points, &mine.radii, &mine.constraints);
+        if excess <= 0 {
+            continue;
+        }
+        for (k, &ci) in part.constraints.iter().enumerate().filter(|(_, ci)| **ci < own) {
+            let without: Vec<Constraint> = mine.constraints.iter().enumerate().filter(|(t, _)| *t != k).map(|(_, c)| c.clone()).collect();
+            if dof_whole(&mine.points, &mine.radii, &without).0 == free_all {
+                out.push(ci);
+            }
+        }
+    }
+    out.sort_unstable();
+    out
+}
+
+/// The free points of the whole sketch from one Jacobian (`free_points`); the reference of the parts.
+pub fn free_points_whole(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint]) -> Vec<bool> {
     let n = points.len();
     if n == 0 {
         return Vec::new();

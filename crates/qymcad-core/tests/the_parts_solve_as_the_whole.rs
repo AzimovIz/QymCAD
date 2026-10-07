@@ -129,3 +129,67 @@ fn the_sparse_algebra_solves_as_the_dense() {
     }
     assert!(failures.is_empty(), "the sparse and the dense algebra disagree:\n{}", failures.join("\n"));
 }
+
+/// The same sketch made to argue: every third constraint laid twice (redundant), and the first that can be contradicted
+/// contradicted - a
+/// Horizontal by a vertical dimension of 5 mm on the same points (a Vertical would not: both hold where the points
+/// meet), a dimension by the same one 5 mm longer.
+fn arguing(mut i: Input) -> Input {
+    let had = i.constraints.clone();
+    i.constraints.extend(had.iter().step_by(3).cloned());
+    let against = had.iter().find_map(|c| match c {
+        Constraint::Horizontal { a, b } => Some(Constraint::Distance { a: *a, b: *b, d: 5.0, off: 2.0, expr: String::new(), driven: false, axis: 2, at: None }),
+        Constraint::Distance { a, b, d, axis, .. } => Some(Constraint::Distance { a: *a, b: *b, d: d + 5.0, off: 2.0, expr: String::new(), driven: false, axis: *axis, at: None }),
+        Constraint::Diameter { c, d, .. } => Some(Constraint::Diameter { c: *c, d: d + 5.0, off: 0.0, expr: String::new(), driven: false, diam: false, at: None }),
+        _ => None,
+    });
+    i.constraints.extend(against);
+    i
+}
+
+/// The redundant constraints of the whole sketch as they were counted before the parts: each of the first `own` whose
+/// removal leaves the degrees of freedom of the whole as they are, while the sketch has an excess at all.
+fn redundant_whole(i: &Input, own: usize) -> Vec<usize> {
+    let (free_all, excess) = solver::dof_whole(&i.points, &i.radii, &i.constraints);
+    if excess <= 0 {
+        return Vec::new();
+    }
+    (0..own)
+        .filter(|&k| {
+            let without: Vec<Constraint> = i.constraints.iter().enumerate().filter(|(t, _)| *t != k).map(|(_, c)| c.clone()).collect();
+            solver::dof_whole(&i.points, &i.radii, &without).0 == free_all
+        })
+        .collect()
+}
+
+#[test]
+fn the_diagnostics_of_the_parts_are_those_of_the_whole() {
+    let mut failures = Vec::new();
+    for kind in KINDS {
+        for n in [1, 3, size_of(kind)] {
+            for (how, i) in [("plain", input(&build(kind, n))), ("arguing", arguing(input(&build(kind, n))))] {
+                let case = format!("{kind:?} x{n}, {how}");
+                let (dof, dof_whole) = (solver::dof(&i.points, &i.radii, &i.constraints), solver::dof_whole(&i.points, &i.radii, &i.constraints));
+                if dof != dof_whole {
+                    failures.push(format!("{case}: degrees of freedom {dof:?} against {dof_whole:?}"));
+                }
+                if solver::free_points(&i.points, &i.radii, &i.constraints) != solver::free_points_whole(&i.points, &i.radii, &i.constraints) {
+                    failures.push(format!("{case}: the free points differ"));
+                }
+                let (c, c_whole) = (solver::conflicts(&i.points, &i.radii, &i.constraints), solver::conflicts_whole(&i.points, &i.radii, &i.constraints));
+                if c != c_whole {
+                    failures.push(format!("{case}: conflicts {c:?} against {c_whole:?}"));
+                }
+                let own = i.constraints.len();
+                let (r, r_whole) = (solver::redundant(&i.points, &i.radii, &i.constraints, own), redundant_whole(&i, own));
+                if r != r_whole {
+                    failures.push(format!("{case}: redundant {r:?} against {r_whole:?}"));
+                }
+                if how == "arguing" && c_whole.is_empty() && kind != Kind::Mixed {
+                    failures.push(format!("{case}: the contradiction made no conflict - the check checks nothing"));
+                }
+            }
+        }
+    }
+    assert!(failures.is_empty(), "the diagnostics of the parts and of the whole disagree:\n{}", failures.join("\n"));
+}

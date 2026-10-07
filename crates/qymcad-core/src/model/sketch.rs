@@ -544,30 +544,12 @@ impl Project {
     /// an excess to explain.
     pub fn sketch_redundant_constraints(&self, si: usize) -> Vec<usize> {
         let Some(s) = self.sketches.get(si) else { return Vec::new() };
-        let (_, redun) = self.sketch_dof(si);
-        if redun <= 0 {
-            return Vec::new();
-        }
-        let radii = self.entity_radii(si);
-        let intr = self.entity_intrinsics(si);
-        let active_all: Vec<Constraint> = s.constraints.iter().filter(|c| !c.is_driven()).cloned().collect();
-        let mut base = active_all.clone();
-        base.extend(intr.iter().cloned());
-        let (dof_all, _) = crate::solver::dof(&s.points, &radii, &base);
-        let mut out = Vec::new();
-        for (ci, c) in s.constraints.iter().enumerate() {
-            if c.is_driven() {
-                continue;
-            }
-            let mut without: Vec<Constraint> = s.constraints.iter().enumerate().filter(|(i, cc)| *i != ci && !cc.is_driven()).map(|(_, cc)| cc.clone()).collect();
-            without.extend(intr.iter().cloned());
-            let (dof_without, _) = crate::solver::dof(&s.points, &radii, &without);
-            if dof_without == dof_all {
-                out.push(ci); // Removing it did not raise the degrees of freedom, so the constraint is
-                              // redundant (one of an interdependent set).
-            }
-        }
-        out
+        // the sketch's own constraints that constrain (not the reference ones), by their place in the sketch, then the
+        // entities' own
+        let at: Vec<usize> = (0..s.constraints.len()).filter(|&ci| !s.constraints[ci].is_driven()).collect();
+        let mut active: Vec<Constraint> = at.iter().map(|&ci| s.constraints[ci].clone()).collect();
+        active.extend(self.entity_intrinsics(si));
+        crate::solver::redundant(&s.points, &self.entity_radii(si), &active, at.len()).into_iter().map(|k| at[k]).collect()
     }
     /// Add a constraint only when it is independent, that is, when it reduces the degrees of freedom by raising
     /// the rank of the Jacobian. Redundant automatic constraints (inferred while drawing) are dropped, so the

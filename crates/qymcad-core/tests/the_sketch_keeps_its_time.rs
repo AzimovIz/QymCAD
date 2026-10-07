@@ -58,3 +58,23 @@ fn an_array_of_rectangles_is_solved_as_one_sparse_part() {
     eprintln!("Array x300, solve: {t:?}");
     assert!(t < Duration::from_millis(2_000), "an array of 300 rectangles took {t:?} to solve, budget 2 s");
 }
+
+#[test]
+fn the_diagnostics_of_separate_shapes_are_counted_each_alone() {
+    // Measured before: the degrees of freedom of 10 000 separate lines 49 s, the conflicts 6 s, the redundant ones 49 s.
+    let mut p = build(Kind::Lines, 10_000);
+    // every line laid Horizontal twice, so the redundant ones are looked for in every part
+    let twice: Vec<_> = p.sketches[0].constraints.clone();
+    p.sketches[0].constraints.extend(twice);
+    let t = best_of_three(|| {
+        let _ = (p.sketch_dof(0), p.sketch_free_points(0), p.sketch_conflicts(0));
+    });
+    eprintln!("Lines x10000, degrees of freedom, free points, conflicts: {t:?}");
+    assert!(t < Duration::from_secs(1), "the diagnostics of 10 000 lines took {t:?}, budget 1 s");
+    let started = Instant::now();
+    let redundant = p.sketch_redundant_constraints(0);
+    let t = started.elapsed();
+    eprintln!("Lines x10000, redundant: {t:?}");
+    assert_eq!(redundant.len(), 20_000, "each Horizontal of a line laid twice is redundant");
+    assert!(t < Duration::from_secs(1), "the redundant constraints of 10 000 lines took {t:?}, budget 1 s");
+}
