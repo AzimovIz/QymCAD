@@ -131,3 +131,22 @@ fn separate_circles_and_tangents_are_solved_each_alone() {
         assert!(t < Duration::from_secs(2), "10 000 {kind:?} took {t:?} to solve, budget 2 s in a test build");
     }
 }
+
+#[test]
+fn the_diagnostics_of_one_big_part_are_counted_sparse() {
+    // 1 000 rectangles tied into one part of 8 000 unknowns; measured in a release build with the dense count: the
+    // degrees of freedom 16 s, the free points 18 s, the redundant constraints 16 s, the conflicts 1 s (12 s on 3 000)
+    let p = build(Kind::Array, 1_000);
+    let started = Instant::now();
+    let dof = p.sketch_dof(0);
+    let free = p.sketch_free_points(0);
+    let conflicts = p.sketch_conflicts(0);
+    let t = started.elapsed();
+    eprintln!("Array x1000, degrees of freedom, free points and conflicts: {t:?}");
+    assert!(conflicts.is_empty(), "an array that can be solved has no conflicts: {conflicts:?}");
+    // each rectangle keeps its height and its place up and down free (the spacing is dimensioned along the row only),
+    // the first its place along the row too
+    assert_eq!(dof, (2 * 1_000 + 1, 0), "the degrees of freedom of the array");
+    assert!(free.iter().any(|f| *f), "an array that is free to move has free points");
+    assert!(t < Duration::from_secs(2), "the diagnostics of an array of 1 000 rectangles took {t:?}, budget 2 s in a test build");
+}

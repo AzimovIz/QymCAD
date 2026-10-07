@@ -257,3 +257,60 @@ fn a_solved_sketch_edited_in_one_shape_is_solved_as_the_whole() {
     }
     assert!(failures.is_empty(), "the parts and the whole disagree:\n{}", failures.join("\n"));
 }
+
+/// A fixed pseudo-random sequence in 0..n.
+struct Seq(u64);
+
+impl Seq {
+    fn next(&mut self, n: u64) -> u64 {
+        self.0 = self.0.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+        (self.0 >> 33) % n
+    }
+}
+
+/// A random chain of `n` points, one part: between neighbours and between points a few apart, Horizontal, Vertical,
+/// Coincident, Equal and dimensions, some of the dimensions laid twice at different lengths.
+fn random_chain(seed: u64, n: usize) -> Input {
+    let mut s = Seq(seed);
+    let points: Vec<SketchPoint> = (0..n).map(|k| SketchPoint { id: 1_000 + k as u64, x: (s.next(400) as f64) * 0.25, y: (s.next(400) as f64) * 0.25 }).collect();
+    let id = |k: usize| points[k].id;
+    let mut constraints = Vec::new();
+    for k in 1..n {
+        let back = 1 + s.next(4.min(k as u64)) as usize;
+        let (a, b) = (id(k - back), id(k));
+        let d = 5.0 + s.next(10) as f64;
+        constraints.push(match s.next(6) {
+            0 => Constraint::Horizontal { a, b },
+            1 => Constraint::Vertical { a, b },
+            2 => Constraint::Equal { a: id(0), b: id(1), c: a, d: b },
+            3 => Constraint::Coincident { a, b },
+            _ => Constraint::Distance { a, b, d, off: 2.0, expr: String::new(), driven: false, axis: s.next(3) as u8, at: None },
+        });
+        if s.next(5) == 0 {
+            constraints.push(Constraint::Distance { a, b, d: d + 3.0, off: 2.0, expr: String::new(), driven: false, axis: 0, at: None });
+        }
+    }
+    Input { points, radii: Vec::new(), constraints }
+}
+
+#[test]
+fn the_diagnostics_of_a_random_chain_are_those_of_the_whole() {
+    let mut failures = Vec::new();
+    let mut with_conflicts = 0;
+    for seed in 0..60 {
+        let i = random_chain(seed, 40 + (seed as usize % 5) * 20);
+        let (c, c_whole) = (solver::conflicts(&i.points, &i.radii, &i.constraints), solver::conflicts_whole(&i.points, &i.radii, &i.constraints));
+        with_conflicts += usize::from(!c_whole.is_empty());
+        if c != c_whole {
+            failures.push(format!("seed {seed}: conflicts {c:?} against {c_whole:?}"));
+        }
+        if solver::dof(&i.points, &i.radii, &i.constraints) != solver::dof_whole(&i.points, &i.radii, &i.constraints) {
+            failures.push(format!("seed {seed}: the degrees of freedom differ"));
+        }
+        if solver::free_points(&i.points, &i.radii, &i.constraints) != solver::free_points_whole(&i.points, &i.radii, &i.constraints) {
+            failures.push(format!("seed {seed}: the free points differ"));
+        }
+    }
+    assert!(with_conflicts > 20, "the chains argue too seldom to say anything: {with_conflicts} of 60");
+    assert!(failures.is_empty(), "the sparse diagnostics and the whole disagree:\n{}", failures.join("\n"));
+}

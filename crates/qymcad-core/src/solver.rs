@@ -916,7 +916,7 @@ pub fn conflicts(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Con
     let mut rows = Vec::new();
     for part in parts(points, radii, constraints).iter().filter(|p| !p.constraints.is_empty()) {
         let own = part.own(points, radii, constraints);
-        rows.extend(eliminated(&own.points, &own.radii, &own.constraints).into_iter().map(|r| Eliminated { from: r.from.iter().map(|&k| part.constraints[k]).collect(), ..r }));
+        rows.extend(eliminated_sparse(&own.points, &own.radii, &own.constraints).into_iter().map(|r| Eliminated { from: r.from.iter().map(|&k| part.constraints[k]).collect(), ..r }));
     }
     conflicting(&rows)
 }
@@ -947,11 +947,23 @@ fn conflicting(rows: &[Eliminated]) -> Vec<usize> {
 }
 
 /// The rows of [J | r] of a sketch reduced to row echelon form, see `conflicts`.
-fn eliminated(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint]) -> Vec<Eliminated> {
+/// THE ROWS OF [J | r] OF A SKETCH for `conflicts`: every row of every constraint that can disagree, its non-zero
+/// coefficients by the column as the analytic Jacobian gives them (summed where a constraint names a variable twice),
+/// its residual and its constraint; with the variables that are not free and the number of variables.
+struct ConflictRows {
+    rows: Vec<ConflictRow>,
+    fixed_var: Vec<bool>,
+    nv: usize,
+}
+
+struct ConflictRow {
+    coeffs: Vec<(usize, f64)>,
+    residual: f64,
+    from: usize,
+}
+
+fn conflict_rows(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint]) -> ConflictRows {
     let np = points.len();
-    if np == 0 {
-        return Vec::new();
-    }
     let idx: HashMap<Id, usize> = points.iter().enumerate().map(|(i, p)| (p.id, i)).collect();
     let ridx: HashMap<Id, usize> = radii.iter().enumerate().map(|(j, rv)| (rv.center, np * 2 + j)).collect();
     let has = |id: Id| idx.contains_key(&id);
@@ -979,9 +991,7 @@ fn eliminated(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constr
             }
         }
     }
-
-    // rows: [coefficients per variable | residual | set of constraints that went into the row]
-    let mut rows: Vec<(Vec<f64>, f64, Vec<usize>)> = Vec::new();
+    let mut rows = Vec::new();
     for (ci, c) in constraints.iter().enumerate() {
         if !cons_ok(c, &has, &is_center) || matches!(c, Constraint::Fixed { .. }) {
             continue; // an anchor is part of the statement of the problem, not a dimension that can disagree
@@ -994,15 +1004,35 @@ fn eliminated(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constr
         let mut j = Vec::new();
         con_jac(c, &x, &x, &idx, &ridx, &mut j);
         for (t, rv) in r.iter().enumerate() {
-            let mut dense = vec![0.0; nv];
-            if let Some(row) = j.get(t) {
-                for &(k, v) in row {
-                    dense[k] += v;
-                }
+            // summed by the column, in the order the Jacobian gives them, as a dense row sums them
+            let mut by_col: std::collections::BTreeMap<usize, f64> = std::collections::BTreeMap::new();
+            for &(k, v) in j.get(t).into_iter().flatten() {
+                *by_col.entry(k).or_insert(0.0) += v;
             }
-            rows.push((dense, *rv, vec![ci]));
+            rows.push(ConflictRow { coeffs: by_col.into_iter().collect(), residual: *rv, from: ci });
         }
     }
+    ConflictRows { rows, fixed_var, nv }
+}
+
+/// The rows of [J | r] of a sketch reduced to row echelon form, see `conflicts`. Dense: the reference of
+/// `eliminated_sparse`.
+fn eliminated(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint]) -> Vec<Eliminated> {
+    if points.is_empty() {
+        return Vec::new();
+    }
+    let ConflictRows { rows, fixed_var, nv } = conflict_rows(points, radii, constraints);
+    // rows: [coefficients per variable | residual | set of constraints that went into the row]
+    let mut rows: Vec<(Vec<f64>, f64, Vec<usize>)> = rows
+        .into_iter()
+        .map(|r| {
+            let mut dense = vec![0.0; nv];
+            for (k, v) in r.coeffs {
+                dense[k] += v;
+            }
+            (dense, r.residual, vec![r.from])
+        })
+        .collect();
 
     // forward elimination with pivoting
     let mut used = vec![false; rows.len()];
@@ -1029,6 +1059,71 @@ fn eliminated(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constr
             // geometry can no longer satisfy it
             let null = (0..nv).filter(|k| !fixed_var[*k]).all(|k| dense[k].abs() <= 1e-7);
             Eliminated { null, residual, from }
+        })
+        .collect()
+}
+
+/// The elimination of `eliminated` step for step, on the non-zero coefficients only: for each free column the row
+/// not yet taken with the largest coefficient - the last of equal ones, as `max_by` takes it - when above 1e-9, and
+/// the column cleared from every row not yet taken where it stands above 1e-12. A part of 1 000 rectangles is
+/// 8 000 columns of a few coefficients each, where the dense rows are 8 000 wide.
+fn eliminated_sparse(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint]) -> Vec<Eliminated> {
+    if points.is_empty() {
+        return Vec::new();
+    }
+    let ConflictRows { rows, fixed_var, nv } = conflict_rows(points, radii, constraints);
+    let n = rows.len();
+    let mut coeffs: Vec<std::collections::BTreeMap<usize, f64>> = Vec::with_capacity(n);
+    let mut residual = Vec::with_capacity(n);
+    let mut from: Vec<std::collections::BTreeSet<usize>> = Vec::with_capacity(n);
+    for r in rows {
+        coeffs.push(r.coeffs.into_iter().collect());
+        residual.push(r.residual);
+        from.push(std::iter::once(r.from).collect());
+    }
+    let mut in_col: Vec<Vec<usize>> = vec![Vec::new(); nv];
+    for (r, row) in coeffs.iter().enumerate() {
+        for &c in row.keys() {
+            in_col[c].push(r);
+        }
+    }
+    let mut used = vec![false; n];
+    for col in (0..nv).filter(|k| !fixed_var[*k]) {
+        let value = |coeffs: &[std::collections::BTreeMap<usize, f64>], r: usize| coeffs[r].get(&col).copied().unwrap_or(0.0);
+        let mut piv: Option<usize> = None;
+        for &r in in_col[col].iter().filter(|&&r| !used[r]) {
+            let v = value(&coeffs, r).abs();
+            if piv.is_none_or(|p| v > value(&coeffs, p).abs() || v == value(&coeffs, p).abs() && r > p) {
+                piv = Some(r);
+            }
+        }
+        let Some(piv) = piv.filter(|&p| value(&coeffs, p).abs() > 1e-9) else { continue };
+        used[piv] = true;
+        let pivot: Vec<(usize, f64)> = coeffs[piv].range(col..).map(|(&c, &v)| (c, v)).collect();
+        let (d, pivot_residual, pivot_from) = (value(&coeffs, piv), residual[piv], from[piv].clone());
+        for &i in &in_col[col].clone() {
+            if used[i] || value(&coeffs, i).abs() <= 1e-12 {
+                continue;
+            }
+            let f = value(&coeffs, i) / d;
+            for &(c, v) in &pivot {
+                let e = coeffs[i].entry(c).or_insert_with(|| {
+                    in_col[c].push(i);
+                    0.0
+                });
+                *e -= f * v;
+            }
+            residual[i] -= f * pivot_residual;
+            from[i].extend(pivot_from.iter().copied());
+        }
+    }
+    coeffs
+        .into_iter()
+        .zip(residual)
+        .zip(from)
+        .map(|((row, residual), from)| {
+            let null = row.iter().filter(|(k, _)| !fixed_var[**k]).all(|(_, v)| v.abs() <= 1e-7);
+            Eliminated { null, residual, from: from.into_iter().collect() }
         })
         .collect()
 }
@@ -1628,11 +1723,178 @@ pub fn dof(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constrain
             continue;
         }
         let own = part.own(points, radii, constraints);
-        let (f, r) = dof_whole(&own.points, &own.radii, &own.constraints);
+        let (f, r) = dof_sparse(&own.points, &own.radii, &own.constraints);
         free += f;
         redundant += r;
     }
     (free, redundant)
+}
+
+/// THE JACOBIAN OF A PART BY DIFFERENCES, KEPT SPARSE: each row the non-zero derivatives of a constraint, by the
+/// column. The same differences as `dof_whole` takes - a variable stepped by `h`, the rows of the constraints that hold
+/// it computed again - but only the rows of those constraints, where `dof_whole` computes every row of the part for
+/// every variable and keeps a matrix of every row by every variable: 8 000 by 8 000 for an array of 1 000 rectangles.
+struct Differences {
+    rows: Vec<Vec<(usize, f64)>>,
+    nv: usize,
+}
+
+fn differences(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint]) -> Differences {
+    let np = points.len();
+    let idx: HashMap<Id, usize> = points.iter().enumerate().map(|(i, p)| (p.id, i)).collect();
+    let ridx: HashMap<Id, usize> = radii.iter().enumerate().map(|(j, rv)| (rv.center, np * 2 + j)).collect();
+    let has = |id: Id| idx.contains_key(&id);
+    let is_center = |id: Id| ridx.contains_key(&id);
+    let cons: Vec<Constraint> = constraints.iter().filter(|&c| cons_ok(c, &has, &is_center)).cloned().collect();
+    let nv = np * 2 + radii.len();
+    let anchor: HashMap<Id, (f64, f64)> = cons
+        .iter()
+        .filter_map(|c| match *c {
+            Constraint::Fixed { p } => idx.get(&p).map(|&i| (p, (points[i].x, points[i].y))),
+            _ => None,
+        })
+        .collect();
+    let mut x: Vec<f64> = points.iter().flat_map(|p| [p.x, p.y]).collect();
+    x.extend(radii.iter().map(|rv| rv.value));
+    // the rows of every constraint at x, where they start, and the constraints that hold each variable
+    let mut r0: Vec<Vec<f64>> = Vec::with_capacity(cons.len());
+    let mut first = Vec::with_capacity(cons.len());
+    let mut m = 0;
+    let mut holding: Vec<Vec<usize>> = vec![Vec::new(); nv];
+    for (ci, c) in cons.iter().enumerate() {
+        let mut r = Vec::new();
+        con_rows(c, &x, &x, &idx, &ridx, &anchor, &mut r); // the side of an axis dimension is read off the current configuration
+        first.push(m);
+        m += r.len();
+        r0.push(r);
+        for id in c.points() {
+            let vars = idx.get(&id).map(|&i| [2 * i, 2 * i + 1]).into_iter().flatten().chain(ridx.get(&id).copied());
+            for k in vars {
+                if holding[k].last() != Some(&ci) {
+                    holding[k].push(ci);
+                }
+            }
+        }
+    }
+    let h = 1e-6;
+    let mut rows: Vec<Vec<(usize, f64)>> = vec![Vec::new(); m];
+    let mut xp = x.clone();
+    let mut rp = Vec::new();
+    for k in 0..nv {
+        xp[k] = x[k] + h;
+        for &ci in &holding[k] {
+            rp.clear();
+            con_rows(&cons[ci], &xp, &x, &idx, &ridx, &anchor, &mut rp);
+            for (t, (&after, &before)) in rp.iter().zip(&r0[ci]).enumerate() {
+                let v = (after - before) / h;
+                if v != 0.0 {
+                    rows[first[ci] + t].push((k, v));
+                }
+            }
+        }
+        xp[k] = x[k];
+    }
+    // each row scaled to unit length, summed by the column as `normalize_rows` sums it: the rank must not depend on
+    // the scale of the sketch or on constraint weights
+    for row in rows.iter_mut() {
+        let n = row.iter().map(|(_, v)| v * v).sum::<f64>().sqrt();
+        if n > 1e-12 {
+            for (_, v) in row.iter_mut() {
+                *v /= n;
+            }
+        }
+    }
+    Differences { rows, nv }
+}
+
+/// THE PIVOT COLUMNS OF A SPARSE MATRIX, by the elimination of `pivot_columns` step for step: the columns in order,
+/// in each the row of the largest value among the rows not yet taken - the first of them in the order the rows stand,
+/// rows swapped as that elimination swaps them - taken when above 1e-7, and its column cleared from every row not yet
+/// taken. The rows taken are not cleared further: they are never looked at again. Only the non-zero values are kept
+/// and worked: an array of 1 000 rectangles is 8 000 columns of a few values each.
+fn pivot_columns_sparse(rows: Vec<Vec<(usize, f64)>>, cols: usize) -> Vec<usize> {
+    let n = rows.len();
+    let mut a: Vec<std::collections::BTreeMap<usize, f64>> = rows.into_iter().map(|r| r.into_iter().collect()).collect();
+    let mut in_col: Vec<Vec<usize>> = vec![Vec::new(); cols];
+    for (r, row) in a.iter().enumerate() {
+        for &c in row.keys() {
+            in_col[c].push(r);
+        }
+    }
+    let mut at: Vec<usize> = (0..n).collect(); // the row standing at each place
+    let mut place: Vec<usize> = (0..n).collect(); // the place of each row
+    let mut pivots = Vec::new();
+    let mut row = 0usize;
+    for col in 0..cols {
+        if row >= n {
+            break;
+        }
+        let value = |a: &[std::collections::BTreeMap<usize, f64>], r: usize| a[r].get(&col).copied().unwrap_or(0.0);
+        // the first place from `row` on holding the largest value; places without a value in the column hold 0
+        let mut piv = row;
+        let mut best = value(&a, at[row]).abs();
+        for &r in &in_col[col] {
+            let (p, v) = (place[r], value(&a, r).abs());
+            if p > row && (v > best || v == best && p < piv) {
+                (piv, best) = (p, v);
+            }
+        }
+        if best < 1e-7 {
+            continue;
+        }
+        let (pr, rr) = (at[piv], at[row]);
+        at.swap(row, piv);
+        (place[pr], place[rr]) = (row, piv);
+        let pivot: Vec<(usize, f64)> = a[pr].range(col..).map(|(&c, &v)| (c, v)).collect();
+        let d = pivot[0].1;
+        for &r in &in_col[col].clone() {
+            if place[r] <= row {
+                continue;
+            }
+            let f = value(&a, r) / d;
+            if f == 0.0 {
+                continue;
+            }
+            for &(c, v) in &pivot {
+                let e = a[r].entry(c).or_insert_with(|| {
+                    in_col[c].push(r);
+                    0.0
+                });
+                *e -= f * v;
+            }
+        }
+        pivots.push(col);
+        row += 1;
+    }
+    pivots
+}
+
+/// `dof_whole` of a part, by `differences` and `pivot_columns_sparse`: the same count, at the cost of the non-zeros.
+fn dof_sparse(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint]) -> (i32, i32) {
+    if points.is_empty() {
+        return (0, 0);
+    }
+    let Differences { rows, nv } = differences(points, radii, constraints);
+    let m = rows.len();
+    if m == 0 {
+        return (nv as i32, 0);
+    }
+    let rank = pivot_columns_sparse(rows, nv).len() as i32;
+    (nv as i32 - rank, m as i32 - rank)
+}
+
+/// `free_points_whole` of a part, by `differences` and `pivot_columns_sparse`.
+fn free_points_sparse(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint]) -> Vec<bool> {
+    let n = points.len();
+    if n == 0 {
+        return Vec::new();
+    }
+    let Differences { rows, nv } = differences(points, radii, constraints);
+    if rows.is_empty() {
+        return vec![true; n]; // no constraints at all, so everything is free
+    }
+    let piv: std::collections::HashSet<usize> = pivot_columns_sparse(rows, nv).into_iter().collect();
+    (0..n).map(|i| !piv.contains(&(2 * i)) || !piv.contains(&(2 * i + 1))).collect()
 }
 
 /// The degrees of freedom of the whole sketch counted as one Jacobian, the way they were counted before the sketch
@@ -1701,7 +1963,7 @@ pub fn free_points(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[C
     let mut out = vec![true; points.len()];
     for part in parts(points, radii, constraints).iter().filter(|p| !p.constraints.is_empty()) {
         let own = part.own(points, radii, constraints);
-        for (&i, f) in part.points.iter().zip(free_points_whole(&own.points, &own.radii, &own.constraints)) {
+        for (&i, f) in part.points.iter().zip(free_points_sparse(&own.points, &own.radii, &own.constraints)) {
             out[i] = f;
         }
     }
@@ -1743,7 +2005,7 @@ fn part_of(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constrain
 /// The degrees of freedom of a part without its constraint `at` less those with it.
 fn taken(own: &Own, at: usize) -> i32 {
     let without: Vec<Constraint> = own.constraints.iter().enumerate().filter(|(t, _)| *t != at).map(|(_, c)| c.clone()).collect();
-    dof_whole(&own.points, &own.radii, &without).0 - dof_whole(&own.points, &own.radii, &own.constraints).0
+    dof_sparse(&own.points, &own.radii, &without).0 - dof_sparse(&own.points, &own.radii, &own.constraints).0
 }
 
 /// THE REDUNDANT CONSTRAINTS among the first `own` of `constraints` (the rest are those of the entities themselves, such
@@ -1754,13 +2016,13 @@ pub fn redundant(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Con
     let mut out = Vec::new();
     for part in parts(points, radii, constraints) {
         let mine = part.own(points, radii, constraints);
-        let (free_all, excess) = dof_whole(&mine.points, &mine.radii, &mine.constraints);
+        let (free_all, excess) = dof_sparse(&mine.points, &mine.radii, &mine.constraints);
         if excess <= 0 {
             continue;
         }
         for (k, &ci) in part.constraints.iter().enumerate().filter(|(_, ci)| **ci < own) {
             let without: Vec<Constraint> = mine.constraints.iter().enumerate().filter(|(t, _)| *t != k).map(|(_, c)| c.clone()).collect();
-            if dof_whole(&mine.points, &mine.radii, &without).0 == free_all {
+            if dof_sparse(&mine.points, &mine.radii, &without).0 == free_all {
                 out.push(ci);
             }
         }
@@ -1849,4 +2111,49 @@ fn pivot_columns(a: &mut [Vec<f64>], cols: usize) -> Vec<usize> {
         row += 1;
     }
     pivots
+}
+
+#[cfg(test)]
+mod sparse_elimination {
+    use super::{pivot_columns, pivot_columns_sparse};
+
+    /// A fixed pseudo-random sequence in 0..n.
+    struct Seq(u64);
+
+    impl Seq {
+        fn next(&mut self, n: u64) -> u64 {
+            self.0 = self.0.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+            (self.0 >> 33) % n
+        }
+    }
+
+    #[test]
+    fn the_sparse_elimination_takes_the_pivot_columns_the_dense_one_takes() {
+        let mut s = Seq(3);
+        let mut failures = Vec::new();
+        for case in 0..400 {
+            let (rows, cols) = (2 + s.next(40) as usize, 2 + s.next(40) as usize);
+            // values from a few levels, so equal magnitudes meet and the first of them must be taken; rows laid twice
+            // and rows made of others, so the rank falls short
+            let mut dense: Vec<Vec<f64>> = vec![vec![0.0; cols]; rows];
+            for row in dense.iter_mut() {
+                for _ in 0..1 + s.next(4) {
+                    row[s.next(cols as u64) as usize] = [1.0, -1.0, 0.5, 2.0, 1e-8][s.next(5) as usize];
+                }
+            }
+            for r in 1..rows {
+                match s.next(4) {
+                    0 => dense[r] = dense[r - 1].clone(),
+                    1 => dense[r] = dense[r - 1].iter().zip(&dense[0]).map(|(a, b)| a - b).collect(),
+                    _ => {}
+                }
+            }
+            let sparse: Vec<Vec<(usize, f64)>> = dense.iter().map(|row| row.iter().enumerate().filter(|(_, v)| **v != 0.0).map(|(c, &v)| (c, v)).collect()).collect();
+            let (by_dense, by_sparse) = (pivot_columns(&mut dense.clone(), cols), pivot_columns_sparse(sparse, cols));
+            if by_dense != by_sparse {
+                failures.push(format!("case {case}: dense {by_dense:?}, sparse {by_sparse:?}"));
+            }
+        }
+        assert!(failures.is_empty(), "the eliminations disagree:\n{}", failures.join("\n"));
+    }
 }
