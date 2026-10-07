@@ -731,6 +731,51 @@ impl<'a> Hand<'a> {
         true
     }
 
+    /// THE FIELDS OF THE TOP BAR THAT HAVE NO CAPTION BEFORE THEM, the next frame drawn: a field above the canvas with no
+    /// words to its left on the same row, or with another field between it and the nearest words.
+    pub fn bar_fields_without_caption(&mut self) -> Vec<egui::Rect> {
+        self.frame(Vec::new());
+        let top = self.app.viewing.view_rect.top();
+        let field = |k: &super::window::Kind| matches!(k, super::window::Kind::TextField | super::window::Kind::Number);
+        let fields: Vec<egui::Rect> = self.win.widgets.iter().filter(|w| field(&w.kind) && w.rect.bottom() <= top).map(|w| w.rect).collect();
+        let row = |a: &egui::Rect, b: &egui::Rect| (a.center().y - b.center().y).abs() < 6.0;
+        fields
+            .iter()
+            .filter(|f| {
+                let caption = self
+                    .win
+                    .drawn
+                    .iter()
+                    .filter(|(t, r)| !t.trim().is_empty() && t.trim().parse::<f64>().is_err() && row(r, f) && r.right() <= f.left() + 1.0)
+                    .map(|(_, r)| r.right())
+                    .fold(f32::NEG_INFINITY, f32::max);
+                caption.is_infinite() || fields.iter().any(|g| g != *f && row(g, f) && g.left() >= caption && g.right() <= f.left() + 1.0)
+            })
+            .copied()
+            .collect()
+    }
+
+    /// TYPE `text` INTO THE FIELD THAT STANDS RIGHT AFTER `word`, all of what it held replaced, with no Enter. Answers
+    /// whether the word and a field after it were on screen.
+    pub fn type_after_word(&mut self, word: &str, text: &str) -> bool {
+        let Some(at) = self.written_at(word) else { return false };
+        let field = |k: &super::window::Kind| matches!(k, super::window::Kind::TextField | super::window::Kind::Number);
+        let Some(f) = self
+            .win
+            .widgets
+            .iter()
+            .filter(|w| field(&w.kind) && w.rect.left() >= at.right() - 1.0 && (w.rect.center().y - at.center().y).abs() < 6.0)
+            .map(|w| w.rect)
+            .min_by(|a, b| a.left().total_cmp(&b.left()))
+        else {
+            return false;
+        };
+        self.press_screen(f.center());
+        self.chord(egui::Modifiers::COMMAND, egui::Key::A);
+        self.type_text(text);
+        true
+    }
+
     /// THE SMALL RINGS OF `radius` px THE LAST FRAME DREW, where they stand on screen: the marks a preview puts where a
     /// line will be cut.
     pub fn rings_drawn(&self, radius: f32) -> Vec<egui::Pos2> {
