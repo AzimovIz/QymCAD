@@ -1,0 +1,48 @@
+//! A SKETCH KEEPS ITS TIME: the budgets of issue #95 on sketches of separate shapes (`sketch_kinds`), timed through the
+//! project's own doors. The measure of every kind and size is `sketch_speed.rs`; these are the budgets that hold.
+mod sketch_kinds;
+
+use qymcad_core::solver;
+use sketch_kinds::{build, Kind};
+use std::time::{Duration, Instant};
+
+/// The time of `work`, the best of three: a check of a budget is a check of the work, not of what else the machine did.
+fn best_of_three(mut work: impl FnMut()) -> Duration {
+    (0..3)
+        .map(|_| {
+            let started = Instant::now();
+            work();
+            started.elapsed()
+        })
+        .min()
+        .unwrap_or_default()
+}
+
+#[test]
+fn separate_shapes_are_solved_each_alone() {
+    // Reported behaviour: 300 arcs, each with a Horizontal not yet met, took 6.8 s to solve, 600 arcs 27 s.
+    for kind in [Kind::Lines, Kind::Arcs] {
+        let p = build(kind, 300);
+        let t = best_of_three(|| {
+            let _ = p.clone().solve_sketch(0);
+        });
+        eprintln!("{kind:?} x300, solve: {t:?}");
+        assert!(t < Duration::from_millis(500), "300 separate {kind:?} took {t:?} to solve, budget 500 ms");
+    }
+}
+
+#[test]
+fn a_drag_frame_solves_its_own_shape_alone() {
+    // The solve of a drag frame alone: the frame through `Project::solve_sketch_drag_fast` also rebuilds the contours
+    // of the sketch, which intersect every curve with every other - 14 s among 10 000 lines, a step of its own.
+    let mut p = build(Kind::Lines, 10_000);
+    p.solve_sketch(0);
+    let s = &mut p.sketches[0];
+    let (q, constraints) = (s.points[0], s.constraints.clone());
+    let drag = Some((q.id, q.x + 1.0, q.y + 1.0));
+    let t = best_of_three(|| {
+        let _ = solver::solve_full_iter(&mut s.points, &mut Vec::new(), &constraints, drag, 40);
+    });
+    eprintln!("Lines x10000, the solve of a drag frame: {t:?}");
+    assert!(t < Duration::from_millis(16), "the solve of a drag frame among 10 000 lines took {t:?}, budget 16 ms");
+}

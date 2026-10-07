@@ -46,6 +46,19 @@ pub fn solve_full(points: &mut [SketchPoint], radii: &mut [RadiusVar], constrain
 /// again, and the result is accepted only if the residual strictly dropped. Disabled during a drag, where frame
 /// stability and responsiveness outweigh it.
 pub fn solve_full_iter(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, max_iter: usize) -> f64 {
+    let scale = Scale::of(points);
+    guarded(points, radii, |points, radii| solve_by_parts(points, radii, constraints, drag, max_iter, scale))
+}
+
+/// The whole sketch as one system, the way it was solved before it was split into parts (`solve_full_iter`). Kept as
+/// the reference the parts are checked against: on a sketch whose parts are solved alone, the answer is the same.
+pub fn solve_full_iter_whole(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, max_iter: usize) -> f64 {
+    let scale = Scale::of(points);
+    guarded(points, radii, |points, radii| solve_full_iter_inner(points, radii, constraints, drag, max_iter, scale))
+}
+
+/// Run a solve, and put the sketch back as it was if it comes out with a non-number.
+fn guarded(points: &mut [SketchPoint], radii: &mut [RadiusVar], solve: impl FnOnce(&mut [SketchPoint], &mut [RadiusVar]) -> f64) -> f64 {
     // The solver must never be able to corrupt the sketch.
     //
     // A numerical method can produce non-numbers: a degenerate system, huge magnitudes, a division by
@@ -56,7 +69,7 @@ pub fn solve_full_iter(points: &mut [SketchPoint], radii: &mut [RadiusVar], cons
     // geometry intact. Returning garbage silently is not an option.
     let backup: Vec<SketchPoint> = points.to_vec();
     let backup_r: Vec<RadiusVar> = radii.to_vec();
-    let res = solve_full_iter_inner(points, radii, constraints, drag, max_iter);
+    let res = solve(points, radii);
     let clean = res.is_finite() && points.iter().all(|p| p.x.is_finite() && p.y.is_finite()) && radii.iter().all(|r| r.value.is_finite());
     if clean {
         return res;
@@ -66,7 +79,120 @@ pub fn solve_full_iter(points: &mut [SketchPoint], radii: &mut [RadiusVar], cons
     f64::INFINITY
 }
 
-fn solve_full_iter_inner(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, max_iter: usize) -> f64 {
+/// The size of the whole sketch, which the thresholds of a solve scale with. Taken from the whole sketch even when
+/// one part is solved, so a part is solved to the same thresholds as it was inside the whole.
+#[derive(Clone, Copy)]
+struct Scale {
+    /// the largest coordinate, at least 1: the residual below `1e-4 * span` counts as solved
+    span: f64,
+    /// the spread of all coordinates: an axis dimension off by more than `1e-4` of it is a candidate for a side flip
+    extent: f64,
+}
+
+impl Scale {
+    fn of(points: &[SketchPoint]) -> Scale {
+        let span = points.iter().fold(0.0_f64, |m, p| m.max(p.x.abs()).max(p.y.abs())).max(1.0);
+        let (mut lo, mut hi) = (f64::MAX, f64::MIN);
+        for p in points {
+            lo = lo.min(p.x).min(p.y);
+            hi = hi.max(p.x).max(p.y);
+        }
+        Scale { span, extent: if hi > lo { hi - lo } else { 0.0 } }
+    }
+}
+
+/// A part of a sketch that no constraint ties to the rest: its points, the radii of its circles and its constraints,
+/// by their places in the sketch's lists.
+struct Part {
+    points: Vec<usize>,
+    radii: Vec<usize>,
+    constraints: Vec<usize>,
+}
+
+/// The parts of a sketch: the points a constraint names are of one part, and a radius is of the part of its centre.
+/// A constraint that names no point of the sketch is of no part - the solve leaves it out anyway (`cons_ok`).
+fn parts(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint]) -> Vec<Part> {
+    let idx: HashMap<Id, usize> = points.iter().enumerate().map(|(i, p)| (p.id, i)).collect();
+    let mut up: Vec<usize> = (0..points.len()).collect();
+    fn root(up: &mut [usize], mut i: usize) -> usize {
+        while up[i] != i {
+            up[i] = up[up[i]];
+            i = up[i];
+        }
+        i
+    }
+    let mut first_of: Vec<Option<usize>> = Vec::with_capacity(constraints.len());
+    for c in constraints {
+        let mut first = None;
+        for id in c.points() {
+            let Some(&i) = idx.get(&id) else { continue };
+            match first {
+                None => first = Some(i),
+                Some(f) => {
+                    let (ra, rb) = (root(&mut up, f), root(&mut up, i));
+                    if ra != rb {
+                        up[ra.max(rb)] = ra.min(rb);
+                    }
+                }
+            }
+        }
+        first_of.push(first);
+    }
+    let mut part_of_root: HashMap<usize, usize> = HashMap::new();
+    let mut out: Vec<Part> = Vec::new();
+    let mut part_at = |up: &mut [usize], i: usize, out: &mut Vec<Part>| -> usize {
+        let r = root(up, i);
+        *part_of_root.entry(r).or_insert_with(|| {
+            out.push(Part { points: Vec::new(), radii: Vec::new(), constraints: Vec::new() });
+            out.len() - 1
+        })
+    };
+    for i in 0..points.len() {
+        let k = part_at(&mut up, i, &mut out);
+        out[k].points.push(i);
+    }
+    for (j, rv) in radii.iter().enumerate() {
+        if let Some(&i) = idx.get(&rv.center) {
+            let k = part_at(&mut up, i, &mut out);
+            out[k].radii.push(j);
+        }
+    }
+    for (ci, first) in first_of.into_iter().enumerate() {
+        if let Some(i) = first {
+            let k = part_at(&mut up, i, &mut out);
+            out[k].constraints.push(ci);
+        }
+    }
+    out
+}
+
+/// Solve every part of the sketch as a system of its own. 300 separate lines are 300 systems of 4 unknowns, not one
+/// of 1 200: the dense algebra of a solve costs the cube of its unknowns. A part with no constraint is not solved. A
+/// drag solves only the part of the dragged point - nothing ties the others to it, and the release solves them all.
+fn solve_by_parts(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, max_iter: usize, scale: Scale) -> f64 {
+    let drag = drag.filter(|(id, _, _)| points.iter().any(|p| p.id == *id));
+    let mut sum_sq = 0.0;
+    for part in parts(points, radii, constraints) {
+        let part_drag = drag.filter(|(id, _, _)| part.points.iter().any(|&i| points[i].id == *id));
+        if part.constraints.is_empty() && part_drag.is_none() || drag.is_some() && part_drag.is_none() {
+            continue;
+        }
+        let mut own_points: Vec<SketchPoint> = part.points.iter().map(|&i| points[i]).collect();
+        let mut own_radii: Vec<RadiusVar> = part.radii.iter().map(|&j| radii[j]).collect();
+        let own_constraints: Vec<Constraint> = part.constraints.iter().map(|&ci| constraints[ci].clone()).collect();
+        let r = solve_full_iter_inner(&mut own_points, &mut own_radii, &own_constraints, part_drag, max_iter, scale);
+        sum_sq += r * r;
+        for (&i, q) in part.points.iter().zip(own_points) {
+            points[i] = q;
+        }
+        for (&j, rv) in part.radii.iter().zip(own_radii) {
+            radii[j] = rv;
+        }
+    }
+    sum_sq.sqrt()
+}
+
+fn solve_full_iter_inner(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, max_iter: usize, scale: Scale) -> f64 {
     // Two stages. First, a solve with a pull towards the previous state, which selects the solution closest to
     // how the sketch currently looks — without it the free degrees of freedom, such as the rotation of a
     // polygon, drift anywhere. Second, a polish without that pull, started from the solution just found: the
@@ -82,12 +208,14 @@ fn solve_full_iter_inner(points: &mut [SketchPoint], radii: &mut [RadiusVar], co
     // The threshold scales with the sketch, it is not absolute: on a 500 mm part the residual left by the first
     // stage exceeds any fixed threshold on its own, the polish never started, and a dimension landed with a
     // 2e-4 error. Same lesson as the thresholds for dimension conflicts.
-    let span = points.iter().fold(0.0_f64, |m, p| m.max(p.x.abs()).max(p.y.abs())).max(1.0);
+    let span = scale.span;
     // The arms of angle dimensions are held at their old lengths only to make an arm turn rather than stretch;
     // where the other constraints force an arm to a new length, that hold fights them and the first stage stops
     // at a compromise. A chamfer by a leg and an angle, its angle changed from 30 to 45 deg, must lengthen its
     // cut from 5.77 to 7.07 and stopped at a residual of 0.057. Solved again from there without the hold, and
-    // taken only if that solves the sketch, so a contradictory one keeps the compromise it had.
+    // taken only if that solves the sketch, so a contradictory one keeps the compromise it had. Measured over the probes
+    // of the core: 240 solves of 48 063 ran it, all on parts of at most 36 unknowns, 0.27 s in all, and 2 were solved
+    // by it. It repeats the part it is called for, not the sketch (`solve_by_parts`).
     if drag.is_none() && best >= 1e-4 * span {
         let mut trial: Vec<SketchPoint> = points.to_vec();
         let mut trial_radii: Vec<RadiusVar> = radii.to_vec();
@@ -105,7 +233,7 @@ fn solve_full_iter_inner(points: &mut [SketchPoint], radii: &mut [RadiusVar], co
     if drag.is_some() || best <= SOLVED {
         return best;
     }
-    for (a, b, axis) in violated_axis_dims(points, constraints, 6) {
+    for (a, b, axis) in violated_axis_dims(points, constraints, scale.extent, 6) {
         let (Some(ia), Some(ib)) = (points.iter().position(|p| p.id == a), points.iter().position(|p| p.id == b)) else { continue };
         let mut trial: Vec<SketchPoint> = points.to_vec();
         let mut trial_radii: Vec<RadiusVar> = radii.to_vec();
@@ -149,24 +277,12 @@ impl Pull {
 /// side flip. The tolerance scales with the sketch, on the same principle as `sketch_conflicts`: the solver
 /// repairs exactly what is shown as red, and behaves the same on a 2 mm part and on a 3 m frame. At most
 /// `limit` of them.
-fn violated_axis_dims(points: &[SketchPoint], constraints: &[Constraint], limit: usize) -> Vec<(Id, Id, u8)> {
+fn violated_axis_dims(points: &[SketchPoint], constraints: &[Constraint], extent: f64, limit: usize) -> Vec<(Id, Id, u8)> {
     let pos: HashMap<Id, (f64, f64)> = points.iter().map(|p| (p.id, (p.x, p.y))).collect();
-    // Tolerance scaled by the extent of the sketch, the same principle as in `sketch_conflicts`: a fixed
-    // 0.05 mm kept the multi-start from firing on a metre-sized frame, and on a tiny part it would have
+    // Tolerance scaled by the extent of the sketch (`Scale::extent`), the same principle as in `sketch_conflicts`: a
+    // fixed 0.05 mm kept the multi-start from firing on a metre-sized frame, and on a tiny part it would have
     // declared almost everything violated.
-    let span = {
-        let (mut lo, mut hi) = (f64::MAX, f64::MIN);
-        for p in points {
-            lo = lo.min(p.x).min(p.y);
-            hi = hi.max(p.x).max(p.y);
-        }
-        if hi > lo {
-            hi - lo
-        } else {
-            0.0
-        }
-    };
-    let tol = (span * 1e-4).max(1e-6);
+    let tol = (extent * 1e-4).max(1e-6);
     let mut out = Vec::new();
     for c in constraints {
         if let Constraint::Distance { a, b, d, axis, driven, .. } = c {
