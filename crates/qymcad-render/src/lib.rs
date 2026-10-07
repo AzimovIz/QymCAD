@@ -1810,7 +1810,11 @@ pub fn draw_sketch_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
     }
     let col = if pn.tool.construction { pn.scheme.pal.sketch_construction() } else { pn.scheme.pal.sketch_line() };
     let stroke = Stroke::new(1.3, col);
-    for p in &pn.tool.pts {
+    // THE CLICKS THAT ARE NOTHING YET ARE MARKED, and of a chain of lines only the corner the next segment goes from: the
+    // corners already laid are points of the sketch and drawn as such, and the solve after an automatic constraint moves
+    // them - marked again where they were clicked, a second dot stood beside every corner of the chain.
+    let marked = if pn.armed.draw_kind() == 1 { pn.tool.pts.len().saturating_sub(1) } else { 0 };
+    for p in &pn.tool.pts[marked..] {
         painter.circle_filled(sh.at(*p), 3.0, col);
     }
     let Some(cur) = pn.cursor else { return };

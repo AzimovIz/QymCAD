@@ -3931,6 +3931,7 @@ mod a_shift_box_leaves_the_sheet_still;
 mod a_dimension_being_placed_follows_the_pointer;
 mod the_dimensions_turn_with_their_rectangle;
 mod an_automatic_parallel_stays_in_its_shape;
+mod the_chain_being_drawn_marks_its_own_corners;
 mod a_drag_takes_what_was_pressed;
 mod text_font;
 mod font_row_look;

@@ -3083,6 +3083,14 @@ pub fn sketch_tool_click(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: P
     qymcad_ui_state::commit_edit_if_changed(&mut sk.rebuild());
 }
 
+/// Where the two ends of line `seg` of sketch `si` stand, first end first.
+fn segment_ends(project: &Project, si: usize, seg: Id) -> Option<[Point2; 2]> {
+    let s = project.sketches.get(si)?;
+    let qymcad_core::model::EntityKind::Line { a, b } = s.entities.iter().find(|e| e.id == seg)?.kind else { return None };
+    let at = |id: Id| s.points.iter().find(|q| q.id == id).map(|q| Point2::new(q.x, q.y));
+    Some([at(a)?, at(b)?])
+}
+
 pub fn sketch_tool_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos2) {
     let w = snap_world(sk, rect, pos);
     let Some(si) = qymcad_ui_state::edit_si(&*sk.project, &*sk.sketch_ses) else { return };
@@ -3097,7 +3105,7 @@ pub fn sketch_tool_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, 
             }
             if let Some(&last) = sk.tool.pts.last() {
                 let prev = (sk.tool.pts.len() >= 2).then(|| sk.tool.pts[sk.tool.pts.len() - 2]);
-                sk.project.add_line_entity(si, last.x, last.y, w.x, w.y, qymcad_core::feature::Purpose::of(con));
+                let seg = sk.project.add_line_entity(si, last.x, last.y, w.x, w.y, qymcad_core::feature::Purpose::of(con));
                 if !con && sk.set.auto_constrain {
                     // automatic constraints: horizontal or vertical, perpendicular to the previous segment,
                     // point-on-edge
@@ -3113,6 +3121,17 @@ pub fn sketch_tool_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, 
                 let tol = (8.0 / sk.view.scale as f64).clamp(1e-4, 0.4);
                 sk.project.merge_close_points(si, tol);
                 qymcad_ui_state::invalidate(&mut *sk.regen);
+                // THE CHAIN GOES ON FROM ITS CORNERS AS THEY STAND: an automatic constraint and the solve after it move
+                // the ends of the segment just laid (a corner squared by a Perpendicular), and kept at the clicks, the
+                // dots of the chain stood a few pixels beside its corners and the next segment was led from a click
+                // rather than from the corner.
+                if let Some([a, b]) = segment_ends(sk.project, si, seg) {
+                    if let Some(l) = sk.tool.pts.last_mut() {
+                        *l = a;
+                    }
+                    sk.tool.pts.push(b);
+                    return;
+                }
             }
             sk.tool.pts.push(w);
         }
