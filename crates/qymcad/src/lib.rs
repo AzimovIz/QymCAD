@@ -39,6 +39,9 @@ mod packaging_macos;
 // The Linux packaging script, read rather than run: what it must carry is decided by the dependency tree.
 #[cfg(test)]
 mod packaging_linux;
+// Every crate's manifest: the licence of the tree, stated so that `cargo metadata` gives it rather than null.
+#[cfg(test)]
+mod packaging_licence;
 // The AUR package description: three versions that must agree, and a checksum that must be real.
 #[cfg(test)]
 mod packaging_aur;

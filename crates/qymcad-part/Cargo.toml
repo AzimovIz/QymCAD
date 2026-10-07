@@ -2,6 +2,7 @@
 name = "qymcad-part"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 
 # THE PART WORKBENCH. The feature commands - extrude, revolve, sweep, loft, fillet, chamfer, shell, the
 # array, the thread, the hole, the split - their option bars, their popups at the geometry and their

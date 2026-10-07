@@ -2,6 +2,7 @@
 name = "qymcad-sketch"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 
 # THE SKETCH WORKBENCH. Drawing entities, constraints and dimensions, dragging points, trimming, patterns,
 # text and notes, the diagnostics of degrees of freedom. It works over `SketchCtx` and asks nothing of the
