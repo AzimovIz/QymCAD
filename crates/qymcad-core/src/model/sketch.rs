@@ -1131,6 +1131,9 @@ impl Project {
             s.constraints.retain(|k| !(matches!(k, Constraint::Orientation { .. }) && is_rect_own(&r, k)));
             let [c0, c1, c2, c3] = r.corners;
             s.constraints.extend(rect_free_constraints(c0, c1, c2, c3));
+            // the dimensions of its sides go round with the sides the angle is about to turn
+            let along = axis_dims_of_whole_sides(s, &|id| r.corners.contains(&id));
+            lay_along_their_sides(s, &along, 0.0);
         }
     }
     /// AFTER A CONSTRAINT IS DELETED, the rectangles it was part of: one of a rectangle's own constraints deleted breaks
@@ -1272,6 +1275,8 @@ impl Project {
                     }
                 }
             }
+            // read before the points go round: which dimensions measure a whole side along its axis
+            let along = axis_dims_of_whole_sides(s, &|id| pts.contains(&id));
             for p in s.points.iter_mut() {
                 if pts.contains(&p.id) {
                     let (x, y) = (p.x - cx, p.y - cy);
@@ -1279,6 +1284,7 @@ impl Project {
                     p.y = cy + x * sn + y * cs;
                 }
             }
+            lay_along_their_sides(s, &along, deg);
         }
         self.solve_sketch(si); // regenerates as well, on the positions the constraints allow
     }
@@ -4998,6 +5004,53 @@ fn seam_cleaned(loop_: &[Point2]) -> Vec<Point2> {
         out.pop();
     }
     out
+}
+
+/// THE HORIZONTAL AND VERTICAL DIMENSIONS THAT MEASURE A WHOLE SIDE: a `Distance` along an axis (1 or 2) between two
+/// points that both turn (`turns`), the two standing on that axis's line, so the measure along the axis is the whole
+/// length between them. Answers their indices. A dimension of the projection of a slanted line is not among them: along
+/// the line it would say another number.
+pub(crate) fn axis_dims_of_whole_sides(s: &crate::model::Sketch, turns: &dyn Fn(Id) -> bool) -> Vec<usize> {
+    let at = |id: Id| s.points.iter().find(|q| q.id == id).map(|q| (q.x, q.y));
+    s.constraints
+        .iter()
+        .enumerate()
+        .filter_map(|(i, c)| match *c {
+            Constraint::Distance { a, b, axis: axis @ (1 | 2), .. } if turns(a) && turns(b) => {
+                let ((ax, ay), (bx, by)) = (at(a)?, at(b)?);
+                let (len, across) = ((bx - ax).hypot(by - ay), if axis == 1 { (by - ay).abs() } else { (bx - ax).abs() });
+                (len > 1e-9 && across <= 1e-6 * len).then_some(i)
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// THE DIMENSIONS `dims` TURNED BY `deg` WITH THEIR SIDES, LAID ALONG THEM: a horizontal or vertical dimension of a
+/// side becomes one along the side (axis 0), on the side of it it stood, as far from it - its offset turned with the
+/// side and read across the side as it stands now. Left horizontal and vertical, the dimensions of a rectangle turned by
+/// 30 deg stayed on the axes where they stood, measuring along them rather than along the sides.
+pub(crate) fn lay_along_their_sides(s: &mut crate::model::Sketch, dims: &[usize], deg: f64) {
+    let (sn, cs) = (deg.to_radians().sin(), deg.to_radians().cos());
+    let at = |s: &crate::model::Sketch, id: Id| s.points.iter().find(|q| q.id == id).map(|q| (q.x, q.y));
+    for &i in dims {
+        let Some(Constraint::Distance { a, b, axis, off, .. }) = s.constraints.get(i).cloned() else { continue };
+        let (Some((ax, ay)), Some((bx, by))) = (at(s, a), at(s, b)) else { continue };
+        // where the dimension stood off its side, in the world: down the screen is -y for a horizontal one, right +x for a
+        // vertical one; turned with the side
+        let (vx, vy) = if axis == 1 { (0.0, -off) } else { (off, 0.0) };
+        let (vx, vy) = (vx * cs - vy * sn, vx * sn + vy * cs);
+        // a dimension along its line stands off it along the world normal (dy, -dx) of its first end looking at its second
+        let (dx, dy) = (bx - ax, by - ay);
+        let len = dx.hypot(dy);
+        if len < 1e-9 {
+            continue;
+        }
+        if let Some(Constraint::Distance { axis, off, .. }) = s.constraints.get_mut(i) {
+            *axis = 0;
+            *off = (vx * dy - vy * dx) / len;
+        }
+    }
 }
 
 /// ONE END OF A LINEAR DIMENSION: its point and where the point stands.
