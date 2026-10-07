@@ -1790,6 +1790,9 @@ pub struct SketchSelection {
     /// what. It used to have no second step at all - the axis was whichever line happened to be in the
     /// selection (and got mirrored too, being in the same set), or silently Y.
     pub mirror_of: Vec<Id>,
+    /// THE LINES OF `items` CLICKED AT THEIR MIDDLE, where the triangle of the midpoint showed. Picked as lines; a
+    /// constraint that takes points reads them as their midpoints (`qymcad_sketch::middles_for`).
+    pub at_middle: Vec<Id>,
 }
 
 impl SketchSelection {

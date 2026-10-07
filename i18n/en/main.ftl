@@ -1261,6 +1261,7 @@ sk-arc = Arc
 sk-length-hint = The length of the line. Click a second item to get a distance instead; or place the length with a click
 sk-gap-hint = The gap between circle edges, or from a point to an edge (the editor can use the far edge)
 sk-note-selected = The note is selected — Del removes it, double-click edits it
+sk-midpoint-picked = The line is picked at its middle: a constraint with a point - Coincident, Horizontal, Vertical - ties its midpoint
 sk-note-added = The note is added
 sk-fix = Fix
 sk-params-hint = Named values for dimensions: w=50, d=w/2. A dimension can be given as an expression in its own field.

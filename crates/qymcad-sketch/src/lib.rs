@@ -1647,6 +1647,28 @@ fn shape_sizes(project: &Project, si: usize) -> Vec<f64> {
         .collect()
 }
 
+/// THE LINES CLICKED AT THEIR MIDDLE READ AS THEIR MIDDLES WHERE THE CONSTRAINT TAKES POINTS: Coincident always,
+/// Horizontal and Vertical when points are picked with them - a line and a point are not one line nor two points, so
+/// "the centre above the middle of the line" is what is meant. Every other constraint takes the lines as lines, and so
+/// do Horizontal and Vertical on lines alone. Each such line is replaced in the selection by a point held at its middle
+/// (`materialize_ref`, the dimension tool's door), laid inside the constraint's own step of undo.
+fn middles_for(project: &mut Project, si: usize, sel_sk: &mut qymcad_ui_state::SketchSelection, code: u8) {
+    let with_points = sel_sk.items.iter().any(|(k, _)| *k == 0);
+    let reads = match code {
+        0 => true,
+        1 | 2 => with_points,
+        _ => false,
+    };
+    if !reads || sel_sk.at_middle.is_empty() {
+        return;
+    }
+    for eid in std::mem::take(&mut sel_sk.at_middle) {
+        let Some(slot) = sel_sk.items.iter().position(|&it| it == (1, eid)) else { continue };
+        let Some((a, b)) = line_ends_of(project, si, eid) else { continue };
+        sel_sk.items[slot] = (0, qymcad_ui_state::materialize_ref(project, si, qymcad_ui_state::SketchRef::Midpoint(a, b)));
+    }
+}
+
 pub fn try_constraint_inner(
     project: &mut Project,
     regen: &mut qymcad_ui_state::Rebuilding,
@@ -1657,6 +1679,7 @@ pub fn try_constraint_inner(
 ) -> bool {
     use qymcad_core::model::Constraint;
     let qymcad_ui_state::Sel::Sketch(si) = sel else { return false };
+    middles_for(project, si, sel_sk, code);
     let pts = qymcad_ui_state::sel_point_ids(sel_sk);
     let mut lines = qymcad_ui_state::sel_line_pts(project, sel_sk, si);
     // the lines drawn, before the axes join them: Vertical and Horizontal go on these, an axis already stands so
@@ -2494,6 +2517,27 @@ pub fn tool_for_action(action: &str) -> Option<u8> {
     })
 }
 
+/// The two ends of line `eid` of sketch `si`.
+fn line_ends_of(project: &Project, si: usize, eid: Id) -> Option<(Id, Id)> {
+    match project.sketches.get(si)?.entities.iter().find(|e| e.id == eid)?.kind {
+        qymcad_core::model::EntityKind::Line { a, b } => Some((a, b)),
+        _ => None,
+    }
+}
+
+/// The ends of the line of sketch `si` whose middle stands at `at`, where the snap put its triangle.
+fn line_with_middle_at(project: &Project, si: usize, at: Point2) -> Option<(Id, Id)> {
+    let s = project.sketches.get(si)?;
+    let pt = |id: Id| s.points.iter().find(|q| q.id == id).map(|q| (q.x, q.y));
+    s.entities.iter().find_map(|e| match e.kind {
+        qymcad_core::model::EntityKind::Line { a, b } => {
+            let ((ax, ay), (bx, by)) = (pt(a)?, pt(b)?);
+            (((ax + bx) / 2.0 - at.x).abs() < 1e-9 && ((ay + by) / 2.0 - at.y).abs() < 1e-9).then_some((a, b))
+        }
+        _ => None,
+    })
+}
+
 pub fn sketch_select_click(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos2, additive: bool) {
     let sh = qymcad_ui_state::Sheet { view: *sk.view, rect };
     let qymcad_ui_state::Sel::Sketch(si) = *sk.sel else { return };
@@ -2539,6 +2583,18 @@ pub fn sketch_select_click(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos:
     // clicked one at a time, and the constraint applies as soon as there are enough of them.
     let additive = additive || sk.sel_sk.constraint.is_some() || sk.sel_sk.modify.is_some();
     let mut hit = sketch_hit(&sk.pick(), rect, pos, si);
+    // A LINE CLICKED AT ITS MIDDLE, WHERE ITS TRIANGLE SHOWS, IS PICKED AS THE LINE and remembered as clicked there:
+    // the constraint pressed after it decides whether the line or its middle is meant (`middles_for`). Picked as a
+    // point at once, the middle took every click a person makes in the middle of a line, and constraints between lines
+    // were laid between their midpoints.
+    let middle = match hit {
+        Some((1, eid)) => sk
+            .snap_hint
+            .filter(|&(_, kind)| kind == 3)
+            .and_then(|(at, _)| line_with_middle_at(&*sk.project, si, at))
+            .and_then(|ends| (line_ends_of(&*sk.project, si, eid) == Some(ends)).then_some(eid)),
+        _ => None,
+    };
     // a click on the origin materialises the reference point and picks it (for constraints and dimensions)
     if hit.is_none() && sh.at(Point2::new(0.0, 0.0)).distance(pos) <= qymcad_ui_state::grab::grab(sk.set, Grab::Point) {
         let o = sk.project.ensure_origin(si);
@@ -2588,8 +2644,13 @@ pub fn sketch_select_click(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos:
             }
             if let Some(p) = sk.sel_sk.items.iter().position(|r| *r == refr) {
                 sk.sel_sk.items.remove(p); // a second click deselects it
+                sk.sel_sk.at_middle.retain(|&e| e != refr.1);
             } else {
                 sk.sel_sk.items.push(refr);
+                if let Some(eid) = middle {
+                    sk.sel_sk.at_middle.push(eid);
+                    *sk.status = qymcad_i18n::tr("sk-midpoint-picked");
+                }
             }
         }
         None => {

@@ -3933,6 +3933,7 @@ mod the_dimensions_turn_with_their_rectangle;
 mod an_automatic_parallel_stays_in_its_shape;
 mod the_chain_being_drawn_marks_its_own_corners;
 mod a_side_deleted_leaves_the_rectangle_lines_held;
+mod the_middle_of_a_line_is_picked;
 mod a_drag_takes_what_was_pressed;
 mod text_font;
 mod font_row_look;

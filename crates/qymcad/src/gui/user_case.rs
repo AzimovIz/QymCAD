@@ -1631,6 +1631,38 @@ mod tests {
                 }
                 qymcad_ui_state::set_click_op(&mut qymcad_ui_state::tools_of!(app), &mut app.viewing.mode_3d, 0);
                 check_all(&mut app, "sketch: a rectangle turned as one shape", &mut problems);
+                // THE MIDDLE OF A LINE IS PICKED AS A POINT: a line and a circle on a place of their own, the middle of the
+                // line clicked where its triangle shows, the centre of the circle added with Shift, Vertical pressed - the
+                // centre stands straight above the middle.
+                {
+                    Hand::new(&mut app).sk_tool(1).look2d((290.0, -20.0)).click2d(270.0, -40.0).click2d(310.0, -40.0).key(egui::Key::Escape);
+                    Hand::new(&mut app).sk_tool(3).look2d((290.0, -20.0)).click2d(296.0, -10.0).click2d(300.0, -10.0).key(egui::Key::Escape);
+                    let mut hand = Hand::new(&mut app);
+                    hand.sk_tool(0).look2d((290.0, -20.0)).hover2d(290.0, -40.0).click2d(290.0, -40.0);
+                    let picked = hand.app.tools.sel_sk.items.clone();
+                    let centre = hand.app.project.sketches[si].points.iter().find(|q| (q.x - 296.0).hypot(q.y + 10.0) < 1e-6).map(|q| q.id);
+                    hand.shift_click2d(296.0, -10.0);
+                    Hand::new(&mut app).constraint(2);
+                    let sk = &app.project.sketches[si];
+                    let at = |id: u64| sk.points.iter().find(|q| q.id == id).map(|q| q.x);
+                    // the middle is laid by Vertical, held to the line clicked
+                    let line = match picked.as_slice() {
+                        [(1, eid)] => sk.entities.iter().find(|e| e.id == *eid).and_then(|e| if let qymcad_core::model::EntityKind::Line { a, b } = e.kind { Some((a, b)) } else { None }),
+                        _ => None,
+                    };
+                    let mid = line.and_then(|(a, b)| {
+                        sk.constraints.iter().find_map(|k| match *k {
+                            qymcad_core::model::Constraint::Midpoint { p, a: x, b: y } if (x, y) == (a, b) => Some(p),
+                            _ => None,
+                        })
+                    });
+                    let stands = mid.zip(centre).and_then(|(m, c)| Some((at(m)? - at(c)?).abs() < 1e-6));
+                    if stands != Some(true) {
+                        problems
+                            .push(format!("sketch: the middle of a line picked and held Vertical with a centre: picked {picked:?}, centre {centre:?}, standing {stands:?}; status: {}", app.status));
+                    }
+                }
+                check_all(&mut app, "sketch: the middle of a line takes a constraint", &mut problems);
             }
 
             // DIMENSIONS: linear, angular, radial. A dimension is not a caption but A CONSTRAINT: it must take
