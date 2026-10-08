@@ -3930,6 +3930,8 @@ mod diagnostics_wait_for_the_release;
 mod the_sketch_says_what_it_did_not_solve_in_time;
 mod a_big_drawing_stays_live;
 mod a_pattern_across_a_pattern_is_laid_by_hand;
+mod the_sketch_of_the_report_takes_a_line;
+mod a_big_sketch_selected_keeps_the_3d_frame;
 mod an_arc_by_its_centre_ends_on_itself;
 mod a_shift_box_leaves_the_sheet_still;
 mod a_dimension_being_placed_follows_the_pointer;
