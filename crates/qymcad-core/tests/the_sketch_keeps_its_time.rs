@@ -265,6 +265,14 @@ fn the_checks_after_an_edit_count_the_part_it_touched() {
     assert!(took < budget, "the checks of 17 500 rectangles after one moved took {took:?}, budget {budget:?}");
 }
 
+/// The time of one solve of a copy of `p`, its sketch 0.
+fn solved_in(p: &qymcad_core::model::Project) -> std::time::Duration {
+    let mut q = p.clone();
+    let started = std::time::Instant::now();
+    q.solve_sketch(0);
+    started.elapsed()
+}
+
 #[test]
 fn a_contradiction_in_a_big_part_is_solved_without_a_run_for_nothing() {
     // a pattern of 1 000 rectangles tied into one part, one of its dimensions laid again 5 mm off: the solve cannot meet
@@ -281,17 +289,39 @@ fn a_contradiction_in_a_big_part_is_solved_without_a_run_for_nothing() {
         })
         .expect("a dimension in the pattern");
     p.sketches[0].constraints.push(qymcad_core::model::Constraint::Distance { a, b, d: d + 5.0, off: 2.0, expr: String::new(), driven: false, axis, at: None });
-    let took = (0..3)
-        .map(|_| {
-            let mut q = p.clone();
-            let started = std::time::Instant::now();
-            q.solve_sketch(0);
-            started.elapsed()
+    // THE SAME PART WITH AN ANGLE DIMENSION, where the second run has arms to hold and is made: its time is the measure,
+    // taken beside, so the check reads the same on a fast machine and a loaded one. Two sides of the first rectangle at
+    // the 90 deg they stand at - the part and its contradiction are unchanged.
+    let sides: Vec<(u64, u64)> = p.sketches[0]
+        .entities
+        .iter()
+        .filter_map(|e| match e.kind {
+            qymcad_core::model::EntityKind::Line { a, b } => Some((a, b)),
+            _ => None,
         })
-        .min()
-        .unwrap_or_default();
-    eprintln!("a contradiction in 1 000 tied rectangles solved in {took:?}");
-    // measured: 0.52 s with the run for nothing and 0.28 s without in a release build, 0.63 s and 0.34 s in a test build
-    let budget = std::time::Duration::from_millis(450);
-    assert!(took < budget, "a contradiction in 1 000 tied rectangles solved in {took:?}, budget {budget:?}");
+        .take(2)
+        .collect();
+    let mut with_an_angle = p.clone();
+    with_an_angle.sketches[0].constraints.push(qymcad_core::model::Constraint::AngleLines {
+        a: sides[0].0,
+        b: sides[0].1,
+        c: sides[1].0,
+        d: sides[1].1,
+        deg: 90.0,
+        expr: String::new(),
+        driven: false,
+        off: 0.0,
+        at: None,
+    });
+    // IN TURNS, the shortest of five each: a check beside that loads the machine loads both alike
+    let (mut took, mut measure) = (std::time::Duration::MAX, std::time::Duration::MAX);
+    for _ in 0..5 {
+        took = took.min(solved_in(&p));
+        measure = measure.min(solved_in(&with_an_angle));
+    }
+    eprintln!("a contradiction in 1 000 tied rectangles solved in {took:?}; with an angle dimension, run twice, {measure:?}");
+    // measured in a test build: 0.30 s against 0.49 s with the second run, 0.61 of it; with the second run made in every
+    // part, 0.55 s against 0.50 s, 1.1; the line between them at 0.85. A budget of 450 ms read 451 ms on a runner of
+    // the CI loaded by the checks beside.
+    assert!(took.as_secs_f64() < 0.85 * measure.as_secs_f64(), "a contradiction in 1 000 tied rectangles solved in {took:?}, as long as with the second run ({measure:?})");
 }
