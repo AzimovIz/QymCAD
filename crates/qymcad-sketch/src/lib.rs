@@ -307,7 +307,8 @@ pub fn trim_span_key(project: &qymcad_core::model::Project, si: usize, eid: Id, 
     let inter = project.entity_intersections(si, eid);
     let Some(s) = project.sketches.get(si) else { return 0 };
     let Some(kind) = s.entities.iter().find(|e| e.id == eid).map(|e| e.kind) else { return 0 };
-    let pt = |id: Id| s.points.iter().find(|q| q.id == id).map(|q| (q.x, q.y));
+    let points_by_id: std::collections::HashMap<Id, &qymcad_core::model::SketchPoint> = s.points.iter().map(|p| (p.id, p)).collect(); // a table: these are looked up for every entity or constraint
+    let pt = |id: Id| points_by_id.get(&id).copied().map(|q| (q.x, q.y));
     match kind {
         qymcad_core::model::EntityKind::Line { a, b } => {
             let (Some((ax, ay)), Some((bx, by))) = (pt(a), pt(b)) else { return 0 };
@@ -443,7 +444,10 @@ pub fn sketch_hit(pick: &qymcad_ui_state::PickCtx, rect: Rect, pos: Pos2, si: us
     let sh = qymcad_ui_state::Sheet { view: *pick.view, rect };
     use qymcad_core::model::EntityKind;
     let s = pick.project.sketches.get(si)?;
-    let pt = |id: Id| s.points.iter().find(|p| p.id == id).map(|p| Point2::new(p.x, p.y));
+    // the points by id from a table: looked up along the list for both ends of every entity, a drawing of 70 000
+    // segments took 4 s a frame under the pointer
+    let at: std::collections::HashMap<Id, Point2> = s.points.iter().map(|p| (p.id, Point2::new(p.x, p.y))).collect();
+    let pt = |id: Id| at.get(&id).copied();
     // the ends of THE AXES are not picked as ordinary points (they mark infinite lines); the origin
     // deliberately STAYS pickable (it is needed for a coincidence with the origin) - hence `axis_pts`
     // rather than `system_ids`
@@ -1641,7 +1645,8 @@ pub fn sketch_rotate_popup(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Cont
 fn shape_sizes(project: &Project, si: usize) -> Vec<f64> {
     use qymcad_core::model::EntityKind;
     let Some(s) = project.sketches.get(si) else { return Vec::new() };
-    let at = |id: Id| s.points.iter().find(|p| p.id == id).map(|p| (p.x, p.y));
+    let points_by_id: std::collections::HashMap<Id, &qymcad_core::model::SketchPoint> = s.points.iter().map(|p| (p.id, p)).collect(); // a table: these are looked up for every entity or constraint
+    let at = |id: Id| points_by_id.get(&id).copied().map(|p| (p.x, p.y));
     s.entities
         .iter()
         .filter_map(|e| match e.kind {
@@ -4674,8 +4679,10 @@ pub fn snap_world(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, screen: Pos2)
                     best = Some((d, p, ty));
                 }
             }
+            // the place of each contour from a table: looked up along the list for each, 17 500 contours were 1.5e8 steps
+            let place: std::collections::HashMap<Id, usize> = sk.project.contours.ids().iter().enumerate().map(|(i, &id)| (id, i)).collect();
             for cid in &s.contour_ids {
-                let Some(ci) = sk.project.contour_index(*cid) else { continue };
+                let Some(&ci) = place.get(cid) else { continue };
                 // NOR TO THE CURVE IT DRAGS ALONG: a spline drawn through a dragged node runs under the cursor, and
                 // the points it is cut into caught the node - the middle node of a spline led to (20, 25) stopped at
                 // (18.7, 24.8). The true corners of such a contour are points of the sketch, snapped above.
@@ -4721,11 +4728,18 @@ pub fn snap_world(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, screen: Pos2)
     let mut cand: Option<(f32, Point2, u8)> = None;
     if let Some(si) = qymcad_ui_state::edit_si(&*sk.project, &*sk.sketch_ses) {
         let qymcad_ui_state::ActiveEdges { lines, circles: circs } = qymcad_ui_state::active_edges(&sk.draw(), si);
-        let lines: Vec<(Point2, Point2)> = lines.into_iter().filter(|(a, b)| !own(*a) && !own(*b)).collect(); // what moves with the drag is no target
-                                                                                                              // the segments of the projected outlines of the reference body, used for INTERSECTIONS with the
-                                                                                                              // sketch lines and for points on an edge. That is how the intersection of a construction line with
-                                                                                                              // a face or the outline of a part becomes snappable.
-        let ref_segs: Vec<(Point2, Point2)> = ref_edges.iter().flat_map(|poly| poly.windows(2).map(|s| (s[0], s[1]))).collect();
+        // ONLY WHAT RUNS NEAR THE POINTER: every point offered below - a midpoint, an intersection, a point on an
+        // edge - lies on its segments or circles and is taken within the reach of a snap, so a curve that passes
+        // further than that from the pointer offers nothing. Every pair of 70 000 segments, intersected each frame,
+        // took 15 s.
+        let reach = qymcad_ui_state::grab::grab(sk.set, Grab::Snap) + 1.0;
+        let near_seg = |a: Point2, b: Point2| qymcad_ui_state::screen_dist_seg(screen, sh.at(a), sh.at(b)) <= reach;
+        let lines: Vec<(Point2, Point2)> = lines.into_iter().filter(|(a, b)| !own(*a) && !own(*b) && near_seg(*a, *b)).collect(); // what moves with the drag is no target
+        let circs: Vec<_> = circs.into_iter().filter(|rim| (sh.at(rim.centre).distance(screen) - rim.radius as f32 * sk.view.scale).abs() <= reach).collect();
+        // the segments of the projected outlines of the reference body, used for INTERSECTIONS with the
+        // sketch lines and for points on an edge. That is how the intersection of a construction line with
+        // a face or the outline of a part becomes snappable.
+        let ref_segs: Vec<(Point2, Point2)> = ref_edges.iter().flat_map(|poly| poly.windows(2).map(|s| (s[0], s[1]))).filter(|(a, b)| near_seg(*a, *b)).collect();
         // the priority: a midpoint (3) over an intersection (5) over a point on an edge (6)
         // 1) the midpoints of segments (SKETCH lines only - the midpoints of a tessellated outline are noise)
         for (a, b) in &lines {

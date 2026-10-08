@@ -6083,7 +6083,8 @@ pub fn rename_selected(project: &qymcad_core::model::Project, rename: &mut Renam
 /// points a shape happens to be built from, and a circle carries one while a rectangle carries four.
 pub fn entities_centroid(project: &Project, si: usize, eids: &[Id]) -> Option<Point2> {
     let s = project.sketches.get(si)?;
-    let pt = |id: Id| s.points.iter().find(|p| p.id == id).map(|p| Point2::new(p.x, p.y));
+    let points_by_id: std::collections::HashMap<Id, &qymcad_core::model::SketchPoint> = s.points.iter().map(|p| (p.id, p)).collect(); // a table: these are looked up for every entity or constraint
+    let pt = |id: Id| points_by_id.get(&id).copied().map(|p| Point2::new(p.x, p.y));
     let (mut lo, mut hi) = ((f64::MAX, f64::MAX), (f64::MIN, f64::MIN));
     let mut seen = false;
     for e in s.entities.iter().filter(|e| eids.contains(&e.id)) {
@@ -11589,7 +11590,8 @@ pub fn sel_circle_cr(project: &Project, sel_sk: &SketchSelection, si: usize) -> 
 pub fn line_under_point(project: &Project, view: &View2d, si: usize, p: Point2, ea: Id, eb: Id) -> Option<(Id, Id)> {
     use qymcad_core::model::EntityKind;
     let s = project.sketches.get(si)?;
-    let pt = |id: Id| s.points.iter().find(|q| q.id == id).map(|q| Point2::new(q.x, q.y));
+    let points_by_id: std::collections::HashMap<Id, &qymcad_core::model::SketchPoint> = s.points.iter().map(|p| (p.id, p)).collect(); // a table: these are looked up for every entity or constraint
+    let pt = |id: Id| points_by_id.get(&id).copied().map(|q| Point2::new(q.x, q.y));
     for e in &s.entities {
         if let EntityKind::Line { a, b } = e.kind {
             if (a == ea && b == eb) || (a == eb && b == ea) {
@@ -12885,7 +12887,8 @@ pub fn active_edges(dc: &DrawCtx, si: usize) -> ActiveEdges {
     let mut lines = Vec::new();
     let mut circs = Vec::new();
     if let Some(s) = dc.project.sketches.get(si) {
-        let pt = |id: Id| s.points.iter().find(|p| p.id == id).map(|p| Point2::new(p.x, p.y));
+        let points_by_id: std::collections::HashMap<Id, &qymcad_core::model::SketchPoint> = s.points.iter().map(|p| (p.id, p)).collect(); // a table: these are looked up for every entity or constraint
+        let pt = |id: Id| points_by_id.get(&id).copied().map(|p| Point2::new(p.x, p.y));
         for e in &s.entities {
             match e.kind {
                 EntityKind::Line { a, b } => {
@@ -12914,7 +12917,8 @@ pub fn active_edges(dc: &DrawCtx, si: usize) -> ActiveEdges {
 /// a circle or an arc the distance to the rim.
 pub fn entity_near(pick: &PickCtx, rect: Rect, pos: Pos2, si: usize) -> Option<Id> {
     let s = pick.project.sketches.get(si)?;
-    let scr = |id: Id| s.points.iter().find(|q| q.id == id).map(|q| (Sheet { view: *pick.view, rect }).at(Point2::new(q.x, q.y)));
+    let points_by_id: std::collections::HashMap<Id, &qymcad_core::model::SketchPoint> = s.points.iter().map(|p| (p.id, p)).collect(); // a table: these are looked up for every entity or constraint
+    let scr = |id: Id| points_by_id.get(&id).copied().map(|q| (Sheet { view: *pick.view, rect }).at(Point2::new(q.x, q.y)));
     let seg_d = |p: Pos2, a: Pos2, b: Pos2| -> f32 {
         let (vx, vy) = (b.x - a.x, b.y - a.y);
         let l2 = vx * vx + vy * vy;

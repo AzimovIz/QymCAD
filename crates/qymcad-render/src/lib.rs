@@ -1123,7 +1123,8 @@ pub fn draw_projection_overlay(project: &Project, scheme: &SchemeUi, sel: Sel, v
     if s.projections.is_empty() {
         return;
     }
-    let pt = |id: Id| s.points.iter().find(|q| q.id == id).map(|q| Point2::new(q.x, q.y));
+    let points_by_id: std::collections::HashMap<Id, &qymcad_core::model::SketchPoint> = s.points.iter().map(|p| (p.id, p)).collect(); // a table: these are looked up for every entity or constraint
+    let pt = |id: Id| points_by_id.get(&id).copied().map(|q| Point2::new(q.x, q.y));
     for proj in &s.projections {
         let col = if proj.lost { scheme.pal.error() } else { scheme.pal.sketch_driven() };
         let stroke = Stroke::new(if proj.lost { 2.2 } else { 1.8 }, col);
@@ -1678,7 +1679,8 @@ pub fn draw_sketch_constraints(pn: &Painting, painter: &egui::Painter, rect: Rec
     let sh = qymcad_ui_state::Sheet { view: pn.view, rect };
     use qymcad_core::model::EntityKind;
     let Some(s) = pn.project.sketches.get(si) else { return };
-    let pt = |id: Id| s.points.iter().find(|p| p.id == id).map(|p| Point2::new(p.x, p.y));
+    let points_by_id: std::collections::HashMap<Id, &qymcad_core::model::SketchPoint> = s.points.iter().map(|p| (p.id, p)).collect(); // a table: these are looked up for every entity or constraint
+    let pt = |id: Id| points_by_id.get(&id).copied().map(|p| Point2::new(p.x, p.y));
     // hovering a constraint (its glyph or its row in the list) lights the points and edges it holds
     if let Some(ci) = pn.hover.constraint {
         let pts = pn.project.sketch_constraint_points(si, ci);
@@ -2062,7 +2064,8 @@ pub fn draw_trim_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
     };
     let Some(s) = pn.project.sketches.get(si) else { return };
     let Some(kind) = s.entities.iter().find(|e| e.id == eid).map(|e| e.kind) else { return };
-    let pt = |id: Id| s.points.iter().find(|q| q.id == id).map(|q| Point2::new(q.x, q.y));
+    let points_by_id: std::collections::HashMap<Id, &qymcad_core::model::SketchPoint> = s.points.iter().map(|p| (p.id, p)).collect(); // a table: these are looked up for every entity or constraint
+    let pt = |id: Id| points_by_id.get(&id).copied().map(|q| Point2::new(q.x, q.y));
     let red = pn.scheme.pal.error();
     let green = pn.scheme.pal.add();
     let inter = pn.project.entity_intersections(si, eid);
@@ -2387,6 +2390,58 @@ pub fn draw_move_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
     painter.line_segment([sh.at(base), sh.at(cur)], Stroke::new(0.8, col));
 }
 
+/// Above this many points in sight their numbers are not written: 10 000 numbers on a screen are a grey field, not
+/// a reading, and laying them out was most of a frame of a drawing of 10 000 segments.
+pub const NUMBERED_POINTS: usize = 300;
+
+/// Above this many points in sight only the selected, the lit and the picked ones are drawn: the rest are dots closer
+/// than their own size, one grey field. 70 000 dots were most of a frame of a drawing of 70 000 segments, 0.18 s in
+/// a release build. Brought nearer, the points are drawn again.
+pub const DOTTED_POINTS: usize = 5_000;
+
+/// THE POINTS OF A SKETCH, each in the colour of how defined it is: green defined, yellow still free, red while the
+/// sketch holds a conflict of dimensions (harmless redundancy reddens nothing). The selected, the lit and the picked
+/// ones larger. Only the points in sight are drawn, the plain ones only while `DOTTED_POINTS` or fewer are in sight,
+/// and their numbers only while `NUMBERED_POINTS` or fewer are. `picked` - the points the dimension tool holds.
+pub fn draw_sketch_points(pn: &Painting, painter: &egui::Painter, rect: Rect, si: usize, picked: &[Id]) {
+    let Some(s) = pn.project.sketches.get(si) else { return };
+    let sh = Sheet { view: pn.view, rect };
+    let diag = sketch_diag(pn.cache, pn.project, si);
+    let has_conflict = !diag.conflicts.is_empty();
+    // the reference points and the virtual sharps of rectangles are not drawn as numbered geometry
+    let unseen = s.unseen_points();
+    let selected: std::collections::HashSet<Id> = pn.sel_sk.items.iter().filter(|(k, _)| *k == 0).map(|(_, id)| *id).collect();
+    let sight = rect.expand(8.0);
+    let in_sight: Vec<(usize, Pos2)> =
+        s.points.iter().enumerate().filter(|(_, p)| !unseen.contains(&p.id)).map(|(pi, p)| (pi, sh.at(Point2::new(p.x, p.y)))).filter(|(_, sp)| sight.contains(*sp)).collect();
+    let (numbered, dotted) = (in_sight.len() <= NUMBERED_POINTS, in_sight.len() <= DOTTED_POINTS);
+    for (pi, sp) in in_sight {
+        let id = s.points[pi].id;
+        let base_col = if has_conflict {
+            pn.scheme.pal.error_mild() // a conflict of dimensions - the points do not satisfy the constraints
+        } else if diag.free.get(pi).copied().unwrap_or(true) {
+            pn.scheme.pal.underdefined() // still free
+        } else {
+            pn.scheme.pal.ok() // defined
+        };
+        let (col, r) = if selected.contains(&id) {
+            (pn.scheme.pal.emphasis(), 5.0)
+        } else if pn.hover.sketch == Some((0, id)) {
+            (pn.scheme.pal.preview(), 5.0) // the pre-select highlight
+        } else if picked.contains(&id) {
+            (pn.scheme.pal.sketch_point(), 4.5)
+        } else if dotted {
+            (base_col, 3.5)
+        } else {
+            continue;
+        };
+        painter.circle_filled(sp, r, col);
+        if numbered {
+            painter.text(sp + egui::vec2(5.0, -5.0), egui::Align2::LEFT_BOTTOM, format!("{}", pi + 1), egui::FontId::monospace(10.0), pn.scheme.pal.text_faint());
+        }
+    }
+}
+
 /// Draw the associative dimensions and constraints of the selected sketch in the viewport.
 pub fn draw_sketch_dims(pn: &Painting, painter: &egui::Painter, rect: Rect, si: usize) {
     let sh = qymcad_ui_state::Sheet { view: pn.view, rect };
@@ -2430,7 +2485,8 @@ pub fn draw_sketch_dims(pn: &Painting, painter: &egui::Painter, rect: Rect, si: 
             painter.add(egui::Shape::dashed_line(&pts, Stroke::new(1.0, aux_col), 6.0, 4.0));
         }
     }
-    let pt_of = |id: Id| s.points.iter().find(|p| p.id == id).map(|p| Point2::new(p.x, p.y));
+    let points_by_id: std::collections::HashMap<Id, &qymcad_core::model::SketchPoint> = s.points.iter().map(|p| (p.id, p)).collect(); // a table: these are looked up for every entity or constraint
+    let pt_of = |id: Id| points_by_id.get(&id).copied().map(|p| Point2::new(p.x, p.y));
     for e in &s.entities {
         if !e.construction {
             continue;
