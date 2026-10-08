@@ -1490,6 +1490,9 @@ pub struct Settings {
     pub snap: Snapping,
     /// the automatic constraints while drawing
     pub auto_constrain: bool,
+    /// THE NUMBERS OF THE POINTS of a sketch beside them: off by default - to a person drawing they mean nothing and
+    /// clutter the sheet; on for looking into a sketch (`draw_sketch_points`)
+    pub show_point_numbers: bool,
     /// WHAT THE LABEL OF A SKETCH DIMENSION SAYS beside its value: the name of a driver (`w = 110`) and the formula it
     /// is set by (`2*w+10 = 110`); both on reads `w = 2*w+10 = 110`
     pub dim_show_name: bool,
@@ -1638,6 +1641,7 @@ impl Default for Settings {
             show_interference: false,
             snap: Snapping::default(),
             auto_constrain: true,
+            show_point_numbers: false,
             dim_show_name: false,
             dim_show_formula: false,
             dim_font: DIM_FONT_DEFAULT,

@@ -41,6 +41,8 @@ mod tests {
         assert_eq!(s.entities.len(), 2 * n as usize, "the two patterns laid their copies");
         let cells = ((n - 1) * (n - 1)) as usize;
         assert!(s.contour_ids.len() >= cells, "the grid has {} loops, fewer than its {cells} cells", s.contour_ids.len());
+        // the numbers of the points are behind their box in Settings -> Sketch: ticked here, to see they keep apart
+        assert!(crate::gui::the_point_numbers_wait_for_their_setting::tests::point_numbers_ticked(&mut hand), "the box of the numbers of the points was not reached");
         // TAKEN AWAY until the whole grid is in sight and its ends, 20 mm apart, stand closer than a point is wide: they are
         // not drawn as bars - no two points nearer than a point is wide, no number over another
         let total = hand.app.project.sketches[si].points.iter().filter(|q| !hand.app.project.sketches[si].unseen_points().contains(&q.id)).count();

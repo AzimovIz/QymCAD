@@ -2516,7 +2516,7 @@ pub fn draw_sketch_points(pn: &Painting, painter: &egui::Painter, rect: Rect, si
         dots.put(sp);
         painter.circle_filled(sp, r, col);
         let label = Rect::from_min_size(sp + egui::vec2(5.0, -5.0 - 11.0), number_room(pi + 1));
-        if numbers.free(label) {
+        if pn.set.show_point_numbers && numbers.free(label) {
             numbers.put(label);
             painter.text(sp + egui::vec2(5.0, -5.0), egui::Align2::LEFT_BOTTOM, format!("{}", pi + 1), egui::FontId::monospace(10.0), pn.scheme.pal.text_faint());
         }

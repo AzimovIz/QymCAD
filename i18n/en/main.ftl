@@ -456,6 +456,7 @@ plane-xz-front = XZ (front)
 plane-yz-side = YZ (side)
 tree-interference-hint = Highlight in red the bodies of different components that intersect each other (expensive — recomputed while idle)
 settings-auto-constrain = Auto constraints while drawing
+settings-point-numbers = Numbers of the points
 settings-dim-name = Show the name of a dimension
 settings-dim-formula = Show the formula of a dimension
 settings-dim-font = Size of dimension labels
@@ -534,6 +535,7 @@ about-site = Site:
 about-license = Licence:
 about-no-warranty = The program comes with no warranty of any kind, to the extent permitted by law.
 settings-auto-constrain-hint = Horizontal, vertical, perpendicular and point-on-edge are added on their own (only independent ones, never over-defining)
+settings-point-numbers-hint = The number of every point of a sketch beside it - for looking into a sketch; off, the sheet shows the shapes alone
 settings-dim-name-hint = A dimension named in the "driver:" field is labelled like this: w = 110
 settings-dim-formula-hint = A dimension set by a formula is labelled like this: 2*w+10 = 110
 props-title = Properties

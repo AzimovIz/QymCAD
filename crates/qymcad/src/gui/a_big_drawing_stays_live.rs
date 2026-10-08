@@ -86,6 +86,8 @@ pub(crate) mod tests {
             hand.click([5.0, 5.0, 0.0]);
         });
         let si = hand.app.project.sketches.iter().position(|s| s.entities.len() >= 4 * n).expect("the drawing came in as a sketch");
+        // the numbers of the points are behind their box in Settings -> Sketch: ticked here, to see they keep apart
+        assert!(crate::gui::the_point_numbers_wait_for_their_setting::tests::point_numbers_ticked(&mut hand), "the box of the numbers of the points was not reached");
         let t_frame = timed(|| {
             hand.frame(Vec::new());
         });
