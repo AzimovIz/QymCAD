@@ -219,3 +219,24 @@ fn a_drag_frame_after_the_first_works_on_its_own_part() {
     eprintln!("Rectangles x{n}, a drag frame after the first: {t:?}");
     assert!(t < budget, "a drag frame after the first among {n} rectangles took {t:?}, budget {budget:?}");
 }
+
+#[test]
+fn a_pattern_across_a_pattern_lays_its_copies_with_one_rebuild() {
+    // Reported behaviour: a line and another across it, each patterned 200 times 20 mm apart - a grid of 40 000 cells
+    // - and every operation of the sketch waits 30 s. Each copy of a pattern rebuilt the loops of the growing grid: the
+    // second pattern took 29 s in a release build. 100 by 100 here, a test build: 3 s rebuilt after each copy, 56 ms
+    // rebuilt once.
+    use qymcad_core::model::PatternKind;
+    let mut p = qymcad_core::model::Project::default();
+    p.new_document();
+    let si = p.new_sketch("S");
+    let h = p.add_line_entity(si, 0.0, -10.0, 2000.0, -10.0, qymcad_core::feature::Purpose::Real);
+    let v = p.add_line_entity(si, -10.0, 0.0, -10.0, 2000.0, qymcad_core::feature::Purpose::Real);
+    p.add_pattern(si, &[h], PatternKind::Linear { dx: 0.0, dy: 20.0, count: 100, dx2: 0.0, dy2: 0.0, count2: 0 });
+    let started = Instant::now();
+    p.add_pattern(si, &[v], PatternKind::Linear { dx: 20.0, dy: 0.0, count: 100, dx2: 0.0, dy2: 0.0, count2: 0 });
+    let t = started.elapsed();
+    eprintln!("a pattern of 100 lines across 100 others: {t:?}, {} loops", p.sketches[si].contour_ids.len());
+    assert!(p.sketches[si].contour_ids.len() > 9_000, "the grid has its cells: {} loops", p.sketches[si].contour_ids.len());
+    assert!(t < Duration::from_millis(500), "a pattern of 100 lines across 100 others took {t:?}, budget 0.5 s in a test build");
+}

@@ -1386,6 +1386,14 @@ impl Project {
     /// dimensions internal to the set are carried over (horizontals, verticals, edge dimensions and so on, but
     /// no `Fixed` and no references to the axes). Returns the new ids.
     pub(super) fn dup_entities<F: Fn(f64, f64) -> (f64, f64)>(&mut self, si: usize, eids: &[Id], f: F, with_constraints: bool) -> Vec<Id> {
+        let new_ids = self.dup_entities_unbuilt(si, eids, f, with_constraints);
+        self.regen_sketch(si);
+        new_ids
+    }
+    /// `dup_entities` without the loops made again after it: for a pattern, which lays every copy and makes the loops
+    /// once. Made again after each copy, a pattern of 200 lines across 200 others made a growing grid 199 times - 29 s,
+    /// the last grid of 40 000 cells.
+    pub(super) fn dup_entities_unbuilt<F: Fn(f64, f64) -> (f64, f64)>(&mut self, si: usize, eids: &[Id], f: F, with_constraints: bool) -> Vec<Id> {
         let pids = self.entity_point_ids(si, eids);
         let coords: Vec<(Id, f64, f64)> = {
             let Some(s) = self.sketches.get(si) else { return Vec::new() };
@@ -1422,7 +1430,6 @@ impl Project {
             let cons: Vec<Constraint> = self.internal_constraints(si, &inside).iter().map(|c| remap_constraint_via(c, &map)).collect();
             self.sketches[si].constraints.extend(cons);
         }
-        self.regen_sketch(si);
         new_ids
     }
     /// Capture the selected geometry of sketch `si` into the clipboard, for pasting into this sketch or

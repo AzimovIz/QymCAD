@@ -2056,8 +2056,9 @@ impl Project {
     pub fn array_linear(&mut self, si: usize, eids: &[Id], dx: f64, dy: f64, count: u32) {
         for k in 1..count.max(1) {
             let (ox, oy) = (dx * k as f64, dy * k as f64);
-            self.dup_entities(si, eids, |x, y| (x + ox, y + oy), false);
+            self.dup_entities_unbuilt(si, eids, |x, y| (x + ox, y + oy), false);
         }
+        self.regen_sketch(si); // the loops once, for every copy
     }
 
     /// Circular array: `count` copies around (cx, cy) spanning `total_deg` in total.
@@ -2068,7 +2069,7 @@ impl Project {
         for k in 1..count {
             let ang = (step * k as f64).to_radians();
             let (s_, c_) = (ang.sin(), ang.cos());
-            self.dup_entities(
+            self.dup_entities_unbuilt(
                 si,
                 eids,
                 move |x, y| {
@@ -2078,6 +2079,7 @@ impl Project {
                 false,
             );
         }
+        self.regen_sketch(si); // the loops once, for every copy
     }
 
     /// Create the pattern instances without recording the pattern. Returns the ids of the new entities.
@@ -2092,7 +2094,7 @@ impl Project {
                             continue;
                         }
                         let (ox, oy) = (dx * i as f64 + dx2 * j as f64, dy * i as f64 + dy2 * j as f64);
-                        out.extend(self.dup_entities(si, source, |x, y| (x + ox, y + oy), false));
+                        out.extend(self.dup_entities_unbuilt(si, source, |x, y| (x + ox, y + oy), false));
                     }
                 }
             }
@@ -2102,7 +2104,7 @@ impl Project {
                 for k in 1..count {
                     let ang = (step * k as f64).to_radians();
                     let (s_, c_) = (ang.sin(), ang.cos());
-                    out.extend(self.dup_entities(
+                    out.extend(self.dup_entities_unbuilt(
                         si,
                         source,
                         move |x, y| {
