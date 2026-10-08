@@ -30,7 +30,7 @@ fn dragged_as_rebuilt(mut p: Project, id: u64, path: &[(f64, f64)], what: &str, 
     for (k, &(x, y)) in path.iter().enumerate() {
         let _ = p.solve_sketch_drag_fast(0, Some((id, x, y)));
         let mut whole = p.clone();
-        whole.regen_sketch(0);
+        whole.regen_sketch_whole(0);
         let (framed, rebuilt) = (loops(&p, 0), loops(&whole, 0));
         if framed != rebuilt {
             failures.push(format!("{what}, frame {k}: {} loops against {} of a rebuild; first apart: {:?}", framed.len(), rebuilt.len(), framed.iter().zip(&rebuilt).find(|(a, b)| a != b)));

@@ -231,7 +231,7 @@ fn every_tool_takes_a_few_rebuilds_of_a_big_sketch() {
             .map(|_| {
                 let mut p = big.project.clone();
                 let started = Instant::now();
-                p.regen_sketch(0);
+                p.regen_sketch_whole(0);
                 started.elapsed()
             })
             .min()

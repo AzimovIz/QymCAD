@@ -620,6 +620,10 @@ pub struct Sketch {
     /// WHAT A DRAG UNDER WAY KEEPS from one frame to the next (`drag::DragSession`). Not a fact of the drawing.
     #[serde(skip)]
     pub(crate) drag_session: Option<Box<drag::DragSession>>,
+    /// WHAT ITS LOOPS WERE MADE FROM (`round::Laid`): a rebuild makes again only the loops round what changed since.
+    /// Not a fact of the drawing.
+    #[serde(skip)]
+    pub(crate) laid: Option<Box<round::Laid>>,
     /// THE PLACES OF THE POINTS AND OF THE ENTITIES BY ID (`Sketch::point`, `Sketch::entity`). Not a fact of the drawing.
     #[serde(skip)]
     pub(crate) point_at: IdPlaces,
@@ -632,8 +636,16 @@ pub struct Sketch {
 /// `Sketch::entity`, it is right however the lists were changed; looked along the lists, a tool laying an element at
 /// every corner of 2 000 rectangles looked through them some ten times a corner - 7 s in a release build. Copied, a
 /// sketch makes its own anew.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub(crate) struct IdPlaces(std::sync::Mutex<std::collections::HashMap<Id, usize>>);
+
+/// Printed without its places: a table filled as ids are asked for is no fact of the sketch, and a sketch compared by
+/// its print before and after an operation that changed nothing read as changed where only the table had filled.
+impl std::fmt::Debug for IdPlaces {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("IdPlaces")
+    }
+}
 
 impl Clone for IdPlaces {
     fn clone(&self) -> Self {

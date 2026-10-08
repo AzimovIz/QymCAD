@@ -260,6 +260,7 @@ impl Project {
             origin_uv: None,
             left_unsolved: 0,
             drag_session: None,
+            laid: None,
             point_at: Default::default(),
             entity_at: Default::default(),
         });
@@ -448,6 +449,7 @@ impl Project {
             origin_uv: None,
             left_unsolved: 0,
             drag_session: None,
+            laid: None,
             point_at: Default::default(),
             entity_at: Default::default(),
         });
@@ -479,6 +481,7 @@ impl Project {
             origin_uv: None,
             left_unsolved: 0,
             drag_session: None,
+            laid: None,
             point_at: Default::default(),
             entity_at: Default::default(),
         });
@@ -3687,6 +3690,15 @@ impl Project {
     pub fn is_typed_sketch(&self, si: usize) -> bool {
         self.sketches.get(si).is_some_and(|s| !s.entities.is_empty() || !s.splines.is_empty())
     }
+    /// THE LOOPS OF A SKETCH MADE FROM ALL ITS CURVES, whatever changed since they were made: what a rebuild round a
+    /// change (`round`) is held to.
+    pub fn regen_sketch_whole(&mut self, si: usize) {
+        if let Some(s) = self.sketches.get_mut(si) {
+            s.laid = None;
+        }
+        self.regen_sketch(si);
+    }
+
     /// Rebuild the contours of a sketch from its entities, as a multi-loop tessellation. The contour ids are
     /// preserved where possible (see the matching below).
     pub fn regen_sketch(&mut self, si: usize) {
@@ -3710,6 +3722,19 @@ impl Project {
             s.pin_frame();
         }
         let Some(s) = self.sketches.get(si) else { return };
+        // only the loops round what changed since they were made (`round::Laid`), where few curves changed; splines and
+        // text are made whole
+        let plain = s.splines.is_empty() && s.texts.is_empty();
+        if let Some(changed) = self.changed_since_laid(si).filter(|_| plain) {
+            let drawn = s.entities.iter().filter(|e| !e.construction).count();
+            if changed.drawn.is_empty() && changed.gone.is_empty() {
+                return; // nothing drawn changed: every loop stands
+            }
+            if 4 * (changed.drawn.len() + changed.gone.len()) <= drawn {
+                return self.loops_round(si, &changed.drawn, &changed.gone);
+            }
+        }
+        let s = &self.sketches[si];
         // Every contour of a sketch comes from entities now; the ids are reused by position.
         let entity_cids: Vec<Id> = s.contour_ids.clone();
         // Construction geometry never reaches a profile or a contour; it is drawn separately, dashed. Only
@@ -3751,6 +3776,8 @@ impl Project {
         }
         let new_entity_cids = self.replace_contours(entity_cids, pairs, &[]);
         self.sketches[si].contour_ids = new_entity_cids;
+        let laid = if plain { self.laid_now(si).map(Box::new) } else { None };
+        self.sketches[si].laid = laid;
     }
     /// A BATCH OF CHANGES TO SKETCHES: within `work` a rebuild of a sketch is held back, and at its end every sketch
     /// asked for is rebuilt once. A tool that lays many elements, each rebuilding the sketch, rebuilt it as many times:
@@ -3804,39 +3831,55 @@ impl Project {
             return self.regen_sketch(si);
         }
         let s = &self.sketches[si];
-        let at: std::collections::HashMap<Id, SketchPoint> = s.points.iter().map(|p| (p.id, *p)).collect();
-        let drawn: Vec<SketchEntity> = s.entities.iter().filter(|e| !e.construction).copied().collect();
-        let shifted: Vec<usize> = drawn.iter().enumerate().filter(|(_, e)| entity_points(e).iter().any(|p| moved.contains(p))).map(|(k, _)| k).collect();
-        if shifted.is_empty() {
+        let changed: std::collections::HashSet<Id> = s.entities.iter().filter(|e| !e.construction && entity_points(e).iter().any(|p| moved.contains(p))).map(|e| e.id).collect();
+        if changed.is_empty() {
             return; // nothing drawn moved: every loop stands
         }
-        let shifted_ids: std::collections::HashSet<Id> = shifted.iter().map(|&k| drawn[k].id).collect();
-        // each loop of the sketch: the entities it is made of, closed or open, and its box
+        self.loops_round(si, &changed, &std::collections::HashSet::new());
+    }
+
+    /// THE LOOPS ROUND A CHANGE MADE AGAIN (`round`): the curves `changed` (drawn now) and `gone` since the loops were
+    /// made, the regions and chains round them made again, the rest standing.
+    fn loops_round(&mut self, si: usize, changed: &std::collections::HashSet<Id>, gone: &std::collections::HashSet<Id>) {
+        let laid = self.laid_held(si);
+        let s = &self.sketches[si];
+        let at: std::collections::HashMap<Id, SketchPoint> = s.points.iter().map(|p| (p.id, *p)).collect();
+        let drawn: Vec<SketchEntity> = s.entities.iter().filter(|e| !e.construction).copied().collect();
+        let shifted: Vec<usize> = drawn.iter().enumerate().filter(|(_, e)| changed.contains(&e.id)).map(|(k, _)| k).collect();
+        let touched = |e: &Id| changed.contains(e) || gone.contains(e);
+        // each loop of the sketch: its place, closed or open, its box, and whether a curve changed is in it - looked at
+        // once, with no list made for a loop: made for each of the 40 000 cells of a grid, the lists were 14 ms of an edit
         struct Before {
             id: Id,
-            of: Vec<Id>,
+            ci: usize,
             closed: bool,
             span: [f64; 4],
+            touched: bool,
         }
+        let of = |id: Id, ci: usize| self.contours.ents_of(id).into_iter().flatten().chain(&self.contours[ci].edge_src);
         let before: Vec<Before> = s
             .contour_ids
             .iter()
             .filter_map(|&id| {
                 let ci = self.contour_index(id)?;
-                let mut of: Vec<Id> = self.contours.ents_of(id).cloned().unwrap_or_default();
-                of.extend(self.contours[ci].edge_src.iter().copied());
-                Some(Before { id, of, closed: self.contours[ci].closed, span: round::contour_box(&self.contours[ci]) })
+                Some(Before { id, ci, closed: self.contours[ci].closed, span: round::contour_box(&self.contours[ci]), touched: of(id, ci).any(touched) })
             })
             .collect();
         // where the moved curves stood is known by the loops they were in, and where they stand by their boxes now
         let boxes: Vec<[f64; 4]> = drawn.iter().map(|e| entity_box(e, &|id| at.get(&id).map(|p| (p.x, p.y)))).collect();
-        let swept: Vec<[f64; 4]> = before.iter().filter(|b| b.of.iter().any(|e| shifted_ids.contains(e))).map(|b| b.span).chain(shifted.iter().map(|&k| boxes[k])).collect();
-        let mut old: std::collections::HashSet<Id> =
-            before.iter().filter(|b| b.of.iter().any(|e| shifted_ids.contains(e)) || b.closed && swept.iter().any(|w| round::meet(&b.span, w))).map(|b| b.id).collect();
+        let swept: Vec<[f64; 4]> = before.iter().filter(|b| b.touched).map(|b| b.span).chain(shifted.iter().map(|&k| boxes[k])).collect();
+        // the regions meeting a swept box, looked up on a grid of their boxes: each region against each of the 400 boxes
+        // a line of a grid of 200 by 200 sweeps was 16 million looks, 60 ms of an edit
+        let mut old: std::collections::HashSet<Id> = before.iter().filter(|b| b.touched).map(|b| b.id).collect();
+        let spans: Vec<[f64; 4]> = before.iter().map(|b| b.span).collect();
+        let regions = round::BoxGrid::new(&spans);
+        for w in &swept {
+            old.extend(regions.near(w, spans.len()).into_iter().filter(|&i| before[i].closed && round::meet(&spans[i], w)).map(|i| before[i].id));
+        }
         let held = before.iter().filter(|b| b.closed && old.contains(&b.id)).map(|b| b.span).reduce(round::union);
         // the chains are made from the moved curves and every curve of a chain one of them was in
         let place: std::collections::HashMap<Id, usize> = drawn.iter().enumerate().map(|(k, e)| (e.id, k)).collect();
-        let from: Vec<usize> = shifted.iter().copied().chain(before.iter().filter(|b| !b.closed && old.contains(&b.id)).flat_map(|b| b.of.iter().filter_map(|e| place.get(e).copied()))).collect();
+        let from: Vec<usize> = shifted.iter().copied().chain(before.iter().filter(|b| !b.closed && old.contains(&b.id)).flat_map(|b| of(b.id, b.ci).filter_map(|e| place.get(e).copied()))).collect();
         let grid = round::BoxGrid::new(&boxes);
         let curve = |k: usize| drawn[k];
         let point = |id: Id| at.get(&id).copied();
@@ -3845,10 +3888,15 @@ impl Project {
         let mut pairs = round::regions_round(&change);
         let chains = round::chains_round(&change, &from);
         pairs.extend(chains.made);
-        old.extend(before.iter().filter(|b| !b.closed && b.of.iter().any(|e| chains.through.contains(e))).map(|b| b.id));
+        old.extend(before.iter().filter(|b| !b.closed && of(b.id, b.ci).any(|e| chains.through.contains(e))).map(|b| b.id));
         let (old, kept): (Vec<Id>, Vec<Id>) = s.contour_ids.iter().partition(|cid| old.contains(cid));
-        let made = self.replace_contours(old, pairs, &kept);
+        // the loops whose nesting may change: those whose box meets the box of the loops going and coming
+        let going: std::collections::HashSet<Id> = old.iter().copied().collect();
+        let over = before.iter().filter(|b| going.contains(&b.id)).map(|b| b.span).chain(pairs.iter().map(|(c, _)| round::contour_box(c))).reduce(round::union);
+        let near: Vec<Id> = before.iter().filter(|b| !going.contains(&b.id) && over.is_some_and(|o| round::meet(&b.span, &o))).map(|b| b.id).collect();
+        let made = self.replace_contours(old, pairs, &near);
         self.sketches[si].contour_ids = kept.into_iter().chain(made).collect();
+        self.laid_follows(si, laid, changed, gone);
     }
     /// THE LOOPS OF A SKETCH REPLACED: the loops `old` (contour ids) give way to `pairs` (each a loop and the entities
     /// it is made of), each new loop taking the id of the old one it is - by the entities of its boundary first, by
@@ -4436,6 +4484,7 @@ impl Project {
             origin_uv: None,
             left_unsolved: 0,
             drag_session: None,
+            laid: None,
             point_at: Default::default(),
             entity_at: Default::default(),
         });
