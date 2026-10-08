@@ -624,6 +624,10 @@ pub struct Sketch {
     /// Not a fact of the drawing.
     #[serde(skip)]
     pub(crate) laid: Option<Box<round::Laid>>,
+    /// WHAT ITS CHECKS REMEMBER OF EACH PART (`solver::PartMemo`): a change counts again the parts it touched. Not a
+    /// fact of the drawing.
+    #[serde(skip)]
+    pub(crate) checked: CheckMemo,
     /// THE PLACES OF THE POINTS AND OF THE ENTITIES BY ID (`Sketch::point`, `Sketch::entity`). Not a fact of the drawing.
     #[serde(skip)]
     pub(crate) point_at: IdPlaces,
@@ -638,6 +642,30 @@ pub struct Sketch {
 /// sketch makes its own anew.
 #[derive(Default)]
 pub(crate) struct IdPlaces(std::sync::Mutex<std::collections::HashMap<Id, usize>>);
+
+/// THE MEMORY OF THE CHECKS OF A SKETCH, asked through `&Project` (`sketch_checks`, `sketch_conflicts`). Copied, a
+/// sketch starts its own empty; printed, it shows nothing - as `IdPlaces`.
+#[derive(Default)]
+pub(crate) struct CheckMemo(std::sync::Mutex<crate::solver::PartMemo>);
+
+impl Clone for CheckMemo {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl std::fmt::Debug for CheckMemo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("CheckMemo")
+    }
+}
+
+impl CheckMemo {
+    pub(crate) fn with<R>(&self, work: impl FnOnce(&mut crate::solver::PartMemo) -> R) -> R {
+        let mut memo = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        work(&mut memo)
+    }
+}
 
 /// Printed without its places: a table filled as ids are asked for is no fact of the sketch, and a sketch compared by
 /// its print before and after an operation that changed nothing read as changed where only the table had filled.

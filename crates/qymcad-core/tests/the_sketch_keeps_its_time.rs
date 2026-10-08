@@ -240,3 +240,26 @@ fn a_pattern_across_a_pattern_lays_its_copies_with_one_rebuild() {
     assert!(p.sketches[si].contour_ids.len() > 9_000, "the grid has its cells: {} loops", p.sketches[si].contour_ids.len());
     assert!(t < Duration::from_millis(500), "a pattern of 100 lines across 100 others took {t:?}, budget 0.5 s in a test build");
 }
+
+#[test]
+fn the_checks_after_an_edit_count_the_part_it_touched() {
+    // 17 500 rectangles - 70 000 segments - their checks counted once, then a rectangle moved and the checks counted
+    // again, three times on three rectangles: the quickest, as a test run beside others is slowed by them
+    let mut p = sketch_kinds::build(sketch_kinds::Kind::Rectangles, 17_500);
+    p.solve_sketch(0);
+    let _ = (p.sketch_checks(0), p.sketch_conflicts(0));
+    let mut times = Vec::new();
+    for k in [0, 4_000, 40_000] {
+        if let Some(pt) = p.sketches[0].points.get_mut(k) {
+            pt.x += 0.5;
+        }
+        let started = std::time::Instant::now();
+        let _ = (p.sketch_checks(0), p.sketch_conflicts(0));
+        times.push(started.elapsed());
+    }
+    let took = times.iter().min().copied().unwrap_or_default();
+    eprintln!("the checks of 17 500 rectangles after one moved: {times:?}");
+    // measured in a release build: 225 ms with every part counted again on each change, 92 ms with the parts remembered
+    let budget = std::time::Duration::from_millis(120);
+    assert!(took < budget, "the checks of 17 500 rectangles after one moved took {took:?}, budget {budget:?}");
+}

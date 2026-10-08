@@ -932,13 +932,29 @@ pub fn residual_per_constraint(points: &[SketchPoint], radii: &[RadiusVar], cons
 /// conflicting set. This is what lets the sketch point at the specific dimensions that disagree instead of
 /// reporting one overall residual.
 pub fn conflicts(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint]) -> Vec<usize> {
+    conflicts_remembered(points, radii, constraints, &mut PartMemo::default())
+}
+
+/// `conflicts`, the rows of each part taken from `memo` where its print is there (`PartMemo`).
+pub fn conflicts_remembered(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint], memo: &mut PartMemo) -> Vec<usize> {
     // Part by part, as `dof`: no row of one part combines with a row of another. The rows of every part are judged
     // together, against the largest residual of the sketch, as the rows of the whole were.
     let mut rows = Vec::new();
+    let mut kept: HashMap<u64, Vec<Eliminated>> = HashMap::new();
+    let mut buf = String::new();
     for part in parts(points, radii, constraints).iter().filter(|p| !p.constraints.is_empty()) {
-        let own = part.own(points, radii, constraints);
-        rows.extend(eliminated_sparse(&own.points, &own.radii, &own.constraints).into_iter().map(|r| Eliminated { from: r.from.iter().map(|&k| part.constraints[k]).collect(), ..r }));
+        let print = part_print(part, points, radii, constraints, 0, &mut buf);
+        let mine = match memo.conflicts.remove(&print).or_else(|| kept.get(&print).cloned()) {
+            Some(r) => r,
+            None => {
+                let own = part.own(points, radii, constraints);
+                eliminated_sparse(&own.points, &own.radii, &own.constraints)
+            }
+        };
+        rows.extend(mine.iter().map(|r| Eliminated { from: r.from.iter().map(|&k| part.constraints[k]).collect(), ..*r }));
+        kept.insert(print, mine);
     }
+    memo.conflicts = kept;
     conflicting(&rows)
 }
 
@@ -948,6 +964,7 @@ pub fn conflicts_whole(points: &[SketchPoint], radii: &[RadiusVar], constraints:
 }
 
 /// A row of the augmented matrix [J | r] after the elimination of `eliminated`.
+#[derive(Clone)]
 struct Eliminated {
     /// no coefficient is left on a free unknown: moving the unanchored geometry can no longer satisfy the row
     null: bool,
@@ -2147,35 +2164,101 @@ pub struct Checks {
 /// and 9 ms more of 54 on a sketch of 1 062 points on lines, on every change. Each constraint a dependency holds is then
 /// counted without it, as `redundant` counted it: the dependencies only say where to look.
 pub fn checks(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint], own: usize) -> Checks {
+    checks_remembered(points, radii, constraints, own, &mut PartMemo::default())
+}
+
+/// WHAT THE CHECKS REMEMBER OF EACH PART, by its print (`part_print`): a part whose points stand where they stood, held by
+/// the same constraints, has the answers it had. A change touches a part or two; counted again, every part of a sketch
+/// of 70 000 segments drawn as rectangles took 126 ms of checks and 99 ms of conflicts on each change, in a release build.
+/// Each count keeps the parts it met and lets the others go.
+#[derive(Default)]
+pub struct PartMemo {
+    checks: HashMap<u64, PartChecks>,
+    conflicts: HashMap<u64, Vec<Eliminated>>,
+}
+
+/// The checks of one part: the constraints by their place in the part.
+#[derive(Clone)]
+struct PartChecks {
+    free: i32,
+    excess: i32,
+    free_points: Vec<bool>,
+    redundant: Vec<usize>,
+}
+
+/// THE PRINT OF A PART: its points with where they stand, its radii with their values, its constraints as they print,
+/// each with whether it is among those counted for redundancy (`own`). The constraints are printed into one buffer and
+/// mixed a word at a time: a string made and hashed for each was 32 ms of the 54 of a count of 17 500 rectangles.
+fn part_print(part: &Part, points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint], own: usize, buf: &mut String) -> u64 {
+    use std::fmt::Write;
+    let mut h: u64 = part.points.len() as u64;
+    let mut mix = |x: u64| h = (h.rotate_left(5) ^ x).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
+    for &i in &part.points {
+        [points[i].id, points[i].x.to_bits(), points[i].y.to_bits()].into_iter().for_each(&mut mix);
+    }
+    for &j in &part.radii {
+        [radii[j].center, radii[j].value.to_bits()].into_iter().for_each(&mut mix);
+    }
+    for &ci in &part.constraints {
+        buf.clear();
+        let _ = write!(buf, "{:?}", constraints[ci]);
+        let bytes = buf.as_bytes();
+        mix(bytes.len() as u64);
+        for word in bytes.chunks(8) {
+            let mut w = [0u8; 8];
+            w[..word.len()].copy_from_slice(word);
+            mix(u64::from_le_bytes(w));
+        }
+        mix(u64::from(ci < own));
+    }
+    h
+}
+
+/// `checks`, each part taken from `memo` where its print is there, and `memo` left holding the parts of this count.
+pub fn checks_remembered(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint], own: usize, memo: &mut PartMemo) -> Checks {
     let parts = parts(points, radii, constraints);
     let mut free_count = (radii.len() - parts.iter().map(|p| p.radii.len()).sum::<usize>()) as i32; // radii of no point
     let mut excess = 0;
     let mut free = vec![true; points.len()];
     let mut redundant = Vec::new();
+    let mut kept: HashMap<u64, PartChecks> = HashMap::new();
+    let mut buf = String::new();
     for part in &parts {
         if part.constraints.is_empty() {
             free_count += (part.points.len() * 2 + part.radii.len()) as i32;
             continue;
         }
-        let mine = part.own(points, radii, constraints);
-        let count = counted(&mine);
-        free_count += count.free;
-        excess += count.excess;
-        for (&i, f) in part.points.iter().zip(count.free_points) {
+        let print = part_print(part, points, radii, constraints, own, &mut buf);
+        let answer = match memo.checks.remove(&print).or_else(|| kept.get(&print).cloned()) {
+            Some(a) => a,
+            None => part_checks(part, &part.own(points, radii, constraints), own),
+        };
+        free_count += answer.free;
+        excess += answer.excess;
+        for (&i, &f) in part.points.iter().zip(&answer.free_points) {
             free[i] = f;
         }
-        if count.excess <= 0 {
-            continue;
-        }
-        for (k, &ci) in part.constraints.iter().enumerate().filter(|(k, ci)| **ci < own && count.maybe.contains(k)) {
+        redundant.extend(answer.redundant.iter().map(|&k| part.constraints[k]));
+        kept.insert(print, answer);
+    }
+    memo.checks = kept;
+    redundant.sort_unstable();
+    Checks { dof: (free_count, excess), free, redundant }
+}
+
+/// The checks of one part with constraints.
+fn part_checks(part: &Part, mine: &Own, own: usize) -> PartChecks {
+    let count = counted(mine);
+    let mut redundant = Vec::new();
+    if count.excess > 0 {
+        for (k, _) in part.constraints.iter().enumerate().filter(|(k, ci)| **ci < own && count.maybe.contains(k)) {
             let without: Vec<Constraint> = mine.constraints.iter().enumerate().filter(|(t, _)| *t != k).map(|(_, c)| c.clone()).collect();
             if dof_sparse(&mine.points, &mine.radii, &without).0 == count.free {
-                redundant.push(ci);
+                redundant.push(k);
             }
         }
     }
-    redundant.sort_unstable();
-    Checks { dof: (free_count, excess), free, redundant }
+    PartChecks { free: count.free, excess: count.excess, free_points: count.free_points, redundant }
 }
 
 /// What one elimination of a part tells.

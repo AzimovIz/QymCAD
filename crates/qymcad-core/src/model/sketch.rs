@@ -261,6 +261,7 @@ impl Project {
             left_unsolved: 0,
             drag_session: None,
             laid: None,
+            checked: Default::default(),
             point_at: Default::default(),
             entity_at: Default::default(),
         });
@@ -450,6 +451,7 @@ impl Project {
             left_unsolved: 0,
             drag_session: None,
             laid: None,
+            checked: Default::default(),
             point_at: Default::default(),
             entity_at: Default::default(),
         });
@@ -482,6 +484,7 @@ impl Project {
             left_unsolved: 0,
             drag_session: None,
             laid: None,
+            checked: Default::default(),
             point_at: Default::default(),
             entity_at: Default::default(),
         });
@@ -689,7 +692,8 @@ impl Project {
         let at: Vec<usize> = (0..s.constraints.len()).filter(|&ci| !s.constraints[ci].is_driven()).collect();
         let mut active: Vec<Constraint> = at.iter().map(|&ci| s.constraints[ci].clone()).collect();
         active.extend(self.entity_intrinsics(si));
-        let mut checks = crate::solver::checks(&s.points, &self.entity_radii(si), &active, at.len());
+        let radii = self.entity_radii(si);
+        let mut checks = s.checked.with(|memo| crate::solver::checks_remembered(&s.points, &radii, &active, at.len(), memo));
         checks.redundant = checks.redundant.into_iter().map(|k| at[k]).collect();
         checks
     }
@@ -3425,7 +3429,7 @@ impl Project {
         let nuser = s.constraints.len();
         let mut all: Vec<Constraint> = s.constraints.clone();
         all.extend(self.entity_intrinsics(si));
-        let mut out = crate::solver::conflicts(&s.points, &radii, &all);
+        let mut out = s.checked.with(|memo| crate::solver::conflicts_remembered(&s.points, &radii, &all, memo));
         out.retain(|&ci| ci < nuser);
         // Unevaluable constraints go red too. The solver rejects them (otherwise they silently hold nothing),
         // but a silent rejection is no better than a silent no-op: the point still looks constrained. A
@@ -4497,6 +4501,7 @@ impl Project {
             left_unsolved: 0,
             drag_session: None,
             laid: None,
+            checked: Default::default(),
             point_at: Default::default(),
             entity_at: Default::default(),
         });

@@ -320,3 +320,43 @@ fn the_diagnostics_of_a_random_chain_are_those_of_the_whole() {
     assert!(with_conflicts > 20, "the chains argue too seldom to say anything: {with_conflicts} of 60");
     assert!(failures.is_empty(), "the sparse diagnostics and the whole disagree:\n{}", failures.join("\n"));
 }
+
+#[test]
+fn the_checks_remembered_through_edits_are_those_counted_anew() {
+    // one memory carried through a run of edits - a point moved, a constraint laid twice, one taken out - and after each
+    // the checks and the conflicts it gives are those of a count with nothing remembered
+    let mut failures = Vec::new();
+    for kind in KINDS {
+        let mut i = input(&build(kind, size_of(kind)));
+        let mut memo = solver::PartMemo::default();
+        let edit = |i: &mut Input, step: usize| match step {
+            0 => {}
+            1 => i.points[0].x += 0.7,
+            2 => {
+                let c = i.constraints[0].clone();
+                i.constraints.push(c);
+            }
+            3 => {
+                let _ = i.constraints.pop();
+            }
+            _ => {
+                if let Some(last) = i.points.last_mut() {
+                    last.y -= 0.3;
+                }
+            }
+        };
+        for step in 0..5 {
+            edit(&mut i, step);
+            let own = i.constraints.len();
+            let (kept, anew) = (solver::checks_remembered(&i.points, &i.radii, &i.constraints, own, &mut memo), solver::checks(&i.points, &i.radii, &i.constraints, own));
+            if kept != anew {
+                failures.push(format!("{kind:?}, edit {step}: the checks remembered {:?} {:?} against {:?} {:?}", kept.dof, kept.redundant, anew.dof, anew.redundant));
+            }
+            let (kept, anew) = (solver::conflicts_remembered(&i.points, &i.radii, &i.constraints, &mut memo), solver::conflicts(&i.points, &i.radii, &i.constraints));
+            if kept != anew {
+                failures.push(format!("{kind:?}, edit {step}: the conflicts remembered {kept:?} against {anew:?}"));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "the checks remembered and counted anew disagree:\n{}", failures.join("\n"));
+}
