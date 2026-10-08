@@ -84,4 +84,39 @@ pub(crate) mod tests {
         assert!(t_away < Duration::from_secs(1), "the pointer away from the corners took {t_away:?} for its two frames, budget 1 s in a test build");
         eprintln!("import {t_import:?}, place {t_place:?}, frame {t_frame:?}, hover {t_hover:?}, drag {t_drag:?}, away {t_away:?}; {} entities", hand.app.project.sketches[si].entities.len());
     }
+
+    #[test]
+    fn a_sketch_of_three_hundred_shapes_takes_a_line_and_a_dimension() {
+        // Reported behaviour (#95): in a sketch of 300 lines a constraint or a dimension took seconds to minutes.
+        let path = rectangles_dxf(300);
+        let (mut app, ctx) = running();
+        answer(&mut app, &ctx, Want::Anything, &path.to_string_lossy());
+        let mut hand = Hand::new(&mut app);
+        hand.click([5.0, 5.0, 0.0]);
+        let si = hand.app.project.sketches.iter().position(|s| s.entities.len() >= 1_200).expect("the drawing came in as a sketch");
+        let before = hand.app.project.sketches[si].constraints.len();
+        // a line drawn nearly level below the drawing takes a Horizontal of its own
+        let t_line = timed(|| {
+            hand.sk_tool(1).click2d(0.0, -20.0).click2d(60.0, -19.6);
+            hand.key(egui::Key::Escape).key(egui::Key::Escape);
+        });
+        let s = &hand.app.project.sketches[si];
+        assert_eq!(s.entities.len(), 1_201, "the line did not come in");
+        assert!(s.constraints[before..].iter().any(|c| matches!(c, qymcad_core::model::Constraint::Horizontal { .. })), "the line drawn nearly level took no Horizontal");
+        let laid = s.constraints.len();
+        let t_dim = timed(|| {
+            hand.sk_tool(0);
+            assert!(hand.press_hint(&crate::i18n::tr("tb-dim-hint")), "the dimension tool");
+            hand.click2d(30.0, -19.8);
+            hand.click2d(30.0, -28.0);
+            hand.key(egui::Key::Enter).key(egui::Key::Escape);
+        });
+        let dims = hand.app.project.sketches[si].constraints[laid..].iter().filter(|c| matches!(c, qymcad_core::model::Constraint::Distance { .. })).count();
+        assert_eq!(dims, 1, "the dimension was not laid on the line");
+        eprintln!("1 200 segments: a line drawn {t_line:?}, a dimension laid {t_dim:?}");
+        // whole gestures of the hand, each several frames, in a test build; the solve and the diagnostics of the whole
+        // sketch for every step took 3 s a constraint on 1 000 lines in a release build before the parts
+        assert!(t_line < Duration::from_secs(3), "a line drawn among 1 200 segments took {t_line:?}");
+        assert!(t_dim < Duration::from_secs(3), "a dimension laid among 1 200 segments took {t_dim:?}");
+    }
 }
