@@ -1814,6 +1814,32 @@ mod tests {
             app.exit_context();
         }
 
+        // A BIG DRAWING IN THE MIDDLE OF THE WORK: 300 rectangles of four segments - the size of sketch that hung the
+        // program (#95) - come in through Import, are laid on a plane, and a corner is dragged by hand; the document
+        // holds after each.
+        {
+            let path = crate::gui::a_big_drawing_stays_live::tests::rectangles_dxf(300);
+            let ctx = egui::Context::default();
+            crate::gui::install_fonts(&ctx);
+            crate::gui::import_door::tests::answer(&mut app, &ctx, qymcad_ui_state::Want::Anything, &path.to_string_lossy());
+            Hand::new(&mut app).click([5.0, 5.0, 0.0]);
+            match app.project.sketches.iter().position(|s| s.entities.len() >= 1_200) {
+                None => problems.push(format!("a big drawing: 1 200 segments did not come in as a sketch; the status says {:?}", app.status)),
+                Some(si) => {
+                    check_all(&mut app, "a big drawing came in", &mut problems);
+                    // the corner (10, 6) of the first rectangle, led 2 mm on along both axes
+                    Hand::new(&mut app).sk_tool(0).drag2d((10.0, 6.0), (12.0, 8.0));
+                    let moved = app.project.sketches[si].points.iter().any(|p| (p.x - 12.0).hypot(p.y - 8.0) < 0.5);
+                    if !moved {
+                        problems.push("a big drawing: the corner (10, 6) dragged to (12, 8) did not go".into());
+                    }
+                    check_all(&mut app, "a big drawing: a corner dragged", &mut problems);
+                    app.finish_sketch_edit();
+                    app.exit_context();
+                }
+            }
+        }
+
         // --- THE MONKEY: RANDOM ACTIONS ON A FINISHED DOCUMENT ---
         //
         // People do more than the sensible: press the wrong tool, click the wrong face, type nonsense, change
