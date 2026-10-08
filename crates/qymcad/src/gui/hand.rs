@@ -108,6 +108,7 @@ impl<'a> Hand<'a> {
 
     fn find_hint(&mut self, hint: &str) -> Option<egui::Pos2> {
         self.frame(Vec::new());
+        self.rebuild_gone();
         let known = SEEN.with(|s| s.borrow().get(hint).copied());
         if let Some(at) = known.filter(|at| self.win.plates.contains(at)) {
             if self.hint_comes_up(at, hint) {
@@ -121,6 +122,18 @@ impl<'a> Hand<'a> {
         }
         self.panel_to_its_top();
         self.hint_down_the_panel(hint)
+    }
+
+    /// A REBUILD UNDER WAY REFUSES INPUT: its card lies over the window, nothing under it is pressed and no hint comes up.
+    /// A person waits for the card to go before pressing or looking for anything; so does the hand, a minute at most.
+    /// Measured in a run of the whole crate, the kernel held by the checks beside it: the card stood over the window
+    /// for the whole search of a button, 70 buttons rested over and none answered.
+    fn rebuild_gone(&mut self) {
+        let waiting = std::time::Instant::now();
+        while self.app.regen.busy.is_some() && waiting.elapsed() < std::time::Duration::from_secs(60) {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            self.frame(Vec::new());
+        }
     }
 
     /// The button of `hint` looked for down the panel, a notch of the wheel at a time; it is remembered where found.
@@ -454,12 +467,7 @@ impl<'a> Hand<'a> {
     fn in_view2d(&mut self, places: &[(f64, f64)]) {
         self.app.viewing.mode_3d = false;
         self.frame(Vec::new()); // the canvas as this frame lays it out, with the view as it now stands
-                                // A REBUILD UNDER WAY REFUSES INPUT, and a person waits for its spinner to go before pressing anything.
-        let waiting = std::time::Instant::now();
-        while self.app.regen.busy.is_some() && waiting.elapsed() < std::time::Duration::from_secs(60) {
-            std::thread::sleep(std::time::Duration::from_millis(20));
-            self.frame(Vec::new());
-        }
+        self.rebuild_gone();
         let canvas = self.app.viewing.view_rect.shrink(40.0);
         if places.iter().any(|p| !canvas.contains(self.screen2d(*p))) {
             let n = places.len().max(1) as f64;
@@ -1225,5 +1233,29 @@ mod tests {
         let made = app.project.timeline.iter().any(|n| matches!(n.kind, qymcad_core::feature::FeatureKind::Fillet { .. }));
         assert!(made, "a click on an edge and Enter must create a fillet; status: {}", app.status);
         assert!(app.project.regen_errors.is_empty(), "and it must build: {:?}", app.project.regen_errors);
+    }
+
+    /// A BUTTON IS LOOKED FOR ONCE THE REBUILD HAS GONE: while the model rebuilds, its card lies over the window and no
+    /// hint comes up under the pointer. The kernel held by a neighbour for 8 s - as a heavy check beside this one holds
+    /// it - and the rectangle is still found by its hint.
+    ///
+    /// Measured in a run of the whole crate: the card "Rebuilding the model" stood over the window for the whole search,
+    /// 70 buttons rested over, and the rectangle was reported missing from a panel that had it.
+    #[test]
+    fn a_button_is_found_after_the_rebuild_card_goes() {
+        let (held, holding) = std::sync::mpsc::channel();
+        let neighbour = std::thread::spawn(move || {
+            let _gate = qymcad_kernel::kernel_gate();
+            held.send(()).expect("the probe waits for the kernel to be held");
+            std::thread::sleep(std::time::Duration::from_secs(8));
+        });
+        holding.recv().expect("the neighbour holds the kernel");
+        let (mut app, _ctx) = crate::gui::import_door::tests::running();
+        let si = app.create_sketch_on(qymcad_core::feature::SketchPlane::default());
+        let mut hand = Hand::new(&mut app);
+        hand.app.enter_sketch_edit(si);
+        hand.sk_tool(2);
+        assert_eq!(hand.app.tools.armed.draw_kind(), 2, "the rectangle was not taken");
+        neighbour.join().expect("the neighbour lets the kernel go");
     }
 }
