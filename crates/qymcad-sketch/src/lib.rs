@@ -182,13 +182,15 @@ pub fn sketch_props(pr: &mut qymcad_ui_state::PropsCtx, ui: &mut egui::Ui, si: u
                                 if ui.selectable_label(is_sel, qymcad_i18n::tr("sk-dim")).clicked() {
                                     sel_click = Some(ci);
                                 }
-                                changed |= ui.add(egui::DragValue::new(d).speed(0.2).range(0.01..=100000.0).suffix(qymcad_i18n::tr("unit-mm-suffix"))).changed();
+                                // a dimension standing past the field is shown as it stands: put into the range on every frame, it
+                                // was written and solved as an edit, and the window never came to rest
+                                changed |= ui.add(egui::DragValue::new(d).speed(0.2).range(0.01..=100000.0).clamp_existing_to_range(false).suffix(qymcad_i18n::tr("unit-mm-suffix"))).changed();
                             }
                             Constraint::Angle { deg, .. } => {
                                 if ui.selectable_label(is_sel, qymcad_i18n::tr("sk-angle")).clicked() {
                                     sel_click = Some(ci);
                                 }
-                                changed |= ui.add(egui::DragValue::new(deg).speed(0.5).range(0.1..=359.9).suffix("°")).changed();
+                                changed |= ui.add(egui::DragValue::new(deg).speed(0.5).range(0.1..=359.9).clamp_existing_to_range(false).suffix("°")).changed();
                             }
                             other => {
                                 // THE PARTICIPANTS IN THE ROW: "Horizontal: Line 3". Without them a list of
