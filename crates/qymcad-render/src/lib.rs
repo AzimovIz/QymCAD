@@ -2432,6 +2432,45 @@ impl Taken {
     }
 }
 
+/// THE POINTS DRAWN ON THE SCREEN, on a dense grid of cells as wide as a point: whether a point stands nearer than
+/// `POINT_ROOM` on both axes to one drawn before - the cells round its own looked at. A map of cells to the boxes put in
+/// them, made for 70 000 points in sight, was most of 60 ms of a frame.
+struct Dots {
+    origin: Pos2,
+    cols: usize,
+    rows: usize,
+    cells: Vec<Vec<Pos2>>,
+}
+
+impl Dots {
+    fn new(area: Rect) -> Self {
+        let (cols, rows) = (((area.width() / POINT_ROOM).ceil() as usize).max(1), ((area.height() / POINT_ROOM).ceil() as usize).max(1));
+        Dots { origin: area.min, cols, rows, cells: vec![Vec::new(); cols * rows] }
+    }
+
+    fn at(&self, p: Pos2) -> (i64, i64) {
+        (((p.x - self.origin.x) / POINT_ROOM).floor() as i64, ((p.y - self.origin.y) / POINT_ROOM).floor() as i64)
+    }
+
+    fn cell(&self, x: i64, y: i64) -> Option<usize> {
+        (x >= 0 && y >= 0 && (x as usize) < self.cols && (y as usize) < self.rows).then(|| y as usize * self.cols + x as usize)
+    }
+
+    /// Whether no point drawn stands nearer than `POINT_ROOM` to `p` on both axes.
+    fn free(&self, p: Pos2) -> bool {
+        let (cx, cy) = self.at(p);
+        let room = POINT_ROOM - 0.02;
+        (cx - 1..=cx + 1).all(|x| (cy - 1..=cy + 1).all(|y| self.cell(x, y).is_none_or(|k| self.cells[k].iter().all(|q| (q.x - p.x).abs() >= room || (q.y - p.y).abs() >= room))))
+    }
+
+    fn put(&mut self, p: Pos2) {
+        let (x, y) = self.at(p);
+        if let Some(k) = self.cell(x, y) {
+            self.cells[k].push(p);
+        }
+    }
+}
+
 /// THE POINTS OF A SKETCH, each in the colour of how defined it is: green defined, yellow still free, red while the
 /// sketch holds a conflict of dimensions (harmless redundancy reddens nothing). The selected, the lit and the picked
 /// ones larger, and always drawn. Only the points in sight are drawn; a plain point only where no point drawn before
@@ -2446,13 +2485,13 @@ pub fn draw_sketch_points(pn: &Painting, painter: &egui::Painter, rect: Rect, si
     let unseen = s.unseen_points();
     let selected: std::collections::HashSet<Id> = pn.sel_sk.items.iter().filter(|(k, _)| *k == 0).map(|(_, id)| *id).collect();
     let sight = rect.expand(8.0);
-    let mut in_sight: Vec<(usize, Pos2)> =
+    let in_sight: Vec<(usize, Pos2)> =
         s.points.iter().enumerate().filter(|(_, p)| !unseen.contains(&p.id)).map(|(pi, p)| (pi, sh.at(Point2::new(p.x, p.y)))).filter(|(_, sp)| sight.contains(*sp)).collect();
     // the points marked go first, so a plain point gives way to them and not they to it
     let marked = |id: Id| selected.contains(&id) || pn.hover.sketch == Some((0, id)) || picked.contains(&id);
-    in_sight.sort_by_key(|&(pi, _)| !marked(s.points[pi].id));
-    let (mut dots, mut numbers) = (Taken::new(POINT_ROOM), Taken::new(24.0));
-    let half = egui::Vec2::splat(POINT_ROOM / 2.0 - 0.01);
+    // stable, in two passes rather than a sort: 70 000 points in sight sorted every frame were part of 60 ms
+    let in_sight = in_sight.iter().filter(|&&(pi, _)| marked(s.points[pi].id)).chain(in_sight.iter().filter(|&&(pi, _)| !marked(s.points[pi].id))).copied();
+    let (mut dots, mut numbers) = (Dots::new(rect.expand(8.0)), Taken::new(24.0));
     for (pi, sp) in in_sight {
         let id = s.points[pi].id;
         let base_col = if has_conflict {
@@ -2471,11 +2510,10 @@ pub fn draw_sketch_points(pn: &Painting, painter: &egui::Painter, rect: Rect, si
         } else {
             (base_col, 3.5)
         };
-        let blot = Rect::from_center_size(sp, half * 2.0);
-        if !marked(id) && !dots.free(blot) {
+        if !marked(id) && !dots.free(sp) {
             continue;
         }
-        dots.put(blot);
+        dots.put(sp);
         painter.circle_filled(sp, r, col);
         let label = Rect::from_min_size(sp + egui::vec2(5.0, -5.0 - 11.0), number_room(pi + 1));
         if numbers.free(label) {

@@ -305,12 +305,19 @@ fn print_of(e: &SketchEntity, at: &dyn Fn(Id) -> Option<SketchPoint>) -> u64 {
     h
 }
 
-/// A print of the loops of a sketch, `None` where one of them is not in the project.
+/// A print of one loop: its id, mixed.
+fn print_of_loop(id: Id) -> u64 {
+    (id ^ 0x9e_37_79_b9_7f_4a_7c_15).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95).rotate_left(29)
+}
+
+/// A print of the loops of a sketch, `None` where one of them is not in the project: the sum of the prints of the loops,
+/// so a frame of a drag follows it by the loops it took out and made (`laid_framed`). Made again from every loop for
+/// every frame, it was 2 ms of a frame of 16 among 70 000 rectangles.
 fn print_of_loops(project: &Project, ids: &[Id]) -> Option<u64> {
     let mut h: u64 = ids.len() as u64;
     for &id in ids {
         project.contour_index(id)?;
-        h = (h.rotate_left(5) ^ id).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
+        h = h.wrapping_add(print_of_loop(id));
     }
     Some(h)
 }
@@ -355,6 +362,26 @@ impl Project {
             laid.curves.keys().copied().filter(|id| !now.contains(id)).collect()
         };
         Some(Changed { drawn, gone })
+    }
+
+    /// The print followed through a frame of a drag: the loops `gone` taken out of it and `made` put in, the curves
+    /// `changed` printed where they stand - with no look at every loop of the sketch. Where the loops of the sketch were
+    /// changed in another way the print no longer fits them, and the next rebuild makes them whole.
+    pub(super) fn laid_framed(&mut self, si: usize, gone: &[Id], made: &[Id], changed: &HashSet<Id>) {
+        let Some(s) = self.sketches.get_mut(si) else { return };
+        let Some(mut laid) = s.laid.take() else { return };
+        let at = |id: Id| s.point(id).copied();
+        laid.loops = laid.loops.wrapping_add(made.len() as u64).wrapping_sub(gone.len() as u64);
+        for &id in gone {
+            laid.loops = laid.loops.wrapping_sub(print_of_loop(id));
+        }
+        for &id in made {
+            laid.loops = laid.loops.wrapping_add(print_of_loop(id));
+        }
+        for e in changed.iter().filter_map(|id| s.entity(*id)).filter(|e| !e.construction) {
+            laid.curves.insert(e.id, print_of(e, &at));
+        }
+        s.laid = Some(laid);
     }
 
     /// The print of sketch `si` taken out before its loops are made again round a change, where it holds for the loops

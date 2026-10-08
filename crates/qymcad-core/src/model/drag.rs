@@ -463,8 +463,6 @@ impl Project {
             return; // nothing drawn moved: every loop stands
         }
         let shifted_ids: HashSet<Id> = shifted.iter().map(|&k| s.entities[sess.drawn[k]].id).collect();
-        let laid = self.laid_held(si);
-        let s = &self.sketches[si];
         // the loops before the frame that held a moved curve, and the regions that met where it swept: a chain changes
         // only with what is joined to it
         let closed = |cid: &Id| self.contour_index(*cid).is_some_and(|ci| self.contours[ci].closed);
@@ -502,9 +500,10 @@ impl Project {
             None => kept.iter().copied().filter(|cid| sess.loop_box.get(cid).is_some_and(|b| meet(b, &over))).collect(),
         };
         let old_in_order: Vec<Id> = s.contour_ids.iter().copied().filter(|cid| old.contains(cid)).collect();
+        let old_in_order_ids = old_in_order.clone();
         let made = self.replace_contours(old_in_order, pairs, &near);
         self.sketches[si].contour_ids = kept.into_iter().chain(made.iter().copied()).collect();
-        self.laid_follows(si, laid, &shifted_ids, &HashSet::new());
+        self.laid_framed(si, &old_in_order_ids, &made, &shifted_ids);
         // the session follows the loops
         for cid in &old {
             for e in sess.made_of.remove(cid).into_iter().flatten() {
