@@ -4679,10 +4679,8 @@ pub fn snap_world(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, screen: Pos2)
                     best = Some((d, p, ty));
                 }
             }
-            // the place of each contour from a table: looked up along the list for each, 17 500 contours were 1.5e8 steps
-            let place: std::collections::HashMap<Id, usize> = sk.project.contours.ids().iter().enumerate().map(|(i, &id)| (id, i)).collect();
             for cid in &s.contour_ids {
-                let Some(&ci) = place.get(cid) else { continue };
+                let Some(ci) = sk.project.contour_index(*cid) else { continue };
                 // NOR TO THE CURVE IT DRAGS ALONG: a spline drawn through a dragged node runs under the cursor, and
                 // the points it is cut into caught the node - the middle node of a spline led to (20, 25) stopped at
                 // (18.7, 24.8). The true corners of such a contour are points of the sketch, snapped above.

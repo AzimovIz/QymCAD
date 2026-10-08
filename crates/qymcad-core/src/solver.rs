@@ -90,6 +90,27 @@ pub fn solve_full_iter_sparse(points: &mut [SketchPoint], radii: &mut [RadiusVar
     solve_by_parts(points, radii, constraints, drag, max_iter, Solve { scale, algebra: Algebra::Sparse, until: None }).residual
 }
 
+/// THE PART OF A SKETCH THAT HOLDS A POINT, by places in the lists given: what a solve dragging that point solves.
+pub struct PartPlaces {
+    pub points: Vec<usize>,
+    pub radii: Vec<usize>,
+    pub constraints: Vec<usize>,
+}
+
+/// The part of the point `id` (`PartPlaces`), `None` for a point not in `points`.
+pub fn part_holding(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint], id: Id) -> Option<PartPlaces> {
+    let at = points.iter().position(|p| p.id == id)?;
+    parts(points, radii, constraints).into_iter().find(|p| p.points.contains(&at)).map(|p| PartPlaces { points: p.points, radii: p.radii, constraints: p.constraints })
+}
+
+/// `solve_within` of one part of a sketch given alone, to the thresholds of the whole sketch `whole` - as a solve of
+/// the whole sketch solves that part.
+pub fn solve_part_within(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, budget: Budget, whole: &[SketchPoint]) -> Outcome {
+    let scale = Scale::of(whole);
+    let until = budget.time.map(|t| std::time::Instant::now() + t);
+    solve_by_parts(points, radii, constraints, drag, budget.steps, Solve { scale, algebra: Algebra::BySize, until })
+}
+
 /// The whole sketch as one system, the way it was solved before it was split into parts (`solve_full_iter`). Kept as
 /// the reference the parts are checked against: on a sketch whose parts are solved alone, the answer is the same.
 pub fn solve_full_iter_whole(points: &mut [SketchPoint], radii: &mut [RadiusVar], constraints: &[Constraint], drag: Option<(Id, f64, f64)>, max_iter: usize) -> f64 {

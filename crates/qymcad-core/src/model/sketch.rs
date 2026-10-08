@@ -166,7 +166,7 @@ fn same_rect_constraint(own: &Constraint, c: &Constraint) -> bool {
 /// its centre holds the centre under a dragged corner. Not dragged, its anchor is held: the centre, or the corner it was
 /// drawn from, so that a width or a height typed grows it from there. Nothing when the centre is dragged: the rectangle
 /// goes with it.
-fn held_for_size(r: &crate::model::SketchRect, dragged: Option<Id>) -> Option<Id> {
+pub(super) fn held_for_size(r: &crate::model::SketchRect, dragged: Option<Id>) -> Option<Id> {
     if dragged == Some(r.centre) {
         return None;
     }
@@ -259,6 +259,7 @@ impl Project {
             frame: 0,
             origin_uv: None,
             left_unsolved: 0,
+            drag_session: None,
         });
         self.sketches.len() - 1
     }
@@ -444,6 +445,7 @@ impl Project {
             frame: 0,
             origin_uv: None,
             left_unsolved: 0,
+            drag_session: None,
         });
         self.regen_sketch(si);
         sid
@@ -472,6 +474,7 @@ impl Project {
             frame: 0,
             origin_uv: None,
             left_unsolved: 0,
+            drag_session: None,
         });
         self.sketches.len() - 1
     }
@@ -3412,23 +3415,38 @@ impl Project {
             centre: Id,
             at: Point2,
         }
-        let mids: Vec<Mid> = s
-            .rects
-            .iter()
-            .filter(|r| matches!(r.anchor, crate::model::RectAnchor::Corner(_)))
+        // how many constraints name each centre, and where each point stands, counted once: asked of every constraint for
+        // every rectangle and looked along the points, 10 000 rectangles drawn were 6e8 steps a solve
+        let corner_drawn: Vec<&crate::model::SketchRect> = s.rects.iter().filter(|r| matches!(r.anchor, crate::model::RectAnchor::Corner(_))).collect();
+        let mut naming: std::collections::HashMap<Id, usize> = corner_drawn.iter().map(|r| (r.centre, 0)).collect();
+        if !naming.is_empty() {
+            for c in &s.constraints {
+                for p in c.points() {
+                    if let Some(n) = naming.get_mut(&p) {
+                        *n += 1;
+                    }
+                }
+            }
+        }
+        let standing: std::collections::HashMap<Id, Point2> = if corner_drawn.is_empty() { Default::default() } else { s.points.iter().map(|q| (q.id, Point2::new(q.x, q.y))).collect() };
+        let mids: Vec<Mid> = corner_drawn
+            .into_iter()
             // only a centre nothing else holds: one that carries a constraint of its own is solved with it, and put back on
             // the middle before every solve of a contradicting sketch it was a new compromise each time - a point drifted
             // by 1 mm from one solve to the next
-            .filter(|r| s.constraints.iter().filter(|c| c.points().contains(&r.centre)).count() == 1)
+            .filter(|r| naming.get(&r.centre) == Some(&1))
             .filter_map(|r| {
-                let at = |id: Id| s.points.iter().find(|q| q.id == id).map(|q| Point2::new(q.x, q.y));
+                let at = |id: Id| standing.get(&id).copied();
                 let (a, c) = (at(r.corners[0])?, at(r.corners[2])?);
                 Some(Mid { centre: r.centre, at: Point2::new((a.x + c.x) / 2.0, (a.y + c.y) / 2.0) })
             })
             .collect();
-        for m in mids {
-            if let Some(q) = s.points.iter_mut().find(|q| q.id == m.centre) {
-                (q.x, q.y) = (m.at.x, m.at.y);
+        if !mids.is_empty() {
+            let place: std::collections::HashMap<Id, usize> = s.points.iter().enumerate().map(|(i, q)| (q.id, i)).collect();
+            for m in mids {
+                if let Some(&i) = place.get(&m.centre) {
+                    (s.points[i].x, s.points[i].y) = (m.at.x, m.at.y);
+                }
             }
         }
         // A SHAPE DRAGGED BY ITS CENTRE GOES WITH IT AS A WHOLE, as a circle goes with its centre: what the centre
@@ -3635,52 +3653,7 @@ impl Project {
             })
             .collect();
         for c in &mut s.constraints {
-            match c {
-                Constraint::Distance { a, b, d, driven: true, axis, .. } => {
-                    if let (Some(&(ax, ay)), Some(&(bx, by))) = (pos.get(a), pos.get(b)) {
-                        *d = match axis {
-                            1 => (ax - bx).abs(),
-                            2 => (ay - by).abs(),
-                            _ => ((ax - bx).powi(2) + (ay - by).powi(2)).sqrt(),
-                        };
-                    }
-                }
-                Constraint::Angle { a, b, c: cc, deg, driven: true, .. } => {
-                    if let (Some(&(ax, ay)), Some(&(bx, by)), Some(&(cx, cy))) = (pos.get(a), pos.get(b), pos.get(cc)) {
-                        let (ux, uy) = (ax - bx, ay - by);
-                        let (vx, vy) = (cx - bx, cy - by);
-                        *deg = (ux * vy - uy * vx).atan2(ux * vx + uy * vy).abs().to_degrees();
-                    }
-                }
-                Constraint::DistancePL { p, a, b, d, driven: true, .. } => {
-                    if let (Some(&(px, py)), Some(&(ax, ay)), Some(&(bx, by))) = (pos.get(p), pos.get(a), pos.get(b)) {
-                        let (dx, dy) = (bx - ax, by - ay);
-                        let len = (dx * dx + dy * dy).sqrt().max(1e-9);
-                        *d = (dx * (py - ay) - dy * (px - ax)) / len; // Signed, so the side is preserved.
-                    }
-                }
-                Constraint::AngleLines { a, b, c, d, deg, driven: true, .. } => {
-                    if let (Some(&(ax, ay)), Some(&(bx, by)), Some(&(cx, cy)), Some(&(dx2, dy2))) = (pos.get(a), pos.get(b), pos.get(c), pos.get(d)) {
-                        let (ux, uy) = (bx - ax, by - ay);
-                        let (vx, vy) = (dx2 - cx, dy2 - cy);
-                        *deg = (ux * vy - uy * vx).atan2(ux * vx + uy * vy).abs().to_degrees();
-                    }
-                }
-                Constraint::Diameter { c, d, driven: true, diam, .. } => {
-                    if let Some(&r) = crad.get(c) {
-                        *d = if *diam { 2.0 * r } else { r };
-                    }
-                }
-                Constraint::ArcLength { c, a, b, ccw, len, driven: true, .. } => {
-                    if let (Some(&(cx, cy)), Some(&(ax, ay)), Some(&(bx, by))) = (pos.get(c), pos.get(a), pos.get(b)) {
-                        let rad = ((ax - cx).powi(2) + (ay - cy).powi(2)).sqrt();
-                        let (a0, a1) = ((ay - cy).atan2(ax - cx), (by - cy).atan2(bx - cx));
-                        let theta = if *ccw { (a1 - a0).rem_euclid(std::f64::consts::TAU) } else { (a0 - a1).rem_euclid(std::f64::consts::TAU) };
-                        *len = rad * theta;
-                    }
-                }
-                _ => {}
-            }
+            measure_driven(c, &pos, &crad);
         }
     }
     /// Whether a sketch is typed: built from points the sketcher edits - its entities, or its splines, which are
@@ -3692,6 +3665,10 @@ impl Project {
     /// Rebuild the contours of a sketch from its entities, as a multi-loop tessellation. The contour ids are
     /// preserved where possible (see the matching below).
     pub fn regen_sketch(&mut self, si: usize) {
+        // the loops are made anew: what a drag kept of them goes
+        if let Some(s) = self.sketches.get_mut(si) {
+            s.drag_session = None;
+        }
         // THE FRAME OF REFERENCE FIRST, before anything is derived from it. The origin and the axis
         // guides are not geometry: a contour, a dimension to an axis and every profile taken from this
         // sketch stand on them. See `pin_frame` for what moving them costs.
@@ -3753,7 +3730,9 @@ impl Project {
     /// of a drag among 70 000 lines took 0.43 s, among 70 000 rectangles 1.6 s, in a release build. A sketch with
     /// splines or text, or one whose frame of reference had to be put back, is rebuilt whole.
     pub(super) fn regen_sketch_moved(&mut self, si: usize, moved: &std::collections::HashSet<Id>) {
-        let Some(s) = self.sketches.get(si) else { return };
+        let Some(s) = self.sketches.get_mut(si) else { return };
+        s.drag_session = None; // its loops are made anew: what a drag kept of them goes
+        let s = &self.sketches[si];
         // a frame of reference to be made first (`ensure_frame` in `regen_sketch`), splines, text: rebuilt whole
         if !s.splines.is_empty() || !s.texts.is_empty() || (s.origin != 0 || s.axis_pts.iter().any(|g| *g != 0)) && s.frame == 0 {
             return self.regen_sketch(si);
@@ -3769,11 +3748,10 @@ impl Project {
         if seeds.is_empty() {
             return; // nothing drawn moved: every loop stands
         }
-        // the entities each loop of the sketch is made of, its place in the list of loops from a table
-        let place: std::collections::HashMap<Id, usize> = self.contours.ids().iter().enumerate().map(|(i, &id)| (id, i)).collect();
+        // the entities each loop of the sketch is made of
         let loops_of = |cid: &Id| -> Vec<Id> {
             let mut of: Vec<Id> = self.contours.ents_of(*cid).cloned().unwrap_or_default();
-            if let Some(&ci) = place.get(cid) {
+            if let Some(ci) = self.contour_index(*cid) {
                 of.extend(self.contours[ci].edge_src.iter().copied());
             }
             of
@@ -3784,35 +3762,8 @@ impl Project {
                 seeds.extend(of);
             }
         }
-        // the box of each curve where it stands now, widened past the welds of the loops (1e-3 mm)
-        let boxes: Vec<[f64; 4]> = drawn
-            .iter()
-            .map(|e| {
-                let p = |id: Id| at.get(&id).copied().unwrap_or((f64::NAN, f64::NAN));
-                let [x0, y0, x1, y1] = match e.kind {
-                    EntityKind::Line { a, b } => {
-                        let (pa, pb) = (p(a), p(b));
-                        [pa.0.min(pb.0), pa.1.min(pb.1), pa.0.max(pb.0), pa.1.max(pb.1)]
-                    }
-                    EntityKind::Circle { center, r } => {
-                        let c = p(center);
-                        [c.0 - r, c.1 - r, c.0 + r, c.1 + r]
-                    }
-                    EntityKind::Arc { center, a, .. } => {
-                        let (c, pa) = (p(center), p(a));
-                        let r = (pa.0 - c.0).hypot(pa.1 - c.1);
-                        [c.0 - r, c.1 - r, c.0 + r, c.1 + r]
-                    }
-                    EntityKind::Ellipse { c, ma, mi } => {
-                        let (pc, pa, pi) = (p(c), p(ma), p(mi));
-                        let r = (pa.0 - pc.0).hypot(pa.1 - pc.1).max((pi.0 - pc.0).hypot(pi.1 - pc.1));
-                        [pc.0 - r, pc.1 - r, pc.0 + r, pc.1 + r]
-                    }
-                };
-                let m = 1e-2 + 1e-6 * (x1 - x0).max(y1 - y0);
-                [x0 - m, y0 - m, x1 + m, y1 + m]
-            })
-            .collect();
+        // the box of each curve where it stands now
+        let boxes: Vec<[f64; 4]> = drawn.iter().map(|e| entity_box(e, &|id| at.get(&id).copied())).collect();
         let group = boxes_reached(&boxes, drawn.iter().enumerate().filter(|(_, e)| seeds.contains(&e.id)).map(|(k, _)| k).collect());
         let ents: Vec<SketchEntity> = drawn.iter().enumerate().filter(|(k, _)| group[*k]).map(|(_, e)| **e).collect();
         let in_group: std::collections::HashSet<Id> = ents.iter().map(|e| e.id).collect();
@@ -3846,13 +3797,10 @@ impl Project {
             }
             (crate::geom::Point2::new(sx / n, sy / n), (0.5 * area).abs())
         };
-        // the place of every contour by its id, looked up once: a look along the list for each contour of a sketch of
-        // 10 000 is 5e7 comparisons; the places of the contours kept do not change while new ones are added below
-        let place: std::collections::HashMap<Id, usize> = self.contours.ids().iter().enumerate().map(|(i, &id)| (id, i)).collect();
         let old: Vec<(Id, Point2, f64, bool)> = entity_cids
             .iter()
             .filter_map(|&cid| {
-                let ci = *place.get(&cid)?;
+                let ci = self.contour_index(cid)?;
                 let c = &self.contours[ci];
                 let (ctr, ar) = sig(&c.points);
                 Some((cid, ctr, ar, c.closed))
@@ -3948,7 +3896,7 @@ impl Project {
                               // them.
             match assign[ni] {
                 Some(cid) => {
-                    if let Some(&ci) = place.get(&cid) {
+                    if let Some(ci) = self.contour_index(cid) {
                         if let Some(slot) = self.contours.get_mut(ci) {
                             *slot = c;
                         }
@@ -3960,14 +3908,9 @@ impl Project {
         }
         // the nesting among the new loops and `kept`, the loops of the sketch left as they stood
         self.rebuild_contour_nesting(&new_entity_cids.iter().chain(kept).copied().collect::<Vec<Id>>());
-        // Old contours not reused by any new loop are deleted.
-        for (k, o) in old.iter().enumerate() {
-            if !used_old[k] {
-                if let Some(ci) = self.contour_index(o.0) {
-                    self.contours.remove_at(ci); // The id, the provenance and the nesting go with it.
-                }
-            }
-        }
+        // Old contours not reused by any new loop are deleted, the id, the provenance and the nesting with each.
+        let gone: std::collections::HashSet<Id> = old.iter().zip(&used_old).filter(|(_, used)| !**used).map(|(o, _)| o.0).collect();
+        self.contours.remove_ids(&gone);
         // Provenance is persisted: contour id to the entities of its boundary, for matching on the next
         // edit.
         for (ni, cid) in new_entity_cids.iter().enumerate() {
@@ -4413,6 +4356,7 @@ impl Project {
             frame: 0,
             origin_uv: None,
             left_unsolved: 0,
+            drag_session: None,
         });
         id
     }
@@ -4887,11 +4831,10 @@ impl Project {
     /// without it: a pad flush against a wall was counted as a hole, the hole touched the outer loop, the face
     /// failed to build, and the whole region silently disappeared from the body.
     pub(super) fn rebuild_contour_nesting(&mut self, cids: &[Id]) {
-        let place: std::collections::HashMap<Id, usize> = self.contours.ids().iter().enumerate().map(|(i, &id)| (id, i)).collect();
         let data: Vec<(Id, Vec<Point2>, f64)> = cids
             .iter()
             .filter_map(|&cid| {
-                let c = self.contours.get(*place.get(&cid)?)?;
+                let c = self.contours.get(self.contour_index(cid)?)?;
                 (c.closed && c.points.len() >= 3).then(|| (cid, c.points.clone(), c.signed_area().abs()))
             })
             .collect();
@@ -5524,4 +5467,83 @@ pub(super) enum Rebuild {
     Whole,
     /// the loops of what the solve moved: a frame of a drag (`Project::regen_sketch_moved`)
     Moved,
+}
+
+/// THE VALUE OF A REFERENCE (DRIVEN) DIMENSION read off the geometry: `pos` - where the points stand, `crad` - the
+/// radius of each circle by its centre. A dimension that drives is left as it is.
+pub(super) fn measure_driven(c: &mut Constraint, pos: &std::collections::HashMap<Id, (f64, f64)>, crad: &std::collections::HashMap<Id, f64>) {
+    match c {
+        Constraint::Distance { a, b, d, driven: true, axis, .. } => {
+            if let (Some(&(ax, ay)), Some(&(bx, by))) = (pos.get(a), pos.get(b)) {
+                *d = match axis {
+                    1 => (ax - bx).abs(),
+                    2 => (ay - by).abs(),
+                    _ => ((ax - bx).powi(2) + (ay - by).powi(2)).sqrt(),
+                };
+            }
+        }
+        Constraint::Angle { a, b, c: cc, deg, driven: true, .. } => {
+            if let (Some(&(ax, ay)), Some(&(bx, by)), Some(&(cx, cy))) = (pos.get(a), pos.get(b), pos.get(cc)) {
+                let (ux, uy) = (ax - bx, ay - by);
+                let (vx, vy) = (cx - bx, cy - by);
+                *deg = (ux * vy - uy * vx).atan2(ux * vx + uy * vy).abs().to_degrees();
+            }
+        }
+        Constraint::DistancePL { p, a, b, d, driven: true, .. } => {
+            if let (Some(&(px, py)), Some(&(ax, ay)), Some(&(bx, by))) = (pos.get(p), pos.get(a), pos.get(b)) {
+                let (dx, dy) = (bx - ax, by - ay);
+                let len = (dx * dx + dy * dy).sqrt().max(1e-9);
+                *d = (dx * (py - ay) - dy * (px - ax)) / len; // Signed, so the side is preserved.
+            }
+        }
+        Constraint::AngleLines { a, b, c, d, deg, driven: true, .. } => {
+            if let (Some(&(ax, ay)), Some(&(bx, by)), Some(&(cx, cy)), Some(&(dx2, dy2))) = (pos.get(a), pos.get(b), pos.get(c), pos.get(d)) {
+                let (ux, uy) = (bx - ax, by - ay);
+                let (vx, vy) = (dx2 - cx, dy2 - cy);
+                *deg = (ux * vy - uy * vx).atan2(ux * vx + uy * vy).abs().to_degrees();
+            }
+        }
+        Constraint::Diameter { c, d, driven: true, diam, .. } => {
+            if let Some(&r) = crad.get(c) {
+                *d = if *diam { 2.0 * r } else { r };
+            }
+        }
+        Constraint::ArcLength { c, a, b, ccw, len, driven: true, .. } => {
+            if let (Some(&(cx, cy)), Some(&(ax, ay)), Some(&(bx, by))) = (pos.get(c), pos.get(a), pos.get(b)) {
+                let rad = ((ax - cx).powi(2) + (ay - cy).powi(2)).sqrt();
+                let (a0, a1) = ((ay - cy).atan2(ax - cx), (by - cy).atan2(bx - cx));
+                let theta = if *ccw { (a1 - a0).rem_euclid(std::f64::consts::TAU) } else { (a0 - a1).rem_euclid(std::f64::consts::TAU) };
+                *len = rad * theta;
+            }
+        }
+        _ => {}
+    }
+}
+
+/// THE BOX OF A CURVE `[x0, y0, x1, y1]` where its points stand (`at`), widened past the welds of the loops (1e-3 mm)
+/// and by a millionth of its size: curves whose boxes so widened do not meet share no loop.
+pub(super) fn entity_box(e: &SketchEntity, at: &dyn Fn(Id) -> Option<(f64, f64)>) -> [f64; 4] {
+    let p = |id: Id| at(id).unwrap_or((f64::NAN, f64::NAN));
+    let [x0, y0, x1, y1] = match e.kind {
+        EntityKind::Line { a, b } => {
+            let (pa, pb) = (p(a), p(b));
+            [pa.0.min(pb.0), pa.1.min(pb.1), pa.0.max(pb.0), pa.1.max(pb.1)]
+        }
+        EntityKind::Circle { center, r } => {
+            let c = p(center);
+            [c.0 - r, c.1 - r, c.0 + r, c.1 + r]
+        }
+        EntityKind::Arc { center, a, .. } => {
+            let (c, pa) = (p(center), p(a));
+            let r = (pa.0 - c.0).hypot(pa.1 - c.1);
+            [c.0 - r, c.1 - r, c.0 + r, c.1 + r]
+        }
+        EntityKind::Ellipse { c, ma, mi } => {
+            let (pc, pa, pi) = (p(c), p(ma), p(mi));
+            let r = (pa.0 - pc.0).hypot(pa.1 - pc.1).max((pi.0 - pc.0).hypot(pi.1 - pc.1));
+            [pc.0 - r, pc.1 - r, pc.0 + r, pc.1 + r]
+        }
+    };
+    let m = 1e-2 + 1e-6 * (x1 - x0).max(y1 - y0);
+    [x0 - m, y0 - m, x1 + m, y1 + m]
 }

@@ -177,3 +177,45 @@ fn a_drawing_of_forty_thousand_segments_comes_in_whole() {
     assert_eq!(s.entities.len(), 4 * n);
     assert!(t < Duration::from_secs(3), "40 000 segments took {t:?} to come in, budget 3 s in a test build");
 }
+
+#[test]
+fn rectangles_drawn_by_their_corners_are_solved_without_a_pass_of_all_pairs() {
+    // Every rectangle drawn by its corners asked every constraint of the sketch whether it named its centre, on every
+    // solve: 2 000 rectangles, 12 000 constraints, 2.4e7 asks a solve - 0.39 s in a test build, 55 ms counted once.
+    let mut p = qymcad_core::model::Project::default();
+    p.new_document();
+    let si = p.new_sketch("S");
+    for k in 0..2_000 {
+        let (x, y) = ((k % 50) as f64 * 20.0, (k / 50) as f64 * 20.0);
+        p.add_rect_entity(si, x, y, x + 10.0, y + 6.0, qymcad_core::feature::Purpose::Real);
+    }
+    let t = best_of_three(|| {
+        let _ = p.clone().solve_sketch(si);
+    });
+    eprintln!("2 000 rectangles drawn by their corners, solve: {t:?}");
+    assert!(t < Duration::from_millis(200), "2 000 rectangles drawn by their corners took {t:?} to solve, budget 200 ms in a test build");
+}
+
+#[test]
+fn a_drag_frame_after_the_first_works_on_its_own_part() {
+    // A release build takes the sketch of the bar, 70 000 rectangles, and holds a frame to 16 ms; a test build, some ten
+    // times slower, takes 10 000. Measured in a release build on 70 000 rectangles: 1.76 s a frame rebuilt whole, 0.48 s
+    // with the loops of what moved alone, 35 ms with the drag remembering its part, 11 ms with the loops looked up on
+    // grids and the points of the group alone. In a test build on 10 000: 59 ms without the session, 1.5 ms with it.
+    let release = !cfg!(debug_assertions);
+    let (n, budget) = if release { (70_000, Duration::from_millis(16)) } else { (10_000, Duration::from_millis(15)) };
+    let mut p = build(Kind::Rectangles, n);
+    p.solve_sketch(0);
+    let q = p.sketches[0].points[0];
+    let _ = p.solve_sketch_drag_fast(0, Some((q.id, q.x + 0.5, q.y + 0.5))); // the first frame finds the part
+    let t = (1..=5)
+        .map(|k| {
+            let started = Instant::now();
+            let _ = p.solve_sketch_drag_fast(0, Some((q.id, q.x + k as f64, q.y + k as f64)));
+            started.elapsed()
+        })
+        .min()
+        .unwrap_or_default();
+    eprintln!("Rectangles x{n}, a drag frame after the first: {t:?}");
+    assert!(t < budget, "a drag frame after the first among {n} rectangles took {t:?}, budget {budget:?}");
+}

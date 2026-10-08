@@ -604,6 +604,9 @@ pub struct Sketch {
     /// they stood until the next solve. Not a fact of the drawing - it is not written to a file.
     #[serde(skip)]
     pub left_unsolved: usize,
+    /// WHAT A DRAG UNDER WAY KEEPS from one frame to the next (`drag::DragSession`). Not a fact of the drawing.
+    #[serde(skip)]
+    pub(crate) drag_session: Option<Box<drag::DragSession>>,
 }
 
 impl Sketch {
@@ -1996,6 +1999,7 @@ pub use regen::{ArrayAxis, BodyOp, ChamferShape, CombineSpan, ExtrudeSpan, HoleT
 mod tess;
 mod timeline;
 mod sketch;
+mod drag;
 pub use sketch::{ChamferLegs, CornerAt, CornerBlend, CornerCut, CornerTool, FilletBy, FilletSize, TextSpec};
 pub(crate) mod comp_pattern;
 pub use comp_pattern::{CompPattern, CompPatternKind};
@@ -2698,6 +2702,16 @@ impl Project {
     /// iterations with a numeric Jacobian) and a regenerate over every sketch, which lagged visibly on any
     /// sizeable sketch.
     pub fn solve_sketch_drag_fast(&mut self, si: usize, drag: Option<(Id, f64, f64)>) -> f64 {
+        // a point dragged: through what the drag keeps from frame to frame, where the sketch takes it
+        if let Some(r) = drag.and_then(|d| self.drag_frame(si, d)) {
+            return r;
+        }
+        self.solve_sketch_drag_frame_alone(si, drag)
+    }
+
+    /// A FRAME OF A DRAG made without what the drag keeps from frame to frame: the part solved and the loops rebuilt as
+    /// the frame finds them. The reference of the frames made through it (`solve_sketch_drag_fast`).
+    pub fn solve_sketch_drag_frame_alone(&mut self, si: usize, drag: Option<(Id, f64, f64)>) -> f64 {
         self.solve_sketch_inner(si, drag, crate::solver::Budget::FRAME, sketch::Rebuild::Moved)
     }
 
