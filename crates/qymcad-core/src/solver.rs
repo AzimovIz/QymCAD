@@ -1757,6 +1757,8 @@ pub fn dof(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constrain
 /// every variable and keeps a matrix of every row by every variable: 8 000 by 8 000 for an array of 1 000 rectangles.
 struct Differences {
     rows: Vec<Vec<(usize, f64)>>,
+    /// the constraint of each row, by its place among the constraints given
+    of: Vec<usize>,
     nv: usize,
 }
 
@@ -1766,7 +1768,8 @@ fn differences(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Const
     let ridx: HashMap<Id, usize> = radii.iter().enumerate().map(|(j, rv)| (rv.center, np * 2 + j)).collect();
     let has = |id: Id| idx.contains_key(&id);
     let is_center = |id: Id| ridx.contains_key(&id);
-    let cons: Vec<Constraint> = constraints.iter().filter(|&c| cons_ok(c, &has, &is_center)).cloned().collect();
+    let given: Vec<usize> = (0..constraints.len()).filter(|&k| cons_ok(&constraints[k], &has, &is_center)).collect();
+    let cons: Vec<Constraint> = given.iter().map(|&k| constraints[k].clone()).collect();
     let nv = np * 2 + radii.len();
     let anchor: HashMap<Id, (f64, f64)> = cons
         .iter()
@@ -1777,6 +1780,7 @@ fn differences(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Const
         .collect();
     let mut x: Vec<f64> = points.iter().flat_map(|p| [p.x, p.y]).collect();
     x.extend(radii.iter().map(|rv| rv.value));
+    let mut of = Vec::new();
     // the rows of every constraint at x, where they start, and the constraints that hold each variable
     let mut r0: Vec<Vec<f64>> = Vec::with_capacity(cons.len());
     let mut first = Vec::with_capacity(cons.len());
@@ -1787,6 +1791,7 @@ fn differences(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Const
         con_rows(c, &x, &x, &idx, &ridx, &anchor, &mut r); // the side of an axis dimension is read off the current configuration
         first.push(m);
         m += r.len();
+        of.extend(std::iter::repeat_n(given[ci], r.len()));
         r0.push(r);
         for id in c.points() {
             let vars = idx.get(&id).map(|&i| [2 * i, 2 * i + 1]).into_iter().flatten().chain(ridx.get(&id).copied());
@@ -1825,7 +1830,7 @@ fn differences(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Const
             }
         }
     }
-    Differences { rows, nv }
+    Differences { rows, of, nv }
 }
 
 /// THE PIVOT COLUMNS OF A SPARSE MATRIX, by the elimination of `pivot_columns` step for step: the columns in order,
@@ -1834,8 +1839,35 @@ fn differences(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Const
 /// taken. The rows taken are not cleared further: they are never looked at again. Only the non-zero values are kept
 /// and worked: an array of 1 000 rectangles is 8 000 columns of a few values each.
 fn pivot_columns_sparse(rows: Vec<Vec<(usize, f64)>>, cols: usize) -> Vec<usize> {
+    eliminate_sparse(rows, cols, Keep::Pivots).pivots
+}
+
+/// What an elimination keeps besides its pivot columns.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Keep {
+    Pivots,
+    /// and the rows left without a pivot as sums of the rows given (`Elimination::dependent`)
+    Dependencies,
+}
+
+struct Elimination {
+    pivots: Vec<usize>,
+    /// each row no pivot was taken from, as the rows given summed into it with their factors: a sum of rows that is
+    /// nothing, a dependency among them
+    dependent: Vec<std::collections::BTreeMap<usize, f64>>,
+}
+
+/// `pivot_columns_sparse`, and with `Keep::Dependencies` the dependencies among the rows besides: every row is followed
+/// by the sum of the rows given that it now stands for, and the rows no pivot was taken from - each brought to nothing -
+/// give one dependency each. They are as many as the rows less the rank, and one of them holds a row exactly where the
+/// row follows from the others.
+fn eliminate_sparse(rows: Vec<Vec<(usize, f64)>>, cols: usize, keep: Keep) -> Elimination {
     let n = rows.len();
     let mut a: Vec<std::collections::BTreeMap<usize, f64>> = rows.into_iter().map(|r| r.into_iter().collect()).collect();
+    let mut sum: Vec<std::collections::BTreeMap<usize, f64>> = match keep {
+        Keep::Pivots => Vec::new(),
+        Keep::Dependencies => (0..n).map(|r| std::iter::once((r, 1.0)).collect()).collect(),
+    };
     let mut in_col: Vec<Vec<usize>> = vec![Vec::new(); cols];
     for (r, row) in a.iter().enumerate() {
         for &c in row.keys() {
@@ -1867,6 +1899,7 @@ fn pivot_columns_sparse(rows: Vec<Vec<(usize, f64)>>, cols: usize) -> Vec<usize>
         at.swap(row, piv);
         (place[pr], place[rr]) = (row, piv);
         let pivot: Vec<(usize, f64)> = a[pr].range(col..).map(|(&c, &v)| (c, v)).collect();
+        let pivot_sum: Vec<(usize, f64)> = sum.get(pr).map(|s| s.iter().map(|(&k, &v)| (k, v)).collect()).unwrap_or_default();
         let d = pivot[0].1;
         for &r in &in_col[col].clone() {
             if place[r] <= row {
@@ -1883,11 +1916,20 @@ fn pivot_columns_sparse(rows: Vec<Vec<(usize, f64)>>, cols: usize) -> Vec<usize>
                 });
                 *e -= f * v;
             }
+            if let Some(s) = sum.get_mut(r) {
+                for &(k, v) in &pivot_sum {
+                    *s.entry(k).or_insert(0.0) -= f * v;
+                }
+            }
         }
         pivots.push(col);
         row += 1;
     }
-    pivots
+    let dependent = match keep {
+        Keep::Pivots => Vec::new(),
+        Keep::Dependencies => at[row..].iter().map(|&r| std::mem::take(&mut sum[r])).collect(),
+    };
+    Elimination { pivots, dependent }
 }
 
 /// `dof_whole` of a part, by `differences` and `pivot_columns_sparse`: the same count, at the cost of the non-zeros.
@@ -1895,7 +1937,7 @@ fn dof_sparse(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constr
     if points.is_empty() {
         return (0, 0);
     }
-    let Differences { rows, nv } = differences(points, radii, constraints);
+    let Differences { rows, nv, .. } = differences(points, radii, constraints);
     let m = rows.len();
     if m == 0 {
         return (nv as i32, 0);
@@ -1910,7 +1952,7 @@ fn free_points_sparse(points: &[SketchPoint], radii: &[RadiusVar], constraints: 
     if n == 0 {
         return Vec::new();
     }
-    let Differences { rows, nv } = differences(points, radii, constraints);
+    let Differences { rows, nv, .. } = differences(points, radii, constraints);
     if rows.is_empty() {
         return vec![true; n]; // no constraints at all, so everything is free
     }
@@ -2041,7 +2083,11 @@ pub fn redundant(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Con
         if excess <= 0 {
             continue;
         }
-        for (k, &ci) in part.constraints.iter().enumerate().filter(|(_, ci)| **ci < own) {
+        // only a constraint a dependency among the rows holds can be removed with no degree of freedom freed; each of
+        // them is then counted without it, as before. Counted for every constraint of the part, a sketch of 973 lines
+        // tied by 1 062 points on lines - one part - took 9 s a count, and the count was made on every change
+        let maybe = in_a_dependency(&mine);
+        for (k, &ci) in part.constraints.iter().enumerate().filter(|(k, ci)| **ci < own && maybe.contains(k)) {
             let without: Vec<Constraint> = mine.constraints.iter().enumerate().filter(|(t, _)| *t != k).map(|(_, c)| c.clone()).collect();
             if dof_sparse(&mine.points, &mine.radii, &without).0 == free_all {
                 out.push(ci);
@@ -2050,6 +2096,16 @@ pub fn redundant(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Con
     }
     out.sort_unstable();
     out
+}
+
+/// THE CONSTRAINTS OF A PART A DEPENDENCY AMONG ITS ROWS HOLDS, by their place: a row that follows from the others
+/// stands in a dependency with a factor of its own, and a constraint none of whose rows does is needed whole. A factor
+/// down to 1e-9 counts: what the count without the constraint then finds is the answer, the factor only says where to
+/// look.
+fn in_a_dependency(own: &Own) -> std::collections::HashSet<usize> {
+    let Differences { rows, of, nv } = differences(&own.points, &own.radii, &own.constraints);
+    let biggest = |d: &std::collections::BTreeMap<usize, f64>| d.values().fold(0.0_f64, |m, v| m.max(v.abs()));
+    eliminate_sparse(rows, nv, Keep::Dependencies).dependent.iter().flat_map(|d| d.iter().filter(|(_, v)| v.abs() > 1e-9 * biggest(d)).map(|(&r, _)| of[r])).collect()
 }
 
 /// The free points of the whole sketch from one Jacobian (`free_points`); the reference of the parts.
