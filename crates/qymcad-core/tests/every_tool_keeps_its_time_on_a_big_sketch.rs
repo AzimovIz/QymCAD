@@ -11,7 +11,7 @@ mod sketch_tools;
 
 use qymcad_core::model::{PatternKind, Project};
 use sketch_kinds::{build, Kind};
-use sketch_tools::tools;
+use sketch_tools::{lay_targets, loops, shows, tools};
 use std::time::{Duration, Instant};
 
 /// A big sketch of one kind, the sketch being the first of the project.
@@ -50,10 +50,13 @@ fn bigs() -> Vec<Big> {
 fn every_tool_takes_a_few_rebuilds_of_a_big_sketch() {
     let mut failures = Vec::new();
     for big in bigs() {
+        // the targets of the tools laid beside the sketch
+        let mut base = big.project.clone();
+        let targets = lay_targets(&mut base);
         // one rebuild of this sketch, the best of three: the unit the tools are told against
         let rebuild = (0..3)
             .map(|_| {
-                let mut p = big.project.clone();
+                let mut p = base.clone();
                 let started = Instant::now();
                 p.regen_sketch_whole(0);
                 started.elapsed()
@@ -62,11 +65,11 @@ fn every_tool_takes_a_few_rebuilds_of_a_big_sketch() {
             .unwrap_or_default();
         let budget = rebuild * 5 + Duration::from_millis(200);
         for tool in tools() {
-            let mut p = big.project.clone();
+            let mut p = base.clone();
             let started = Instant::now();
-            (tool.work)(&mut p);
+            (tool.work)(&mut p, &targets);
             let t = started.elapsed();
-            eprintln!("{:<45} {:<32} {t:>12.3?}  (a rebuild {rebuild:.3?})", big.name, tool.name);
+            eprintln!("{:<45} {:<48} {t:>12.3?}  (a rebuild {rebuild:.3?})", big.name, tool.name);
             if t > budget {
                 failures.push(format!(
                     "{} - {}: {t:.3?}, {:.0} rebuilds of the sketch ({rebuild:.3?} each), budget {budget:.3?}",
@@ -75,7 +78,16 @@ fn every_tool_takes_a_few_rebuilds_of_a_big_sketch() {
                     t.as_secs_f64() / rebuild.as_secs_f64().max(1e-9)
                 ));
             }
+            // what it left behind, and the loops of a rebuild from all the curves
+            if let Some(wrong) = shows(tool.effect, &base, &p) {
+                failures.push(format!("{} - {}: {wrong}", big.name, tool.name));
+            }
+            let mut whole = p.clone();
+            whole.regen_sketch_whole(0);
+            if loops(&p) != loops(&whole) {
+                failures.push(format!("{} - {}: the loops are not those of a rebuild", big.name, tool.name));
+            }
         }
     }
-    assert!(failures.is_empty(), "tools that take more than a few rebuilds of a big sketch:\n{}", failures.join("\n"));
+    assert!(failures.is_empty(), "tools slow or wrong on a big sketch:\n{}", failures.join("\n"));
 }

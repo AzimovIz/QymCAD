@@ -76,3 +76,33 @@ fn a_segment_dragged_across_a_rectangle_cuts_it_and_leaves_it_whole_again() {
     assert!(failures.is_empty(), "the loops of a drag frame and of a rebuild differ:\n{}", failures.join("\n"));
     assert_eq!(closed, 4, "after the segment went out again, four whole rectangles");
 }
+
+#[test]
+fn a_side_dragged_off_a_square_of_separate_lines_leaves_an_open_chain() {
+    // four lines each with ends of its own standing on the next one's: one closed loop; the end of one side led away,
+    // the four are an open chain - found from the side dragged along the ends that stand together - and the loops of
+    // every frame are those of a rebuild
+    let mut p = Project::default();
+    p.new_document();
+    let si = p.new_sketch("S");
+    // the points laid by hand, two at each corner, as a drawing brought in lays them
+    let c = [(0.0, 0.0), (20.0, 0.0), (20.0, 20.0), (0.0, 20.0)];
+    let s = &mut p.sketches[si];
+    let mut end = 0;
+    for i in 0..4 {
+        let (a, b, e) = (1000 + 3 * i as u64, 1001 + 3 * i as u64, 1002 + 3 * i as u64);
+        s.points.push(SketchPoint { id: a, x: c[i].0, y: c[i].1 });
+        s.points.push(SketchPoint { id: b, x: c[(i + 1) % 4].0, y: c[(i + 1) % 4].1 });
+        s.entities.push(SketchEntity { id: e, kind: EntityKind::Line { a, b }, construction: false });
+        if i == 0 {
+            end = b;
+        }
+    }
+    p.regen_sketch(si);
+    assert_eq!(loops(&p, 0).iter().filter(|l| l.starts_with("true")).count(), 1, "the four separate lines make one closed loop");
+    let mut failures = Vec::new();
+    let p = dragged_as_rebuilt(p, end, &[(22.0, -3.0), (30.0, -10.0)], "a side dragged off a square", &mut failures);
+    let open = loops(&p, 0).iter().filter(|l| l.starts_with("false")).count();
+    assert!(failures.is_empty(), "the loops of a drag frame and of a rebuild differ:\n{}", failures.join("\n"));
+    assert!(open >= 1, "the three sides left are no open chain");
+}

@@ -10,7 +10,7 @@
 mod sketch_tools;
 
 use qymcad_core::model::Project;
-use sketch_tools::tools;
+use sketch_tools::{lay_targets, loops, shows, tools};
 use std::time::{Duration, Instant};
 
 /// The time of `work`.
@@ -34,18 +34,29 @@ fn every_tool_keeps_its_time_on_the_sketch_of_the_report() {
         return;
     }
     let project = qymcad_io::load_project(&path).expect("the sample opens");
+    let mut project = project;
+    let targets = lay_targets(&mut project);
     let mut failures = Vec::new();
     // measured in a release build: a tool 0.03 ms - 0.34 s (50 lines turned the slowest); the checks after it 148 - 233 ms
     // each counted apart, 57 - 98 ms counted together with the dependencies made for the rows that need them
     let (tool_budget, check_budget) = (Duration::from_millis(600), Duration::from_millis(120));
     for tool in tools() {
         let mut p = project.clone();
-        let took = timed(|| (tool.work)(&mut p));
+        let took = timed(|| (tool.work)(&mut p, &targets));
         let counted = timed(|| checks(&p));
         eprintln!("the sketch of the report - {:<40} {took:>12.3?}, the checks after it {counted:>12.3?}", tool.name);
         if took > tool_budget || counted > check_budget {
             failures.push(format!("{}: {took:.3?} (budget {tool_budget:?}), the checks after it {counted:.3?} (budget {check_budget:?})", tool.name));
         }
+        // what it left behind, and the loops of a rebuild from all the curves
+        if let Some(wrong) = shows(tool.effect, &project, &p) {
+            failures.push(format!("{}: {wrong}", tool.name));
+        }
+        let mut whole = p.clone();
+        whole.regen_sketch_whole(0);
+        if loops(&p) != loops(&whole) {
+            failures.push(format!("{}: the loops are not those of a rebuild", tool.name));
+        }
     }
-    assert!(failures.is_empty(), "tools slow on the sketch of the report:\n{}", failures.join("\n"));
+    assert!(failures.is_empty(), "tools slow or wrong on the sketch of the report:\n{}", failures.join("\n"));
 }

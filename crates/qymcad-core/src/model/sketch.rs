@@ -3893,9 +3893,16 @@ impl Project {
             old.extend(regions.near(w, spans.len()).into_iter().filter(|&i| before[i].closed && round::meet(&spans[i], w)).map(|i| before[i].id));
         }
         let held = before.iter().filter(|b| b.closed && old.contains(&b.id)).map(|b| b.span).reduce(round::union);
-        // the chains are made from the moved curves and every curve of a chain one of them was in
+        // the chains are made from the changed curves, every curve of an open loop one of them was in, and every curve of
+        // any loop a curve gone was in: two sides of a rectangle deleted leave the other two an open chain, and with
+        // nothing changed left to reach it from it was lost. A curve still there reaches its chain along its ends; seeded
+        // from every loop it was in, a line of a grid of 200 by 200 took in the whole grid
         let place: std::collections::HashMap<Id, usize> = drawn.iter().enumerate().map(|(k, e)| (e.id, k)).collect();
-        let from: Vec<usize> = shifted.iter().copied().chain(before.iter().filter(|b| !b.closed && old.contains(&b.id)).flat_map(|b| of(b.id, b.ci).filter_map(|e| place.get(e).copied()))).collect();
+        let from: Vec<usize> = shifted
+            .iter()
+            .copied()
+            .chain(before.iter().filter(|b| b.touched && (!b.closed || of(b.id, b.ci).any(|e| gone.contains(e)))).flat_map(|b| of(b.id, b.ci).filter_map(|e| place.get(e).copied())))
+            .collect();
         let grid = round::BoxGrid::new(&boxes);
         let curve = |k: usize| drawn[k];
         let point = |id: Id| at.get(&id).copied();

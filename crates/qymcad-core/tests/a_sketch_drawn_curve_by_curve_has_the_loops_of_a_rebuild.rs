@@ -80,3 +80,38 @@ fn every_sketch_drawn_curve_by_curve_has_the_loops_of_a_rebuild() {
     assert!(failures.is_empty(), "the loops of a sketch drawn curve by curve and of a rebuild differ:\n{}", failures.join("\n"));
     assert_eq!(closed, 1, "the half disc drawn segment by segment is one closed loop");
 }
+
+#[test]
+fn every_sketch_taken_apart_curve_by_curve_has_the_loops_of_a_rebuild() {
+    // the curves of every kind of sketch deleted, or made construction and back, one at a time; after each the loops a
+    // rebuild of the change makes are those of a rebuild from all the curves. Two sides of a rectangle deleted leave the
+    // other two an open chain, which the loops round the change lost
+    let mut failures = Vec::new();
+    for kind in [Kind::Lines, Kind::Arcs, Kind::Rectangles, Kind::Circles, Kind::Hexagons, Kind::Tangents, Kind::Array, Kind::Mixed] {
+        for (how, construction) in [("deleted", false), ("made construction", true)] {
+            let mut p = build(kind, 12);
+            p.regen_sketch(0);
+            let ids: Vec<u64> = p.sketches[0].entities.iter().map(|e| e.id).step_by(3).collect();
+            for (k, id) in ids.into_iter().enumerate() {
+                if construction {
+                    let _ = p.toggle_construction(0, &[id]);
+                } else {
+                    p.delete_entities(0, &[id]);
+                }
+                let mut whole = p.clone();
+                whole.regen_sketch_whole(0);
+                let (made, rebuilt) = (loops(&p), loops(&whole));
+                if made != rebuilt {
+                    failures.push(format!(
+                        "{kind:?}, {how}, curve {k}: {} loops against {} of a rebuild; only in the rebuild: {:?}",
+                        made.len(),
+                        rebuilt.len(),
+                        rebuilt.iter().find(|x| !made.contains(x))
+                    ));
+                    break;
+                }
+            }
+        }
+    }
+    assert!(failures.is_empty(), "the loops of a sketch taken apart and of a rebuild differ:\n{}", failures.join("\n"));
+}
