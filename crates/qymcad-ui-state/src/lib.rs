@@ -9475,12 +9475,9 @@ pub fn sketch_diag(cache: &Caches, project: &Project, si: usize) -> SketchDiag {
             return st.diag.clone();
         }
     }
-    let d = SketchDiag {
-        dof: project.sketch_dof(si),
-        free: project.sketch_free_points(si),
-        conflicts: project.sketch_conflicts(si).into_iter().collect(),
-        redundant: project.sketch_redundant_constraints(si).into_iter().collect(),
-    };
+    // the degrees of freedom, the free points and the redundant from one elimination a part (`sketch_checks`)
+    let checks = project.sketch_checks(si);
+    let d = SketchDiag { dof: checks.dof, free: checks.free, conflicts: project.sketch_conflicts(si).into_iter().collect(), redundant: checks.redundant.into_iter().collect() };
     *cache.sk_status.borrow_mut() = Some(SketchStatus { si, shape, place, diag: d.clone() });
     d
 }

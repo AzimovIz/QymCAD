@@ -185,6 +185,12 @@ fn the_diagnostics_of_the_parts_are_those_of_the_whole() {
                 if r != r_whole {
                     failures.push(format!("{case}: redundant {r:?} against {r_whole:?}"));
                 }
+                // the checks counted together, from one elimination a part, are the ones counted apart
+                let together = solver::checks(&i.points, &i.radii, &i.constraints, own);
+                let apart = solver::Checks { dof, free: solver::free_points(&i.points, &i.radii, &i.constraints), redundant: r };
+                if together != apart {
+                    failures.push(format!("{case}: the checks together {:?} {:?} against {:?} {:?}", together.dof, together.redundant, apart.dof, apart.redundant));
+                }
                 if how == "arguing" && c_whole.is_empty() && kind != Kind::Mixed {
                     failures.push(format!("{case}: the contradiction made no conflict - the check checks nothing"));
                 }

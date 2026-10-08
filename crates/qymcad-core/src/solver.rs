@@ -1096,11 +1096,16 @@ fn eliminated_sparse(points: &[SketchPoint], radii: &[RadiusVar], constraints: &
     let n = rows.len();
     let mut coeffs: Vec<std::collections::BTreeMap<usize, f64>> = Vec::with_capacity(n);
     let mut residual = Vec::with_capacity(n);
-    let mut from: Vec<std::collections::BTreeSet<usize>> = Vec::with_capacity(n);
+    // the constraint of each row, and the pivot rows each was taken from; the constraints a row came to stand for are
+    // made afterwards for the null rows alone (`from_of`): gathered for every row as it went, the sets grew with the fill,
+    // 56 ms of a count of a sketch of 1 062 points on lines
+    let mut own: Vec<usize> = Vec::with_capacity(n);
+    let mut taken: Vec<Vec<usize>> = vec![Vec::new(); n];
+    let mut order: Vec<usize> = Vec::new();
     for r in rows {
         coeffs.push(r.coeffs.into_iter().collect());
         residual.push(r.residual);
-        from.push(std::iter::once(r.from).collect());
+        own.push(r.from);
     }
     let mut in_col: Vec<Vec<usize>> = vec![Vec::new(); nv];
     for (r, row) in coeffs.iter().enumerate() {
@@ -1120,8 +1125,9 @@ fn eliminated_sparse(points: &[SketchPoint], radii: &[RadiusVar], constraints: &
         }
         let Some(piv) = piv.filter(|&p| value(&coeffs, p).abs() > 1e-9) else { continue };
         used[piv] = true;
+        order.push(piv);
         let pivot: Vec<(usize, f64)> = coeffs[piv].range(col..).map(|(&c, &v)| (c, v)).collect();
-        let (d, pivot_residual, pivot_from) = (value(&coeffs, piv), residual[piv], from[piv].clone());
+        let (d, pivot_residual) = (value(&coeffs, piv), residual[piv]);
         for &i in &in_col[col].clone() {
             if used[i] || value(&coeffs, i).abs() <= 1e-12 {
                 continue;
@@ -1135,18 +1141,37 @@ fn eliminated_sparse(points: &[SketchPoint], radii: &[RadiusVar], constraints: &
                 *e -= f * v;
             }
             residual[i] -= f * pivot_residual;
-            from[i].extend(pivot_from.iter().copied());
+            taken[i].push(piv);
         }
     }
-    coeffs
-        .into_iter()
-        .zip(residual)
-        .zip(from)
-        .map(|((row, residual), from)| {
-            let null = row.iter().filter(|(k, _)| !fixed_var[**k]).all(|(_, v)| v.abs() <= 1e-7);
-            Eliminated { null, residual, from: from.into_iter().collect() }
-        })
-        .collect()
+    let null: Vec<bool> = coeffs.iter().map(|row| row.iter().filter(|(k, _)| !fixed_var[**k]).all(|(_, v)| v.abs() <= 1e-7)).collect();
+    let mut from = from_of(&null, &own, &taken, &order);
+    null.into_iter().zip(residual).enumerate().map(|(r, (null, residual))| Eliminated { null, residual, from: std::mem::take(&mut from[r]) }).collect()
+}
+
+/// The constraints each null row came to stand for: its own and those of every pivot row it was taken from, through
+/// theirs. A pivot row is taken from only by pivots taken before it (`order`), and stands as it was once taken; the rows
+/// not null are left without, nothing reads them.
+fn from_of(null: &[bool], own: &[usize], taken: &[Vec<usize>], order: &[usize]) -> Vec<Vec<usize>> {
+    let mut reached = vec![false; own.len()];
+    let mut stack: Vec<usize> = (0..own.len()).filter(|&r| null[r]).flat_map(|r| taken[r].iter().copied()).collect();
+    while let Some(p) = stack.pop() {
+        if !std::mem::replace(&mut reached[p], true) {
+            stack.extend(taken[p].iter().copied());
+        }
+    }
+    let mut of: Vec<Option<std::collections::BTreeSet<usize>>> = vec![None; own.len()];
+    let gather = |r: usize, of: &[Option<std::collections::BTreeSet<usize>>]| -> std::collections::BTreeSet<usize> {
+        let mut s: std::collections::BTreeSet<usize> = std::iter::once(own[r]).collect();
+        for &p in &taken[r] {
+            s.extend(of[p].iter().flatten().copied());
+        }
+        s
+    };
+    for &p in order.iter().filter(|&&p| reached[p]) {
+        of[p] = Some(gather(p, &of));
+    }
+    (0..own.len()).map(|r| if null[r] { gather(r, &of).into_iter().collect() } else { Vec::new() }).collect()
 }
 
 /// Jacobian cross-check, used by tests: the largest discrepancy between the analytic derivatives of a
@@ -1857,16 +1882,19 @@ struct Elimination {
     dependent: Vec<std::collections::BTreeMap<usize, f64>>,
 }
 
-/// `pivot_columns_sparse`, and with `Keep::Dependencies` the dependencies among the rows besides: every row is followed
-/// by the sum of the rows given that it now stands for, and the rows no pivot was taken from - each brought to nothing -
-/// give one dependency each. They are as many as the rows less the rank, and one of them holds a row exactly where the
-/// row follows from the others.
+/// `pivot_columns_sparse`, and with `Keep::Dependencies` the dependencies among the rows besides: the rows no pivot was
+/// taken from - each brought to nothing - give one dependency each, the sum of the rows given that the row came to stand
+/// for. They are as many as the rows less the rank, and one of them holds a row exactly where the row follows from the
+/// others. The elimination writes down only what it took from each row - the row of the pivot and the factor - and the
+/// sums are made afterwards for those rows and the pivots they reach alone: followed for every row as it went, the sums
+/// grew with the fill, 42 ms of a count against 9 ms of the elimination on a sketch of 1 062 points on lines.
 fn eliminate_sparse(rows: Vec<Vec<(usize, f64)>>, cols: usize, keep: Keep) -> Elimination {
     let n = rows.len();
     let mut a: Vec<std::collections::BTreeMap<usize, f64>> = rows.into_iter().map(|r| r.into_iter().collect()).collect();
-    let mut sum: Vec<std::collections::BTreeMap<usize, f64>> = match keep {
+    // what was taken from each row: the row of the pivot and its factor
+    let mut taken: Vec<Vec<(usize, f64)>> = match keep {
         Keep::Pivots => Vec::new(),
-        Keep::Dependencies => (0..n).map(|r| std::iter::once((r, 1.0)).collect()).collect(),
+        Keep::Dependencies => vec![Vec::new(); n],
     };
     let mut in_col: Vec<Vec<usize>> = vec![Vec::new(); cols];
     for (r, row) in a.iter().enumerate() {
@@ -1899,7 +1927,6 @@ fn eliminate_sparse(rows: Vec<Vec<(usize, f64)>>, cols: usize, keep: Keep) -> El
         at.swap(row, piv);
         (place[pr], place[rr]) = (row, piv);
         let pivot: Vec<(usize, f64)> = a[pr].range(col..).map(|(&c, &v)| (c, v)).collect();
-        let pivot_sum: Vec<(usize, f64)> = sum.get(pr).map(|s| s.iter().map(|(&k, &v)| (k, v)).collect()).unwrap_or_default();
         let d = pivot[0].1;
         for &r in &in_col[col].clone() {
             if place[r] <= row {
@@ -1916,10 +1943,8 @@ fn eliminate_sparse(rows: Vec<Vec<(usize, f64)>>, cols: usize, keep: Keep) -> El
                 });
                 *e -= f * v;
             }
-            if let Some(s) = sum.get_mut(r) {
-                for &(k, v) in &pivot_sum {
-                    *s.entry(k).or_insert(0.0) -= f * v;
-                }
+            if let Some(t) = taken.get_mut(r) {
+                t.push((pr, f));
             }
         }
         pivots.push(col);
@@ -1927,9 +1952,37 @@ fn eliminate_sparse(rows: Vec<Vec<(usize, f64)>>, cols: usize, keep: Keep) -> El
     }
     let dependent = match keep {
         Keep::Pivots => Vec::new(),
-        Keep::Dependencies => at[row..].iter().map(|&r| std::mem::take(&mut sum[r])).collect(),
+        Keep::Dependencies => sums_of(&at[row..], &at[..row], &taken),
     };
     Elimination { pivots, dependent }
+}
+
+/// The sums of the rows given that `rows` came to stand for, from what the elimination took from each (`taken`): a row is
+/// itself less each factor times the sum of the pivot row it was taken by. The pivot rows reached are made first, in the
+/// order they became pivots (`pivots`) - a pivot row was itself taken from by earlier pivots alone.
+fn sums_of(rows: &[usize], pivots: &[usize], taken: &[Vec<(usize, f64)>]) -> Vec<std::collections::BTreeMap<usize, f64>> {
+    let mut reached: std::collections::HashSet<usize> = std::collections::HashSet::new();
+    let mut stack: Vec<usize> = rows.iter().flat_map(|&r| taken[r].iter().map(|&(p, _)| p)).collect();
+    while let Some(p) = stack.pop() {
+        if reached.insert(p) {
+            stack.extend(taken[p].iter().map(|&(q, _)| q));
+        }
+    }
+    let mut made: std::collections::HashMap<usize, std::collections::BTreeMap<usize, f64>> = std::collections::HashMap::new();
+    let make = |r: usize, made: &std::collections::HashMap<usize, std::collections::BTreeMap<usize, f64>>| {
+        let mut s: std::collections::BTreeMap<usize, f64> = std::iter::once((r, 1.0)).collect();
+        for &(p, f) in &taken[r] {
+            for (&k, &v) in &made[&p] {
+                *s.entry(k).or_insert(0.0) -= f * v;
+            }
+        }
+        s
+    };
+    for &p in pivots.iter().filter(|p| reached.contains(p)) {
+        let s = make(p, &made);
+        made.insert(p, s);
+    }
+    rows.iter().map(|&r| make(r, &made)).collect()
 }
 
 /// `dof_whole` of a part, by `differences` and `pivot_columns_sparse`: the same count, at the cost of the non-zeros.
@@ -2076,36 +2129,88 @@ fn taken(own: &Own, at: usize) -> i32 {
 /// a part with an excess: a removal changes the rank of its own part alone. Counted whole, every constraint took two
 /// counts of the whole sketch - 49 s on 10 000 lines for one count.
 pub fn redundant(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint], own: usize) -> Vec<usize> {
-    let mut out = Vec::new();
-    for part in parts(points, radii, constraints) {
-        let mine = part.own(points, radii, constraints);
-        let (free_all, excess) = dof_sparse(&mine.points, &mine.radii, &mine.constraints);
-        if excess <= 0 {
+    checks(points, radii, constraints, own).redundant
+}
+
+/// WHAT THE CHECKS OF A SKETCH COUNT: its degrees of freedom and its excess (`dof`), its free points (`free_points`)
+/// and its redundant constraints (`redundant`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Checks {
+    pub dof: (i32, i32),
+    pub free: Vec<bool>,
+    pub redundant: Vec<usize>,
+}
+
+/// THE CHECKS OF A SKETCH FROM ONE ELIMINATION A PART: the Jacobian of each part made once and eliminated once, its
+/// rank the degrees of freedom, its pivot columns the free points, its dependencies where to look for the redundant -
+/// the answers of `dof`, `free_points` and `redundant`, each of which made the part and eliminated it again: 9 ms, 9 ms
+/// and 9 ms more of 54 on a sketch of 1 062 points on lines, on every change. Each constraint a dependency holds is then
+/// counted without it, as `redundant` counted it: the dependencies only say where to look.
+pub fn checks(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint], own: usize) -> Checks {
+    let parts = parts(points, radii, constraints);
+    let mut free_count = (radii.len() - parts.iter().map(|p| p.radii.len()).sum::<usize>()) as i32; // radii of no point
+    let mut excess = 0;
+    let mut free = vec![true; points.len()];
+    let mut redundant = Vec::new();
+    for part in &parts {
+        if part.constraints.is_empty() {
+            free_count += (part.points.len() * 2 + part.radii.len()) as i32;
             continue;
         }
-        // only a constraint a dependency among the rows holds can be removed with no degree of freedom freed; each of
-        // them is then counted without it, as before. Counted for every constraint of the part, a sketch of 973 lines
-        // tied by 1 062 points on lines - one part - took 9 s a count, and the count was made on every change
-        let maybe = in_a_dependency(&mine);
-        for (k, &ci) in part.constraints.iter().enumerate().filter(|(k, ci)| **ci < own && maybe.contains(k)) {
+        let mine = part.own(points, radii, constraints);
+        let count = counted(&mine);
+        free_count += count.free;
+        excess += count.excess;
+        for (&i, f) in part.points.iter().zip(count.free_points) {
+            free[i] = f;
+        }
+        if count.excess <= 0 {
+            continue;
+        }
+        for (k, &ci) in part.constraints.iter().enumerate().filter(|(k, ci)| **ci < own && count.maybe.contains(k)) {
             let without: Vec<Constraint> = mine.constraints.iter().enumerate().filter(|(t, _)| *t != k).map(|(_, c)| c.clone()).collect();
-            if dof_sparse(&mine.points, &mine.radii, &without).0 == free_all {
-                out.push(ci);
+            if dof_sparse(&mine.points, &mine.radii, &without).0 == count.free {
+                redundant.push(ci);
             }
         }
     }
-    out.sort_unstable();
-    out
+    redundant.sort_unstable();
+    Checks { dof: (free_count, excess), free, redundant }
 }
 
-/// THE CONSTRAINTS OF A PART A DEPENDENCY AMONG ITS ROWS HOLDS, by their place: a row that follows from the others
-/// stands in a dependency with a factor of its own, and a constraint none of whose rows does is needed whole. A factor
-/// down to 1e-9 counts: what the count without the constraint then finds is the answer, the factor only says where to
-/// look.
-fn in_a_dependency(own: &Own) -> std::collections::HashSet<usize> {
+/// What one elimination of a part tells.
+struct Counted {
+    /// the degrees of freedom of the part and its excess, as `dof_sparse` counts them
+    free: i32,
+    excess: i32,
+    /// each point of the part free, as `free_points_sparse` finds it
+    free_points: Vec<bool>,
+    /// the constraints a dependency among the rows holds, by their place: a row that follows from the others stands in a
+    /// dependency with a factor of its own, and a constraint none of whose rows does is needed whole. A factor down to
+    /// 1e-9 counts: the count without the constraint gives the answer, the factor only says where to look
+    maybe: std::collections::HashSet<usize>,
+}
+
+fn counted(own: &Own) -> Counted {
+    let n = own.points.len();
+    if n == 0 {
+        return Counted { free: 0, excess: 0, free_points: Vec::new(), maybe: Default::default() };
+    }
     let Differences { rows, of, nv } = differences(&own.points, &own.radii, &own.constraints);
+    let m = rows.len();
+    if m == 0 {
+        return Counted { free: nv as i32, excess: 0, free_points: vec![true; n], maybe: Default::default() };
+    }
+    let Elimination { pivots, dependent } = eliminate_sparse(rows, nv, Keep::Dependencies);
+    let rank = pivots.len() as i32;
+    let piv: std::collections::HashSet<usize> = pivots.into_iter().collect();
     let biggest = |d: &std::collections::BTreeMap<usize, f64>| d.values().fold(0.0_f64, |m, v| m.max(v.abs()));
-    eliminate_sparse(rows, nv, Keep::Dependencies).dependent.iter().flat_map(|d| d.iter().filter(|(_, v)| v.abs() > 1e-9 * biggest(d)).map(|(&r, _)| of[r])).collect()
+    Counted {
+        free: nv as i32 - rank,
+        excess: m as i32 - rank,
+        free_points: (0..n).map(|i| !piv.contains(&(2 * i)) || !piv.contains(&(2 * i + 1))).collect(),
+        maybe: dependent.iter().flat_map(|d| d.iter().filter(|(_, v)| v.abs() > 1e-9 * biggest(d)).map(|(&r, _)| of[r])).collect(),
+    }
 }
 
 /// The free points of the whole sketch from one Jacobian (`free_points`); the reference of the parts.

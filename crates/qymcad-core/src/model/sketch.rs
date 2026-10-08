@@ -681,6 +681,18 @@ impl Project {
         false
     }
     /// Mobility mask of the sketch points (`true` means the point can still move), one entry per point.
+    /// THE CHECKS OF A SKETCH COUNTED TOGETHER (`solver::checks`): its degrees of freedom, its free points and its
+    /// redundant constraints by their place, from one elimination a part - the answers of `sketch_dof`,
+    /// `sketch_free_points` and `sketch_redundant_constraints`.
+    pub fn sketch_checks(&self, si: usize) -> crate::solver::Checks {
+        let Some(s) = self.sketches.get(si) else { return crate::solver::Checks { dof: (0, 0), free: Vec::new(), redundant: Vec::new() } };
+        let at: Vec<usize> = (0..s.constraints.len()).filter(|&ci| !s.constraints[ci].is_driven()).collect();
+        let mut active: Vec<Constraint> = at.iter().map(|&ci| s.constraints[ci].clone()).collect();
+        active.extend(self.entity_intrinsics(si));
+        let mut checks = crate::solver::checks(&s.points, &self.entity_radii(si), &active, at.len());
+        checks.redundant = checks.redundant.into_iter().map(|k| at[k]).collect();
+        checks
+    }
     pub fn sketch_free_points(&self, si: usize) -> Vec<bool> {
         let Some(s) = self.sketches.get(si) else { return Vec::new() };
         let mut active: Vec<Constraint> = s.constraints.iter().filter(|c| !c.is_driven()).cloned().collect();
