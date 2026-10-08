@@ -3397,11 +3397,13 @@ impl Project {
         }
         out
     }
-    pub(super) fn solve_sketch_inner(&mut self, si: usize, drag: Option<(Id, f64, f64)>, budget: crate::solver::Budget) -> f64 {
+    pub(super) fn solve_sketch_inner(&mut self, si: usize, drag: Option<(Id, f64, f64)>, budget: crate::solver::Budget, rebuild: Rebuild) -> f64 {
         // The radius variables and the implicit arc constraints are computed before the mutable borrow.
         let mut radii = self.entity_radii(si);
         let intrinsics = self.entity_intrinsics(si);
         let Some(s) = self.sketches.get_mut(si) else { return 0.0 };
+        // where the points stood before anything of this solve moved them, for what it rebuilds after it
+        let at_start: Vec<(f64, f64)> = s.points.iter().map(|p| (p.x, p.y)).collect();
         // THE CENTRE OF A RECTANGLE DRAWN BY ITS CORNERS FOLLOWS THE CORNERS: it is put on the middle of the diagonal
         // before the solve. Left where it stood, it held the corners back - a side moved from 20 to 30 came out at 28.9,
         // the solver sharing the move between the corners and the centre. A centre a rectangle was drawn from is its
@@ -3509,8 +3511,20 @@ impl Project {
                 }
             }
         }
+        // what the solve moved: the points and the centres of the circles whose radius changed
+        let moved: std::collections::HashSet<Id> = s
+            .points
+            .iter()
+            .zip(&at_start)
+            .filter(|(p, &(x, y))| p.x.to_bits() != x.to_bits() || p.y.to_bits() != y.to_bits())
+            .map(|(p, _)| p.id)
+            .chain(radii.iter().zip(&radii_was).filter(|(r, &old)| r.value.to_bits() != old.to_bits()).map(|(r, _)| r.center))
+            .collect();
         self.update_driven_dims(si);
-        self.regen_sketch(si);
+        match rebuild {
+            Rebuild::Whole => self.regen_sketch(si),
+            Rebuild::Moved => self.regen_sketch_moved(si, &moved),
+        }
         resid
     }
     /// Radius variables of the solver: circles (which store `r`) and arcs (whose radius is the distance from
@@ -3728,6 +3742,93 @@ impl Project {
                 }
             }
         }
+        let new_entity_cids = self.replace_contours(entity_cids, pairs, &[]);
+        self.sketches[si].contour_ids = new_entity_cids;
+    }
+    /// THE LOOPS OF A SKETCH REBUILT WHERE IT MOVED, for a frame of a drag: `moved` - the points moved by the frame and
+    /// the centres of the circles whose radius changed. The loops are the faces of the arrangement of the curves and
+    /// the open chains, and neither runs between curves whose boxes, widened past every weld, do not meet: the curves
+    /// of a group whose boxes meet one another make their loops alone. So only the groups holding a curve that moved,
+    /// or a curve that shared a loop with one, are made again; the loops of the rest stand. Rebuilt whole, a frame
+    /// of a drag among 70 000 lines took 0.43 s, among 70 000 rectangles 1.6 s, in a release build. A sketch with
+    /// splines or text, or one whose frame of reference had to be put back, is rebuilt whole.
+    pub(super) fn regen_sketch_moved(&mut self, si: usize, moved: &std::collections::HashSet<Id>) {
+        let Some(s) = self.sketches.get(si) else { return };
+        // a frame of reference to be made first (`ensure_frame` in `regen_sketch`), splines, text: rebuilt whole
+        if !s.splines.is_empty() || !s.texts.is_empty() || (s.origin != 0 || s.axis_pts.iter().any(|g| *g != 0)) && s.frame == 0 {
+            return self.regen_sketch(si);
+        }
+        if self.detach_geometry_from_origin(si) || self.sketches[si].pin_frame() {
+            return self.regen_sketch(si);
+        }
+        let s = &self.sketches[si];
+        let at: std::collections::HashMap<Id, (f64, f64)> = s.points.iter().map(|p| (p.id, (p.x, p.y))).collect();
+        let drawn: Vec<&SketchEntity> = s.entities.iter().filter(|e| !e.construction).collect();
+        // the curves that moved, and every curve of a loop one of them was in
+        let mut seeds: std::collections::HashSet<Id> = drawn.iter().filter(|e| entity_points(e).iter().any(|p| moved.contains(p))).map(|e| e.id).collect();
+        if seeds.is_empty() {
+            return; // nothing drawn moved: every loop stands
+        }
+        // the entities each loop of the sketch is made of, its place in the list of loops from a table
+        let place: std::collections::HashMap<Id, usize> = self.contours.ids().iter().enumerate().map(|(i, &id)| (id, i)).collect();
+        let loops_of = |cid: &Id| -> Vec<Id> {
+            let mut of: Vec<Id> = self.contours.ents_of(*cid).cloned().unwrap_or_default();
+            if let Some(&ci) = place.get(cid) {
+                of.extend(self.contours[ci].edge_src.iter().copied());
+            }
+            of
+        };
+        for cid in &s.contour_ids {
+            let of = loops_of(cid);
+            if of.iter().any(|e| seeds.contains(e)) {
+                seeds.extend(of);
+            }
+        }
+        // the box of each curve where it stands now, widened past the welds of the loops (1e-3 mm)
+        let boxes: Vec<[f64; 4]> = drawn
+            .iter()
+            .map(|e| {
+                let p = |id: Id| at.get(&id).copied().unwrap_or((f64::NAN, f64::NAN));
+                let [x0, y0, x1, y1] = match e.kind {
+                    EntityKind::Line { a, b } => {
+                        let (pa, pb) = (p(a), p(b));
+                        [pa.0.min(pb.0), pa.1.min(pb.1), pa.0.max(pb.0), pa.1.max(pb.1)]
+                    }
+                    EntityKind::Circle { center, r } => {
+                        let c = p(center);
+                        [c.0 - r, c.1 - r, c.0 + r, c.1 + r]
+                    }
+                    EntityKind::Arc { center, a, .. } => {
+                        let (c, pa) = (p(center), p(a));
+                        let r = (pa.0 - c.0).hypot(pa.1 - c.1);
+                        [c.0 - r, c.1 - r, c.0 + r, c.1 + r]
+                    }
+                    EntityKind::Ellipse { c, ma, mi } => {
+                        let (pc, pa, pi) = (p(c), p(ma), p(mi));
+                        let r = (pa.0 - pc.0).hypot(pa.1 - pc.1).max((pi.0 - pc.0).hypot(pi.1 - pc.1));
+                        [pc.0 - r, pc.1 - r, pc.0 + r, pc.1 + r]
+                    }
+                };
+                let m = 1e-2 + 1e-6 * (x1 - x0).max(y1 - y0);
+                [x0 - m, y0 - m, x1 + m, y1 + m]
+            })
+            .collect();
+        let group = boxes_reached(&boxes, drawn.iter().enumerate().filter(|(_, e)| seeds.contains(&e.id)).map(|(k, _)| k).collect());
+        let ents: Vec<SketchEntity> = drawn.iter().enumerate().filter(|(k, _)| group[*k]).map(|(_, e)| **e).collect();
+        let in_group: std::collections::HashSet<Id> = ents.iter().map(|e| e.id).collect();
+        let pts = s.points.clone();
+        let mut pairs: Vec<(Contour, Vec<Id>)> = arrangement_regions_prov(&pts, &ents);
+        pairs.extend(tessellate_sketch_multi(&pts, &ents).into_iter().filter(|c| !c.closed).map(|c| (c, Vec::new())));
+        let (old, kept): (Vec<Id>, Vec<Id>) = s.contour_ids.iter().partition(|cid| loops_of(cid).iter().any(|e| in_group.contains(e)));
+        let made = self.replace_contours(old, pairs, &kept);
+        self.sketches[si].contour_ids = kept.into_iter().chain(made).collect();
+    }
+    /// THE LOOPS OF A SKETCH REPLACED: the loops `old` (contour ids) give way to `pairs` (each a loop and the entities
+    /// it is made of), each new loop taking the id of the old one it is - by the entities of its boundary first, by
+    /// its place and size after - so a feature keeps its loop through an edit. Answers the ids of the new loops, in
+    /// their order. `kept` - the loops of the sketch that stay as they stood, nested with the new ones.
+    pub(super) fn replace_contours(&mut self, old: Vec<Id>, pairs: Vec<(Contour, Vec<Id>)>, kept: &[Id]) -> Vec<Id> {
+        let entity_cids = old;
         // Stable contour ids: the new loops are matched against the old ones by a geometric signature
         // (closedness, centroid, area) rather than by position in the list. Positional reuse breaks
         // associativity: adding or removing a loop shifts a contour id onto a different physical loop, and an
@@ -3857,7 +3958,8 @@ impl Project {
                 None => new_entity_cids.push(self.add_contour(c)),
             }
         }
-        self.rebuild_contour_nesting(&new_entity_cids);
+        // the nesting among the new loops and `kept`, the loops of the sketch left as they stood
+        self.rebuild_contour_nesting(&new_entity_cids.iter().chain(kept).copied().collect::<Vec<Id>>());
         // Old contours not reused by any new loop are deleted.
         for (k, o) in old.iter().enumerate() {
             if !used_old[k] {
@@ -3875,7 +3977,7 @@ impl Project {
                 self.contours.set_ents(*cid, new_prov[ni].clone());
             }
         }
-        self.sketches[si].contour_ids = new_entity_cids;
+        new_entity_cids
     }
     /// The origin point (0,0, fixed) of a sketch, created lazily. Returns its id. It belongs to no entity and
     /// therefore never reaches a profile or a contour.
@@ -5034,7 +5136,7 @@ impl Project {
         // set directly, changing a feature height during an ordinary build.
         for si in 0..self.sketches.len() {
             let before: Vec<(Id, f64, f64)> = self.sketches[si].points.iter().map(|p| (p.id, p.x, p.y)).collect();
-            self.solve_sketch_inner(si, None, crate::solver::Budget::FULL);
+            self.solve_sketch_inner(si, None, crate::solver::Budget::FULL, Rebuild::Whole);
             let moved = self.sketches[si].points.iter().zip(before.iter()).any(|(p, (id, x, y))| p.id != *id || (p.x - x).abs() > 1e-9 || (p.y - y).abs() > 1e-9);
             if moved {
                 self.regen_sketch(si); // The points moved, so the contours are rebuilt; otherwise the profile
@@ -5361,4 +5463,65 @@ const IMPORT_WELD: f64 = 1e-4;
 pub(super) struct ImportPoints {
     welded: super::tess::Welded,
     ids: Vec<Id>,
+}
+
+/// WHICH BOXES ARE REACHED from the boxes `from` through boxes that meet, one after another (`[x0, y0, x1, y1]` each).
+/// The boxes are put on a grid as wide as a box is on the mean, so a box meets only those on its own cells.
+fn boxes_reached(boxes: &[[f64; 4]], from: Vec<usize>) -> Vec<bool> {
+    let n = boxes.len();
+    let mut reached = vec![false; n];
+    if n == 0 {
+        return reached;
+    }
+    let cell = (boxes.iter().filter(|b| b.iter().all(|v| v.is_finite())).map(|b| (b[2] - b[0]).max(b[3] - b[1])).sum::<f64>() / n as f64).max(1e-3);
+    let span = |b: &[f64; 4]| ((b[0] / cell).floor() as i64, (b[1] / cell).floor() as i64, (b[2] / cell).floor() as i64, (b[3] / cell).floor() as i64);
+    // a box over more than 64 cells, and one at no number, is looked at from every box
+    let mut cells: std::collections::HashMap<(i64, i64), Vec<usize>> = std::collections::HashMap::new();
+    let mut wide: Vec<usize> = Vec::new();
+    for (k, b) in boxes.iter().enumerate() {
+        let (x0, y0, x1, y1) = span(b);
+        if !b.iter().all(|v| v.is_finite()) || (x1 - x0 + 1) * (y1 - y0 + 1) > 64 {
+            wide.push(k);
+            continue;
+        }
+        for x in x0..=x1 {
+            for y in y0..=y1 {
+                cells.entry((x, y)).or_default().push(k);
+            }
+        }
+    }
+    let meet = |a: &[f64; 4], b: &[f64; 4]| a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];
+    let mut queue = from;
+    for &k in &queue {
+        reached[k] = true;
+    }
+    while let Some(k) = queue.pop() {
+        let b = boxes[k];
+        let near: Vec<usize> = if !b.iter().all(|v| v.is_finite()) {
+            (0..n).collect()
+        } else {
+            let (x0, y0, x1, y1) = span(&b);
+            if (x1 - x0 + 1) * (y1 - y0 + 1) > 64 {
+                (0..n).collect()
+            } else {
+                (x0..=x1).flat_map(|x| (y0..=y1).map(move |y| (x, y))).filter_map(|c| cells.get(&c)).flatten().copied().chain(wide.iter().copied()).collect()
+            }
+        };
+        for j in near {
+            if !reached[j] && (meet(&b, &boxes[j]) || !boxes[j].iter().all(|v| v.is_finite())) {
+                reached[j] = true;
+                queue.push(j);
+            }
+        }
+    }
+    reached
+}
+
+/// WHAT A SOLVE OF A SKETCH REBUILDS of its loops after it.
+#[derive(Clone, Copy, PartialEq)]
+pub(super) enum Rebuild {
+    /// every loop: an edit, the release of a drag
+    Whole,
+    /// the loops of what the solve moved: a frame of a drag (`Project::regen_sketch_moved`)
+    Moved,
 }
