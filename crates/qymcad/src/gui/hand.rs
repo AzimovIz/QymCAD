@@ -23,6 +23,14 @@ pub(super) struct Hand<'a> {
     /// THE WINDOW the mouse and the keys go into, kept for the whole gesture: egui tells a click from a drag,
     /// and a double click from two clicks, by what it saw in the frames before.
     win: super::window::Window,
+    /// the longest frame since it was last asked for (`worst_frame`): what a person feels as the window standing still
+    worst: std::time::Duration,
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Where the button of each hint was found last, looked at first the next time.
+    static SEEN: std::cell::RefCell<std::collections::HashMap<String, egui::Pos2>> = Default::default();
 }
 
 #[cfg(test)]
@@ -35,7 +43,7 @@ impl<'a> Hand<'a> {
         app.viewing.mode_3d = true;
         app.viewing.cam.init = true;
         let rect = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(900.0, 700.0));
-        Self { app, rect, win: super::window::Window::new(Self::SCREEN) }
+        Self { app, rect, win: super::window::Window::new(Self::SCREEN), worst: std::time::Duration::ZERO }
     }
 
     /// ONE WHOLE FRAME OF THE WINDOW with `events` in it, a sixtieth of a second after the one before.
@@ -62,8 +70,17 @@ impl<'a> Hand<'a> {
     }
 
     fn run(&mut self, modifiers: egui::Modifiers, events: Vec<egui::Event>) -> &mut Self {
+        let started = std::time::Instant::now();
         self.win.run(self.app, modifiers, events, false);
+        self.worst = self.worst.max(started.elapsed());
         self
+    }
+
+    /// THE LONGEST FRAME SINCE THIS WAS LAST ASKED: the window standing still under a step of the hand. The time of a
+    /// whole gesture holds the hand's own looking - over the hint of every button, four frames each - which a person
+    /// who knows the panel does not do; the longest frame is what the person waits.
+    pub fn worst_frame(&mut self) -> std::time::Duration {
+        std::mem::take(&mut self.worst)
     }
 
     /// PRESS THE BUTTON WHOSE HINT IS `hint`, found as a person finds an icon they do not know: the hand goes
@@ -73,39 +90,78 @@ impl<'a> Hand<'a> {
     /// A hint comes up once the pointer has stood still for half a second, so the hand rests a second over each
     /// button. Where a button was found last time is looked at first; it is still read before it is pressed.
     pub fn press_hint(&mut self, hint: &str) -> bool {
-        thread_local! {
-            static SEEN: std::cell::RefCell<std::collections::HashMap<String, egui::Pos2>> = Default::default();
+        match self.find_hint(hint) {
+            Some(at) => {
+                self.press_screen(at);
+                true
+            }
+            None => false,
         }
+    }
+
+    /// KNOW WHERE THE BUTTON OF `hint` STANDS, pressing nothing: the hand looks for it as `press_hint` does and
+    /// remembers the place. A person knows where the buttons of the panel are; a probe that times a tool learns them
+    /// first, or it times the looking - over the hint of every button, four frames each, 6 s of a frame of 30 ms.
+    pub fn know_hint(&mut self, hint: &str) -> bool {
+        self.find_hint(hint).is_some()
+    }
+
+    fn find_hint(&mut self, hint: &str) -> Option<egui::Pos2> {
         self.frame(Vec::new());
         let known = SEEN.with(|s| s.borrow().get(hint).copied());
         if let Some(at) = known.filter(|at| self.win.plates.contains(at)) {
             if self.hint_comes_up(at, hint) {
-                self.press_screen(at);
-                return true;
+                return Some(at);
             }
         }
+        // down the panel from where it stands; and where the button was not below, from the top of the panel down: a
+        // button looked for before may have led the panel down past this one
+        if let Some(at) = self.hint_down_the_panel(hint) {
+            return Some(at);
+        }
+        self.panel_to_its_top();
+        self.hint_down_the_panel(hint)
+    }
+
+    /// The button of `hint` looked for down the panel, a notch of the wheel at a time; it is remembered where found.
+    fn hint_down_the_panel(&mut self, hint: &str) -> Option<egui::Pos2> {
         let mut scrolled = 0;
         loop {
             for at in self.win.plates.clone() {
                 if self.hint_comes_up(at, hint) {
                     SEEN.with(|s| s.borrow_mut().insert(hint.to_string(), at));
-                    self.press_screen(at);
-                    return true;
+                    return Some(at);
                 }
             }
-            // down the panel the buttons stand in, a notch of the wheel at a time
-            let Some(over) = self.win.plates.first().copied() else { return false };
-            let before = self.win.plates.clone();
-            let wheel = egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: egui::vec2(0.0, -200.0), phase: egui::TouchPhase::Move, modifiers: Default::default() };
-            self.frame(vec![egui::Event::PointerMoved(over), wheel]);
-            for _ in 0..10 {
-                self.frame(vec![egui::Event::PointerMoved(over)]); // the scroll is smoothed over frames
+            if !self.panel_turned(-200.0) {
+                return None; // the panel went no further: there is no such button below
             }
             scrolled += 1;
-            if self.win.plates == before || scrolled > 10 {
-                return false; // the panel went no further: there is no such button
+            if scrolled > 10 {
+                return None;
             }
         }
+    }
+
+    /// The panel the buttons stand in turned back to its top.
+    fn panel_to_its_top(&mut self) {
+        for _ in 0..12 {
+            if !self.panel_turned(200.0) {
+                break;
+            }
+        }
+    }
+
+    /// The panel turned by a notch of the wheel, `by` points up (positive) or down; answers whether it moved.
+    fn panel_turned(&mut self, by: f32) -> bool {
+        let Some(over) = self.win.plates.first().copied() else { return false };
+        let before = self.win.plates.clone();
+        let wheel = egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: egui::vec2(0.0, by), phase: egui::TouchPhase::Move, modifiers: Default::default() };
+        self.frame(vec![egui::Event::PointerMoved(over), wheel]);
+        for _ in 0..10 {
+            self.frame(vec![egui::Event::PointerMoved(over)]); // the scroll is smoothed over frames
+        }
+        self.win.plates != before
     }
 
     /// Does `hint` come up with the pointer resting over `at`? Only a hint that was not on screen before counts:
