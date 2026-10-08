@@ -353,6 +353,19 @@ pub struct Project {
     /// their bodies are neither built nor shown. `None` builds everything. Saved with the project.
     #[serde(default)]
     pub rollback: Option<usize>,
+    /// THE REBUILDS OF SKETCHES HELD BACK while a tool lays many elements (`Project::batch`). Not a fact of the
+    /// document.
+    #[serde(skip)]
+    pub held_rebuilds: HeldRebuilds,
+}
+
+/// The sketches whose rebuild is held back, and how deep the batches go.
+#[derive(Clone, Debug, Default)]
+pub struct HeldRebuilds {
+    depth: u32,
+    sketches: std::collections::BTreeSet<usize>,
+    /// the sketches whose solve is held back too (`Project::solve_sketch_held`)
+    solves: std::collections::BTreeSet<usize>,
 }
 
 /// Definition of a datum point. `at` is derived whenever the definition is not `Manual`.
@@ -607,9 +620,63 @@ pub struct Sketch {
     /// WHAT A DRAG UNDER WAY KEEPS from one frame to the next (`drag::DragSession`). Not a fact of the drawing.
     #[serde(skip)]
     pub(crate) drag_session: Option<Box<drag::DragSession>>,
+    /// THE PLACES OF THE POINTS AND OF THE ENTITIES BY ID (`Sketch::point`, `Sketch::entity`). Not a fact of the drawing.
+    #[serde(skip)]
+    pub(crate) point_at: IdPlaces,
+    #[serde(skip)]
+    pub(crate) entity_at: IdPlaces,
+}
+
+/// THE PLACE OF EACH ID IN A LIST, a table that checks itself: a place found is taken only where the list still holds
+/// that id there; an id not found puts in the tail the list has grown by, and failing that makes the table again. Asked through `Sketch::point` and
+/// `Sketch::entity`, it is right however the lists were changed; looked along the lists, a tool laying an element at
+/// every corner of 2 000 rectangles looked through them some ten times a corner - 7 s in a release build. Copied, a
+/// sketch makes its own anew.
+#[derive(Debug, Default)]
+pub(crate) struct IdPlaces(std::sync::Mutex<std::collections::HashMap<Id, usize>>);
+
+impl Clone for IdPlaces {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl IdPlaces {
+    fn find<T>(&self, list: &[T], id: Id, id_of: impl Fn(&T) -> Id) -> Option<usize> {
+        let mut places = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(&i) = places.get(&id) {
+            if list.get(i).is_some_and(|x| id_of(x) == id) {
+                return Some(i);
+            }
+        }
+        // most changes add to the end of a list: the new tail is put in first, the whole list only if that is not it
+        let known = places.len();
+        if known < list.len() {
+            for (i, x) in list.iter().enumerate().skip(known) {
+                places.insert(id_of(x), i);
+            }
+            if let Some(&i) = places.get(&id) {
+                if list.get(i).is_some_and(|x| id_of(x) == id) {
+                    return Some(i);
+                }
+            }
+        }
+        *places = list.iter().enumerate().map(|(i, x)| (id_of(x), i)).collect();
+        places.get(&id).copied()
+    }
 }
 
 impl Sketch {
+    /// The point of id `id` (`IdPlaces`).
+    pub fn point(&self, id: Id) -> Option<&SketchPoint> {
+        self.point_at.find(&self.points, id, |p| p.id).map(|i| &self.points[i])
+    }
+
+    /// The entity of id `id` (`IdPlaces`).
+    pub fn entity(&self, id: Id) -> Option<&SketchEntity> {
+        self.entity_at.find(&self.entities, id, |e| e.id).map(|i| &self.entities[i])
+    }
+
     /// System points of the sketch: the origin and the endpoints of the X and Y axes. They cannot be
     /// dragged, deleted or counted as free.
     ///
@@ -2271,6 +2338,11 @@ impl Project {
     /// corners that took it and left whole on the one that did not, the set was a half-made drawing nobody asked for.
     /// Answers how many corners were cut.
     pub fn cut_corner_set(&mut self, si: usize, corners: &[CornerAt], cut: CornerCut, toward: Option<crate::geom::Point2>) -> usize {
+        // every corner laid, the sketch rebuilt once (`batch`)
+        self.batch(|p| p.cut_corner_set_unbuilt(si, corners, cut, toward))
+    }
+
+    fn cut_corner_set_unbuilt(&mut self, si: usize, corners: &[CornerAt], cut: CornerCut, toward: Option<crate::geom::Point2>) -> usize {
         let Some(before) = self.sketches.get(si).cloned() else { return 0 };
         for corner in corners {
             let done = match cut {

@@ -35,7 +35,6 @@ pub const KINDS: [Kind; 8] = [Kind::Lines, Kind::Arcs, Kind::Rectangles, Kind::C
 struct Laying {
     p: Project,
     si: usize,
-    next: u64,
     /// the state of the pseudo-random sequence of `Kind::Mixed`
     seed: u64,
 }
@@ -54,13 +53,13 @@ impl Laying {
         let mut p = Project::default();
         p.new_document();
         let si = p.new_sketch("S");
-        let next = p.alloc_id() + 1;
-        Laying { p, si, next, seed: 0x9E37_79B9_7F4A_7C15 }
+        Laying { p, si, seed: 0x9E37_79B9_7F4A_7C15 }
     }
 
+    /// A new id from the project itself: an id counted apart was handed out again by the project to the points and
+    /// curves a tool makes, and a fillet of every corner made 118 942 loops of 500 rectangles.
     fn id(&mut self) -> u64 {
-        self.next += 1;
-        self.next
+        self.p.alloc_id()
     }
 
     fn point(&mut self, x: f64, y: f64) -> u64 {

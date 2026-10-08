@@ -260,6 +260,8 @@ impl Project {
             origin_uv: None,
             left_unsolved: 0,
             drag_session: None,
+            point_at: Default::default(),
+            entity_at: Default::default(),
         });
         self.sketches.len() - 1
     }
@@ -446,6 +448,8 @@ impl Project {
             origin_uv: None,
             left_unsolved: 0,
             drag_session: None,
+            point_at: Default::default(),
+            entity_at: Default::default(),
         });
         self.regen_sketch(si);
         sid
@@ -475,6 +479,8 @@ impl Project {
             origin_uv: None,
             left_unsolved: 0,
             drag_session: None,
+            point_at: Default::default(),
+            entity_at: Default::default(),
         });
         self.sketches.len() - 1
     }
@@ -1861,7 +1867,7 @@ impl Project {
     }
     pub(super) fn line_ends(&self, si: usize, eid: Id) -> Option<(Id, Id)> {
         let s = self.sketches.get(si)?;
-        s.entities.iter().find(|e| e.id == eid).and_then(|e| match e.kind {
+        s.entity(eid).and_then(|e| match e.kind {
             EntityKind::Line { a, b } => Some((a, b)),
             _ => None,
         })
@@ -2130,7 +2136,7 @@ impl Project {
     /// WHERE A POINT STANDS in the drawing, or `None` where the sketch has no such point.
     pub fn point_xy(&self, si: usize, id: Id) -> Option<(f64, f64)> {
         let s = self.sketches.get(si)?;
-        s.points.iter().find(|p| p.id == id).map(|p| (p.x, p.y))
+        s.point(id).map(|p| (p.x, p.y))
     }
     /// Set the radius of an arc entity, moving its endpoints to radius `rr` while preserving their angles.
     /// PUT A RADIUS DIMENSION ON A PLAIN ARC: the radius set, then held by a driving dimension, as the radius of a
@@ -2405,8 +2411,17 @@ impl Project {
             }
             (x, y)
         };
+        // only a constraint naming the corner has a pair to carry: `pair` changes a pair one of whose points is `pc`. The
+        // whole match for every constraint of the sketch was 2.3 s of filleting every corner of 2 000 rectangles.
+        let names_corner = |c: &Constraint| match *c {
+            Constraint::Horizontal { a, b } | Constraint::Vertical { a, b } | Constraint::Orientation { a, b, .. } | Constraint::Tangent { a, b, .. } | Constraint::PointOnLine { a, b, .. } => {
+                a == pc || b == pc
+            }
+            Constraint::Equal { a, b, c, d } | Constraint::Parallel { a, b, c, d } | Constraint::Perpendicular { a, b, c, d } | Constraint::Collinear { a, b, c, d } => [a, b, c, d].contains(&pc),
+            _ => false,
+        };
         if let Some(s) = self.sketches.get_mut(si) {
-            for c in s.constraints.iter_mut() {
+            for c in s.constraints.iter_mut().filter(|c| names_corner(c)) {
                 match c {
                     // a tangency or a point held on a line names the line by two points too: rounding the next corner of
                     // a rectangle shortened a side whose tangency still ran to the old vertex, and that vertex was kept
@@ -2550,14 +2565,14 @@ impl Project {
         // valid and the contour stays whole.
         self.settle_the_corner_point(si, pc, o1, t1, o2, t2);
         // SOLVED, not only drawn: the legs and the angle are laid as dimensions above, and a chamfer of two legs or of a
-        // leg and an angle stands by them only once the sketch is solved
-        self.solve_sketch(si);
+        // leg and an angle stands by them only once the sketch is solved - at the end of a batch of corners, once
+        self.solve_sketch_held(si);
         true
     }
     /// Endpoints of an edge entity (a line or an arc), used to find the shared vertex when filleting.
     pub(super) fn edge_end_ids(&self, si: usize, eid: Id) -> Option<(Id, Id)> {
         let s = self.sketches.get(si)?;
-        s.entities.iter().find(|e| e.id == eid).and_then(|e| match e.kind {
+        s.entity(eid).and_then(|e| match e.kind {
             EntityKind::Line { a, b } => Some((a, b)),
             EntityKind::Arc { a, b, .. } => Some((a, b)),
             _ => None,
@@ -3214,14 +3229,17 @@ impl Project {
             }
             count.into_iter().filter(|&(_, c)| c == 2).map(|(id, _)| id).collect()
         };
-        let mut done = 0;
-        for pid in corners {
-            // Is the vertex still intact, with two edges still meeting there?
-            if self.sketches.get(si).is_some_and(|s| s.points.iter().any(|q| q.id == pid)) && self.vertex_edges(si, pid).len() == 2 && self.fillet_at_vertex_by(si, pid, size) {
-                done += 1;
+        // every corner laid, the sketch rebuilt once (`batch`)
+        self.batch(|p| {
+            let mut done = 0;
+            for pid in corners {
+                // Is the vertex still intact, with two edges still meeting there?
+                if p.sketches.get(si).is_some_and(|s| s.points.iter().any(|q| q.id == pid)) && p.vertex_edges(si, pid).len() == 2 && p.fillet_at_vertex_by(si, pid, size) {
+                    done += 1;
+                }
             }
-        }
-        done
+            done
+        })
     }
     /// Offset the selected entities: their closed loops are moved by `dist`, inwards or outwards, and added as
     /// new entities.
@@ -3672,6 +3690,11 @@ impl Project {
     /// Rebuild the contours of a sketch from its entities, as a multi-loop tessellation. The contour ids are
     /// preserved where possible (see the matching below).
     pub fn regen_sketch(&mut self, si: usize) {
+        // within a batch the rebuild waits for its end, once for every change (`batch`)
+        if self.held_rebuilds.depth > 0 {
+            self.held_rebuilds.sketches.insert(si);
+            return;
+        }
         // the loops are made anew: what a drag kept of them goes
         if let Some(s) = self.sketches.get_mut(si) {
             s.drag_session = None;
@@ -3729,6 +3752,39 @@ impl Project {
         let new_entity_cids = self.replace_contours(entity_cids, pairs, &[]);
         self.sketches[si].contour_ids = new_entity_cids;
     }
+    /// A BATCH OF CHANGES TO SKETCHES: within `work` a rebuild of a sketch is held back, and at its end every sketch
+    /// asked for is rebuilt once. A tool that lays many elements, each rebuilding the sketch, rebuilt it as many times:
+    /// every corner of 2 000 rectangles filleted took 1 673 s in a test build. Batches nest; the outermost rebuilds.
+    pub fn batch<R>(&mut self, work: impl FnOnce(&mut Self) -> R) -> R {
+        self.held_rebuilds.depth += 1;
+        let out = work(self);
+        self.held_rebuilds.depth -= 1;
+        if self.held_rebuilds.depth == 0 {
+            // the solves held back first, each rebuilding its sketch; then the rebuilds of the rest
+            let solves = std::mem::take(&mut self.held_rebuilds.solves);
+            for &si in &solves {
+                self.solve_sketch(si);
+            }
+            for si in std::mem::take(&mut self.held_rebuilds.sketches) {
+                if !solves.contains(&si) {
+                    self.regen_sketch(si);
+                }
+            }
+        }
+        out
+    }
+
+    /// SOLVE A SKETCH, or within a batch at its end, once for every change (`batch`) - for a tool that solves after
+    /// laying an element and reads nothing of the solve. A chamfer at each of 20 corners solved the whole sketch 20
+    /// times.
+    pub fn solve_sketch_held(&mut self, si: usize) {
+        if self.held_rebuilds.depth > 0 {
+            self.held_rebuilds.solves.insert(si);
+            return;
+        }
+        self.solve_sketch(si);
+    }
+
     /// THE LOOPS OF A SKETCH REBUILT WHERE IT MOVED, for a frame of a drag: `moved` - the points moved by the frame and
     /// the centres of the circles whose radius changed. The loops are the faces of the arrangement of the curves and
     /// the open chains, and neither runs between curves whose boxes, widened past every weld, do not meet: the curves
@@ -4111,7 +4167,10 @@ impl Project {
         // the origin is a CONSTRAINT, made by clicking it with the constraint tool - not by silently
         // sharing the id.
         let sys = self.sketches[si].system_ids();
-        if let Some(p) = self.sketches[si].points.iter().filter(|p| !sys.contains(&p.id)).find(|p| ((p.x - x).powi(2) + (p.y - y).powi(2)).sqrt() <= eps) {
+        // the distance told by its square first, the frame of reference only for a point that near: a root and a look
+        // at the frame for every point of the sketch was 2 s of filleting every corner of 2 000 rectangles
+        let near = eps * eps;
+        if let Some(p) = self.sketches[si].points.iter().find(|p| (p.x - x).powi(2) + (p.y - y).powi(2) <= near && !sys.contains(&p.id)) {
             return p.id;
         }
         let id = self.alloc_id();
@@ -4364,6 +4423,8 @@ impl Project {
             origin_uv: None,
             left_unsolved: 0,
             drag_session: None,
+            point_at: Default::default(),
+            entity_at: Default::default(),
         });
         id
     }
