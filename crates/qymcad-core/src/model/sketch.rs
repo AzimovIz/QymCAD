@@ -4330,7 +4330,7 @@ impl Project {
         self.sketches[si].plane = plane;
         // Endpoint deduplication cache: nearby endpoints of adjacent curves become one sketch point, which is
         // what makes the chain connected and closable.
-        let mut cache: Vec<(f64, f64, Id)> = Vec::new();
+        let mut cache = ImportPoints { welded: super::tess::Welded::new(IMPORT_WELD), ids: Vec::new() };
         for e in &curves {
             match *e {
                 ProfEdge::Line { a, b } => {
@@ -4364,15 +4364,17 @@ impl Project {
         si
     }
     /// Return the id of a sketch point at (x, y), reusing a nearby one (endpoint deduplication for imports) or
-    /// creating one.
-    pub(super) fn import_intern_pt(&mut self, si: usize, cache: &mut Vec<(f64, f64, Id)>, x: f64, y: f64) -> Id {
-        const TOL: f64 = 1e-4;
-        if let Some((_, _, id)) = cache.iter().find(|(cx, cy, _)| (cx - x).abs() < TOL && (cy - y).abs() < TOL) {
-            return *id;
+    /// creating one. Nearby: within `IMPORT_WELD` along x and along y; the first point made that is, as a look along
+    /// all of them in order finds it - through a grid as wide (`Welded`): the 140 000 ends of a drawing of 70 000
+    /// segments looked along every point before them took 5.3 s.
+    pub(super) fn import_intern_pt(&mut self, si: usize, cache: &mut ImportPoints, x: f64, y: f64) -> Id {
+        let node = cache.welded.weld((x, y), |(cx, cy), (x, y)| (cx - x).abs() < IMPORT_WELD && (cy - y).abs() < IMPORT_WELD);
+        if let Some(&id) = cache.ids.get(node) {
+            return id;
         }
         let id = self.alloc_id();
         self.sketches[si].points.push(SketchPoint { id, x, y });
-        cache.push((x, y, id));
+        cache.ids.push(id);
         id
     }
     pub fn sketch_index(&self, id: Id) -> Option<usize> {
@@ -5350,4 +5352,13 @@ fn hold_offset_loop(ids: &[Id], kinds: &[(EntityKind, OffsetSource)], dist: f64)
         }
     }
     held
+}
+
+/// Ends of imported curves closer than this along x and along y are one point, mm.
+const IMPORT_WELD: f64 = 1e-4;
+
+/// THE POINTS AN IMPORT HAS MADE: the places welded into nodes, and the point each node is.
+pub(super) struct ImportPoints {
+    welded: super::tess::Welded,
+    ids: Vec<Id>,
 }

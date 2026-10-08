@@ -423,7 +423,7 @@ pub(super) fn arr_intersect(x: ArrCurve, y: ArrCurve) -> Vec<(f64, f64)> {
 /// near, as a look through all the nodes in that order finds it. The nodes are looked up in the point's own and the
 /// neighbouring cells of a grid `reach` wide, so `near` must say no past `reach`: 10 000 lines are 40 000 points,
 /// and a look through all nodes for each of them was 8e8 comparisons.
-struct Welded {
+pub(super) struct Welded {
     reach: f64,
     at: Vec<(f64, f64)>,
     cells: std::collections::HashMap<(i64, i64), Vec<usize>>,
@@ -433,7 +433,7 @@ struct Welded {
 const WELD: f64 = 1e-4;
 
 impl Welded {
-    fn new(reach: f64) -> Self {
+    pub(super) fn new(reach: f64) -> Self {
         Welded { reach, at: Vec::new(), cells: std::collections::HashMap::new() }
     }
 
@@ -441,7 +441,7 @@ impl Welded {
         ((p.0 / self.reach).floor() as i64, (p.1 / self.reach).floor() as i64)
     }
 
-    fn weld(&mut self, p: (f64, f64), near: impl Fn((f64, f64), (f64, f64)) -> bool) -> usize {
+    pub(super) fn weld(&mut self, p: (f64, f64), near: impl Fn((f64, f64), (f64, f64)) -> bool) -> usize {
         let (cx, cy) = self.cell(p);
         let found = (cx - 1..=cx + 1).flat_map(|x| (cy - 1..=cy + 1).map(move |y| (x, y))).filter_map(|c| self.cells.get(&c)).flatten().copied().filter(|&k| near(self.at[k], p)).min();
         if let Some(k) = found {

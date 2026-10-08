@@ -150,3 +150,30 @@ fn the_diagnostics_of_one_big_part_are_counted_sparse() {
     assert!(free.iter().any(|f| *f), "an array that is free to move has free points");
     assert!(t < Duration::from_secs(2), "the diagnostics of an array of 1 000 rectangles took {t:?}, budget 2 s in a test build");
 }
+
+#[test]
+fn a_drawing_of_forty_thousand_segments_comes_in_whole() {
+    // Measured through the window in a release build: 70 000 segments took 5.3 s to lay on a plane - every end was
+    // looked for among every point made before it.
+    use qymcad_core::geom::{Point2, ProfEdge};
+    let n = 10_000;
+    let side = (n as f64).sqrt().ceil() as usize;
+    let curves: Vec<ProfEdge> = (0..n)
+        .flat_map(|k| {
+            let (x, y) = ((k % side) as f64 * 20.0, (k / side) as f64 * 20.0);
+            let c = [Point2::new(x, y), Point2::new(x + 10.0, y), Point2::new(x + 10.0, y + 6.0), Point2::new(x, y + 6.0)];
+            (0..4).map(move |i| ProfEdge::Line { a: c[i], b: c[(i + 1) % 4] })
+        })
+        .collect();
+    let mut p = qymcad_core::model::Project::default();
+    p.new_document();
+    let started = Instant::now();
+    let si = p.import_sketch("drawing", curves, None, Default::default());
+    let t = started.elapsed();
+    eprintln!("40 000 segments imported: {t:?}");
+    let s = &p.sketches[si];
+    let own = s.points.len() - s.system_ids().len();
+    assert_eq!(own, 4 * n, "every rectangle is four points, its corners shared by its sides");
+    assert_eq!(s.entities.len(), 4 * n);
+    assert!(t < Duration::from_secs(3), "40 000 segments took {t:?} to come in, budget 3 s in a test build");
+}
