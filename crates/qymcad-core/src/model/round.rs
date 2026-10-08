@@ -13,7 +13,7 @@
 //!
 //! The open chains are made apart, from the curves joined end to end with a moved one: a chain is all the curves so
 //! joined, wherever they reach.
-use super::tess::{arrangement_regions_prov, tessellate_sketch_multi};
+use super::tess::{arrangement_faces, tessellate_sketch_multi};
 use super::*;
 use crate::geom::ProfEdge;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -42,6 +42,16 @@ pub(super) fn regions_round(ch: &Change) -> Vec<(Contour, Vec<Id>)> {
     let Some(all) = ch.boxes.iter().copied().filter(finite).reduce(union) else { return Vec::new() };
     let Some(mut w) = ch.swept.iter().copied().chain(ch.held).filter(finite).reduce(union) else { return Vec::new() };
     let moved: HashSet<Id> = ch.moved.iter().map(|&k| (ch.curve)(k).id).collect();
+    // an end of a moved curve with nothing else of the sketch at it
+    let free_end = |id: Id, p: Point2| -> bool {
+        let Some(&k) = ch.moved.iter().find(|&&k| (ch.curve)(k).id == id) else { return false };
+        let is_end = match (ch.curve)(k).kind {
+            EntityKind::Line { a, b } | EntityKind::Arc { a, b, .. } => [a, b].into_iter().filter_map(ch.at).any(|q| (q.x - p.x).hypot(q.y - p.y) < 1e-6),
+            _ => false,
+        };
+        let spot = [p.x - 1e-3, p.y - 1e-3, p.x + 1e-3, p.y + 1e-3];
+        is_end && (ch.near)(&spot).into_iter().all(|j| j == k || !meet(&ch.boxes[j], &spot))
+    };
     loop {
         let laid: Vec<usize> = (ch.near)(&w).into_iter().chain(ch.moved.iter().copied()).collect::<BTreeSet<usize>>().into_iter().filter(|&k| meet(&ch.boxes[k], &w)).collect();
         let margin = 1.0 + 0.01 * (w[2] - w[0]).max(w[3] - w[1]);
@@ -60,14 +70,26 @@ pub(super) fn regions_round(ch: &Change) -> Vec<(Contour, Vec<Id>)> {
         // the sides a region running out of the window was found at: bottom, right, top, left
         let mut grow = [false; 4];
         let mut grew = false;
-        for (c, prov) in arrangement_regions_prov(&pts, &ents) {
+        let faces = arrangement_faces(&pts, &ents);
+        // A PIECE OF THE DRAWING SEEN WHOLE IN THE WINDOW, clear of its sides, is walked round on its outside and not
+        // made a region: a moved curve on that walk may close a region with what lies past the window. The window takes
+        // the piece in, and the next laying reaches further along it - the half disc whose diameter was drawn last came
+        // in a few segments a step
+        for walk in &faces.outer {
+            let b = contour_box(walk);
+            if !inside(&b, &w) && borders_a_moved_curve(walk, &moved, &free_end) {
+                w = union(w, b);
+                grew = true;
+            }
+        }
+        for (c, prov) in faces.inner {
             let b = contour_box(&c);
             if !ch.swept.iter().any(|s| meet(&b, s)) {
                 continue; // a region the change did not reach: the one of the sketch stands
             }
             let sides: Vec<usize> = prov.iter().chain(&c.edge_src).filter(|id| **id <= RIM_SIDE && **id > RIM_SIDE - 4).map(|id| (RIM_SIDE - id) as usize).collect();
             if !sides.is_empty() {
-                if borders_a_moved_curve(&c, &moved) {
+                if borders_a_moved_curve(&c, &moved, &free_end) {
                     for side in sides {
                         grow[side] = true;
                     }
@@ -146,19 +168,24 @@ pub(super) fn chains_round(ch: &Change, from: &[usize]) -> Chains {
     Chains { made: tessellate_sketch_multi(&pts, &ents).into_iter().filter(|c| !c.closed).map(|c| (c, Vec::new())).collect(), through: ents.iter().map(|e| e.id).collect() }
 }
 
-/// WHETHER A MOVED CURVE BOUNDS A REGION, an edge of it with another face across: where it runs on to the side of the
-/// window, the region may go on past the side and close there. A moved curve that only hangs into a region - each of
-/// its edges there walked both ways, as an end of a line standing out past the last line across it - bounds nothing:
-/// the region is as it was before the curve came, and was either a region then, held in the window, or the outside.
-/// Grown for such an end, the window of a line of a grid of 200 by 200 took the whole grid, 0.25 s a frame.
-fn borders_a_moved_curve(c: &Contour, moved: &HashSet<Id>) -> bool {
+/// WHETHER A MOVED CURVE BOUNDS A REGION, so the region may run on past the side of the window and close there: an edge
+/// of it with another face across, or an edge walked both ways that does not end at a free end of its curve. In the
+/// window a curve is laid without what lies past it, and a curve the window shows hanging may close a loop out of
+/// sight: the diameter of a half disc drawn last, laid with only the two segments of the arc beside its ends, was walked
+/// both ways, the window did not grow, and the half disc was lost. Only an end standing alone in the whole sketch -
+/// a line past the last line across it in a grid - hangs for sure; grown for such ends, the window of a line of a grid
+/// of 200 by 200 took the whole grid, 0.25 s a frame.
+fn borders_a_moved_curve(c: &Contour, moved: &HashSet<Id>, free_end: &dyn Fn(Id, Point2) -> bool) -> bool {
     let key = |p: Point2| ((p.x * 1e6).round() as i64, (p.y * 1e6).round() as i64);
     let ends = |e: &ProfEdge| match *e {
-        ProfEdge::Line { a, b } | ProfEdge::Arc { a, b, .. } => Some((key(a), key(b))),
+        ProfEdge::Line { a, b } | ProfEdge::Arc { a, b, .. } => Some((a, b)),
         ProfEdge::Circle { .. } => None,
     };
-    let walked: HashSet<((i64, i64), (i64, i64))> = c.edges.iter().filter_map(ends).collect();
-    c.edges.iter().zip(&c.edge_src).filter(|(_, id)| moved.contains(id)).any(|(e, _)| ends(e).is_none_or(|(a, b)| !walked.contains(&(b, a))))
+    let walked: HashSet<((i64, i64), (i64, i64))> = c.edges.iter().filter_map(ends).map(|(a, b)| (key(a), key(b))).collect();
+    c.edges.iter().zip(&c.edge_src).filter(|(_, id)| moved.contains(id)).any(|(e, &id)| match ends(e) {
+        None => true,
+        Some((a, b)) => !walked.contains(&(key(b), key(a))) || !(free_end(id, a) || free_end(id, b)),
+    })
 }
 
 /// The ids of the four corners and of the four sides of the window: past every id a sketch hands out.

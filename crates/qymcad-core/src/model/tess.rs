@@ -515,6 +515,19 @@ pub(super) fn arrangement_regions(points: &[SketchPoint], entities: &[SketchEnti
 /// is stitched from. This is what keeps the identity of a contour stable across edits, so that loops which
 /// swapped places do not take over each other's ids.
 pub(super) fn arrangement_regions_prov(points: &[SketchPoint], entities: &[SketchEntity]) -> Vec<(Contour, Vec<Id>)> {
+    arrangement_faces(points, entities).inner
+}
+
+/// THE FACES OF AN ARRANGEMENT AND THE WALKS AROUND ITS PIECES: the regions of `arrangement_regions_prov`, and the walks
+/// left out of them - the outside of each piece of the drawing, clockwise, and the walk along a piece that bounds no
+/// area, out along it and back. The loops round a change (`round`) look at those: a moved curve on the outside of a
+/// piece seen in its window may close a region past it.
+pub(super) struct Faces {
+    pub inner: Vec<(Contour, Vec<Id>)>,
+    pub outer: Vec<Contour>,
+}
+
+pub(super) fn arrangement_faces(points: &[SketchPoint], entities: &[SketchEntity]) -> Faces {
     use std::f64::consts::{PI, TAU};
     let at: std::collections::HashMap<Id, (f64, f64)> = points.iter().map(|p| (p.id, (p.x, p.y))).collect();
     let pt = |id: Id| at.get(&id).copied();
@@ -559,8 +572,9 @@ pub(super) fn arrangement_regions_prov(points: &[SketchPoint], entities: &[Sketc
     }
     let nc = curves.len();
     let mut out: Vec<(Contour, Vec<Id>)> = std::mem::take(&mut out_ellipse);
+    let mut outer: Vec<Contour> = Vec::new();
     if nc == 0 {
-        return out;
+        return Faces { inner: out, outer };
     }
     // Only the curves whose boxes meet are intersected (`meeting_pairs`), in the order of the pairs of every curve with
     // every other, so the cuts come in the order they always did. All pairs of 10 000 lines are 5e7 intersections.
@@ -680,7 +694,7 @@ pub(super) fn arrangement_regions_prov(points: &[SketchPoint], entities: &[Sketc
     }
     let nodes = nodes.at;
     if edges.is_empty() {
-        return out;
+        return Faces { inner: out, outer };
     }
     if std::env::var("QYM_ARR_DEBUG").is_ok() {
         eprintln!("[arr] curves={nc} nodes={} edges={}", nodes.len(), edges.len());
@@ -838,9 +852,11 @@ pub(super) fn arrangement_regions_prov(points: &[SketchPoint], entities: &[Sketc
             // repeats
             let prov: std::collections::BTreeSet<Id> = face.iter().map(|&ei| curve_eid[edges[ei].ci]).collect();
             out.push((cont, prov.into_iter().collect())); // an interior face, counter-clockwise; the outer one and degenerate results were dropped
+        } else {
+            outer.push(cont);
         }
     }
-    out
+    Faces { inner: out, outer }
 }
 
 /// A smooth Catmull-Rom curve through the control points, as a contour.
