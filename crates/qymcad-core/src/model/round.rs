@@ -1,0 +1,234 @@
+//! THE LOOPS ROUND A CHANGE. When curves of a sketch move, only the regions they bounded or crossed before and the
+//! regions they bound or cross now can change; every other region stands. They used to be found as every curve whose
+//! box meets a moved one, and every curve whose box meets one of those, and so on - in a grid where every line crosses
+//! every line across it that is the whole sketch: a frame of a drag of one line of a grid of 200 by 200 made all its
+//! 40 000 cells again, 0.7 s in a release build.
+//!
+//! Here the regions are made inside a window: the boxes of the moved curves where they stood and where they stand (the
+//! swept boxes), and of the regions that held them before. Every curve that meets the window is laid, and four lines
+//! are laid round it. A region inside the window and clear of those four lines is a region of the whole sketch: a
+//! curve that would cut it meets its box, and so the window, and is laid. A region that meets a swept box and runs
+//! into the side of the window may go on past it, and the window grows on that side to the farthest curve laid; a side
+//! already past every curve of the sketch has nothing behind it, and what runs into it is the outside.
+//!
+//! The open chains are made apart, from the curves joined end to end with a moved one: a chain is all the curves so
+//! joined, wherever they reach.
+use super::tess::{arrangement_regions_prov, tessellate_sketch_multi};
+use super::*;
+use crate::geom::ProfEdge;
+use std::collections::{BTreeSet, HashMap, HashSet};
+
+/// WHAT THE LOOPS ROUND A CHANGE ARE MADE FROM: the curves drawn (not construction), each with its box where it stands,
+/// a way to find the curves whose boxes may meet a box, the curves that moved, and where they swept.
+pub(super) struct Change<'a> {
+    /// the curve drawn at a place, and the box of each where it stands
+    pub curve: &'a dyn Fn(usize) -> SketchEntity,
+    pub boxes: &'a [[f64; 4]],
+    /// the point of an id where it stands
+    pub at: &'a dyn Fn(Id) -> Option<SketchPoint>,
+    /// the curves whose boxes may meet a box, by place among `curves`; more is harmless, fewer is not
+    pub near: &'a dyn Fn(&[f64; 4]) -> Vec<usize>,
+    /// the curves that moved, by place
+    pub moved: &'a [usize],
+    /// the boxes of the moved curves where they stood and where they stand
+    pub swept: &'a [[f64; 4]],
+    /// the union of the boxes of the regions before the change that held a moved curve or met a swept box
+    pub held: Option<[f64; 4]>,
+}
+
+/// The regions round a change, each with the curves it is made of, as the regions of the whole sketch would give them:
+/// those whose box meets a swept box.
+pub(super) fn regions_round(ch: &Change) -> Vec<(Contour, Vec<Id>)> {
+    let Some(all) = ch.boxes.iter().copied().filter(finite).reduce(union) else { return Vec::new() };
+    let Some(mut w) = ch.swept.iter().copied().chain(ch.held).filter(finite).reduce(union) else { return Vec::new() };
+    let moved: HashSet<Id> = ch.moved.iter().map(|&k| (ch.curve)(k).id).collect();
+    loop {
+        let laid: Vec<usize> = (ch.near)(&w).into_iter().chain(ch.moved.iter().copied()).collect::<BTreeSet<usize>>().into_iter().filter(|&k| meet(&ch.boxes[k], &w)).collect();
+        let margin = 1.0 + 0.01 * (w[2] - w[0]).max(w[3] - w[1]);
+        let rim = [w[0] - margin, w[1] - margin, w[2] + margin, w[3] + margin];
+        let mut ents: Vec<SketchEntity> = laid.iter().map(|&k| (ch.curve)(k)).collect();
+        let mut pts: Vec<SketchPoint> = ents.iter().flat_map(entity_points).collect::<BTreeSet<Id>>().into_iter().filter_map(ch.at).collect();
+        // the four sides of the window, by ids no sketch gives: a corner a point, a side a line
+        let corner = [(rim[0], rim[1]), (rim[2], rim[1]), (rim[2], rim[3]), (rim[0], rim[3])];
+        for (k, &(x, y)) in corner.iter().enumerate() {
+            pts.push(SketchPoint { id: RIM_POINT - k as Id, x, y });
+        }
+        for side in 0..4 {
+            ents.push(SketchEntity { id: RIM_SIDE - side as Id, kind: EntityKind::Line { a: RIM_POINT - side as Id, b: RIM_POINT - ((side + 1) % 4) as Id }, construction: false });
+        }
+        let mut out = Vec::new();
+        // the sides a region running out of the window was found at: bottom, right, top, left
+        let mut grow = [false; 4];
+        let mut grew = false;
+        for (c, prov) in arrangement_regions_prov(&pts, &ents) {
+            let b = contour_box(&c);
+            if !ch.swept.iter().any(|s| meet(&b, s)) {
+                continue; // a region the change did not reach: the one of the sketch stands
+            }
+            let sides: Vec<usize> = prov.iter().chain(&c.edge_src).filter(|id| **id <= RIM_SIDE && **id > RIM_SIDE - 4).map(|id| (RIM_SIDE - id) as usize).collect();
+            if !sides.is_empty() {
+                if borders_a_moved_curve(&c, &moved) {
+                    for side in sides {
+                        grow[side] = true;
+                    }
+                }
+            } else if inside(&b, &w) {
+                out.push((c, prov));
+            } else if inside(&b, &rim) {
+                // between the window and its sides: a curve laid in neither may cut it, so the window takes it in
+                w = union(w, b);
+                grew = true;
+            }
+        }
+        // a side grows to the farthest curve laid past it, or to the sketch's own box; a side at the sketch's box stays
+        let reach = laid.iter().map(|&k| ch.boxes[k]).filter(finite).fold(w, union);
+        for (side, at) in [(0, 1), (1, 2), (2, 3), (3, 0)] {
+            if !grow[side] {
+                continue;
+            }
+            let (now, past, end) = match at {
+                0 => (w[0], reach[0], all[0]),
+                1 => (w[1], reach[1], all[1]),
+                2 => (w[2], reach[2], all[2]),
+                _ => (w[3], reach[3], all[3]),
+            };
+            let outward = at >= 2;
+            let at_end = if outward { now >= end } else { now <= end };
+            if at_end {
+                continue;
+            }
+            let further = if outward { past > now } else { past < now };
+            w[at] = if further { past } else { end };
+            grew = true;
+        }
+        if !grew {
+            return out;
+        }
+    }
+}
+
+/// The open chains round a change, and the curves they were made from.
+pub(super) struct Chains {
+    pub made: Vec<(Contour, Vec<Id>)>,
+    /// every curve reached: the old chains through any of them give way to the ones made
+    pub through: HashSet<Id>,
+}
+
+/// The open chains of the curves joined end to end with `from` (by place), wherever the joins reach.
+pub(super) fn chains_round(ch: &Change, from: &[usize]) -> Chains {
+    let ends = |k: usize| -> Vec<(f64, f64)> {
+        match (ch.curve)(k).kind {
+            EntityKind::Line { a, b } | EntityKind::Arc { a, b, .. } => [a, b].into_iter().filter_map(ch.at).map(|p| (p.x, p.y)).collect(),
+            _ => Vec::new(),
+        }
+    };
+    let joined = |a: &[(f64, f64)], b: &[(f64, f64)]| a.iter().any(|p| b.iter().any(|q| (p.0 - q.0).powi(2) + (p.1 - q.1).powi(2) < 1e-6));
+    let mut reached: HashSet<usize> = HashSet::new();
+    let mut queue: Vec<usize> = Vec::new();
+    for &k in from {
+        if !ends(k).is_empty() && reached.insert(k) {
+            queue.push(k);
+        }
+    }
+    while let Some(k) = queue.pop() {
+        let mine = ends(k);
+        for j in (ch.near)(&ch.boxes[k]) {
+            if !reached.contains(&j) && meet(&ch.boxes[k], &ch.boxes[j]) && joined(&mine, &ends(j)) {
+                reached.insert(j);
+                queue.push(j);
+            }
+        }
+    }
+    let mut order: Vec<usize> = reached.into_iter().collect();
+    order.sort_unstable();
+    let ents: Vec<SketchEntity> = order.iter().map(|&k| (ch.curve)(k)).collect();
+    let pts: Vec<SketchPoint> = ents.iter().flat_map(entity_points).collect::<BTreeSet<Id>>().into_iter().filter_map(ch.at).collect();
+    Chains { made: tessellate_sketch_multi(&pts, &ents).into_iter().filter(|c| !c.closed).map(|c| (c, Vec::new())).collect(), through: ents.iter().map(|e| e.id).collect() }
+}
+
+/// WHETHER A MOVED CURVE BOUNDS A REGION, an edge of it with another face across: where it runs on to the side of the
+/// window, the region may go on past the side and close there. A moved curve that only hangs into a region - each of
+/// its edges there walked both ways, as an end of a line standing out past the last line across it - bounds nothing:
+/// the region is as it was before the curve came, and was either a region then, held in the window, or the outside.
+/// Grown for such an end, the window of a line of a grid of 200 by 200 took the whole grid, 0.25 s a frame.
+fn borders_a_moved_curve(c: &Contour, moved: &HashSet<Id>) -> bool {
+    let key = |p: Point2| ((p.x * 1e6).round() as i64, (p.y * 1e6).round() as i64);
+    let ends = |e: &ProfEdge| match *e {
+        ProfEdge::Line { a, b } | ProfEdge::Arc { a, b, .. } => Some((key(a), key(b))),
+        ProfEdge::Circle { .. } => None,
+    };
+    let walked: HashSet<((i64, i64), (i64, i64))> = c.edges.iter().filter_map(ends).collect();
+    c.edges.iter().zip(&c.edge_src).filter(|(_, id)| moved.contains(id)).any(|(e, _)| ends(e).is_none_or(|(a, b)| !walked.contains(&(b, a))))
+}
+
+/// The ids of the four corners and of the four sides of the window: past every id a sketch hands out.
+const RIM_POINT: Id = Id::MAX - 16;
+const RIM_SIDE: Id = Id::MAX - 32;
+
+pub(super) fn finite(b: &[f64; 4]) -> bool {
+    b.iter().all(|v| v.is_finite())
+}
+
+pub(super) fn union(a: [f64; 4], b: [f64; 4]) -> [f64; 4] {
+    [a[0].min(b[0]), a[1].min(b[1]), a[2].max(b[2]), a[3].max(b[3])]
+}
+
+pub(super) fn meet(a: &[f64; 4], b: &[f64; 4]) -> bool {
+    a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3] || !finite(a) || !finite(b)
+}
+
+fn inside(a: &[f64; 4], b: &[f64; 4]) -> bool {
+    a[0] >= b[0] && a[1] >= b[1] && a[2] <= b[2] && a[3] <= b[3]
+}
+
+/// The box of a loop over its points.
+pub(super) fn contour_box(c: &Contour) -> [f64; 4] {
+    c.points.iter().fold([f64::MAX, f64::MAX, f64::MIN, f64::MIN], |b, p| [b[0].min(p.x), b[1].min(p.y), b[2].max(p.x), b[3].max(p.y)])
+}
+
+/// A grid of boxes, to find the boxes that may meet a box without a look at every one.
+pub(super) struct BoxGrid {
+    cell: f64,
+    cells: HashMap<(i64, i64), Vec<usize>>,
+    /// a box over more than 64 cells, or at no number: offered for every box
+    wide: Vec<usize>,
+}
+
+impl BoxGrid {
+    pub(super) fn new(boxes: &[[f64; 4]]) -> Self {
+        let n = boxes.len().max(1) as f64;
+        let cell = (boxes.iter().filter(|b| finite(b)).map(|b| (b[2] - b[0]).max(b[3] - b[1])).sum::<f64>() / n).max(1e-3);
+        let mut grid = BoxGrid { cell, cells: HashMap::new(), wide: Vec::new() };
+        for (k, b) in boxes.iter().enumerate() {
+            match grid.span(b) {
+                Some([x0, y0, x1, y1]) => {
+                    for x in x0..=x1 {
+                        for y in y0..=y1 {
+                            grid.cells.entry((x, y)).or_default().push(k);
+                        }
+                    }
+                }
+                None => grid.wide.push(k),
+            }
+        }
+        grid
+    }
+
+    fn span(&self, b: &[f64; 4]) -> Option<[i64; 4]> {
+        if !finite(b) {
+            return None;
+        }
+        let s = [(b[0] / self.cell).floor() as i64, (b[1] / self.cell).floor() as i64, (b[2] / self.cell).floor() as i64, (b[3] / self.cell).floor() as i64];
+        ((s[2] - s[0] + 1) * (s[3] - s[1] + 1) <= 64).then_some(s)
+    }
+
+    /// The boxes that may meet `b`; every box where `b` is too wide for the grid.
+    pub(super) fn near(&self, b: &[f64; 4], all: usize) -> Vec<usize> {
+        match self.span(b) {
+            Some([x0, y0, x1, y1]) => {
+                (x0..=x1).flat_map(|x| (y0..=y1).map(move |y| (x, y))).filter_map(|c| self.cells.get(&c)).flatten().chain(&self.wide).copied().collect::<BTreeSet<usize>>().into_iter().collect()
+            }
+            None => (0..all).collect(),
+        }
+    }
+}

@@ -6,7 +6,6 @@
 //! and the frames after it work on the part alone. The session goes when the sketch is rebuilt whole, and a frame
 //! that finds the structure of the sketch changed under it makes a new one.
 use super::sketch::{entity_box, held_for_size, measure_driven};
-use super::tess::{arrangement_regions_prov, tessellate_sketch_multi};
 use super::*;
 use std::collections::{HashMap, HashSet};
 
@@ -411,7 +410,11 @@ impl Project {
                 loop_boxes.insert(cid, loop_box(&self.contours[ci]));
             }
         }
-        let mut loop_grid = LoopGrid { cell: cell * 4.0, ..Default::default() };
+        // a cell as wide as a loop is on the mean: by the curves, a grid of lines 4 000 mm long put its 40 000 cells of
+        // 20 mm on one cell, and a frame looked through all of them for each loop it made again - 20 ms of 31
+        let finite: Vec<&[f64; 4]> = loop_boxes.values().filter(|b| b.iter().all(|v| v.is_finite())).collect();
+        let loop_cell = (finite.iter().map(|b| (b[2] - b[0]).max(b[3] - b[1])).sum::<f64>() / finite.len().max(1) as f64).max(1e-3);
+        let mut loop_grid = LoopGrid { cell: loop_cell, ..Default::default() };
         for (cid, b) in &loop_boxes {
             loop_grid.put(*cid, b);
         }
@@ -440,55 +443,49 @@ impl Project {
         })
     }
 
-    /// THE LOOPS OF A FRAME through the session: those of the group of what moved made again, as
-    /// `regen_sketch_moved` makes them, the curves reached from the moved ones through the grid of the session.
+    /// THE LOOPS OF A FRAME through the session: the regions and the open chains round what moved made again
+    /// (`round`), the regions that held it before or met where it swept giving way to them.
     fn frame_loops(&mut self, si: usize, sess: &mut DragSession, moved: &HashSet<Id>) {
         let s = &self.sketches[si];
         let pos = |id: Id| sess.place.get(&id).map(|&i| (s.points[i].x, s.points[i].y));
+        // the curves that moved, by place among the drawn, and their boxes where they stood and where they stand
+        let mut shifted: Vec<usize> = Vec::new();
+        let mut swept: Vec<[f64; 4]> = Vec::new();
         for &k in &sess.moving {
+            let was = sess.boxes.boxes[k];
             sess.boxes.boxes[k] = entity_box(&s.entities[sess.drawn[k]], &pos);
-        }
-        // the curves that moved, and every curve of a loop one of them was in
-        let mut reached = vec![false; sess.drawn.len()];
-        let mut queue: Vec<usize> = Vec::new();
-        let seed = |k: usize, reached: &mut Vec<bool>, queue: &mut Vec<usize>| {
-            if !reached[k] {
-                reached[k] = true;
-                queue.push(k);
-            }
-        };
-        for &k in &sess.moving {
             if entity_points(&s.entities[sess.drawn[k]]).iter().any(|p| moved.contains(p)) {
-                seed(k, &mut reached, &mut queue);
-                for cid in sess.loops_of.get(&s.entities[sess.drawn[k]].id).into_iter().flatten() {
-                    for e in sess.made_of.get(cid).into_iter().flatten() {
-                        if let Some(&j) = sess.drawn_at.get(e) {
-                            seed(j, &mut reached, &mut queue);
-                        }
-                    }
-                }
+                shifted.push(k);
+                swept.extend([was, sess.boxes.boxes[k]]);
             }
         }
-        if queue.is_empty() {
+        if shifted.is_empty() {
             return; // nothing drawn moved: every loop stands
         }
-        // every curve whose box meets one reached
-        while let Some(k) = queue.pop() {
-            let b = sess.boxes.boxes[k];
-            for j in sess.boxes.near(&b).into_iter().chain(sess.moving.iter().copied()) {
-                if !reached[j] && meet(&b, &sess.boxes.boxes[j]) {
-                    reached[j] = true;
-                    queue.push(j);
-                }
+        // the loops before the frame that held a moved curve, and the regions that met where it swept: a chain changes
+        // only with what is joined to it
+        let closed = |cid: &Id| self.contour_index(*cid).is_some_and(|ci| self.contours[ci].closed);
+        let mut old: HashSet<Id> = shifted.iter().flat_map(|&k| sess.loops_of.get(&s.entities[sess.drawn[k]].id).into_iter().flatten().copied()).collect();
+        for b in &swept {
+            match sess.loop_grid.near(b) {
+                Some(maybe) => old.extend(maybe.into_iter().filter(|cid| closed(cid) && sess.loop_box.get(cid).is_some_and(|l| meet(l, b)))),
+                None => old.extend(sess.loop_box.iter().filter(|(cid, l)| closed(cid) && meet(l, b)).map(|(cid, _)| *cid)),
             }
         }
-        let ents: Vec<SketchEntity> = (0..sess.drawn.len()).filter(|&k| reached[k]).map(|k| s.entities[sess.drawn[k]]).collect();
-        // the points of the group alone: the loops look their points up by id, and a table of every point of the
-        // sketch, made twice a frame, was 13 ms of it on 70 000 rectangles
-        let own: Vec<SketchPoint> = ents.iter().flat_map(entity_points).collect::<std::collections::BTreeSet<Id>>().into_iter().filter_map(|id| sess.place.get(&id).map(|&i| s.points[i])).collect();
-        let mut pairs: Vec<(Contour, Vec<Id>)> = arrangement_regions_prov(&own, &ents);
-        pairs.extend(tessellate_sketch_multi(&own, &ents).into_iter().filter(|c| !c.closed).map(|c| (c, Vec::new())));
-        let old: HashSet<Id> = ents.iter().flat_map(|e| sess.loops_of.get(&e.id).into_iter().flatten().copied()).collect();
+        let held = old.iter().filter(|cid| closed(cid)).filter_map(|cid| sess.loop_box.get(cid)).copied().reduce(round::union);
+        // the chains are made from the moved curves and every curve of a chain one of them was in
+        let mut from: Vec<usize> = shifted.clone();
+        for cid in old.iter().filter(|cid| !closed(cid)) {
+            from.extend(sess.made_of.get(cid).into_iter().flatten().filter_map(|e| sess.drawn_at.get(e).copied()));
+        }
+        let curve = |k: usize| s.entities[sess.drawn[k]];
+        let at = |id: Id| sess.place.get(&id).map(|&i| s.points[i]);
+        let near = |b: &[f64; 4]| sess.boxes.near(b).into_iter().chain(sess.moving.iter().copied()).collect();
+        let change = round::Change { curve: &curve, boxes: &sess.boxes.boxes, at: &at, near: &near, moved: &shifted, swept: &swept, held };
+        let mut pairs = round::regions_round(&change);
+        let chains = round::chains_round(&change, &from);
+        pairs.extend(chains.made);
+        old.extend(chains.through.iter().flat_map(|e| sess.loops_of.get(e).into_iter().flatten().copied()).filter(|cid| !closed(cid)));
         // the loops whose nesting may change: those whose box meets the box of the loops going and coming
         let over = old
             .iter()

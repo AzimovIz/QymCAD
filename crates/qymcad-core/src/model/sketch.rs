@@ -3804,36 +3804,49 @@ impl Project {
             return self.regen_sketch(si);
         }
         let s = &self.sketches[si];
-        let at: std::collections::HashMap<Id, (f64, f64)> = s.points.iter().map(|p| (p.id, (p.x, p.y))).collect();
-        let drawn: Vec<&SketchEntity> = s.entities.iter().filter(|e| !e.construction).collect();
-        // the curves that moved, and every curve of a loop one of them was in
-        let mut seeds: std::collections::HashSet<Id> = drawn.iter().filter(|e| entity_points(e).iter().any(|p| moved.contains(p))).map(|e| e.id).collect();
-        if seeds.is_empty() {
+        let at: std::collections::HashMap<Id, SketchPoint> = s.points.iter().map(|p| (p.id, *p)).collect();
+        let drawn: Vec<SketchEntity> = s.entities.iter().filter(|e| !e.construction).copied().collect();
+        let shifted: Vec<usize> = drawn.iter().enumerate().filter(|(_, e)| entity_points(e).iter().any(|p| moved.contains(p))).map(|(k, _)| k).collect();
+        if shifted.is_empty() {
             return; // nothing drawn moved: every loop stands
         }
-        // the entities each loop of the sketch is made of
-        let loops_of = |cid: &Id| -> Vec<Id> {
-            let mut of: Vec<Id> = self.contours.ents_of(*cid).cloned().unwrap_or_default();
-            if let Some(ci) = self.contour_index(*cid) {
-                of.extend(self.contours[ci].edge_src.iter().copied());
-            }
-            of
-        };
-        for cid in &s.contour_ids {
-            let of = loops_of(cid);
-            if of.iter().any(|e| seeds.contains(e)) {
-                seeds.extend(of);
-            }
+        let shifted_ids: std::collections::HashSet<Id> = shifted.iter().map(|&k| drawn[k].id).collect();
+        // each loop of the sketch: the entities it is made of, closed or open, and its box
+        struct Before {
+            id: Id,
+            of: Vec<Id>,
+            closed: bool,
+            span: [f64; 4],
         }
-        // the box of each curve where it stands now
-        let boxes: Vec<[f64; 4]> = drawn.iter().map(|e| entity_box(e, &|id| at.get(&id).copied())).collect();
-        let group = boxes_reached(&boxes, drawn.iter().enumerate().filter(|(_, e)| seeds.contains(&e.id)).map(|(k, _)| k).collect());
-        let ents: Vec<SketchEntity> = drawn.iter().enumerate().filter(|(k, _)| group[*k]).map(|(_, e)| **e).collect();
-        let in_group: std::collections::HashSet<Id> = ents.iter().map(|e| e.id).collect();
-        let pts = s.points.clone();
-        let mut pairs: Vec<(Contour, Vec<Id>)> = arrangement_regions_prov(&pts, &ents);
-        pairs.extend(tessellate_sketch_multi(&pts, &ents).into_iter().filter(|c| !c.closed).map(|c| (c, Vec::new())));
-        let (old, kept): (Vec<Id>, Vec<Id>) = s.contour_ids.iter().partition(|cid| loops_of(cid).iter().any(|e| in_group.contains(e)));
+        let before: Vec<Before> = s
+            .contour_ids
+            .iter()
+            .filter_map(|&id| {
+                let ci = self.contour_index(id)?;
+                let mut of: Vec<Id> = self.contours.ents_of(id).cloned().unwrap_or_default();
+                of.extend(self.contours[ci].edge_src.iter().copied());
+                Some(Before { id, of, closed: self.contours[ci].closed, span: round::contour_box(&self.contours[ci]) })
+            })
+            .collect();
+        // where the moved curves stood is known by the loops they were in, and where they stand by their boxes now
+        let boxes: Vec<[f64; 4]> = drawn.iter().map(|e| entity_box(e, &|id| at.get(&id).map(|p| (p.x, p.y)))).collect();
+        let swept: Vec<[f64; 4]> = before.iter().filter(|b| b.of.iter().any(|e| shifted_ids.contains(e))).map(|b| b.span).chain(shifted.iter().map(|&k| boxes[k])).collect();
+        let mut old: std::collections::HashSet<Id> =
+            before.iter().filter(|b| b.of.iter().any(|e| shifted_ids.contains(e)) || b.closed && swept.iter().any(|w| round::meet(&b.span, w))).map(|b| b.id).collect();
+        let held = before.iter().filter(|b| b.closed && old.contains(&b.id)).map(|b| b.span).reduce(round::union);
+        // the chains are made from the moved curves and every curve of a chain one of them was in
+        let place: std::collections::HashMap<Id, usize> = drawn.iter().enumerate().map(|(k, e)| (e.id, k)).collect();
+        let from: Vec<usize> = shifted.iter().copied().chain(before.iter().filter(|b| !b.closed && old.contains(&b.id)).flat_map(|b| b.of.iter().filter_map(|e| place.get(e).copied()))).collect();
+        let grid = round::BoxGrid::new(&boxes);
+        let curve = |k: usize| drawn[k];
+        let point = |id: Id| at.get(&id).copied();
+        let near = |b: &[f64; 4]| grid.near(b, boxes.len());
+        let change = round::Change { curve: &curve, boxes: &boxes, at: &point, near: &near, moved: &shifted, swept: &swept, held };
+        let mut pairs = round::regions_round(&change);
+        let chains = round::chains_round(&change, &from);
+        pairs.extend(chains.made);
+        old.extend(before.iter().filter(|b| !b.closed && b.of.iter().any(|e| chains.through.contains(e))).map(|b| b.id));
+        let (old, kept): (Vec<Id>, Vec<Id>) = s.contour_ids.iter().partition(|cid| old.contains(cid));
         let made = self.replace_contours(old, pairs, &kept);
         self.sketches[si].contour_ids = kept.into_iter().chain(made).collect();
     }
@@ -5474,58 +5487,6 @@ const IMPORT_WELD: f64 = 1e-4;
 pub(super) struct ImportPoints {
     welded: super::tess::Welded,
     ids: Vec<Id>,
-}
-
-/// WHICH BOXES ARE REACHED from the boxes `from` through boxes that meet, one after another (`[x0, y0, x1, y1]` each).
-/// The boxes are put on a grid as wide as a box is on the mean, so a box meets only those on its own cells.
-fn boxes_reached(boxes: &[[f64; 4]], from: Vec<usize>) -> Vec<bool> {
-    let n = boxes.len();
-    let mut reached = vec![false; n];
-    if n == 0 {
-        return reached;
-    }
-    let cell = (boxes.iter().filter(|b| b.iter().all(|v| v.is_finite())).map(|b| (b[2] - b[0]).max(b[3] - b[1])).sum::<f64>() / n as f64).max(1e-3);
-    let span = |b: &[f64; 4]| ((b[0] / cell).floor() as i64, (b[1] / cell).floor() as i64, (b[2] / cell).floor() as i64, (b[3] / cell).floor() as i64);
-    // a box over more than 64 cells, and one at no number, is looked at from every box
-    let mut cells: std::collections::HashMap<(i64, i64), Vec<usize>> = std::collections::HashMap::new();
-    let mut wide: Vec<usize> = Vec::new();
-    for (k, b) in boxes.iter().enumerate() {
-        let (x0, y0, x1, y1) = span(b);
-        if !b.iter().all(|v| v.is_finite()) || (x1 - x0 + 1) * (y1 - y0 + 1) > 64 {
-            wide.push(k);
-            continue;
-        }
-        for x in x0..=x1 {
-            for y in y0..=y1 {
-                cells.entry((x, y)).or_default().push(k);
-            }
-        }
-    }
-    let meet = |a: &[f64; 4], b: &[f64; 4]| a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];
-    let mut queue = from;
-    for &k in &queue {
-        reached[k] = true;
-    }
-    while let Some(k) = queue.pop() {
-        let b = boxes[k];
-        let near: Vec<usize> = if !b.iter().all(|v| v.is_finite()) {
-            (0..n).collect()
-        } else {
-            let (x0, y0, x1, y1) = span(&b);
-            if (x1 - x0 + 1) * (y1 - y0 + 1) > 64 {
-                (0..n).collect()
-            } else {
-                (x0..=x1).flat_map(|x| (y0..=y1).map(move |y| (x, y))).filter_map(|c| cells.get(&c)).flatten().copied().chain(wide.iter().copied()).collect()
-            }
-        };
-        for j in near {
-            if !reached[j] && (meet(&b, &boxes[j]) || !boxes[j].iter().all(|v| v.is_finite())) {
-                reached[j] = true;
-                queue.push(j);
-            }
-        }
-    }
-    reached
 }
 
 /// WHAT A SOLVE OF A SKETCH REBUILDS of its loops after it.

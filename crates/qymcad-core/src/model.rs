@@ -2067,6 +2067,7 @@ mod tess;
 mod timeline;
 mod sketch;
 mod drag;
+mod round;
 pub use sketch::{ChamferLegs, CornerAt, CornerBlend, CornerCut, CornerTool, FilletBy, FilletSize, TextSpec};
 pub(crate) mod comp_pattern;
 pub use comp_pattern::{CompPattern, CompPatternKind};
