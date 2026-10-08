@@ -260,6 +260,7 @@ fn the_checks_after_an_edit_count_the_part_it_touched() {
     let took = times.iter().min().copied().unwrap_or_default();
     eprintln!("the checks of 17 500 rectangles after one moved: {times:?}");
     // measured in a release build: 225 ms with every part counted again on each change, 92 ms with the parts remembered
-    let budget = std::time::Duration::from_millis(120);
+    // (120 ms beside the other checks of a release run)
+    let budget = std::time::Duration::from_millis(150);
     assert!(took < budget, "the checks of 17 500 rectangles after one moved took {took:?}, budget {budget:?}");
 }

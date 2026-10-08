@@ -25,9 +25,9 @@ mod tests {
         kind: Kind,
     }
 
-    /// What a step is: an action of the hand, several frames, or one frame of the window, or the way to the sketch -
-    /// timed and told, not held to a time: entering the part rebuilds its bodies in the background, 0.36 s alone and
-    /// 8.7 s beside a thousand other checks
+    /// What a step is: an action of the hand, several frames, or one frame of the window, or the way in and out of the
+    /// sketch - timed and told, not held to a time: entering the part and leaving the sketch rebuild its bodies, 0.36 s
+    /// and under 1 s alone, 7.3 s and 5.7 s beside a thousand other checks
     #[derive(Clone, Copy, PartialEq)]
     enum Kind {
         Action,
@@ -82,7 +82,7 @@ mod tests {
         let took = timed(|| {
             hand.key(egui::Key::Escape).key(egui::Key::Escape).ctrl(egui::Key::Enter);
         });
-        steps.push(Step { what: "the sketch left", took, kind: Kind::Action });
+        steps.push(Step { what: "the sketch left", took, kind: Kind::Way });
         assert!(hand.app.sketch_ses.editing.is_none(), "Ctrl+Enter did not leave the sketch");
         assert!(hand.app.viewing.mode_3d && matches!(hand.app.chosen.sel, super::super::Sel::Sketch(0)), "the sketch left is not selected in the 3D view");
         let took = timed(|| {

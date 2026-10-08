@@ -19,6 +19,13 @@ mod tests {
         let si = app.create_sketch_on(SketchPlane::default());
         let mut hand = Hand::new(&mut app);
         hand.app.enter_sketch_edit(si);
+        // a rebuild under way refuses input: the hand waits for it to end, as a person waits for the spinner to go
+        let waiting = Instant::now();
+        hand.frame(Vec::new());
+        while hand.app.regen.busy.is_some() && waiting.elapsed() < Duration::from_secs(60) {
+            std::thread::sleep(Duration::from_millis(20));
+            hand.frame(Vec::new());
+        }
         hand.sk_tool(1).click2d(0.0, -10.0).click2d(len, -10.0).key(egui::Key::Escape).key(egui::Key::Escape);
         hand.sk_tool(1).click2d(-10.0, 0.0).click2d(-10.0, len).key(egui::Key::Escape).key(egui::Key::Escape);
         for (middle, step) in [((len / 2.0, -10.0), ["0", "20"]), ((-10.0, len / 2.0), ["20", "0"])] {
