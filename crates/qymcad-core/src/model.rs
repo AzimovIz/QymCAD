@@ -619,6 +619,11 @@ impl Sketch {
     /// rectangle's: shown, a chamfer of 3 carried two "=" and a point-on-line badge out in the air beside its cut, and a
     /// fillet a tangency badge on each line. A dimension a person measured to the sharp is not among them.
     pub fn corner_holders(&self) -> std::collections::HashSet<usize> {
+        // no constraint of a kind a corner holds itself by, no holder - before the points of every entity are gathered:
+        // 6 ms on 70 000 segments, and the list of constraints asks every frame
+        if !self.constraints.iter().any(|c| matches!(c, Constraint::PointOnLine { .. } | Constraint::Equal { .. } | Constraint::Tangent { .. })) {
+            return Default::default();
+        }
         let drawn: std::collections::HashSet<Id> = self
             .entities
             .iter()

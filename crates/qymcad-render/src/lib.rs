@@ -1679,8 +1679,9 @@ pub fn draw_sketch_constraints(pn: &Painting, painter: &egui::Painter, rect: Rec
     let sh = qymcad_ui_state::Sheet { view: pn.view, rect };
     use qymcad_core::model::EntityKind;
     let Some(s) = pn.project.sketches.get(si) else { return };
-    let points_by_id: std::collections::HashMap<Id, &qymcad_core::model::SketchPoint> = s.points.iter().map(|p| (p.id, p)).collect(); // a table: these are looked up for every entity or constraint
-    let pt = |id: Id| points_by_id.get(&id).copied().map(|p| Point2::new(p.x, p.y));
+    // a table, built only when a point is looked for: with nothing hovered, selected or arguing, none is
+    let points_by_id: std::cell::OnceCell<std::collections::HashMap<Id, &qymcad_core::model::SketchPoint>> = std::cell::OnceCell::new();
+    let pt = |id: Id| points_by_id.get_or_init(|| s.points.iter().map(|p| (p.id, p)).collect()).get(&id).copied().map(|p| Point2::new(p.x, p.y));
     // hovering a constraint (its glyph or its row in the list) lights the points and edges it holds
     if let Some(ci) = pn.hover.constraint {
         let pts = pn.project.sketch_constraint_points(si, ci);

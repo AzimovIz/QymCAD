@@ -9513,7 +9513,9 @@ pub fn flagged_redundant(cache: &Caches, project: &qymcad_core::model::Project, 
     let diag = sketch_diag(cache, project, si);
     let Some(s) = project.sketches.get(si) else { return Default::default() };
     let tangency = |c: &Constraint| matches!(c, Constraint::Tangent { .. } | Constraint::CircleTangent { .. });
-    if s.constraints.iter().any(tangency) {
+    // nothing redundant, nothing to mark - before the points of every entity are gathered: 7 ms a call on 70 000
+    // segments, called by the list and by the canvas every frame
+    if diag.redundant.is_empty() || s.constraints.iter().any(tangency) {
         return Default::default();
     }
     let entity_pts: std::collections::HashSet<Id> = s
@@ -9547,13 +9549,38 @@ pub fn flagged_redundant(cache: &Caches, project: &qymcad_core::model::Project, 
         .collect()
 }
 
+/// A QUICK HASH FOR THE KEYS OF THE STATUS CACHE: each word turned and multiplied in. The keys are taken several times
+/// a frame (the panel, the points, the glyphs, the pick, the dimensions), over every point, entity and constraint of
+/// the sketch; the hasher of a map, built to stand against an attacker, took most of a frame on 70 000 segments. A
+/// key of a cache needs no such standing.
+#[derive(Default)]
+struct Mix(u64);
+
+impl std::hash::Hasher for Mix {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write_u64(&mut self, x: u64) {
+        self.0 = (self.0.rotate_left(5) ^ x).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for chunk in bytes.chunks(8) {
+            let mut word = [0u8; 8];
+            word[..chunk.len()].copy_from_slice(chunk);
+            self.write_u64(u64::from_le_bytes(word));
+        }
+    }
+}
+
 /// THE SHAPE OF A SKETCH, for the status cache: its points, entities, splines and constraints by what they are and
 /// what they tie, and the values of its dimensions - everything the diagnostics depend on but where the points stand.
 /// O(n) per frame is pennies against the Jacobian.
 pub fn sketch_shape_key(project: &qymcad_core::model::Project, si: usize) -> u64 {
     use qymcad_core::model::EntityKind;
     use std::hash::{Hash, Hasher};
-    let mut h = std::collections::hash_map::DefaultHasher::new();
+    let mut h = Mix::default();
     if let Some(s) = project.sketches.get(si) {
         for p in &s.points {
             p.id.hash(&mut h);
@@ -9586,7 +9613,7 @@ pub fn sketch_shape_key(project: &qymcad_core::model::Project, si: usize) -> u64
 /// rim changes it.
 pub fn sketch_place_key(project: &qymcad_core::model::Project, si: usize) -> u64 {
     use std::hash::{Hash, Hasher};
-    let mut h = std::collections::hash_map::DefaultHasher::new();
+    let mut h = Mix::default();
     if let Some(s) = project.sketches.get(si) {
         for p in &s.points {
             p.x.to_bits().hash(&mut h);
