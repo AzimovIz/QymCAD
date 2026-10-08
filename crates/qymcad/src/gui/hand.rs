@@ -192,6 +192,25 @@ impl<'a> Hand<'a> {
         self.written_at(word).is_some()
     }
 
+    /// A NOTCH OF THE WHEEL over a point of the sketch: up brings the sheet nearer, down takes it away, as by hand.
+    pub fn wheel2d(&mut self, at: (f64, f64), up: bool) -> &mut Self {
+        let over = self.screen2d(at);
+        let delta = egui::vec2(0.0, if up { 120.0 } else { -120.0 });
+        let wheel = egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta, phase: egui::TouchPhase::Move, modifiers: Default::default() };
+        self.frame(vec![egui::Event::PointerMoved(over)]); // the hand comes over the view first
+        self.frame(vec![egui::Event::PointerMoved(over), wheel]);
+        // the wheel is smoothed over frames
+        for _ in 0..10 {
+            self.frame(vec![egui::Event::PointerMoved(over)]);
+        }
+        self
+    }
+
+    /// EVERY WORD THE LAST FRAME WROTE, with where it stands.
+    pub fn words_drawn(&self) -> &[(String, egui::Rect)] {
+        &self.win.drawn
+    }
+
     /// WHERE `word` IS WRITTEN, the next frame drawn - the place written first, when it is written in several.
     pub fn written_at(&mut self, word: &str) -> Option<egui::Rect> {
         self.frame(Vec::new());
@@ -795,15 +814,25 @@ impl<'a> Hand<'a> {
     /// THE SMALL RINGS OF `radius` px THE LAST FRAME DREW, where they stand on screen: the marks a preview puts where a
     /// line will be cut.
     pub fn rings_drawn(&self, radius: f32) -> Vec<egui::Pos2> {
-        fn rings(s: &egui::Shape, radius: f32, out: &mut Vec<egui::Pos2>) {
+        self.circles_drawn(radius, |_| true)
+    }
+
+    /// THE FILLED DOTS OF `radius` px THE LAST FRAME DREW, where they stand on screen: the points of a sketch, and not
+    /// the outlined marker of the origin, which is a ring of the same 3.5 px.
+    pub fn dots_drawn(&self, radius: f32) -> Vec<egui::Pos2> {
+        self.circles_drawn(radius, |c| c.fill != egui::Color32::TRANSPARENT)
+    }
+
+    fn circles_drawn(&self, radius: f32, takes: fn(&egui::epaint::CircleShape) -> bool) -> Vec<egui::Pos2> {
+        fn walk(s: &egui::Shape, radius: f32, takes: fn(&egui::epaint::CircleShape) -> bool, out: &mut Vec<egui::Pos2>) {
             match s {
-                egui::Shape::Circle(c) if (c.radius - radius).abs() < 1e-3 => out.push(c.center),
-                egui::Shape::Vec(v) => v.iter().for_each(|x| rings(x, radius, out)),
+                egui::Shape::Circle(c) if (c.radius - radius).abs() < 1e-3 && takes(c) => out.push(c.center),
+                egui::Shape::Vec(v) => v.iter().for_each(|x| walk(x, radius, takes, out)),
                 _ => {}
             }
         }
         let mut out = Vec::new();
-        self.win.shapes.iter().for_each(|cs| rings(&cs.shape, radius, &mut out));
+        self.win.shapes.iter().for_each(|cs| walk(&cs.shape, radius, takes, &mut out));
         out
     }
 

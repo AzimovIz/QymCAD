@@ -2391,19 +2391,52 @@ pub fn draw_move_preview(pn: &Painting, painter: &egui::Painter, rect: Rect) {
     painter.line_segment([sh.at(base), sh.at(cur)], Stroke::new(0.8, col));
 }
 
-/// Above this many points in sight their numbers are not written: 10 000 numbers on a screen are a grey field, not
-/// a reading, and laying them out was most of a frame of a drawing of 10 000 segments.
-pub const NUMBERED_POINTS: usize = 300;
+/// Two plain points nearer on the screen than this, px - the width of a plain point - are one blot: the later one is
+/// left out. Counted by points in sight instead (5 000), a grid of 200 lines across 200 others, 800 ends 5 px apart at
+/// a whole view, drew its ends as solid bars.
+pub const POINT_ROOM: f32 = 7.0;
 
-/// Above this many points in sight only the selected, the lit and the picked ones are drawn: the rest are dots closer
-/// than their own size, one grey field. 70 000 dots were most of a frame of a drawing of 70 000 segments, 0.18 s in
-/// a release build. Brought nearer, the points are drawn again.
-pub const DOTTED_POINTS: usize = 5_000;
+/// The room a number of a point takes on the screen, px, as written in the monospace face of 10 px.
+fn number_room(n: usize) -> egui::Vec2 {
+    egui::vec2(6.2 * n.to_string().len() as f32 + 2.0, 11.0)
+}
+
+/// THE PLACES TAKEN ON THE SCREEN, on a grid of square cells: whether a place is free of what was put before it.
+struct Taken {
+    cell: f32,
+    cells: std::collections::HashMap<(i32, i32), Vec<Rect>>,
+}
+
+impl Taken {
+    fn new(cell: f32) -> Self {
+        Taken { cell, cells: std::collections::HashMap::new() }
+    }
+
+    fn at(&self, p: Pos2) -> (i32, i32) {
+        ((p.x / self.cell).floor() as i32, (p.y / self.cell).floor() as i32)
+    }
+
+    /// Whether `r` meets nothing put before, the cells it spans and those round them looked at.
+    fn free(&self, r: Rect) -> bool {
+        let ((x0, y0), (x1, y1)) = (self.at(r.min), self.at(r.max));
+        (x0 - 1..=x1 + 1).all(|x| (y0 - 1..=y1 + 1).all(|y| self.cells.get(&(x, y)).is_none_or(|put| put.iter().all(|q| !q.intersects(r)))))
+    }
+
+    fn put(&mut self, r: Rect) {
+        let ((x0, y0), (x1, y1)) = (self.at(r.min), self.at(r.max));
+        for x in x0..=x1 {
+            for y in y0..=y1 {
+                self.cells.entry((x, y)).or_default().push(r);
+            }
+        }
+    }
+}
 
 /// THE POINTS OF A SKETCH, each in the colour of how defined it is: green defined, yellow still free, red while the
 /// sketch holds a conflict of dimensions (harmless redundancy reddens nothing). The selected, the lit and the picked
-/// ones larger. Only the points in sight are drawn, the plain ones only while `DOTTED_POINTS` or fewer are in sight,
-/// and their numbers only while `NUMBERED_POINTS` or fewer are. `picked` - the points the dimension tool holds.
+/// ones larger, and always drawn. Only the points in sight are drawn; a plain point only where no point drawn before
+/// it stands nearer than `POINT_ROOM`, and a number only where no number written before it stands - brought nearer,
+/// the points part and are all drawn again. `picked` - the points the dimension tool holds.
 pub fn draw_sketch_points(pn: &Painting, painter: &egui::Painter, rect: Rect, si: usize, picked: &[Id]) {
     let Some(s) = pn.project.sketches.get(si) else { return };
     let sh = Sheet { view: pn.view, rect };
@@ -2413,9 +2446,13 @@ pub fn draw_sketch_points(pn: &Painting, painter: &egui::Painter, rect: Rect, si
     let unseen = s.unseen_points();
     let selected: std::collections::HashSet<Id> = pn.sel_sk.items.iter().filter(|(k, _)| *k == 0).map(|(_, id)| *id).collect();
     let sight = rect.expand(8.0);
-    let in_sight: Vec<(usize, Pos2)> =
+    let mut in_sight: Vec<(usize, Pos2)> =
         s.points.iter().enumerate().filter(|(_, p)| !unseen.contains(&p.id)).map(|(pi, p)| (pi, sh.at(Point2::new(p.x, p.y)))).filter(|(_, sp)| sight.contains(*sp)).collect();
-    let (numbered, dotted) = (in_sight.len() <= NUMBERED_POINTS, in_sight.len() <= DOTTED_POINTS);
+    // the points marked go first, so a plain point gives way to them and not they to it
+    let marked = |id: Id| selected.contains(&id) || pn.hover.sketch == Some((0, id)) || picked.contains(&id);
+    in_sight.sort_by_key(|&(pi, _)| !marked(s.points[pi].id));
+    let (mut dots, mut numbers) = (Taken::new(POINT_ROOM), Taken::new(24.0));
+    let half = egui::Vec2::splat(POINT_ROOM / 2.0 - 0.01);
     for (pi, sp) in in_sight {
         let id = s.points[pi].id;
         let base_col = if has_conflict {
@@ -2431,13 +2468,18 @@ pub fn draw_sketch_points(pn: &Painting, painter: &egui::Painter, rect: Rect, si
             (pn.scheme.pal.preview(), 5.0) // the pre-select highlight
         } else if picked.contains(&id) {
             (pn.scheme.pal.sketch_point(), 4.5)
-        } else if dotted {
-            (base_col, 3.5)
         } else {
-            continue;
+            (base_col, 3.5)
         };
+        let blot = Rect::from_center_size(sp, half * 2.0);
+        if !marked(id) && !dots.free(blot) {
+            continue;
+        }
+        dots.put(blot);
         painter.circle_filled(sp, r, col);
-        if numbered {
+        let label = Rect::from_min_size(sp + egui::vec2(5.0, -5.0 - 11.0), number_room(pi + 1));
+        if numbers.free(label) {
+            numbers.put(label);
             painter.text(sp + egui::vec2(5.0, -5.0), egui::Align2::LEFT_BOTTOM, format!("{}", pi + 1), egui::FontId::monospace(10.0), pn.scheme.pal.text_faint());
         }
     }

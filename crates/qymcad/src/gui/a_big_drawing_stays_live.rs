@@ -30,6 +30,41 @@ pub(crate) mod tests {
         p
     }
 
+    /// The points the last frame drew, where they stand on the screen: plain (3.5 px), picked (4.5 px), selected or lit
+    /// (5 px).
+    pub(crate) fn points_drawn(hand: &Hand) -> Vec<egui::Pos2> {
+        [3.5, 4.5, 5.0].into_iter().flat_map(|r| hand.dots_drawn(r)).collect()
+    }
+
+    /// How many points of the sketch stand in sight, the reference points of the frame left out.
+    pub(crate) fn points_in_sight(hand: &Hand, si: usize) -> usize {
+        let app = &hand.app;
+        let sheet = qymcad_ui_state::Sheet { view: app.viewing.view, rect: app.viewing.view_rect };
+        let s = &app.project.sketches[si];
+        let unseen = s.unseen_points();
+        let sight = app.viewing.view_rect.expand(8.0);
+        s.points.iter().filter(|q| !unseen.contains(&q.id) && sight.contains(sheet.at(qymcad_core::geom::Point2::new(q.x, q.y)))).count()
+    }
+
+    /// No two of `drawn` nearer than a point is wide, along either axis.
+    pub(crate) fn apart(drawn: &[egui::Pos2]) -> bool {
+        let room = qymcad_render::POINT_ROOM - 0.1;
+        let mut by_cell: std::collections::HashMap<(i32, i32), Vec<egui::Pos2>> = std::collections::HashMap::new();
+        for p in drawn {
+            by_cell.entry(((p.x / room) as i32, (p.y / room) as i32)).or_default().push(*p);
+        }
+        drawn.iter().all(|p| {
+            let (cx, cy) = ((p.x / room) as i32, (p.y / room) as i32);
+            (cx - 1..=cx + 1).all(|x| (cy - 1..=cy + 1).all(|y| by_cell.get(&(x, y)).is_none_or(|q| q.iter().all(|q| q == p || (q.x - p.x).abs() >= room || (q.y - p.y).abs() >= room))))
+        })
+    }
+
+    /// No two numbers of points written over one another in the last frame.
+    pub(crate) fn numbers_apart(hand: &Hand) -> bool {
+        let numbers: Vec<egui::Rect> = hand.words_drawn().iter().filter(|(t, _)| !t.is_empty() && t.chars().all(|c| c.is_ascii_digit())).map(|(_, r)| r.shrink(0.5)).collect();
+        numbers.iter().enumerate().all(|(i, a)| numbers.iter().skip(i + 1).all(|b| !a.intersects(*b)))
+    }
+
     /// The time of `work`.
     fn timed(work: impl FnOnce()) -> Duration {
         let started = Instant::now();
@@ -54,11 +89,12 @@ pub(crate) mod tests {
         let t_frame = timed(|| {
             hand.frame(Vec::new());
         });
-        // the whole drawing in sight, 10 000 points: the plain ones are not drawn (a ring or so of the window's own marks
-        // is of that size), nor any number
-        let plain = |hand: &Hand| hand.rings_drawn(3.5).len();
-        assert!(plain(&hand) < 10, "{} points of 10 000 in sight are drawn one by one", plain(&hand));
-        assert!(!hand.shows("10000"), "the numbers of 10 000 points in sight are written");
+        // the whole drawing in sight: the points stand closer than they are wide, and only those with room are drawn -
+        // no two nearer than a point is wide, fewer than are in sight - and no number over another
+        let (drawn, seen) = (points_drawn(&hand), points_in_sight(&hand, si));
+        assert!(drawn.len() < seen, "all {seen} points in sight are drawn, the most of them one over another");
+        assert!(apart(&drawn), "two points are drawn nearer than a point is wide");
+        assert!(numbers_apart(&hand), "two numbers of points are written one over another");
         let t_hover = timed(|| {
             hand.hover2d(10.0, 6.0);
         });
@@ -73,9 +109,10 @@ pub(crate) mod tests {
         }
         // brought near a corner, a few hundred points in sight: drawn and numbered again
         hand.look2d((30.0, 30.0)).frame(Vec::new());
-        let near = plain(&hand);
-        assert!(near > 0 && near <= qymcad_render::DOTTED_POINTS, "near a corner {near} plain points are drawn");
+        let (near, seen) = (points_drawn(&hand).len(), points_in_sight(&hand, si));
+        assert_eq!(near, seen, "near a corner, the points apart, {near} of the {seen} in sight are drawn");
         assert!(hand.shows("1"), "near a corner the points are not numbered");
+        assert!(numbers_apart(&hand), "near a corner two numbers are written one over another");
         // the pointer inside a rectangle, no corner within reach: the snap looks for what runs near it, not for every
         // crossing of every pair of segments (5e7 pairs here, 2.45e9 on 70 000 segments - 15 s a frame)
         let t_away = timed(|| {
