@@ -264,3 +264,34 @@ fn the_checks_after_an_edit_count_the_part_it_touched() {
     let budget = std::time::Duration::from_millis(150);
     assert!(took < budget, "the checks of 17 500 rectangles after one moved took {took:?}, budget {budget:?}");
 }
+
+#[test]
+fn a_contradiction_in_a_big_part_is_solved_without_a_run_for_nothing() {
+    // a pattern of 1 000 rectangles tied into one part, one of its dimensions laid again 5 mm off: the solve cannot meet
+    // it and keeps a compromise. A second run without the hold of the arms of angle dimensions was made for every such
+    // part - in a part with no angle dimension it is the first run again, and its answer is thrown away
+    let mut p = sketch_kinds::build(sketch_kinds::Kind::Array, 1000);
+    p.solve_sketch(0);
+    let (a, b, d, axis) = p.sketches[0]
+        .constraints
+        .iter()
+        .find_map(|c| match c {
+            qymcad_core::model::Constraint::Distance { a, b, d, axis, .. } => Some((*a, *b, *d, *axis)),
+            _ => None,
+        })
+        .expect("a dimension in the pattern");
+    p.sketches[0].constraints.push(qymcad_core::model::Constraint::Distance { a, b, d: d + 5.0, off: 2.0, expr: String::new(), driven: false, axis, at: None });
+    let took = (0..3)
+        .map(|_| {
+            let mut q = p.clone();
+            let started = std::time::Instant::now();
+            q.solve_sketch(0);
+            started.elapsed()
+        })
+        .min()
+        .unwrap_or_default();
+    eprintln!("a contradiction in 1 000 tied rectangles solved in {took:?}");
+    // measured: 0.52 s with the run for nothing and 0.28 s without in a release build, 0.63 s and 0.34 s in a test build
+    let budget = std::time::Duration::from_millis(450);
+    assert!(took < budget, "a contradiction in 1 000 tied rectangles solved in {took:?}, budget {budget:?}");
+}

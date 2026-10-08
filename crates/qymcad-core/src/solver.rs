@@ -391,7 +391,12 @@ fn solve_full_iter_inner(points: &mut [SketchPoint], radii: &mut [RadiusVar], co
     // taken only if that solves the sketch, so a contradictory one keeps the compromise it had. Measured over the probes
     // of the core: 240 solves of 48 063 ran it, all on parts of at most 36 unknowns, 0.27 s in all, and 2 were solved
     // by it. It repeats the part it is called for, not the sketch (`solve_by_parts`).
-    if drag.is_none() && best >= 1e-4 * span {
+    //
+    // Only a part with an angle dimension has arms to hold: in one without, the run without the hold is the first run
+    // again, step for step, and its answer is thrown away as the first one's is. A contradiction in 1 000 tied rectangles
+    // took 0.42 s of its 0.52 s solve in it, run for nothing.
+    let holds_arms = constraints.iter().any(|c| matches!(c, Constraint::Angle { .. } | Constraint::AngleLines { .. }));
+    if drag.is_none() && best >= 1e-4 * span && holds_arms {
         let mut trial: Vec<SketchPoint> = points.to_vec();
         let mut trial_radii: Vec<RadiusVar> = radii.to_vec();
         let r = solve_lm(&mut trial, &mut trial_radii, constraints, drag, max_iter, Pull { hold_arms: false, ..Pull::SETTLE }, how);
