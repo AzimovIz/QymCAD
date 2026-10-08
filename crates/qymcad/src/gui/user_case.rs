@@ -1373,6 +1373,24 @@ mod tests {
                 check_all(&mut app, &format!("sketch: the {name} constraint"), &mut problems);
             }
 
+            // A DRAWING TOOL TAKEN OVER A SELECTION drops it: two lines selected, the circle taken and drawn beside
+            // them, and nothing stays selected - neither the lines nor the circle.
+            {
+                let mut hand = Hand::new(&mut app);
+                hand.sk_select();
+                let lines: Vec<(u8, u64)> = hand.app.project.sketches[si].entities.iter().filter(|e| matches!(e.kind, qymcad_core::model::EntityKind::Line { .. })).map(|e| (1u8, e.id)).collect();
+                if lines.windows(2).any(|w| hand.select2d(w)) {
+                    hand.sk_tool(3).click2d(150.0, 150.0).click2d(160.0, 150.0).key(egui::Key::Escape);
+                    if !hand.app.tools.sel_sk.items.is_empty() {
+                        problems.push(format!("sketch: a circle drawn over two selected lines left {:?} selected", hand.app.tools.sel_sk.items));
+                    }
+                    hand.sk_tool(0);
+                } else {
+                    problems.push("sketch: no pair of lines could be clicked before a drawing tool was taken".into());
+                }
+                check_all(&mut app, "sketch: a drawing tool taken over a selection", &mut problems);
+            }
+
             // EDITING WHAT WAS DRAWN: corner fillets, chamfers, trimming, extending, breaking, offsetting,
             // moving, copying, rotating. Every tool must either DO something or say why it cannot: silently
             // doing nothing is the worst of behaviours.

@@ -5060,6 +5060,18 @@ pub fn radius_of(project: &Project, si: usize, c: Id) -> Option<f64> {
     })
 }
 
+/// TAKE DRAWING TOOL `kind` IN HAND: every other tool put down in one move (`exit_draw_tools`), whatever the one before
+/// had collected cleared (`SketchTool::select`), and the selection of the geometry dropped - a drawing tool works on
+/// nothing selected before it. Reported behaviour: a line selected, the circle taken and drawn, and the line stood
+/// selected the whole time and after. The arrow of selection (kind 0) keeps the selection.
+pub fn take_drawing_tool(t: &mut Tools, kind: u8) {
+    exit_draw_tools(t);
+    t.tool.select(t.armed, kind);
+    if t.armed.draw_kind() != 0 {
+        t.sel_sk.clear();
+    }
+}
+
 /// LEAVING ALL THE TOOLS — the single transition from a mode back to selection.
 ///
 /// The sketch modes are mutually exclusive: exactly one is active. This exit used to be written out

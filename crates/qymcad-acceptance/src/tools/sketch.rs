@@ -2281,7 +2281,9 @@ pub static EDIT_COPY: Tool = Tool {
     flow: Flow::Drawing(&[(20.0, 0.0), (20.0, -30.0)], Finish::LastClick),
     title: "tool-copy",
     entries: &[Entry::Menu(&["menu-edit", "menu-copy"])],
-    other: (Entry::Button("tb-line-hint"), "tool-line"),
+    // over Trim, not a drawing tool: a drawing tool taken drops the selection, and with nothing selected there is nothing
+    // to copy
+    other: (Entry::Button("tb-trim-hint"), "tool-trim"),
     fixture: Fixture::RectangleSidePicked,
     picks: &[],
     pick_trial: &[],
@@ -2310,7 +2312,9 @@ pub static EDIT_CUT: Tool = Tool {
     flow: Flow::Drawing(&[(20.0, 0.0)], Finish::LastClick),
     title: "menu-cut",
     entries: &[Entry::Menu(&["menu-edit", "menu-cut"])],
-    other: (Entry::Button("tb-line-hint"), "tool-line"),
+    // over Trim, not a drawing tool: a drawing tool taken drops the selection, and with nothing selected there is nothing
+    // to copy
+    other: (Entry::Button("tb-trim-hint"), "tool-trim"),
     fixture: Fixture::RectangleSidePicked,
     picks: &[],
     pick_trial: &[],

@@ -1385,8 +1385,7 @@ impl App {
         if edit_si(&self.project, &self.sketch_ses).is_none() {
             self.create_sketch_on(qymcad_core::feature::SketchPlane::default());
         }
-        exit_draw_tools(&mut qymcad_ui_state::tools_of!(self)); // entering a tool means leaving all the others, in one move
-        self.tools.tool.select(&mut self.tools.armed, t); // changing the tool clears whatever the previous one had collected
+        qymcad_ui_state::take_drawing_tool(&mut qymcad_ui_state::tools_of!(self), t);
         self.viewing.mode_3d = false;
         self.status = match self.tools.armed.draw_kind() {
             1 => crate::i18n::tr("g-line-hint"),
@@ -3934,6 +3933,7 @@ mod the_sketch_of_the_report_takes_a_line;
 mod a_big_sketch_selected_keeps_the_3d_frame;
 mod a_dimension_past_its_field_is_left_as_it_stands;
 mod the_point_numbers_wait_for_their_setting;
+mod a_drawing_tool_drops_the_selection;
 mod an_arc_by_its_centre_ends_on_itself;
 mod a_shift_box_leaves_the_sheet_still;
 mod a_dimension_being_placed_follows_the_pointer;
