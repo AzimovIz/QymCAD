@@ -1105,6 +1105,18 @@ impl<'a> Hand<'a> {
         self.close_window()
     }
 
+    /// Ctrl+X, as egui hands it over: an event of its own.
+    pub fn cut(&mut self) -> &mut Self {
+        self.frame_holding(egui::Modifiers::COMMAND, vec![egui::Event::Cut]);
+        self.close_window()
+    }
+
+    /// Ctrl+V, as egui hands it over: the text of the system clipboard, empty here.
+    pub fn paste(&mut self) -> &mut Self {
+        self.frame_holding(egui::Modifiers::COMMAND, vec![egui::Event::Paste(String::new())]);
+        self.close_window()
+    }
+
     /// DRAG WITH THE MOUSE from one place of the sketch to another: press, lead, release, in whole frames, and
     /// the window closes after it. What is taken is what the window takes - a point, a dimension, a label, or
     /// nothing and a band of selection.

@@ -1052,7 +1052,7 @@ pub fn armed_toolbar_hint(pn: &Painting) -> Option<&'static str> {
         return Some("tb-fillet-all-hint");
     }
     // Edit -> Copy, Cut, Insert in a sketch are the copy's article: the base point and the place
-    if pn.clip.geom_pending.is_some() || pn.clip.geom_place.is_some() {
+    if pn.clip.geom_pending.is_some() || pn.clip.geom_place {
         return Some("tb-copy-hint");
     }
     match pn.armed.move_op() {
@@ -2546,11 +2546,25 @@ impl GeomSelection {
 pub struct Clipboard {
     pub geom: Option<qymcad_core::model::GeomClip>,
     pub geom_pending: Option<(Vec<Id>, bool)>,
-    /// the place of a paste is awaited; `Some(true)` when it is the second half of a copy (base point, then place)
-    pub geom_place: Option<bool>,
+    /// THE PLACE OF A PASTE IS AWAITED: a ghost follows the pointer, a click places it. A copy or a cut waits for its
+    /// base point alone and fills the clipboard (`geom_pending`); nothing follows it until a paste.
+    pub geom_place: bool,
     pub tree: Option<TreeClip>,
     pub tree_multi: Option<(Vec<Id>, bool)>,
     pub os_ping: bool,
+}
+
+impl Clipboard {
+    /// A COPY (or with `cut`, a cut) OF THE GEOMETRY `eids` taken: its base point is awaited; a paste waiting before it
+    /// goes.
+    pub fn arm_copy(&mut self, eids: Vec<Id>, cut: bool) {
+        (self.geom_pending, self.geom_place) = (Some((eids, cut)), false);
+    }
+
+    /// An unfinished copy or paste of geometry put down.
+    pub fn drop_geom(&mut self) {
+        (self.geom_pending, self.geom_place) = (None, false);
+    }
 }
 
 /// The orbit camera for the software 3D view (the projection comes from `Settings::projection`).

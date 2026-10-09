@@ -4379,20 +4379,18 @@ pub fn sketch_click_at(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context,
                 let n = clip.entities.len();
                 sk.clip.geom = Some(clip);
                 *sk.status = qymcad_i18n::tr2("sk-clipboard", "what", &if cut { qymcad_i18n::tr("sk-cut-done") } else { qymcad_i18n::tr("sk-copied") }, "n", &n.to_string());
+                // A COPY GOES TO THE CLIPBOARD AND NO FURTHER: the base point is the point the copy is held by when it is
+                // pasted - here or in another sketch, as many times as wanted. Reported behaviour: "a copy meant for the
+                // clipboard becomes a move-copy on the spot". Placing at once is the Copy tool of the panel.
                 if cut {
                     qymcad_ui_state::commit_edit_if_changed(&mut sk.rebuild());
-                } else {
-                    // A COPY GOES ON TO ITS PLACE: base point, then where the copy lands, as the copy of entities
-                    // in the professional systems. The buffer used to fill silently and the next click did nothing.
-                    sk.clip.geom_place = Some(true);
-                    *sk.status = qymcad_i18n::tr("g-insert-click");
                 }
-            } else if let (Some(copying), qymcad_ui_state::Sel::Sketch(_)) = (sk.clip.geom_place, *sk.sel) {
+            } else if let (true, qymcad_ui_state::Sel::Sketch(_)) = (sk.clip.geom_place, *sk.sel) {
                 // a placement click pastes the buffer so that the anchor lands on the clicked point
                 let qymcad_ui_state::Sel::Sketch(si) = *sk.sel else { return }; // the selection may have changed between frames - do not crash
                 let w = snap_world(sk, rect, pos);
                 if let Some(clip) = sk.clip.geom.clone() {
-                    qymcad_ui_state::begin_edit(&mut *sk.edits, &*sk.project, qymcad_i18n::tr(if copying { "tool-copy" } else { "win-insert" }));
+                    qymcad_ui_state::begin_edit(&mut *sk.edits, &*sk.project, qymcad_i18n::tr("win-insert"));
                     let ids = sk.project.paste_sketch_geometry(si, &clip, w.x, w.y);
                     sk.project.solve_sketch(si);
                     sk.sel_sk.items = ids.into_iter().map(|id| (1u8, id)).collect();
@@ -4400,7 +4398,7 @@ pub fn sketch_click_at(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context,
                     *sk.status = qymcad_i18n::tr("sk-pasted");
                     qymcad_ui_state::commit_edit_if_changed(&mut sk.rebuild());
                 }
-                sk.clip.geom_place = None;
+                sk.clip.geom_place = false;
             } else if sk.armed.pat_op() != 0 && matches!(*sk.sel, qymcad_ui_state::Sel::Sketch(_)) {
                 // an array: pick the entities, then (for a circular one) click THE CENTRE of
                 // rotation, then Enter
@@ -4986,7 +4984,7 @@ pub fn arm_paste(sk: &mut qymcad_ui_state::SketchCtx) -> bool {
         return false;
     }
     qymcad_ui_state::exit_draw_tools(&mut qymcad_ui_state::tools_in!(sk));
-    (sk.clip.geom_pending, sk.clip.geom_place) = (None, Some(false));
+    (sk.clip.geom_pending, sk.clip.geom_place) = (None, true);
     *sk.status = qymcad_i18n::tr("g-insert-click");
     true
 }

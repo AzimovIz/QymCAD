@@ -1046,7 +1046,7 @@ pub fn draw_sketch_grid(scheme: &SchemeUi, set: &Settings, view: View2d, painter
 pub fn draw_clip_ghost(clip: &Clipboard, cursor: Option<Point2>, scheme: &SchemeUi, view: View2d, painter: &egui::Painter, rect: Rect) {
     let sh = qymcad_ui_state::Sheet { view, rect };
     use qymcad_core::model::EntityKind;
-    if clip.geom_place.is_none() {
+    if !clip.geom_place {
         return;
     }
     let Some(clip) = clip.geom.as_ref() else { return };

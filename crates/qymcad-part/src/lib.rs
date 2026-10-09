@@ -6380,14 +6380,13 @@ pub fn tool_options_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
     }
     // another tool taken puts the copy down: one thing in hand at a time
     if !matches!(*bc.armed, qymcad_ui_state::Armed::None) {
-        (bc.clip.geom_pending, bc.clip.geom_place) = (None, None);
+        bc.clip.drop_geom();
     }
     let waiting = match (bc.clip.geom_pending.as_ref(), bc.clip.geom_place) {
         (Some((_, true)), _) => Some(("menu-cut", "g-cut-base-point")),
         (Some((_, false)), _) => Some(("tool-copy", "g-copy-base-point")),
-        (None, Some(true)) => Some(("tool-copy", "g-insert-click")),
-        (None, Some(false)) => Some(("win-insert", "g-insert-click")),
-        (None, None) => None,
+        (None, true) => Some(("win-insert", "g-insert-click")),
+        (None, false) => None,
     };
     if let Some((name, ask)) = waiting {
         let mut cancel = false;
@@ -6404,7 +6403,7 @@ pub fn tool_options_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
         // a point is clicked, not typed: Enter before it has nothing to do
         qymcad_ui_state::enter_not_ready(&ui.ctx().clone(), bc.status, &qymcad_i18n::tr(ask));
         if cancel {
-            (bc.clip.geom_pending, bc.clip.geom_place) = (None, None);
+            bc.clip.drop_geom();
             *bc.status = qymcad_i18n::tr(if name == "win-insert" { "in-insert-cancelled" } else { "in-copy-cancelled" });
         }
         return;
