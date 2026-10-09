@@ -709,6 +709,20 @@ impl<'a> Hand<'a> {
         })
     }
 
+    /// THE SEGMENTS OF `colour` THE LAST FRAME DREW, where they stand on screen: a dashed line is drawn as its dashes.
+    pub fn segments_in(&self, colour: egui::Color32) -> Vec<[egui::Pos2; 2]> {
+        fn walk(s: &egui::Shape, colour: egui::Color32, out: &mut Vec<[egui::Pos2; 2]>) {
+            match s {
+                egui::Shape::LineSegment { points, stroke } if stroke.color == colour => out.push(*points),
+                egui::Shape::Vec(v) => v.iter().for_each(|x| walk(x, colour, out)),
+                _ => {}
+            }
+        }
+        let mut out = Vec::new();
+        self.win.shapes.iter().for_each(|cs| walk(&cs.shape, colour, &mut out));
+        out
+    }
+
     /// HOW MANY STROKES OF `colour` THE FRAME DRAWS NEAR THE POINTER, the hand resting over `place` of the sketch: a
     /// path or a segment with a point within 40 px of it. What follows the pointer is drawn there.
     pub fn strokes_near2d(&mut self, place: (f64, f64), colour: egui::Color32) -> usize {

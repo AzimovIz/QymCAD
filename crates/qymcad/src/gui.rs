@@ -3935,6 +3935,7 @@ mod a_drawing_tool_drops_the_selection;
 mod a_circle_and_an_arc_take_a_size_only_when_typed;
 mod a_rectangle_with_its_centre_fixed_is_worked_by_hand;
 mod a_copy_goes_to_the_clipboard;
+mod extend_is_worked_by_hand;
 mod an_arc_by_its_centre_ends_on_itself;
 mod a_shift_box_leaves_the_sheet_still;
 mod a_dimension_being_placed_follows_the_pointer;

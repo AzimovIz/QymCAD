@@ -1008,11 +1008,12 @@ pub static BREAK: Tool = Tool {
     not_applicable: CUTS,
 };
 
-/// EXTEND: the line that stops at x = 20 stretched by a click near its end to the line standing across its way at
-/// x = 30. Nothing is added or taken away: the end moves, and the stretch is a line where there was none.
+/// EXTEND: the line that stops at x = 20 taken by a click on it, and a click past its end stretches it to the line
+/// standing across its way at x = 30, as the preview shows. Nothing is added or taken away: the end moves, and the
+/// stretch is a line where there was none.
 pub static EXTEND: Tool = Tool {
     id: "sketch.extend",
-    flow: Flow::Drawing(&[(18.0, 0.0)], Finish::LastClick),
+    flow: Flow::Drawing(&[(18.0, 0.0), (25.0, 3.0)], Finish::LastClick),
     title: "tool-extend",
     entries: &[Entry::Button("tb-extend-hint"), Entry::SearchByArticle],
     other: (Entry::Button("tb-line-hint"), "tool-line"),

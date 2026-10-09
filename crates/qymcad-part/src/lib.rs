@@ -6593,8 +6593,13 @@ pub fn tool_options_bar(bc: &mut qymcad_ui_state::BarCtx, ui: &mut egui::Ui) {
                     bc.tool.proj_face = true;
                 }
             }
+            if bc.armed.click_op() == 2 {
+                ui.checkbox(&mut bc.tool_prefs.extend_both, qymcad_i18n::tr("opt-extend-both")).on_hover_text(qymcad_i18n::tr("opt-extend-both-hint"));
+            }
             let h = match bc.armed.click_op() {
                 1 => &qymcad_i18n::tr("opt-trim-hint"),
+                // the line held, the tool says what it waits for next
+                2 if bc.tool.extend.is_some() => &qymcad_i18n::tr("opt-extend-to-hint"),
                 2 => &qymcad_i18n::tr("opt-extend-hint"),
                 3 => &qymcad_i18n::tr("opt-break-hint"),
                 4 => &qymcad_i18n::tr("opt-fillet-hint"),
