@@ -1382,6 +1382,30 @@ mod tests {
                 check_all(&mut app, "sketch: a circle sized by a value typed", &mut problems);
             }
 
+            // A RECTANGLE WITH ITS CENTRE FIXED: drawn from a corner, the centre picked and fixed, a corner dragged by the
+            // mouse - it resizes about the centre, which stays
+            {
+                let mut hand = Hand::new(&mut app);
+                hand.sk_tool(2).click2d(110.0, 30.0).click2d(130.0, 50.0).key(egui::Key::Escape).key(egui::Key::Escape);
+                hand.sk_tool(0);
+                let centre = hand.app.project.sketches[si].rects.last().map(|r| r.centre);
+                match centre {
+                    Some(c) if hand.select2d(&[(0, c)]) => {
+                        hand.constraint(6);
+                        hand.key(egui::Key::Escape);
+                        hand.drag2d((130.0, 50.0), (134.0, 53.0));
+                        let sk = &hand.app.project.sketches[si];
+                        let stays = sk.points.iter().find(|q| q.id == c).is_some_and(|q| (q.x - 120.0).abs() < 0.6 && (q.y - 40.0).abs() < 0.6);
+                        let moved = sk.points.iter().any(|q| (q.x - 134.0).abs() < 0.6 && (q.y - 53.0).abs() < 0.6);
+                        if !stays || !moved {
+                            problems.push(format!("sketch: a corner of a rectangle with its centre fixed dragged to (134, 53): the centre stays {stays}, the corner went there {moved}"));
+                        }
+                    }
+                    _ => problems.push("sketch: the centre of a rectangle drawn from a corner could not be picked".into()),
+                }
+                check_all(&mut app, "sketch: a rectangle with its centre fixed resized by a corner", &mut problems);
+            }
+
             // CONSTRAINTS: each is placed on a suitable selection. One that did not take must say so through
             // the status line rather than silently doing nothing.
             let codes: [(u8, &str); 9] =

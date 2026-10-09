@@ -30,6 +30,8 @@ struct PartRadius {
 struct TouchedRect {
     index: usize,
     mid: bool,
+    /// whether its centre is held by the sketch, looked at once when the drag begins (`Centre`)
+    centre: super::sketch::Centre,
 }
 
 /// THE BOXES OF THE CURVES OF A SKETCH on a grid, by their place among the drawn curves; the curves that do not move
@@ -276,7 +278,7 @@ impl Project {
         let mut own_radii: Vec<crate::solver::RadiusVar> = sess.radii.iter().map(|r| crate::solver::RadiusVar { center: r.centre, value: radius(s, r) }).collect();
         let radii_was: Vec<f64> = own_radii.iter().map(|r| r.value).collect();
         // a rectangle changes its size from where it was drawn (`held_for_size`)
-        let anchors = sess.rects.iter().filter_map(|r| held_for_size(&s.rects[r.index], Some(d))).filter(|p| sess.place.contains_key(p)).map(|p| Constraint::Fixed { p });
+        let anchors = sess.rects.iter().filter_map(|r| held_for_size(&s.rects[r.index], Some(d), r.centre)).filter(|p| sess.place.contains_key(p)).map(|p| Constraint::Fixed { p });
         let constraints: Vec<Constraint> = sess.constraints.iter().cloned().chain(anchors).collect();
         let outcome = crate::solver::solve_part_within(&mut own_points, &mut own_radii, &constraints, Some(drag), crate::solver::Budget::FRAME, &s.points);
         s.left_unsolved = outcome.left;
@@ -375,12 +377,23 @@ impl Project {
                 }
             }
         }
+        // THE POINTS OF THE PART THAT CAN MOVE, counted once for the drag: a centre no motion of the part moves is held
+        let free: HashMap<Id, bool> = {
+            let own_points: Vec<SketchPoint> = part.points.iter().map(|&i| s.points[i]).collect();
+            let own_radii: Vec<crate::solver::RadiusVar> = part.radii.iter().map(|&j| radii[j]).collect();
+            let own: Vec<Constraint> = part.constraints.iter().map(|&ci| active[ci].clone()).collect();
+            own_points.iter().map(|q| q.id).zip(crate::solver::free_points(&own_points, &own_radii, &own)).collect()
+        };
         let rects: Vec<TouchedRect> = s
             .rects
             .iter()
             .enumerate()
             .filter(|(_, r)| touched.contains(&r.centre) || r.corners.iter().any(|k| touched.contains(k)))
-            .map(|(index, r)| TouchedRect { index, mid: matches!(r.anchor, RectAnchor::Corner(_)) && naming.get(&r.centre) == Some(&1) })
+            .map(|(index, r)| TouchedRect {
+                index,
+                mid: matches!(r.anchor, RectAnchor::Corner(_)) && naming.get(&r.centre) == Some(&1),
+                centre: if free.get(&r.centre) == Some(&false) { super::sketch::Centre::Held } else { super::sketch::Centre::Free },
+            })
             .collect();
         let watched: Vec<usize> =
             touched.iter().chain(rects.iter().map(|r| &s.rects[r.index].centre)).filter_map(|id| place.get(id).copied()).collect::<std::collections::BTreeSet<usize>>().into_iter().collect();

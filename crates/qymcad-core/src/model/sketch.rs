@@ -160,19 +160,31 @@ fn same_rect_constraint(own: &Constraint, c: &Constraint) -> bool {
     }
 }
 
+/// WHETHER THE CENTRE OF A RECTANGLE IS HELD by the sketch - fixed, or set by dimensions - so that no motion the
+/// constraints allow moves it (`solver::free_points`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Centre {
+    Held,
+    Free,
+}
+
 /// WHAT A SOLVE HOLDS OF RECTANGLE `r` so that its size changes from where it should, `dragged` being the point under
 /// the hand. A dragged corner stretches the rectangle from the corner across from it - a corner shares a side with each
 /// neighbour, so with a neighbour held it could only slide along that side, one size at a time. A rectangle drawn from
-/// its centre holds the centre under a dragged corner. Not dragged, its anchor is held: the centre, or the corner it was
+/// its centre holds the centre under a dragged corner, and so does one drawn from a corner whose centre is held: the
+/// corner across is the reflection of the dragged one through the held centre, and held it leaves the dragged one
+/// nowhere to go. Reported behaviour: "a rectangle drawn from a corner, its centre fixed - a corner cannot be dragged;
+/// with the centre let go it drags as it should". Not dragged, its anchor is held: the centre, or the corner it was
 /// drawn from, so that a width or a height typed grows it from there. Nothing when the centre is dragged: the rectangle
 /// goes with it.
-pub(super) fn held_for_size(r: &crate::model::SketchRect, dragged: Option<Id>) -> Option<Id> {
+pub(super) fn held_for_size(r: &crate::model::SketchRect, dragged: Option<Id>, centre: Centre) -> Option<Id> {
     if dragged == Some(r.centre) {
         return None;
     }
     let corner_dragged = dragged.and_then(|d| r.corners.iter().position(|k| *k == d));
     match (r.anchor, corner_dragged) {
         (crate::model::RectAnchor::Centre, _) => Some(r.centre),
+        (crate::model::RectAnchor::Corner(_), Some(_)) if centre == Centre::Held => Some(r.centre),
         (crate::model::RectAnchor::Corner(_), Some(k)) => Some(r.corners[(k + 2) % 4]),
         (crate::model::RectAnchor::Corner(c), None) => Some(c),
     }
@@ -3522,8 +3534,18 @@ impl Project {
         // dragged corner or a width typed grew a rectangle about wherever the least travel lay. What is held for this
         // solve (`held_for_size`) is let go when the sketch does not solve with it - a dimension that moves the
         // rectangle as a whole.
+        // A CORNER DRAGGED OF A RECTANGLE DRAWN FROM A CORNER asks whether its centre is held - counted only then, as a
+        // drag frame of a sketch the drag session does not take is solved here
+        let dragged = drag.map(|(d, _, _)| d);
+        let corner_dragged = dragged.is_some_and(|d| s.rects.iter().any(|r| matches!(r.anchor, crate::model::RectAnchor::Corner(_)) && r.corners.contains(&d)));
+        let free: std::collections::HashMap<Id, bool> = if corner_dragged {
+            s.points.iter().map(|q| q.id).zip(crate::solver::free_points(&s.points, &radii, &active)).collect()
+        } else {
+            std::collections::HashMap::new()
+        };
+        let centre_of = |r: &crate::model::SketchRect| if free.get(&r.centre) == Some(&false) { Centre::Held } else { Centre::Free };
         let anchors: Vec<Constraint> =
-            s.rects.iter().filter_map(|r| held_for_size(r, drag.map(|(d, _, _)| d))).filter(|p| s.points.iter().any(|q| q.id == *p)).map(|p| Constraint::Fixed { p }).collect();
+            s.rects.iter().filter_map(|r| held_for_size(r, dragged, centre_of(r))).filter(|p| s.points.iter().any(|q| q.id == *p)).map(|p| Constraint::Fixed { p }).collect();
         let outcome = if anchors.is_empty() {
             crate::solver::solve_within(&mut s.points, &mut radii, &active, drag, budget)
         } else {

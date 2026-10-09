@@ -892,6 +892,21 @@ impl<'a> Hand<'a> {
         self.circles_drawn(radius, |c| c.fill != egui::Color32::TRANSPARENT)
     }
 
+    /// THE FILLED DOTS OF `radius` px IN `colour` THE LAST FRAME DREW: the points of a sketch drawn free, or defined.
+    pub fn dots_in(&self, radius: f32, colour: egui::Color32) -> Vec<egui::Pos2> {
+        fn walk(s: &egui::Shape, dot: &egui::epaint::CircleShape, out: &mut Vec<egui::Pos2>) {
+            match s {
+                egui::Shape::Circle(c) if (c.radius - dot.radius).abs() < 1e-3 && c.fill == dot.fill => out.push(c.center),
+                egui::Shape::Vec(v) => v.iter().for_each(|x| walk(x, dot, out)),
+                _ => {}
+            }
+        }
+        let dot = egui::epaint::CircleShape::filled(egui::Pos2::ZERO, radius, colour);
+        let mut out = Vec::new();
+        self.win.shapes.iter().for_each(|cs| walk(&cs.shape, &dot, &mut out));
+        out
+    }
+
     fn circles_drawn(&self, radius: f32, takes: fn(&egui::epaint::CircleShape) -> bool) -> Vec<egui::Pos2> {
         fn walk(s: &egui::Shape, radius: f32, takes: fn(&egui::epaint::CircleShape) -> bool, out: &mut Vec<egui::Pos2>) {
             match s {
