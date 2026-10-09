@@ -25,12 +25,12 @@ IMG := "qymcad-appimage-builder"
 pkg-linux-image:
     docker build -t {{IMG}} packaging/linux
 
-# build the AppImage -> dist/qymcad-<ver>-x86_64.AppImage
+# build the AppImage and the same files as a tar.gz -> dist/qymcad-<ver>-x86_64.AppImage, -x86_64-linux.tar.gz
 pkg-linux: pkg-linux-image
     mkdir -p dist
     docker run --rm \
         -v "$PWD":/src -v "$PWD/dist":/dist \
-        {{IMG}} bash packaging/linux/build-appimage.sh
+        {{IMG}} bash -c "bash packaging/linux/build-appimage.sh && bash packaging/linux/build-tarball.sh"
     @echo "-> the files are in ./dist"
 
 # --- Windows portable zip ---

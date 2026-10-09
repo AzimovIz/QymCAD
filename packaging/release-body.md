@@ -29,6 +29,8 @@
 * **Faster rebuilds:** a rebuild computes independent nodes on several cores (how many is a setting); the scene
   draws large models with less memory.
 * **First start** opens a sample; afterwards the last project opens.
+* **Linux archive.** `qymcad-*-x86_64-linux.tar.gz` holds the same program as the AppImage, as a folder:
+  unpack it anywhere and run `bin/qymcad`, no FUSE needed.
 
 **Fixed**
 

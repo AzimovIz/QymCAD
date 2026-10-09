@@ -16,6 +16,14 @@ just pkg-linux            # builds the image (slow the first time: OCCT is compi
 # sending the file to someone:  chmod +x qymcad-*.AppImage && ./qymcad-*.AppImage
 ```
 
+The same run leaves `dist/qymcad-*-x86_64-linux.tar.gz` beside it: the AppImage unpacked and packed again
+(`packaging/linux/build-tarball.sh`), for a system without FUSE. `bin/qymcad` finds OCCT in `lib/` next to
+it through its RUNPATH (`$ORIGIN/../lib`), wherever the folder is unpacked:
+
+```bash
+tar xzf qymcad-*-x86_64-linux.tar.gz && ./qymcad-*-x86_64-linux/bin/qymcad
+```
+
 Why Ubuntu 22.04 (glibc 2.35) as the base: an AppImage runs on a glibc **no older** than the one it was built
 against. Building on a fresh distribution is therefore not an option - the binary would not start on someone
 else's 24.04 LTS. OCCT 7.8.1 is compiled from source in the same image (apt on 22.04 carries only 7.5). All of

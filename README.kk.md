@@ -81,6 +81,14 @@ chmod +x qymcad-*.AppImage
 ./qymcad-*.AppImage
 ```
 
+Немесе `qymcad-*-x86_64-linux.tar.gz`: сол бағдарлама қалта түрінде, FUSE жоқ жүйе үшін. Кез келген
+жерге ашып, `bin/qymcad` іске қосыңыз.
+
+```bash
+tar xzf qymcad-*-x86_64-linux.tar.gz
+./qymcad-*-x86_64-linux/bin/qymcad
+```
+
 **macOS 12+ (Apple Silicon)** — `qymcad-*-macos-arm64.zip`. Ашып, бағдарламаның жанындағы
 `README.txt` файлын оқыңыз: жинақта Apple қолтаңбасы жоқ, сондықтан алғашқы іске қосудың алдында
 карантин белгісін бір рет алу керек. Бұл бір командамен орындалады және қадам бойынша жазылған.

@@ -81,6 +81,14 @@ chmod +x qymcad-*.AppImage
 ./qymcad-*.AppImage
 ```
 
+Або `qymcad-*-x86_64-linux.tar.gz`: та сама програма текою, для системи без FUSE. Розпакуйте будь-де
+й запустіть `bin/qymcad`.
+
+```bash
+tar xzf qymcad-*-x86_64-linux.tar.gz
+./qymcad-*-x86_64-linux/bin/qymcad
+```
+
 **macOS 12+ (Apple Silicon)** — `qymcad-*-macos-arm64.zip`. Розархівуйте та прочитайте `README.txt` поруч
 із програмою: збірка не має підпису Apple, тому перед першим запуском слід один раз зняти позначку
 карантину. Це робиться однією командою, покроково описаною в інструкції.

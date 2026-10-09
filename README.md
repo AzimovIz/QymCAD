@@ -81,6 +81,14 @@ chmod +x qymcad-*.AppImage
 ./qymcad-*.AppImage
 ```
 
+Or `qymcad-*-x86_64-linux.tar.gz`: the same program as a folder, for a system without FUSE. Unpack it
+anywhere and run `bin/qymcad`.
+
+```bash
+tar xzf qymcad-*-x86_64-linux.tar.gz
+./qymcad-*-x86_64-linux/bin/qymcad
+```
+
 **macOS 12+ (Apple Silicon)** — `qymcad-*-macos-arm64.zip`. Unpack it and read `README.txt` lying beside
 the application: the build carries no Apple signature, so the quarantine mark has to be cleared once,
 before the first launch. It takes one command and is written out step by step.

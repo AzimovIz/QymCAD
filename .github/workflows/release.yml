@@ -1,13 +1,14 @@
-# Building the release packages in CI: the Windows portable zip, the Linux AppImage and the macOS .app.
+# Building the release packages in CI: the Windows portable zip and MSI, the Linux AppImage and tar.gz, and
+# the macOS .app.
 #
 # ONE TRIGGER: the button (Actions -> Run workflow). Nothing builds by itself - not on a push, not on a
 # tag. Commits may arrive daily; a package is made when it is asked for, and asking is a person pressing
 # a button.
 #
-# Run it against a BRANCH -> three artifacts, downloadable by whoever is signed in, kept 90 days. That is a
-# build for oneself.
+# Run it against a BRANCH -> the packages as artifacts, downloadable by whoever is signed in, kept 90 days.
+# That is a build for oneself.
 #
-# Run it against a TAG (the ref selector accepts one) -> the same three files, plus a Release page anyone can
+# Run it against a TAG (the ref selector accepts one) -> the same files, plus a Release page anyone can
 # download from without an account, kept for ever, named by the tag. That is a build for other people.
 # Nothing is marked a pre-release - the reason is written out at the `publish` job.
 #
@@ -223,21 +224,76 @@ jobs:
 
       # The sources are mounted rather than copied into the image: the image is the toolchain, the checkout is
       # the code. That is exactly how `just pkg-linux` runs it, so the two paths cannot drift.
-      - name: Build the AppImage
+      #
+      # The tar.gz is the AppImage unpacked and packed again - the same binary and libraries for whoever
+      # does not want FUSE; build-tarball.sh says why it is not built a second time.
+      - name: Build the AppImage and the tar.gz
         env:
           QYMCAD_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
         run: |
           mkdir -p dist
           docker run --rm -e QYMCAD_VERSION \
             -v "$PWD":/src -v "$PWD/dist":/dist \
-            qymcad-appimage-builder:latest bash packaging/linux/build-appimage.sh
+            qymcad-appimage-builder:latest \
+            bash -c "bash packaging/linux/build-appimage.sh && bash packaging/linux/build-tarball.sh"
 
-      # A single file, uploaded as it is - see the reason at the Windows job.
-      - name: Upload artifact (for workflow_dispatch)
+      # Single files, uploaded as they are - see the reason at the Windows job, and why they are two steps.
+      - name: Upload the AppImage (for workflow_dispatch)
         uses: actions/upload-artifact@v7
         with:
           path: dist/*.AppImage
           archive: false
+
+      - name: Upload the tar.gz (for workflow_dispatch)
+        uses: actions/upload-artifact@v7
+        with:
+          path: dist/*.tar.gz
+          archive: false
+
+  # THE ARCHIVE IS UNPACKED ON MACHINES THAT NEVER SAW OCCT. The builder image has /opt/occt in the loader's
+  # cache, so a library missing from the package would still resolve there; a bare distribution is where it
+  # would not. Only the host's own graphics side is installed - what every desktop has. The AppImage holds
+  # the same files, so this speaks for it too.
+  linux-bare:
+    needs: linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: ubuntu:22.04
+            prepare: apt-get update -q && apt-get install -y -q --no-install-recommends libgl1 libx11-6 libfontconfig1
+          - image: ubuntu:24.04
+            prepare: apt-get update -q && apt-get install -y -q --no-install-recommends libgl1 libx11-6 libfontconfig1
+          - image: debian:12
+            prepare: apt-get update -q && apt-get install -y -q --no-install-recommends libgl1 libx11-6 libfontconfig1
+          - image: fedora:41
+            prepare: dnf install -y -q libglvnd-glx libX11 fontconfig
+    name: linux-bare (${{ matrix.image }})
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: "*-x86_64-linux.tar.gz"
+          path: dist
+          merge-multiple: true
+          skip-decompress: true
+
+      - name: Every library resolves
+        run: |
+          ls -lh dist
+          docker run --rm -v "$PWD/dist":/dist ${{ matrix.image }} bash -euo pipefail -c '
+            ${{ matrix.prepare }} >/dev/null
+            mkdir /opt/q && tar -C /opt/q -xzf /dist/*.tar.gz
+            bin=$(echo /opt/q/*/bin/qymcad)
+            [ -x "$bin" ] || { echo "!!! no executable bin/qymcad in the archive"; exit 1; }
+            ldd "$bin"
+            if ldd "$bin" | grep -q "not found"; then
+              echo "!!! libraries not found on a bare system:"
+              ldd "$bin" | grep "not found"
+              exit 1
+            fi
+          '
 
 
   # macOS: APPLE SILICON ONLY, and that is a decision rather than an omission. GitHub has no live Intel
@@ -324,7 +380,7 @@ jobs:
   # Now every run downloads the packages and checks them; only the page is made on a tag. A branch run
   # costs a minute of downloading and proves the whole path.
   publish:
-    needs: [windows, linux, macos]
+    needs: [windows, linux, linux-bare, macos]
     runs-on: ubuntu-latest
     steps:
       # THE SOURCES ARE NEEDED HERE TOO, for one file: the text that goes onto the release page. This job
@@ -343,13 +399,13 @@ jobs:
           merge-multiple: true
           skip-decompress: true
 
-      # FOUR FILES, AND ALL FOUR ACTUALLY FILES. The packages are uploaded unzipped, and the release
+      # FIVE FILES, AND ALL FIVE ACTUALLY FILES. The packages are uploaded unzipped, and the release
       # step below attaches `dist/*` - a directory among them would be attached as nothing at all, and
       # the Release page would go up with a download missing. Fifteen seconds against that.
       #
-      # Four, not three, since Windows produces two: the portable zip and the MSI installer. The number
-      # is written out rather than counted from the jobs on purpose - a package that silently stopped
-      # being built is exactly what this step exists to catch.
+      # Five, not three, since Windows produces two (the portable zip and the MSI installer) and Linux
+      # two (the AppImage and the tar.gz). The number is written out rather than counted from the jobs on
+      # purpose - a package that silently stopped being built is exactly what this step exists to catch.
       - name: What was built
         run: |
           ls -lh dist
@@ -357,7 +413,7 @@ jobs:
             [ -f "$f" ] || { echo "!!! not a file, so it cannot be attached: $f"; exit 1; }
           done
           n=$(ls dist | wc -l)
-          [ "$n" -eq 4 ] || { echo "!!! four packages were expected, $n arrived"; exit 1; }
+          [ "$n" -eq 5 ] || { echo "!!! five packages were expected, $n arrived"; exit 1; }
 
       # NOT MARKED A PRE-RELEASE, and that is a decision rather than an oversight.
       #
