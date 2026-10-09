@@ -1111,9 +1111,17 @@ impl<'a> Hand<'a> {
         self.close_window()
     }
 
-    /// Ctrl+V, as egui hands it over: the text of the system clipboard, empty here.
+    /// Ctrl+V, AS egui HANDS IT OVER IN A LIVE WINDOW: a paste event with the text of the system clipboard, and only when
+    /// that clipboard holds some - with it empty the keys bring nothing at all. The system clipboard of the hand is what
+    /// the program put there (`Window::copied`). Reported behaviour: "Ctrl+V does not paste (Edit -> Paste works)" - a
+    /// copy of sketch geometry left the system clipboard empty, and a paste event handed over regardless hid it.
+    ///
+    /// A FRAME GOES BY FIRST, as in a live window, which draws on between a click and the next key: what a click asked of
+    /// the system is handed over in the frame after it.
     pub fn paste(&mut self) -> &mut Self {
-        self.frame_holding(egui::Modifiers::COMMAND, vec![egui::Event::Paste(String::new())]);
+        self.frame(Vec::new());
+        let events = self.win.copied.last().filter(|t| !t.is_empty()).map(|t| vec![egui::Event::Paste(t.clone())]).unwrap_or_default();
+        self.frame_holding(egui::Modifiers::COMMAND, events);
         self.close_window()
     }
 

@@ -4378,6 +4378,10 @@ pub fn sketch_click_at(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context,
                 sk.sel_sk.clear(); // the selection and whatever was waiting for it
                 let n = clip.entities.len();
                 sk.clip.geom = Some(clip);
+                // A MARKER INTO THE CLIPBOARD OF THE SYSTEM, as a copy of the tree puts one: a live window hands Ctrl+V
+                // over only while that clipboard holds some text. Reported behaviour: "Ctrl+V does not paste (Edit ->
+                // Paste works), and no preview comes under the cursor".
+                sk.clip.os_ping = true;
                 *sk.status = qymcad_i18n::tr2("sk-clipboard", "what", &if cut { qymcad_i18n::tr("sk-cut-done") } else { qymcad_i18n::tr("sk-copied") }, "n", &n.to_string());
                 // A COPY GOES TO THE CLIPBOARD AND NO FURTHER: the base point is the point the copy is held by when it is
                 // pasted - here or in another sketch, as many times as wanted. Reported behaviour: "a copy meant for the
