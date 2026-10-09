@@ -2530,9 +2530,8 @@ pub fn draw_sketch_dims(pn: &Painting, painter: &egui::Painter, rect: Rect, si: 
     let Some(s) = pn.project.sketches.get(si) else { return };
     let dim_col = pn.scheme.pal.dimension();
     let font = egui::FontId::proportional(pn.set.dim_font);
-    // what a label says, as the settings ask, and the room it takes - the same the mouse takes it by
+    // what a label says, as the settings ask
     let caption = |c: &Constraint| qymcad_ui_state::dim_caption(pn.project, si, c, pn.set).unwrap_or_default();
-    let room = |t: &str| qymcad_ui_state::dim_text_size(t, pn.set.dim_font);
     // the text of a linear dimension beside its line, or on a shelf past the arrow when it does not fit between them
     // the text of a linear dimension where it was led along its line, or beside the line's middle, or on a shelf past
     // the arrow when it does not fit between them - the place the mouse takes it by
@@ -2767,62 +2766,10 @@ pub fn draw_sketch_dims(pn: &Painting, painter: &egui::Painter, rect: Rect, si: 
             _ => {}
         }
     }
-    // the radii and diameters of circle entities and of arcs and fillets:
-    // the selected entity (in sk_sel) or the one being edited is highlighted
-    for e in &s.entities {
-        let dim_col = if pn.sel_sk.items.contains(&(1, e.id)) || pn.inline.circle() == Some(e.id) { pn.scheme.pal.selected() } else { dim_col };
-        match e.kind {
-            EntityKind::Circle { center, r } => {
-                // if the circle already carries a diameter or radius dimension (a Diameter constraint), that loop draws it
-                let has_dim = s.constraints.iter().any(|x| matches!(x, Constraint::Diameter { c, .. } if *c == center));
-                if !has_dim {
-                    if let Some(cp) = qymcad_ui_state::sketch_pt(pn.project, si, center) {
-                        // drawn in the same style as a Diameter constraint at off=0 (the radius to the right,
-                        // the label beyond the rim), so that grabbing the label (which materialises a
-                        // reference diameter) causes no jump.
-                        let sc = sh.at(cp);
-                        let r_px = (sh.at(Point2::new(cp.x + r, cp.y)) - sc).length();
-                        let dir = egui::vec2(1.0, 0.0);
-                        let edge = sc + dir * r_px;
-                        let knee = sc + dir * (r_px + 14.0);
-                        painter.line_segment([sc, edge], Stroke::new(1.0, dim_col));
-                        painter.line_segment([edge, knee], Stroke::new(0.7, dim_col));
-                        let txt = format!("Ø{:.1}", 2.0 * r);
-                        let (at, shelf) = qymcad_ui_state::radial_text_place(knee, dir, room(&txt));
-                        painter.line_segment(shelf, Stroke::new(0.7, dim_col));
-                        painter.text(at, egui::Align2::CENTER_CENTER, txt, font.clone(), dim_col);
-                    }
-                }
-            }
-            EntityKind::Arc { center, a, b, .. } => {
-                // if the arc already carries a size of its own - a radius, an arc length or a chord - that loop above draws it
-                let has_dim = s.rim_sized(center);
-                // a fillet radius: an R leader from the centre to the middle of the arc, the label beyond
-                // the rim (r+14) - the same style and position that passive_radius_label_at grabs, otherwise
-                // the two would not line up.
-                if !has_dim {
-                    if let (Some(cp), Some(pa), Some(pb)) =
-                        (qymcad_ui_state::sketch_pt(pn.project, si, center), qymcad_ui_state::sketch_pt(pn.project, si, a), qymcad_ui_state::sketch_pt(pn.project, si, b))
-                    {
-                        let r = ((pa.x - cp.x).powi(2) + (pa.y - cp.y).powi(2)).sqrt();
-                        let sc = sh.at(cp);
-                        let r_px = (sh.at(Point2::new(cp.x + r, cp.y)) - sc).length();
-                        let m = sh.at(Point2::new((pa.x + pb.x) / 2.0, (pa.y + pb.y) / 2.0)) - sc;
-                        let dir = if m.length() > 1e-3 { m.normalized() } else { egui::vec2(1.0, 0.0) };
-                        let edge = sc + dir * r_px;
-                        let knee = sc + dir * (r_px + 14.0);
-                        painter.line_segment([sc, edge], Stroke::new(1.0, dim_col));
-                        painter.line_segment([edge, knee], Stroke::new(0.7, dim_col));
-                        let txt = format!("R{r:.1}");
-                        let (at, shelf) = qymcad_ui_state::radial_text_place(knee, dir, room(&txt));
-                        painter.line_segment(shelf, Stroke::new(0.7, dim_col));
-                        painter.text(at, egui::Align2::CENTER_CENTER, txt, font.clone(), dim_col);
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
+    // A CIRCLE OR AN ARC WITH NO SIZE OF ITS OWN SHOWS NO NUMBER. A label of its size in the style of a dimension cannot
+    // be told from one: a diameter deleted would look still laid. Reported behaviour: "on circles a radius is always put
+    // ... it is nailed down". A size is seen by laying a dimension; while the field of a new circle or arc is open, the
+    // field shows it.
 }
 
 pub fn draw_mesh(pn: &Painting, painter: &egui::Painter, rect: Rect) {

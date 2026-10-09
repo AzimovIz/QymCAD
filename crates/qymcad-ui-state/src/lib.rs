@@ -1950,6 +1950,9 @@ pub struct DimTool {
     /// typing the value: buffer, focus, editing an existing dimension
     pub buf: String,
     pub focus: bool,
+    /// THE FIELD OF THE SIZE OF A CIRCLE OR AN ARC WAS TYPED IN since it opened: only a value typed is laid as a
+    /// dimension, as the width and the height of a rectangle are (`Placing::typed`)
+    pub typed: bool,
     pub edit: Option<(Id, String, String)>,
     /// THE FIELD OF A DIMENSION JUST MADE: (its constraint, the length of the undo list when it was made). Its value
     /// joins the step that made it - making a dimension and typing its value is one act, undone by one Ctrl+Z - as

@@ -3934,6 +3934,7 @@ mod a_big_sketch_selected_keeps_the_3d_frame;
 mod a_dimension_past_its_field_is_left_as_it_stands;
 mod the_point_numbers_wait_for_their_setting;
 mod a_drawing_tool_drops_the_selection;
+mod a_circle_and_an_arc_take_a_size_only_when_typed;
 mod an_arc_by_its_centre_ends_on_itself;
 mod a_shift_box_leaves_the_sheet_still;
 mod a_dimension_being_placed_follows_the_pointer;

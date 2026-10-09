@@ -403,7 +403,7 @@ impl<'a> Hand<'a> {
         true
     }
 
-    /// A PLACE TO CLICK ON AN ITEM of the sketch (`(0, point)` or `(1, line)`), found as a person finds it: along
+    /// A PLACE TO CLICK ON AN ITEM of the sketch (`(0, point)`, or `(1, line or circle)`), found as a person finds it: along
     /// the item until a click there would pick it. The view is aimed at the item first, at the scale of the
     /// sketch tools; the window closes after it.
     pub fn spot2d(&mut self, item: (u8, u64)) -> Option<(f64, f64)> {
@@ -430,11 +430,16 @@ impl<'a> Hand<'a> {
                     .entities
                     .iter()
                     .find(|e| e.id == *id)
-                    .and_then(|e| match e.kind {
-                        qymcad_core::model::EntityKind::Line { a, b } => Some((at(a)?, at(b)?)),
-                        _ => None,
+                    .map(|e| match e.kind {
+                        qymcad_core::model::EntityKind::Line { a, b } => {
+                            at(a).zip(at(b)).map(|(u, v)| [0.5, 0.37, 0.63, 0.25, 0.75, 0.15, 0.85].iter().map(|t| (u.0 + (v.0 - u.0) * t, u.1 + (v.1 - u.1) * t)).collect()).unwrap_or_default()
+                        }
+                        // a circle along its rim, from the top round
+                        qymcad_core::model::EntityKind::Circle { center, r } => at(center)
+                            .map(|c| [90.0f64, 45.0, 135.0, 0.0, 180.0, 225.0, 315.0, 270.0].iter().map(|deg| (c.0 + r * deg.to_radians().cos(), c.1 + r * deg.to_radians().sin())).collect())
+                            .unwrap_or_default(),
+                        _ => Vec::new(),
                     })
-                    .map(|(u, v)| [0.5, 0.37, 0.63, 0.25, 0.75, 0.15, 0.85].iter().map(|t| (u.0 + (v.0 - u.0) * t, u.1 + (v.1 - u.1) * t)).collect())
                     .unwrap_or_default(),
             })
             .collect()

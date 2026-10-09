@@ -1387,7 +1387,7 @@ pub fn open_shape_size(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos
         }
     }
     if let Some(eid) = qymcad_pick::nearest_circle_entity(&sk.pick(), rect, pos, si) {
-        // a circle gets a diameter dimension; an arc has its radius edited
+        // a circle has its diameter edited, or the field of its size opened; an arc the field of its radius
         let center = sk.project.sketches[si].entities.iter().find(|e| e.id == eid).and_then(|e| match e.kind {
             qymcad_core::model::EntityKind::Circle { center, .. } => Some(center),
             _ => None,
@@ -1398,12 +1398,14 @@ pub fn open_shape_size(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos
         if let (true, Some(c)) = (is_poly_rim, center) {
             sk.place.set(PlacingShape::Poly(c));
             sk.place.focus = true;
-        } else if let Some(c) = center {
-            if let Some(ci) = sk.project.ensure_diameter(si, c, true) {
-                *sk.inline = InlineEdit::Dim(ci);
-                sk.dim.focus = true;
-            }
+        } else if let Some(ci) = center.and_then(|c| sk.project.sketches[si].constraints.iter().position(|x| matches!(x, qymcad_core::model::Constraint::Diameter { c: cc, .. } if *cc == c))) {
+            // a circle with its diameter laid: the dimension is edited
+            *sk.inline = InlineEdit::Dim(ci);
+            sk.dim.focus = true;
         } else {
+            // A CIRCLE OR AN ARC WITH NO SIZE OF ITS OWN opens the field of its size, and a size is laid only when a value
+            // is typed there - as at a circle just drawn. Reported behaviour: "a double click, if the size was not
+            // changed, must not put a dimension line on the circle".
             *sk.inline = InlineEdit::Circle(eid);
             sk.dim.focus = true;
         }
@@ -2303,39 +2305,32 @@ pub fn project_clicked_edge(sk: &mut qymcad_ui_state::SketchCtx, si: usize, rect
 }
 
 /// A click with the dimension tool. Returns true when the click was handled.
-/// A CIRCLE DRAWN GETS ITS DIAMETER AS A REAL DIMENSION, there and then.
+/// A CIRCLE OR AN ARC DRAWN OPENS THE FIELD OF ITS SIZE, and lays no dimension of its own. The size is laid as a
+/// dimension when a value is typed and the field closed with Enter or the tick - a diameter for a circle, a radius for an
+/// arc; closed untouched, or with Esc, the shape is left free, as the rectangle is (`rect_input_popup`).
 ///
-/// Reported behaviour: "the sketch is not defined although the point is locked and a dimension is shown
-/// on the screen - it was placed automatically while drawing. I edit that dimension on purpose, and only
-/// then does it become a diameter, appear in the panel, and the sketch becomes defined. That is not
-/// obvious: a dimension put on a circle while drawing must be a diameter straight away, not a fiction
-/// that has to be edited once more to define the sketch."
+/// Reported behaviour: "on circles a radius is always put ... if no value was typed and nothing was edited, do not put
+/// it, and let it be deleted - it is nailed down. Sometimes a mess comes of it." A diameter laid on every circle drawn
+/// over-defined a sketch the moment a tangent or an equal radius was laid on it.
 ///
-/// What was on screen was the FIELD waiting for a value, not a constraint. The number looked like a
-/// dimension and counted for nothing: the sketch stayed short by one, and the reason was invisible.
-///
-/// The dimension is made here and the field is pointed at it, so typing edits the real thing. It is not
-/// made for construction geometry, which carries no dimensions.
-fn dimension_the_new_circle(sk: &mut qymcad_ui_state::SketchCtx, si: usize, eid: Id, construction: bool) {
-    if construction {
+/// Construction geometry carries no dimensions and opens no field.
+fn open_the_size_of_the_new_shape(sk: &mut qymcad_ui_state::SketchCtx, eid: Id, purpose: qymcad_core::feature::Purpose) {
+    if purpose == qymcad_core::feature::Purpose::Construction {
         return;
     }
-    let centre = sk.project.sketches[si].entities.iter().find(|e| e.id == eid).and_then(|e| match e.kind {
-        qymcad_core::model::EntityKind::Circle { center, .. } => Some(center),
-        _ => None,
-    });
-    if let Some(c) = centre {
-        if let Some(ci) = sk.project.ensure_diameter(si, c, true) {
-            sk.project.solve_sketch(si);
-            *sk.inline = qymcad_ui_state::InlineEdit::Dim(ci);
-            sk.dim.focus = true;
-            return;
-        }
-    }
-    *sk.inline = qymcad_ui_state::InlineEdit::Circle(eid); // an arc or a shape with no centre of its own
+    *sk.inline = qymcad_ui_state::InlineEdit::Circle(eid);
     sk.dim.focus = true;
 }
 
+/// The arc the tool has just added, the last entity of the sketch, has the field of its radius opened.
+fn open_the_size_of_the_new_arc(sk: &mut qymcad_ui_state::SketchCtx, si: usize, purpose: qymcad_core::feature::Purpose) {
+    let last = sk.project.sketches[si].entities.last().filter(|e| matches!(e.kind, qymcad_core::model::EntityKind::Arc { .. })).map(|e| e.id);
+    if let Some(eid) = last {
+        open_the_size_of_the_new_shape(sk, eid, purpose);
+    }
+}
+
+/// A click with the dimension tool. Returns true when the click was handled.
 pub fn dim_click(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos2) -> bool {
     // THE BOUNDARY OF AN OPERATION: placing a dimension is a deliberate act and makes one undo step.
     qymcad_ui_state::begin_edit(&mut *sk.edits, &*sk.project, qymcad_i18n::tr("sk-dim"));
@@ -2410,7 +2405,14 @@ pub fn dim_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos
                 _ => None,
             });
             if let Some(c) = center {
+                let laid = sk.project.sketches[si].constraints.len();
                 if let Some(ci) = sk.project.ensure_diameter(si, c, true) {
+                    // A DIAMETER MADE BY THIS CLICK AND ITS VALUE TYPED ARE ONE STEP OF UNDO, as a linear dimension and
+                    // its value are: a circle drawn carries no diameter of its own, so the tool makes it. The click is one
+                    // operation (`dim_click`), closed after this - the step it adds is the one the value joins.
+                    if ci >= laid {
+                        sk.dim.fresh = Some((ci, sk.edits.undo.len() + 1));
+                    }
                     *sk.inline = qymcad_ui_state::InlineEdit::Dim(ci);
                     sk.dim.focus = true;
                     *sk.status = qymcad_i18n::tr("sk-enter-diameter");
@@ -2768,6 +2770,7 @@ pub fn dim_editor(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context, rect
                 // printed the whole truth about an f64 - "12.750000000000002" in the radius field.
                 buf = qymcad_core::expr::fmt_num(if is_arc { r } else { 2.0 * r });
                 // a radius for an arc, a diameter for a circle
+                sk.dim.typed = false;
             }
             let mut buf_changed = false;
             egui::Area::new(egui::Id::new(("circedit", si, eid))).fixed_pos(qymcad_ui_state::clamp_popup(at, rect) + egui::vec2(8.0, -10.0)).order(egui::Order::Foreground).show(ctx, |ui| {
@@ -2801,8 +2804,9 @@ pub fn dim_editor(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context, rect
             //
             // The value is evaluated when an expression is typed, and stored in the arc's radius dimension - put
             // there by the tool when the arc had none.
-            let _ = buf_changed; // the model is not touched while the text is being typed - see below
-            if close {
+            // the model is not touched while the text is being typed - see below; only a value typed is laid
+            sk.dim.typed |= buf_changed;
+            if close && sk.dim.typed {
                 match parse_num(&*sk.project, &buf) {
                     // A radius of zero or less is not a radius. It used to be clamped to 0.01 silently,
                     // which answers a typing slip with a circle nobody can see.
@@ -2818,6 +2822,8 @@ pub fn dim_editor(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context, rect
                 }
             }
             if chg {
+                // THE SIZE TYPED IS ONE STEP OF UNDO, named as a dimension is
+                qymcad_ui_state::begin_edit(&mut *sk.edits, &*sk.project, qymcad_i18n::tr("sk-dim"));
                 if is_arc {
                     // a fillet arc has its radius edited through the dimension constraint (parametrically);
                     // failing that, the fillet is recomputed geometrically; failing that, it is a plain arc
@@ -2825,9 +2831,17 @@ pub fn dim_editor(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context, rect
                         sk.project.put_arc_radius_dim(si, eid, rr); // a plain arc gets its dimension, as a circle has
                     }
                 } else {
-                    if let Some(e) = sk.project.sketches.get_mut(si).and_then(|s| s.entities.iter_mut().find(|e| e.id == eid)) {
-                        if let EntityKind::Circle { r, .. } = &mut e.kind {
+                    // A DIAMETER TYPED IS LAID AS A DIMENSION, of the value typed
+                    let centre = sk.project.sketches.get_mut(si).and_then(|s| s.entities.iter_mut().find(|e| e.id == eid)).and_then(|e| match &mut e.kind {
+                        EntityKind::Circle { r, center } => {
                             *r = rr;
+                            Some(*center)
+                        }
+                        _ => None,
+                    });
+                    if let Some(ci) = centre.and_then(|c| sk.project.ensure_diameter(si, c, true)) {
+                        if let Some(Constraint::Diameter { d, .. }) = sk.project.sketches[si].constraints.get_mut(ci) {
+                            *d = 2.0 * rr;
                         }
                     }
                     // THE SOLVER, not a rebuild. The radius of a circle is a variable of the solve (it is
@@ -2837,11 +2851,13 @@ pub fn dim_editor(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Context, rect
                     sk.project.solve_sketch(si);
                 }
                 qymcad_ui_state::invalidate(&mut *sk.regen);
+                qymcad_ui_state::commit_edit_if_changed(&mut sk.rebuild());
             }
             if close || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
                 sk.inline.clear();
                 sk.dim.buf.clear();
                 sk.dim.focus = false;
+                sk.dim.typed = false;
             }
         } else {
             sk.inline.clear();
@@ -3317,7 +3333,7 @@ pub fn sketch_tool_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, 
                     qymcad_ui_state::add_tangent_to_edge(&mut *sk.project, si, eref, cen, w.x, w.y, r);
                     sk.project.solve_sketch(si);
                     qymcad_ui_state::invalidate(&mut *sk.regen);
-                    dimension_the_new_circle(sk, si, eid, con);
+                    open_the_size_of_the_new_shape(sk, eid, qymcad_core::feature::Purpose::of(con));
                 } else {
                     *sk.status = qymcad_i18n::tr("sk-centre-on-edge");
                 }
@@ -3338,7 +3354,7 @@ pub fn sketch_tool_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, 
                 let eid = sk.project.add_circle_entity(si, cx, cy, r, qymcad_core::feature::Purpose::of(con));
                 sk.tool.pts.clear();
                 qymcad_ui_state::invalidate(&mut *sk.regen);
-                dimension_the_new_circle(sk, si, eid, con);
+                open_the_size_of_the_new_shape(sk, eid, qymcad_core::feature::Purpose::of(con));
             }
         }
         4 if sk.tool_prefs.arc_mode == 2 => {
@@ -3353,6 +3369,7 @@ pub fn sketch_tool_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, 
                         qymcad_ui_state::add_tangent_to_edge(&mut *sk.project, si, eref, cen, cx, cy, r);
                         sk.project.solve_sketch(si);
                         qymcad_ui_state::invalidate(&mut *sk.regen);
+                        open_the_size_of_the_new_arc(sk, si, qymcad_core::feature::Purpose::of(con));
                     } else {
                         *sk.status = qymcad_i18n::tr("sk-arc-end-on-tangent");
                     }
@@ -3373,6 +3390,7 @@ pub fn sketch_tool_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, 
                         // the orientation start-mid-end: counter-clockwise when the triple turns that way
                         let ccw = (m.x - s.x) * (e.y - s.y) - (m.y - s.y) * (e.x - s.x) > 0.0;
                         sk.project.add_arc_entity(si, Point2::new(cx, cy), Point2::new(s.x, s.y), Point2::new(e.x, e.y), winding(ccw), qymcad_core::feature::Purpose::of(con));
+                        open_the_size_of_the_new_arc(sk, si, qymcad_core::feature::Purpose::of(con));
                     } else {
                         *sk.status = qymcad_i18n::tr("sk-points-collinear-arc");
                     }
@@ -3381,6 +3399,7 @@ pub fn sketch_tool_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, 
                     let (c, a, b) = (p0, p1, p2);
                     let ccw = (a.x - c.x) * (b.y - c.y) - (a.y - c.y) * (b.x - c.x) > 0.0;
                     sk.project.add_arc_entity(si, Point2::new(c.x, c.y), Point2::new(a.x, a.y), Point2::new(b.x, b.y), winding(ccw), qymcad_core::feature::Purpose::of(con));
+                    open_the_size_of_the_new_arc(sk, si, qymcad_core::feature::Purpose::of(con));
                 }
                 sk.tool.pts.clear();
                 qymcad_ui_state::invalidate(&mut *sk.regen);
@@ -3456,7 +3475,7 @@ pub fn sketch_tool_click_inner(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, 
                 if let Some((cx, cy, r)) = qymcad_ui_state::circumcircle(sk.tool.pts[0], sk.tool.pts[1], sk.tool.pts[2]) {
                     let eid = sk.project.add_circle_entity(si, cx, cy, r, qymcad_core::feature::Purpose::of(con));
                     qymcad_ui_state::invalidate(&mut *sk.regen);
-                    dimension_the_new_circle(sk, si, eid, con);
+                    open_the_size_of_the_new_shape(sk, eid, qymcad_core::feature::Purpose::of(con));
                 } else {
                     *sk.status = qymcad_i18n::tr("sk-points-collinear-circle");
                 }
@@ -3603,29 +3622,6 @@ pub fn sketch_drag_start(sk: &mut qymcad_ui_state::SketchCtx, ctx: &egui::Contex
                         qymcad_ui_state::begin_edit(&mut *sk.edits, &*sk.project, qymcad_i18n::tr("sk-move-dim-label"));
                         *sk.drag = qymcad_ui_state::Dragging::Dim(ci);
                         sk.gsel.constraint = Some(ci); // grabbing a dimension selects it, even on a tiny drag
-                        sk.annot.note = None;
-                    }
-                } else if qymcad_ui_state::edit_si(&*sk.project, &*sk.sketch_ses) == Some(si) {
-                    if let Some((center, diam)) = passive_radius_label_at(sk, rect, pp, si) {
-                        // on A CIRCLE or AN ARC with no dimension the label is automatic, so a
-                        // DRIVEN dimension is materialised (it changes no degrees of freedom) to let
-                        // the label be turned about the centre instead of dragging the whole
-                        // geometry - grabbing the radius used to fall through into moving the entire
-                        // arc. A circle gets a diameter, an arc a radius.
-                        use qymcad_core::model::Constraint;
-                        qymcad_ui_state::begin_edit(&mut *sk.edits, &*sk.project, qymcad_i18n::tr("sk-move-dim-label"));
-                        let r = qymcad_ui_state::center_radius(&sk.draw(), si, center).unwrap_or(0.0);
-                        let ang = qymcad_ui_state::sketch_pt(&*sk.project, si, center)
-                            .map(|cp| {
-                                let sc = sh.at(cp);
-                                (pp.y - sc.y).atan2(pp.x - sc.x) as f64
-                            })
-                            .unwrap_or(0.0);
-                        let d = if diam { 2.0 * r } else { r };
-                        sk.project.sketches[si].constraints.push(Constraint::Diameter { c: center, d, off: ang, expr: String::new(), driven: true, diam, at: None });
-                        let ci = sk.project.sketches[si].constraints.len() - 1;
-                        *sk.drag = qymcad_ui_state::Dragging::Dim(ci);
-                        sk.gsel.constraint = Some(ci);
                         sk.annot.note = None;
                     }
                 }
@@ -3926,56 +3922,6 @@ pub fn ref_edge_at(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos2, s
         }
         EntityKind::Ellipse { .. } => None,
     }
-}
-
-/// The centre of the curve whose PASSIVE radius or diameter label (a curve WITHOUT a Diameter
-/// constraint) is under the cursor. Returns (center, diam): a circle gives a diameter (diam = true),
-/// an arc gives a radius (diam = false). A circle's label sits in the off=0 style (to the right,
-/// beyond the rim); an arc's sits by the middle of the arc, where the passive leader draws it.
-pub fn passive_radius_label_at(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, pos: Pos2, si: usize) -> Option<(Id, bool)> {
-    let sh = qymcad_ui_state::Sheet { view: *sk.view, rect };
-    use qymcad_core::model::EntityKind;
-    let s = sk.project.sketches.get(si)?;
-    for e in &s.entities {
-        let (center, diam) = match e.kind {
-            EntityKind::Circle { center, .. } => (center, true),
-            EntityKind::Arc { center, .. } => (center, false),
-            _ => continue,
-        };
-        if s.rim_sized(center) {
-            continue; // a size of its own is drawn, and grabbed, by its constraint
-        }
-        let Some(cp) = qymcad_ui_state::sketch_pt(&*sk.project, si, center) else { continue };
-        let Some(r) = qymcad_ui_state::center_radius(&sk.draw(), si, center) else { continue };
-        let sc = sh.at(cp);
-        let r_px = (sh.at(Point2::new(cp.x + r, cp.y)) - sc).length();
-        // the leader's direction: to the right for a circle (off=0), towards the middle of the arc for an arc, as it is drawn
-        let dir = if diam {
-            egui::vec2(1.0, 0.0)
-        } else if let EntityKind::Arc { a, b, .. } = e.kind {
-            match (qymcad_ui_state::sketch_pt(&*sk.project, si, a), qymcad_ui_state::sketch_pt(&*sk.project, si, b)) {
-                (Some(pa), Some(pb)) => {
-                    let m = sh.at(Point2::new((pa.x + pb.x) / 2.0, (pa.y + pb.y) / 2.0)) - sc;
-                    if m.length() > 1e-3 {
-                        m.normalized()
-                    } else {
-                        egui::vec2(1.0, 0.0)
-                    }
-                }
-                _ => egui::vec2(1.0, 0.0),
-            }
-        } else {
-            egui::vec2(1.0, 0.0)
-        };
-        let txt = if diam { format!("Ø{:.1}", 2.0 * r) } else { format!("R{r:.1}") };
-        let size = qymcad_ui_state::dim_text_size(&txt, sk.set.dim_font);
-        let label_at = qymcad_ui_state::radial_text_place(sc + dir * (r_px + 14.0), dir, size).0;
-        // a radius mark is a LABEL: taken anywhere on its text, or within the Label reach of its middle
-        if qymcad_ui_state::label_reach(label_at, size, pos) <= qymcad_ui_state::grab::grab(sk.set, Grab::Label) {
-            return Some((center, diam));
-        }
-    }
-    None
 }
 
 pub fn power_trim_path_test(sk: &mut qymcad_ui_state::SketchCtx, rect: Rect, a: Pos2, b: Pos2) -> usize {

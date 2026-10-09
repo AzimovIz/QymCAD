@@ -2162,8 +2162,8 @@ impl Project {
     /// circle is - one constraint more and one freedom less. Reported behaviour: the radius tool wrote 15 into the arc
     /// and left no dimension, the arc free to be dragged to any radius.
     pub fn put_arc_radius_dim(&mut self, si: usize, eid: Id, rr: f64) {
-        let Some(center) = self.sketches.get(si).and_then(|s| s.entities.iter().find(|e| e.id == eid)).and_then(|e| match e.kind {
-            EntityKind::Arc { center, .. } => Some(center),
+        let Some((center, a, b, ccw)) = self.sketches.get(si).and_then(|s| s.entities.iter().find(|e| e.id == eid)).and_then(|e| match e.kind {
+            EntityKind::Arc { center, a, b, ccw } => Some((center, a, b, ccw)),
             _ => None,
         }) else {
             return;
@@ -2172,7 +2172,8 @@ impl Project {
         self.set_arc_radius(si, eid, rr);
         if let Some(s) = self.sketches.get_mut(si) {
             if !s.constraints.iter().any(|c| matches!(c, Constraint::Diameter { c: cc, .. } if *cc == center)) {
-                s.constraints.push(Constraint::Diameter { c: center, d: rr, off: 0.0, expr: String::new(), driven: false, diam: false, at: None });
+                let off = arc_label_angle(&s.points, ArcEnds { center, a, b, ccw });
+                s.constraints.push(Constraint::Diameter { c: center, d: rr, off, expr: String::new(), driven: false, diam: false, at: None });
             }
         }
         self.solve_sketch(si);
@@ -5386,6 +5387,28 @@ fn fillet_label_angle(points: &[SketchPoint], cen: Id, t1: Id, t2: Id) -> f64 {
     let level = if ua.0.abs() >= ub.0.abs() { ua } else { ub };
     let (x, y) = unit((mid.0 + level.0, mid.1 + level.1)).unwrap_or(mid);
     (-y).atan2(x)
+}
+
+/// THE POINTS OF AN ARC and the way it runs from `a` to `b`.
+struct ArcEnds {
+    center: Id,
+    a: Id,
+    b: Id,
+    ccw: bool,
+}
+
+/// WHERE THE RADIUS OF AN ARC IS LED: from the centre out through the middle of the arc as it runs from its start to its
+/// end, so the leader meets the arc that is drawn. A leader to the right (zero) misses an arc lying below its centre.
+/// Reported behaviour: "the size on an arc is not put on the segment of the arc that is seen". The middle is taken
+/// along the way the arc runs, not as the bisector of its ends: an arc over half a turn has its middle on the far side
+/// of that bisector. An angle on the screen, where y runs down: the world angle t is -t there.
+fn arc_label_angle(points: &[SketchPoint], arc: ArcEnds) -> f64 {
+    let get = |id: Id| points.iter().find(|p| p.id == id).map(|p| (p.x, p.y));
+    let (Some(c), Some(a), Some(b)) = (get(arc.center), get(arc.a), get(arc.b)) else { return 0.0 };
+    let (ta, tb) = ((a.1 - c.1).atan2(a.0 - c.0), (b.1 - c.1).atan2(b.0 - c.0));
+    let tau = std::f64::consts::TAU;
+    let mid = if arc.ccw { ta + (tb - ta).rem_euclid(tau) / 2.0 } else { ta - (ta - tb).rem_euclid(tau) / 2.0 };
+    -mid
 }
 
 /// A CIRCLE OR AN ARC READ AS ONE THING: the centre, the radius, and for an arc the angular range.

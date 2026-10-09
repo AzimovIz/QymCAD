@@ -1346,6 +1346,42 @@ mod tests {
                 check_all(&mut app, &format!("sketch: {name}"), &mut problems);
             }
 
+            // A SIZE ONLY WHEN TYPED: the circles and the arc above were drawn without a value typed and carry no size of
+            // their own; a circle drawn with 12 typed carries one diameter of 12.
+            {
+                // the sizes on the rims of the circles and arcs drawn as shapes; the construction circle of the polygon keeps
+                // the radius that holds the polygon
+                let sizes = |a: &App| {
+                    let sk = &a.project.sketches[si];
+                    let shapes: Vec<u64> = sk
+                        .entities
+                        .iter()
+                        .filter(|e| !e.construction)
+                        .filter_map(|e| match e.kind {
+                            qymcad_core::model::EntityKind::Circle { center, .. } | qymcad_core::model::EntityKind::Arc { center, .. } => Some(center),
+                            _ => None,
+                        })
+                        .collect();
+                    sk.constraints
+                        .iter()
+                        .filter_map(|c| match c {
+                            qymcad_core::model::Constraint::Diameter { c, d, diam, .. } if shapes.contains(c) => Some((*diam, *d)),
+                            _ => None,
+                        })
+                        .collect::<Vec<_>>()
+                };
+                if !sizes(&app).is_empty() {
+                    problems.push(format!("sketch: circles and an arc drawn without a value typed carry sizes {:?}", sizes(&app)));
+                }
+                let mut hand = Hand::new(&mut app);
+                hand.sk_tool(3).click2d(100.0, 10.0).click2d(106.0, 10.0).type_text("12").key(egui::Key::Enter);
+                hand.key(egui::Key::Escape).key(egui::Key::Escape);
+                if sizes(&app) != vec![(true, 12.0)] {
+                    problems.push(format!("sketch: a circle drawn with 12 typed carries sizes {:?}", sizes(&app)));
+                }
+                check_all(&mut app, "sketch: a circle sized by a value typed", &mut problems);
+            }
+
             // CONSTRAINTS: each is placed on a suitable selection. One that did not take must say so through
             // the status line rather than silently doing nothing.
             let codes: [(u8, &str); 9] =
