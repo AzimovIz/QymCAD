@@ -1899,6 +1899,8 @@ enum Keep {
 
 struct Elimination {
     pivots: Vec<usize>,
+    /// the row of each pivot as it was taken, from its pivot column on, in the order of `pivots`
+    echelon: Vec<Vec<(usize, f64)>>,
     /// each row no pivot was taken from, as the rows given summed into it with their factors: a sum of rows that is
     /// nothing, a dependency among them
     dependent: Vec<std::collections::BTreeMap<usize, f64>>,
@@ -1927,6 +1929,7 @@ fn eliminate_sparse(rows: Vec<Vec<(usize, f64)>>, cols: usize, keep: Keep) -> El
     let mut at: Vec<usize> = (0..n).collect(); // the row standing at each place
     let mut place: Vec<usize> = (0..n).collect(); // the place of each row
     let mut pivots = Vec::new();
+    let mut echelon = Vec::new();
     let mut row = 0usize;
     for col in 0..cols {
         if row >= n {
@@ -1970,13 +1973,14 @@ fn eliminate_sparse(rows: Vec<Vec<(usize, f64)>>, cols: usize, keep: Keep) -> El
             }
         }
         pivots.push(col);
+        echelon.push(pivot);
         row += 1;
     }
     let dependent = match keep {
         Keep::Pivots => Vec::new(),
         Keep::Dependencies => sums_of(&at[row..], &at[..row], &taken),
     };
-    Elimination { pivots, dependent }
+    Elimination { pivots, echelon, dependent }
 }
 
 /// The sums of the rows given that `rows` came to stand for, from what the elimination took from each (`taken`): a row is
@@ -2007,6 +2011,38 @@ fn sums_of(rows: &[usize], pivots: &[usize], taken: &[Vec<(usize, f64)>]) -> Vec
     rows.iter().map(|&r| make(r, &made)).collect()
 }
 
+/// A COORDINATE MOVES WHEN SOME MOTION THE CONSTRAINTS ALLOW MOVES IT: a vector of the null space of the Jacobian with a
+/// share in it. Taken as "its column has no pivot", the freedom falls on the columns eliminated last: a rectangle drawn
+/// from its centre, its centre fixed, shows one corner free and three held, though a width typed moves all four
+/// (reported behaviour: "only one corner is yellow, the rest green"). A column with no pivot moves by itself; a pivot
+/// column moves when the back substitution of the echelon rows gives it a share of a free column above 1e-6 - the
+/// share is the value its row of the reduced echelon form holds in that column, which `free_points_whole` reads. The
+/// free columns are carried as sparse sums, so the work is the non-zeros of the echelon times the shares that reach
+/// each row.
+fn movable(pivots: &[usize], echelon: &[Vec<(usize, f64)>], cols: usize) -> Vec<bool> {
+    let mut is_pivot = vec![false; cols];
+    for &c in pivots {
+        is_pivot[c] = true;
+    }
+    let mut moved: Vec<bool> = is_pivot.iter().map(|p| !p).collect();
+    let mut share: Vec<Option<HashMap<usize, f64>>> = (0..cols).map(|c| (!is_pivot[c]).then(|| std::iter::once((c, 1.0)).collect())).collect();
+    for (&c, row) in pivots.iter().zip(echelon).rev() {
+        let d = row[0].1;
+        let mut sum: HashMap<usize, f64> = HashMap::new();
+        for &(k, v) in &row[1..] {
+            if let Some(of_k) = &share[k] {
+                for (&f, &w) in of_k {
+                    *sum.entry(f).or_insert(0.0) -= v * w / d;
+                }
+            }
+        }
+        sum.retain(|_, w| w.abs() > 1e-12);
+        moved[c] = sum.values().any(|w| w.abs() > 1e-6);
+        share[c] = Some(sum);
+    }
+    moved
+}
+
 /// `dof_whole` of a part, by `differences` and `pivot_columns_sparse`: the same count, at the cost of the non-zeros.
 fn dof_sparse(points: &[SketchPoint], radii: &[RadiusVar], constraints: &[Constraint]) -> (i32, i32) {
     if points.is_empty() {
@@ -2031,8 +2067,9 @@ fn free_points_sparse(points: &[SketchPoint], radii: &[RadiusVar], constraints: 
     if rows.is_empty() {
         return vec![true; n]; // no constraints at all, so everything is free
     }
-    let piv: std::collections::HashSet<usize> = pivot_columns_sparse(rows, nv).into_iter().collect();
-    (0..n).map(|i| !piv.contains(&(2 * i)) || !piv.contains(&(2 * i + 1))).collect()
+    let Elimination { pivots, echelon, .. } = eliminate_sparse(rows, nv, Keep::Pivots);
+    let moved = movable(&pivots, &echelon, nv);
+    (0..n).map(|i| moved[2 * i] || moved[2 * i + 1]).collect()
 }
 
 /// The degrees of freedom of the whole sketch counted as one Jacobian, the way they were counted before the sketch
@@ -2289,14 +2326,14 @@ fn counted(own: &Own) -> Counted {
     if m == 0 {
         return Counted { free: nv as i32, excess: 0, free_points: vec![true; n], maybe: Default::default() };
     }
-    let Elimination { pivots, dependent } = eliminate_sparse(rows, nv, Keep::Dependencies);
+    let Elimination { pivots, echelon, dependent } = eliminate_sparse(rows, nv, Keep::Dependencies);
     let rank = pivots.len() as i32;
-    let piv: std::collections::HashSet<usize> = pivots.into_iter().collect();
+    let moved = movable(&pivots, &echelon, nv);
     let biggest = |d: &std::collections::BTreeMap<usize, f64>| d.values().fold(0.0_f64, |m, v| m.max(v.abs()));
     Counted {
         free: nv as i32 - rank,
         excess: m as i32 - rank,
-        free_points: (0..n).map(|i| !piv.contains(&(2 * i)) || !piv.contains(&(2 * i + 1))).collect(),
+        free_points: (0..n).map(|i| moved[2 * i] || moved[2 * i + 1]).collect(),
         maybe: dependent.iter().flat_map(|d| d.iter().filter(|(_, v)| v.abs() > 1e-9 * biggest(d)).map(|(&r, _)| of[r])).collect(),
     }
 }
@@ -2338,8 +2375,18 @@ pub fn free_points_whole(points: &[SketchPoint], radii: &[RadiusVar], constraint
         }
     }
     normalize_rows(&mut jac); // the rank must not depend on the scale of the sketch or on constraint weights
-    let piv: std::collections::HashSet<usize> = pivot_columns(&mut jac, nv).into_iter().collect();
-    (0..n).map(|i| !piv.contains(&(2 * i)) || !piv.contains(&(2 * i + 1))).collect()
+                              // REDUCED: each row of a pivot holds its pivot and the free columns alone, its values there the shares of the free
+                              // columns in the motion of its pivot column (`movable`)
+    let pivots = pivot_columns(&mut jac, nv);
+    let mut moved = vec![true; nv];
+    for &c in &pivots {
+        moved[c] = false;
+    }
+    let free: Vec<usize> = (0..nv).filter(|&c| moved[c]).collect();
+    for (r, &c) in pivots.iter().enumerate() {
+        moved[c] = free.iter().any(|&f| (jac[r][f] / jac[r][c]).abs() > 1e-6);
+    }
+    (0..n).map(|i| moved[2 * i] || moved[2 * i + 1]).collect()
 }
 
 /// Pivot columns of a rows×cols matrix, by Gaussian elimination with partial pivoting. The number of pivot
